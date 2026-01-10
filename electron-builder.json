@@ -9,7 +9,7 @@
   },
   "files": [
     "dist/**/*",
-    "electron/**/*",
+    "electron/**/*.cjs",
     "public/favicon.ico"
   ],
   "extraResources": [
