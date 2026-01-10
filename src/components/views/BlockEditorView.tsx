@@ -1,5 +1,5 @@
-import { useState, useMemo, useRef } from 'react';
-import { GripVertical, Music, Clock, Save, RotateCcw, Plus, Trash2, Newspaper, FileText, Copy, BookmarkPlus, Bookmark, Download, Upload, AlertTriangle, CheckCircle, Eye, X } from 'lucide-react';
+import { useState, useMemo, useRef, useCallback } from 'react';
+import { GripVertical, Music, Clock, Save, RotateCcw, Plus, Trash2, Newspaper, FileText, Copy, BookmarkPlus, Bookmark, Download, Upload, AlertTriangle, CheckCircle, Eye, Undo2, Redo2, Layers, BarChart3 } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 
@@ -45,6 +46,13 @@ interface ValidationWarning {
   artist: string;
   type: 'same-block' | 'nearby-block';
   conflictTime?: string;
+}
+
+interface HistoryEntry {
+  timeKey: string;
+  songs: BlockSong[];
+  timestamp: Date;
+  action: string;
 }
 
 function SortableSong({ song, onRemove, hasWarning }: SortableSongProps) {
@@ -155,6 +163,15 @@ const defaultTemplates: BlockTemplate[] = [
   },
 ];
 
+// Source colors for statistics
+const sourceColors: Record<string, string> = {
+  'BH': 'bg-primary',
+  'BAND': 'bg-accent',
+  'DISNEY': 'bg-pink-500',
+  'METRO': 'bg-emerald-500',
+  'FIXO': 'bg-purple-500',
+};
+
 export function BlockEditorView() {
   const { blockSongs, setBlockSongs, fixedContent, programs } = useRadioStore();
   const { toast } = useToast();
@@ -165,6 +182,14 @@ export function BlockEditorView() {
   const [newTemplateName, setNewTemplateName] = useState('');
   const [showTemplateInput, setShowTemplateInput] = useState(false);
   const [showDayPreview, setShowDayPreview] = useState(false);
+  const [showBatchMode, setShowBatchMode] = useState(false);
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState<string[]>([]);
+  const [selectedTemplateForBatch, setSelectedTemplateForBatch] = useState<string>('');
+  
+  // History for undo/redo
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [isUndoRedo, setIsUndoRedo] = useState(false);
 
   const timeKey = `${selectedHour.toString().padStart(2, '0')}:${selectedMinute.toString().padStart(2, '0')}`;
 
@@ -173,6 +198,17 @@ export function BlockEditorView() {
     if (blockSongs[timeKey]) return blockSongs[timeKey];
     return songPool.slice(0, 10).map((s, i) => ({ ...s, id: `${timeKey}-${i}` }));
   }, [blockSongs, timeKey]);
+
+  // Statistics by source
+  const sourceStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    currentSongs.forEach(song => {
+      stats[song.source] = (stats[song.source] || 0) + 1;
+    });
+    return stats;
+  }, [currentSongs]);
+
+  const totalSongs = currentSongs.length;
 
   // Get program name for current hour
   const getProgramForHour = (hour: number) => {
@@ -215,7 +251,6 @@ export function BlockEditorView() {
     const warnings: ValidationWarning[] = [];
     const songCounts: Record<string, number> = {};
     
-    // Check duplicates in current block
     currentSongs.forEach((song) => {
       if (song.isFixed) return;
       const key = `${song.title}-${song.artist}`;
@@ -230,7 +265,6 @@ export function BlockEditorView() {
       }
     });
 
-    // Check nearby blocks (±1 hour)
     const nearbyTimes = [
       { hour: selectedHour - 1, minute: 0 },
       { hour: selectedHour - 1, minute: 30 },
@@ -263,6 +297,52 @@ export function BlockEditorView() {
 
   const warningSongIds = new Set(validationWarnings.map(w => w.songId));
 
+  // Add to history
+  const addToHistory = useCallback((newTimeKey: string, newSongs: BlockSong[], action: string) => {
+    if (isUndoRedo) return;
+    
+    const entry: HistoryEntry = {
+      timeKey: newTimeKey,
+      songs: [...newSongs],
+      timestamp: new Date(),
+      action,
+    };
+    
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      return [...newHistory, entry].slice(-50); // Keep last 50 entries
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, 49));
+  }, [historyIndex, isUndoRedo]);
+
+  // Undo
+  const handleUndo = useCallback(() => {
+    if (historyIndex <= 0) return;
+    
+    setIsUndoRedo(true);
+    const prevEntry = history[historyIndex - 1];
+    if (prevEntry) {
+      setBlockSongs(prevEntry.timeKey, prevEntry.songs);
+      setHistoryIndex(prev => prev - 1);
+      toast({ title: 'Desfeito', description: prevEntry.action });
+    }
+    setTimeout(() => setIsUndoRedo(false), 100);
+  }, [history, historyIndex, setBlockSongs, toast]);
+
+  // Redo
+  const handleRedo = useCallback(() => {
+    if (historyIndex >= history.length - 1) return;
+    
+    setIsUndoRedo(true);
+    const nextEntry = history[historyIndex + 1];
+    if (nextEntry) {
+      setBlockSongs(nextEntry.timeKey, nextEntry.songs);
+      setHistoryIndex(prev => prev + 1);
+      toast({ title: 'Refeito', description: nextEntry.action });
+    }
+    setTimeout(() => setIsUndoRedo(false), 100);
+  }, [history, historyIndex, setBlockSongs, toast]);
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -277,23 +357,28 @@ export function BlockEditorView() {
       const newIndex = currentSongs.findIndex((s) => s.id === over.id);
       const newSongs = arrayMove(currentSongs, oldIndex, newIndex);
       setBlockSongs(timeKey, newSongs);
+      addToHistory(timeKey, newSongs, 'Reordenar músicas');
     }
   };
 
   const handleRemoveSong = (id: string) => {
     const newSongs = currentSongs.filter((s) => s.id !== id);
     setBlockSongs(timeKey, newSongs);
+    addToHistory(timeKey, newSongs, 'Remover música');
   };
 
   const handleAddSong = (song: Omit<BlockSong, 'id'>) => {
     const newSong: BlockSong = { ...song, id: `${timeKey}-${Date.now()}` };
-    setBlockSongs(timeKey, [...currentSongs, newSong]);
+    const newSongs = [...currentSongs, newSong];
+    setBlockSongs(timeKey, newSongs);
+    addToHistory(timeKey, newSongs, `Adicionar ${song.title}`);
     toast({ title: 'Item adicionado', description: song.title });
   };
 
   const handleReset = () => {
     const defaultSongs = songPool.slice(0, 10).map((s, i) => ({ ...s, id: `${timeKey}-${i}-${Date.now()}` }));
     setBlockSongs(timeKey, defaultSongs);
+    addToHistory(timeKey, defaultSongs, 'Resetar bloco');
     toast({ title: 'Bloco resetado' });
   };
 
@@ -331,12 +416,52 @@ export function BlockEditorView() {
   const handleLoadTemplate = (template: BlockTemplate) => {
     const loadedSongs = template.songs.map((s, i) => ({ ...s, id: `${timeKey}-loaded-${i}-${Date.now()}` }));
     setBlockSongs(timeKey, loadedSongs);
+    addToHistory(timeKey, loadedSongs, `Carregar template "${template.name}"`);
     toast({ title: 'Template carregado', description: `"${template.name}" aplicado ao bloco ${timeKey}.` });
   };
 
   const handleDeleteTemplate = (templateId: string) => {
     setTemplates(templates.filter(t => t.id !== templateId));
     toast({ title: 'Template removido' });
+  };
+
+  // Batch apply template to multiple time slots
+  const handleBatchApply = () => {
+    if (!selectedTemplateForBatch || selectedTimeSlots.length === 0) {
+      toast({ title: 'Erro', description: 'Selecione um template e ao menos um horário.', variant: 'destructive' });
+      return;
+    }
+
+    const template = templates.find(t => t.id === selectedTemplateForBatch);
+    if (!template) return;
+
+    selectedTimeSlots.forEach(slot => {
+      const loadedSongs = template.songs.map((s, i) => ({ ...s, id: `${slot}-batch-${i}-${Date.now()}` }));
+      setBlockSongs(slot, loadedSongs);
+    });
+
+    toast({ 
+      title: 'Aplicado em lote!', 
+      description: `"${template.name}" aplicado a ${selectedTimeSlots.length} horários.` 
+    });
+    setShowBatchMode(false);
+    setSelectedTimeSlots([]);
+    setSelectedTemplateForBatch('');
+  };
+
+  const toggleTimeSlot = (slot: string) => {
+    setSelectedTimeSlots(prev => 
+      prev.includes(slot) ? prev.filter(s => s !== slot) : [...prev, slot]
+    );
+  };
+
+  const selectAllTimeSlots = () => {
+    const allSlots: string[] = [];
+    for (let h = 0; h < 24; h++) {
+      allSlots.push(`${h.toString().padStart(2, '0')}:00`);
+      allSlots.push(`${h.toString().padStart(2, '0')}:30`);
+    }
+    setSelectedTimeSlots(allSlots);
   };
 
   // Export templates to JSON
@@ -395,7 +520,100 @@ export function BlockEditorView() {
           <h2 className="text-2xl font-bold text-foreground">Editor de Blocos</h2>
           <p className="text-muted-foreground">Arraste e solte para reordenar músicas em cada bloco</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* Undo/Redo */}
+          <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-1">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8"
+              onClick={handleUndo}
+              disabled={historyIndex <= 0}
+              title="Desfazer (Ctrl+Z)"
+            >
+              <Undo2 className="w-4 h-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8"
+              onClick={handleRedo}
+              disabled={historyIndex >= history.length - 1}
+              title="Refazer (Ctrl+Y)"
+            >
+              <Redo2 className="w-4 h-4" />
+            </Button>
+          </div>
+
+          {/* Batch Mode */}
+          <Dialog open={showBatchMode} onOpenChange={setShowBatchMode}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Layers className="w-4 h-4 mr-2" />
+                Lote
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[80vh]">
+              <DialogHeader>
+                <DialogTitle>Edição em Lote</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Template a aplicar:</label>
+                  <Select value={selectedTemplateForBatch} onValueChange={setSelectedTemplateForBatch}>
+                    <SelectTrigger className="mt-2">
+                      <SelectValue placeholder="Selecione um template..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border border-border z-50">
+                      {templates.map(t => (
+                        <SelectItem key={t.id} value={t.id}>{t.name} ({t.songs.length} itens)</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium">Horários ({selectedTimeSlots.length} selecionados):</label>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={selectAllTimeSlots}>
+                        Selecionar Todos
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setSelectedTimeSlots([])}>
+                        Limpar
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-8 gap-2 max-h-60 overflow-y-auto p-2 bg-secondary/30 rounded-lg">
+                    {Array.from({ length: 24 }, (_, h) => (
+                      <>
+                        <label key={`${h}-0`} className="flex items-center gap-2 p-2 rounded hover:bg-secondary/50 cursor-pointer">
+                          <Checkbox
+                            checked={selectedTimeSlots.includes(`${h.toString().padStart(2, '0')}:00`)}
+                            onCheckedChange={() => toggleTimeSlot(`${h.toString().padStart(2, '0')}:00`)}
+                          />
+                          <span className="text-xs font-mono">{h.toString().padStart(2, '0')}:00</span>
+                        </label>
+                        <label key={`${h}-30`} className="flex items-center gap-2 p-2 rounded hover:bg-secondary/50 cursor-pointer">
+                          <Checkbox
+                            checked={selectedTimeSlots.includes(`${h.toString().padStart(2, '0')}:30`)}
+                            onCheckedChange={() => toggleTimeSlot(`${h.toString().padStart(2, '0')}:30`)}
+                          />
+                          <span className="text-xs font-mono">{h.toString().padStart(2, '0')}:30</span>
+                        </label>
+                      </>
+                    ))}
+                  </div>
+                </div>
+
+                <Button className="w-full" onClick={handleBatchApply} disabled={!selectedTemplateForBatch || selectedTimeSlots.length === 0}>
+                  <Layers className="w-4 h-4 mr-2" />
+                  Aplicar a {selectedTimeSlots.length} horários
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={showDayPreview} onOpenChange={setShowDayPreview}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -452,10 +670,43 @@ export function BlockEditorView() {
           </Button>
           <Button onClick={handleSave}>
             <Save className="w-4 h-4 mr-2" />
-            Salvar Bloco
+            Salvar
           </Button>
         </div>
       </div>
+
+      {/* Source Statistics */}
+      <Card className="glass-card">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium">Distribuição por Fonte:</span>
+            </div>
+            <div className="flex-1 flex items-center gap-3 flex-wrap">
+              {Object.entries(sourceStats).map(([source, count]) => (
+                <div key={source} className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${sourceColors[source] || 'bg-muted'}`} />
+                  <span className="text-sm font-medium">{source}</span>
+                  <Badge variant="secondary" className="text-xs">
+                    {count} ({Math.round((count / totalSongs) * 100)}%)
+                  </Badge>
+                </div>
+              ))}
+            </div>
+            <div className="flex h-4 w-48 rounded-full overflow-hidden bg-secondary">
+              {Object.entries(sourceStats).map(([source, count]) => (
+                <div 
+                  key={source} 
+                  className={`h-full ${sourceColors[source] || 'bg-muted'}`}
+                  style={{ width: `${(count / totalSongs) * 100}%` }}
+                  title={`${source}: ${count}`}
+                />
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Validation Warnings */}
       {validationWarnings.length > 0 && (
@@ -514,6 +765,9 @@ export function BlockEditorView() {
             <span>📄 Arquivo: SEX.txt (exemplo)</span>
             <span>🕐 Bloco: {timeKey}</span>
             <span>🎵 {currentSongs.length} itens</span>
+            {history.length > 0 && (
+              <span>📝 Histórico: {historyIndex + 1}/{history.length}</span>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -730,12 +984,12 @@ export function BlockEditorView() {
           {/* Quick Info */}
           <Card className="glass-card border-primary/20">
             <CardContent className="p-4">
-              <h4 className="text-sm font-medium text-primary mb-2">💡 Dicas</h4>
+              <h4 className="text-sm font-medium text-primary mb-2">💡 Atalhos</h4>
               <ul className="text-xs text-muted-foreground space-y-1">
-                <li>• Arraste os itens para reordenar</li>
+                <li>• ↶↷ Desfazer/Refazer alterações</li>
+                <li>• 📊 Barra mostra distribuição</li>
+                <li>• 🗂️ "Lote" aplica a vários horários</li>
                 <li>• ⚠️ Amarelo = música repetida</li>
-                <li>• Use ↑↓ para importar/exportar templates</li>
-                <li>• "Preview do Dia" mostra o .txt completo</li>
               </ul>
             </CardContent>
           </Card>
