@@ -1,4 +1,4 @@
-import { Radio, Settings, Music, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode } from 'lucide-react';
+import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -14,7 +14,9 @@ const navItems: NavItem[] = [
   { id: 'sequence', label: 'Sequência', icon: ListMusic },
   { id: 'schedule', label: 'Programação', icon: Clock },
   { id: 'gradebuilder', label: 'Montagem %dd%', icon: FileCode },
-  { id: 'ranking', label: 'Ranking TOP50', icon: TrendingUp, badge: 'NOVO' },
+  { id: 'blockeditor', label: 'Editor de Blocos', icon: Layers, badge: 'NOVO' },
+  { id: 'fixedcontent', label: 'Conteúdos Fixos', icon: Newspaper },
+  { id: 'ranking', label: 'Ranking TOP50', icon: TrendingUp },
   { id: 'logs', label: 'Logs', icon: Terminal },
   { id: 'export', label: 'Exportar Config', icon: Download },
   { id: 'folders', label: 'Pastas', icon: FolderOpen },
