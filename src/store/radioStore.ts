@@ -1,6 +1,25 @@
 import { create } from 'zustand';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule } from '@/types/radio';
 
+export interface FixedContent {
+  id: string;
+  name: string;
+  fileName: string;
+  type: 'news' | 'horoscope' | 'sports' | 'weather' | 'romance' | 'curiosity' | 'other';
+  dayPattern: string; // WEEKDAYS, WEEKEND, ALL, or specific days
+  timeSlots: { hour: number; minute: number }[];
+  enabled: boolean;
+}
+
+export interface BlockSong {
+  id: string;
+  title: string;
+  artist: string;
+  file: string;
+  source: string;
+  isFixed: boolean;
+}
+
 interface RadioState {
   // Radio Stations
   stations: RadioStation[];
@@ -37,6 +56,17 @@ interface RadioState {
   // Missing Songs
   missingSongs: CapturedSong[];
   setMissingSongs: (songs: CapturedSong[]) => void;
+
+  // Fixed Content
+  fixedContent: FixedContent[];
+  setFixedContent: (content: FixedContent[]) => void;
+  addFixedContent: (content: FixedContent) => void;
+  updateFixedContent: (id: string, updates: Partial<FixedContent>) => void;
+  removeFixedContent: (id: string) => void;
+
+  // Block Songs (for drag-and-drop)
+  blockSongs: Record<string, BlockSong[]>;
+  setBlockSongs: (timeKey: string, songs: BlockSong[]) => void;
 }
 
 const defaultStations: RadioStation[] = [
@@ -115,6 +145,22 @@ const defaultConfig: SystemConfig = {
   coringaCode: 'mus',
 };
 
+const defaultFixedContent: FixedContent[] = [
+  { id: '1', name: 'Notícia da Hora', fileName: 'NOTICIA_DA_HORA_{HH}HORAS', type: 'news', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 9, minute: 0 }, { hour: 10, minute: 0 }, { hour: 11, minute: 0 }, { hour: 12, minute: 0 }, { hour: 14, minute: 0 }, { hour: 15, minute: 0 }, { hour: 16, minute: 0 }, { hour: 17, minute: 0 }, { hour: 18, minute: 0 }], enabled: true },
+  { id: '2', name: 'Horóscopo do Dia', fileName: 'HOROSCOPO_DO_DIA_EDICAO{ED}', type: 'horoscope', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 8, minute: 30 }, { hour: 9, minute: 30 }, { hour: 10, minute: 30 }, { hour: 11, minute: 30 }], enabled: true },
+  { id: '3', name: 'As Últimas do Esporte', fileName: 'AS_ULTIMAS_DO_ESPORTE_EDICAO{ED}', type: 'sports', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 12, minute: 0 }, { hour: 12, minute: 30 }], enabled: true },
+  { id: '4', name: 'Clima Brasil Sudeste', fileName: 'CLIMA_BRASIL_SUDESTE', type: 'weather', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 12, minute: 30 }], enabled: true },
+  { id: '5', name: 'Fique Sabendo', fileName: 'FIQUE_SABENDO_EDICAO{ED}', type: 'news', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 13, minute: 0 }, { hour: 13, minute: 30 }, { hour: 14, minute: 0 }, { hour: 14, minute: 30 }, { hour: 15, minute: 0 }], enabled: true },
+  { id: '6', name: 'Fatos e Boatos', fileName: 'FATOS_E_BOATOS_EDICAO01', type: 'curiosity', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 16, minute: 30 }], enabled: true },
+  { id: '7', name: 'Top 10 Mix', fileName: 'TOP_10_MIX_BLOCO{ED}', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 18, minute: 0 }, { hour: 18, minute: 30 }], enabled: true },
+  { id: '8', name: 'Papo Sério', fileName: 'PAPO_SERIO', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 20, minute: 0 }], enabled: true },
+  { id: '9', name: 'Momento de Reflexão', fileName: 'MOMENTO_DE_REFLEXAO', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 20, minute: 30 }], enabled: true },
+  { id: '10', name: 'Romance', fileName: 'ROMANCE_BLOCO{ED}', type: 'romance', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 20, minute: 0 }, { hour: 20, minute: 30 }, { hour: 21, minute: 0 }, { hour: 22, minute: 30 }], enabled: true },
+  { id: '11', name: 'Raridades', fileName: 'RARIDADES_BLOCO{ED}', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 12, minute: 0 }, { hour: 12, minute: 30 }], enabled: true },
+  { id: '12', name: 'Mamãe Cheguei', fileName: 'MAMAE_CHEGUEI', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 21, minute: 0 }], enabled: true },
+  { id: '13', name: 'Curiosidades', fileName: 'CURIOSIDADES', type: 'curiosity', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 22, minute: 30 }], enabled: true },
+];
+
 export const useRadioStore = create<RadioState>((set) => ({
   stations: defaultStations,
   setStations: (stations) => set({ stations }),
@@ -152,4 +198,25 @@ export const useRadioStore = create<RadioState>((set) => ({
 
   missingSongs: [],
   setMissingSongs: (missingSongs) => set({ missingSongs }),
+
+  fixedContent: defaultFixedContent,
+  setFixedContent: (fixedContent) => set({ fixedContent }),
+  addFixedContent: (content) =>
+    set((state) => ({ fixedContent: [...state.fixedContent, content] })),
+  updateFixedContent: (id, updates) =>
+    set((state) => ({
+      fixedContent: state.fixedContent.map((c) =>
+        c.id === id ? { ...c, ...updates } : c
+      ),
+    })),
+  removeFixedContent: (id) =>
+    set((state) => ({
+      fixedContent: state.fixedContent.filter((c) => c.id !== id),
+    })),
+
+  blockSongs: {},
+  setBlockSongs: (timeKey, songs) =>
+    set((state) => ({
+      blockSongs: { ...state.blockSongs, [timeKey]: songs },
+    })),
 }));

@@ -12,6 +12,8 @@ import { RankingView } from '@/components/views/RankingView';
 import { LogsView } from '@/components/views/LogsView';
 import { GradeBuilderView } from '@/components/views/GradeBuilderView';
 import { ExportView } from '@/components/views/ExportView';
+import { FixedContentView } from '@/components/views/FixedContentView';
+import { BlockEditorView } from '@/components/views/BlockEditorView';
 import { useRadioStore } from '@/store/radioStore';
 import { CapturedSong } from '@/types/radio';
 
@@ -55,6 +57,10 @@ const Index = () => {
         return <ScheduleView />;
       case 'gradebuilder':
         return <GradeBuilderView />;
+      case 'blockeditor':
+        return <BlockEditorView />;
+      case 'fixedcontent':
+        return <FixedContentView />;
       case 'ranking':
         return <RankingView />;
       case 'logs':
