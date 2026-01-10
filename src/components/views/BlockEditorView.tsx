@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { GripVertical, Music, Clock, Save, RotateCcw, Plus, Trash2, Newspaper, FileText, Copy, BookmarkPlus, Bookmark, Download } from 'lucide-react';
+import { useState, useMemo, useRef } from 'react';
+import { GripVertical, Music, Clock, Save, RotateCcw, Plus, Trash2, Newspaper, FileText, Copy, BookmarkPlus, Bookmark, Download, Upload, AlertTriangle, CheckCircle, Eye, X } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -23,21 +23,31 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 
 interface SortableSongProps {
   song: BlockSong;
   onRemove: () => void;
+  hasWarning?: boolean;
 }
 
 interface BlockTemplate {
   id: string;
   name: string;
   songs: BlockSong[];
-  createdAt: Date;
+  createdAt: string;
 }
 
-function SortableSong({ song, onRemove }: SortableSongProps) {
+interface ValidationWarning {
+  songId: string;
+  songTitle: string;
+  artist: string;
+  type: 'same-block' | 'nearby-block';
+  conflictTime?: string;
+}
+
+function SortableSong({ song, onRemove, hasWarning }: SortableSongProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: song.id,
   });
@@ -54,6 +64,8 @@ function SortableSong({ song, onRemove }: SortableSongProps) {
       className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
         isDragging
           ? 'bg-primary/10 border-primary/50 shadow-lg z-50'
+          : hasWarning
+          ? 'bg-warning/10 border-warning/50'
           : song.isFixed
           ? 'bg-accent/10 border-accent/30'
           : 'bg-secondary/30 border-border hover:border-primary/30'
@@ -66,6 +78,7 @@ function SortableSong({ song, onRemove }: SortableSongProps) {
       >
         <GripVertical className="w-4 h-4" />
       </button>
+      {hasWarning && <AlertTriangle className="w-4 h-4 text-warning shrink-0" />}
       <div className="w-8 h-8 rounded bg-secondary flex items-center justify-center shrink-0">
         {song.isFixed ? (
           <Newspaper className="w-4 h-4 text-accent" />
@@ -126,37 +139,38 @@ const defaultTemplates: BlockTemplate[] = [
     id: 'morning-hits',
     name: 'Manhã de Hits',
     songs: songPool.slice(0, 8).map((s, i) => ({ ...s, id: `template-morning-${i}` })),
-    createdAt: new Date(),
+    createdAt: new Date().toISOString(),
   },
   {
     id: 'afternoon-mix',
     name: 'Tarde Mix',
     songs: [...songPool.slice(2, 6), fixedContentPool[0], ...songPool.slice(6, 10)].map((s, i) => ({ ...s, id: `template-afternoon-${i}` })),
-    createdAt: new Date(),
+    createdAt: new Date().toISOString(),
   },
   {
     id: 'news-block',
     name: 'Bloco com Notícias',
     songs: [fixedContentPool[0], ...songPool.slice(0, 5), fixedContentPool[2], ...songPool.slice(5, 8)].map((s, i) => ({ ...s, id: `template-news-${i}` })),
-    createdAt: new Date(),
+    createdAt: new Date().toISOString(),
   },
 ];
 
 export function BlockEditorView() {
   const { blockSongs, setBlockSongs, fixedContent, programs } = useRadioStore();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedHour, setSelectedHour] = useState(14);
   const [selectedMinute, setSelectedMinute] = useState(0);
   const [templates, setTemplates] = useState<BlockTemplate[]>(defaultTemplates);
   const [newTemplateName, setNewTemplateName] = useState('');
   const [showTemplateInput, setShowTemplateInput] = useState(false);
+  const [showDayPreview, setShowDayPreview] = useState(false);
 
   const timeKey = `${selectedHour.toString().padStart(2, '0')}:${selectedMinute.toString().padStart(2, '0')}`;
 
   // Initialize songs for this block if not exists
   const currentSongs = useMemo(() => {
     if (blockSongs[timeKey]) return blockSongs[timeKey];
-    // Generate default songs
     return songPool.slice(0, 10).map((s, i) => ({ ...s, id: `${timeKey}-${i}` }));
   }, [blockSongs, timeKey]);
 
@@ -171,13 +185,83 @@ export function BlockEditorView() {
     return 'PROGRAMA';
   };
 
-  // Generate .txt line preview
-  const generateTxtLine = useMemo(() => {
-    const time = `${selectedHour.toString().padStart(2, '0')}:${selectedMinute.toString().padStart(2, '0')}`;
-    const program = getProgramForHour(selectedHour);
-    const songFiles = currentSongs.map(s => `"${s.file}"`).join(',vht,');
+  // Generate .txt line for a specific time
+  const generateTxtLineForTime = (hour: number, minute: number) => {
+    const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    const key = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    const program = getProgramForHour(hour);
+    const songs = blockSongs[key] || songPool.slice(0, 10).map((s, i) => ({ ...s, id: `${key}-${i}` }));
+    const songFiles = songs.map(s => `"${s.file}"`).join(',vht,');
     return `${time} (ID=${program}) ${songFiles}`;
-  }, [currentSongs, selectedHour, selectedMinute, programs]);
+  };
+
+  // Generate .txt line preview for current block
+  const generateTxtLine = useMemo(() => {
+    return generateTxtLineForTime(selectedHour, selectedMinute);
+  }, [currentSongs, selectedHour, selectedMinute, programs, blockSongs]);
+
+  // Generate full day preview
+  const generateFullDayPreview = useMemo(() => {
+    const lines: string[] = [];
+    for (let hour = 0; hour < 24; hour++) {
+      lines.push(generateTxtLineForTime(hour, 0));
+      lines.push(generateTxtLineForTime(hour, 30));
+    }
+    return lines.join('\n');
+  }, [blockSongs, programs]);
+
+  // Validation: Check for repeated songs in same block or nearby blocks
+  const validationWarnings = useMemo(() => {
+    const warnings: ValidationWarning[] = [];
+    const songCounts: Record<string, number> = {};
+    
+    // Check duplicates in current block
+    currentSongs.forEach((song) => {
+      if (song.isFixed) return;
+      const key = `${song.title}-${song.artist}`;
+      songCounts[key] = (songCounts[key] || 0) + 1;
+      if (songCounts[key] > 1) {
+        warnings.push({
+          songId: song.id,
+          songTitle: song.title,
+          artist: song.artist,
+          type: 'same-block',
+        });
+      }
+    });
+
+    // Check nearby blocks (±1 hour)
+    const nearbyTimes = [
+      { hour: selectedHour - 1, minute: 0 },
+      { hour: selectedHour - 1, minute: 30 },
+      { hour: selectedHour, minute: selectedMinute === 0 ? 30 : 0 },
+      { hour: selectedHour + 1, minute: 0 },
+      { hour: selectedHour + 1, minute: 30 },
+    ].filter(t => t.hour >= 0 && t.hour < 24 && !(t.hour === selectedHour && t.minute === selectedMinute));
+
+    nearbyTimes.forEach(({ hour, minute }) => {
+      const nearbyKey = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      const nearbySongs = blockSongs[nearbyKey] || [];
+      
+      currentSongs.forEach((song) => {
+        if (song.isFixed) return;
+        const found = nearbySongs.find(ns => ns.title === song.title && ns.artist === song.artist && !ns.isFixed);
+        if (found && !warnings.find(w => w.songId === song.id)) {
+          warnings.push({
+            songId: song.id,
+            songTitle: song.title,
+            artist: song.artist,
+            type: 'nearby-block',
+            conflictTime: nearbyKey,
+          });
+        }
+      });
+    });
+
+    return warnings;
+  }, [currentSongs, blockSongs, selectedHour, selectedMinute]);
+
+  const warningSongIds = new Set(validationWarnings.map(w => w.songId));
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -222,6 +306,11 @@ export function BlockEditorView() {
     toast({ title: 'Copiado!', description: 'Linha copiada para a área de transferência.' });
   };
 
+  const handleCopyFullDay = () => {
+    navigator.clipboard.writeText(generateFullDayPreview);
+    toast({ title: 'Copiado!', description: 'Arquivo completo do dia copiado.' });
+  };
+
   const handleSaveTemplate = () => {
     if (!newTemplateName.trim()) {
       toast({ title: 'Erro', description: 'Digite um nome para o template.', variant: 'destructive' });
@@ -231,7 +320,7 @@ export function BlockEditorView() {
       id: `template-${Date.now()}`,
       name: newTemplateName,
       songs: currentSongs.map((s, i) => ({ ...s, id: `saved-${Date.now()}-${i}` })),
-      createdAt: new Date(),
+      createdAt: new Date().toISOString(),
     };
     setTemplates([...templates, newTemplate]);
     setNewTemplateName('');
@@ -250,6 +339,50 @@ export function BlockEditorView() {
     toast({ title: 'Template removido' });
   };
 
+  // Export templates to JSON
+  const handleExportTemplates = () => {
+    const exportData = {
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      templates: templates,
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `templates_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Exportado!', description: `${templates.length} templates exportados.` });
+  };
+
+  // Import templates from JSON
+  const handleImportTemplates = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.templates && Array.isArray(data.templates)) {
+          const importedTemplates = data.templates.map((t: BlockTemplate) => ({
+            ...t,
+            id: `imported-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          }));
+          setTemplates([...templates, ...importedTemplates]);
+          toast({ title: 'Importado!', description: `${importedTemplates.length} templates importados.` });
+        } else {
+          throw new Error('Formato inválido');
+        }
+      } catch {
+        toast({ title: 'Erro', description: 'Arquivo JSON inválido.', variant: 'destructive' });
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   // Get scheduled fixed content for this time
   const scheduledFixed = fixedContent.filter((c) =>
     c.enabled && c.timeSlots.some((s) => s.hour === selectedHour && s.minute === selectedMinute)
@@ -263,6 +396,31 @@ export function BlockEditorView() {
           <p className="text-muted-foreground">Arraste e solte para reordenar músicas em cada bloco</p>
         </div>
         <div className="flex items-center gap-3">
+          <Dialog open={showDayPreview} onOpenChange={setShowDayPreview}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Eye className="w-4 h-4 mr-2" />
+                Preview do Dia
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[80vh]">
+              <DialogHeader>
+                <DialogTitle className="flex items-center justify-between">
+                  <span>Preview Completo - SEX.txt</span>
+                  <Button size="sm" onClick={handleCopyFullDay}>
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copiar Tudo
+                  </Button>
+                </DialogTitle>
+              </DialogHeader>
+              <div className="bg-background/80 rounded-lg p-4 font-mono text-xs overflow-auto max-h-[60vh] border border-border">
+                <pre className="whitespace-pre text-foreground">
+                  {generateFullDayPreview}
+                </pre>
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <div className="flex items-center gap-2 bg-secondary/50 rounded-lg p-1">
             <Clock className="w-4 h-4 text-muted-foreground ml-2" />
             <Select value={selectedHour.toString()} onValueChange={(v) => setSelectedHour(parseInt(v))}>
@@ -299,6 +457,33 @@ export function BlockEditorView() {
         </div>
       </div>
 
+      {/* Validation Warnings */}
+      {validationWarnings.length > 0 && (
+        <Card className="glass-card border-warning/50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="font-medium text-warning mb-2">Músicas Repetidas Detectadas</h4>
+                <div className="space-y-1">
+                  {validationWarnings.map((warning, i) => (
+                    <div key={i} className="text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">{warning.songTitle}</span>
+                      <span className="text-muted-foreground"> - {warning.artist}</span>
+                      {warning.type === 'same-block' ? (
+                        <Badge variant="outline" className="ml-2 text-xs border-warning/50 text-warning">Duplicada no bloco</Badge>
+                      ) : (
+                        <Badge variant="outline" className="ml-2 text-xs border-accent/50 text-accent">Também em {warning.conflictTime}</Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Live .TXT Preview */}
       <Card className="glass-card border-primary/30">
         <CardHeader className="py-3 border-b border-border">
@@ -306,6 +491,12 @@ export function BlockEditorView() {
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-primary" />
               Preview ao Vivo - Linha no Arquivo .txt
+              {validationWarnings.length === 0 && (
+                <Badge className="bg-success/20 text-success border-success/30 ml-2">
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                  Validado
+                </Badge>
+              )}
             </div>
             <Button variant="ghost" size="sm" onClick={handleCopyTxt}>
               <Copy className="w-4 h-4 mr-2" />
@@ -356,7 +547,11 @@ export function BlockEditorView() {
                         {(index + 1).toString().padStart(2, '0')}
                       </span>
                       <div className="flex-1">
-                        <SortableSong song={song} onRemove={() => handleRemoveSong(song.id)} />
+                        <SortableSong
+                          song={song}
+                          onRemove={() => handleRemoveSong(song.id)}
+                          hasWarning={warningSongIds.has(song.id)}
+                        />
                       </div>
                     </div>
                   ))}
@@ -382,15 +577,43 @@ export function BlockEditorView() {
               <CardTitle className="text-sm flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Bookmark className="w-4 h-4 text-accent" />
-                  Templates Salvos
+                  Templates ({templates.length})
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowTemplateInput(!showTemplateInput)}
-                >
-                  <BookmarkPlus className="w-4 h-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportTemplates}
+                    className="hidden"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Importar templates"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={handleExportTemplates}
+                    title="Exportar templates"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setShowTemplateInput(!showTemplateInput)}
+                  >
+                    <BookmarkPlus className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-2">
@@ -423,7 +646,7 @@ export function BlockEditorView() {
                       onClick={() => handleLoadTemplate(template)}
                       className="flex-1 flex items-center gap-2 text-left"
                     >
-                      <Download className="w-4 h-4 text-accent" />
+                      <Bookmark className="w-4 h-4 text-accent" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">{template.name}</p>
                         <p className="text-xs text-muted-foreground">{template.songs.length} itens</p>
@@ -510,9 +733,9 @@ export function BlockEditorView() {
               <h4 className="text-sm font-medium text-primary mb-2">💡 Dicas</h4>
               <ul className="text-xs text-muted-foreground space-y-1">
                 <li>• Arraste os itens para reordenar</li>
-                <li>• Preview atualiza em tempo real</li>
-                <li>• Salve templates para reutilizar</li>
-                <li>• Clique no template para carregar</li>
+                <li>• ⚠️ Amarelo = música repetida</li>
+                <li>• Use ↑↓ para importar/exportar templates</li>
+                <li>• "Preview do Dia" mostra o .txt completo</li>
               </ul>
             </CardContent>
           </Card>
