@@ -1,0 +1,399 @@
+import { useState } from 'react';
+import { TrendingUp, Music, Crown, Medal, Award, BarChart3 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  Area,
+  AreaChart,
+} from 'recharts';
+
+// Demo ranking data
+const rankingData = [
+  { position: 1, title: 'Evidências', artist: 'Chitãozinho & Xororó', plays: 847, style: 'SERTANEJO', trend: 'up' },
+  { position: 2, title: 'Atrasadinha', artist: 'Felipe Araújo', plays: 723, style: 'SERTANEJO', trend: 'up' },
+  { position: 3, title: 'Hear Me Now', artist: 'Alok', plays: 689, style: 'DANCE', trend: 'stable' },
+  { position: 4, title: 'Medo Bobo', artist: 'Maiara & Maraisa', plays: 654, style: 'SERTANEJO', trend: 'up' },
+  { position: 5, title: 'Propaganda', artist: 'Jorge & Mateus', plays: 612, style: 'SERTANEJO', trend: 'down' },
+  { position: 6, title: 'Deixa Eu Te Amar', artist: 'Sorriso Maroto', plays: 589, style: 'PAGODE', trend: 'up' },
+  { position: 7, title: 'Shallow', artist: 'Lady Gaga', plays: 567, style: 'POP/VARIADO', trend: 'stable' },
+  { position: 8, title: 'Péssimo Negócio', artist: 'Henrique & Juliano', plays: 534, style: 'SERTANEJO', trend: 'up' },
+  { position: 9, title: 'Esse Cara Sou Eu', artist: 'Roberto Carlos', plays: 512, style: 'POP/VARIADO', trend: 'stable' },
+  { position: 10, title: 'Blinding Lights', artist: 'The Weeknd', plays: 498, style: 'POP/VARIADO', trend: 'down' },
+];
+
+const top50Data = rankingData.slice(0, 10).map((item, index) => ({
+  name: item.title.length > 12 ? item.title.substring(0, 12) + '...' : item.title,
+  plays: item.plays,
+  fill: index < 3 ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
+}));
+
+const styleDistribution = [
+  { name: 'Sertanejo', value: 45, color: 'hsl(190, 95%, 50%)' },
+  { name: 'Pagode', value: 20, color: 'hsl(25, 95%, 55%)' },
+  { name: 'Pop/Variado', value: 20, color: 'hsl(150, 80%, 45%)' },
+  { name: 'Dance', value: 10, color: 'hsl(280, 70%, 55%)' },
+  { name: 'Agronejo', value: 5, color: 'hsl(40, 95%, 55%)' },
+];
+
+const weeklyTrend = [
+  { day: 'Seg', plays: 120 },
+  { day: 'Ter', plays: 145 },
+  { day: 'Qua', plays: 132 },
+  { day: 'Qui', plays: 178 },
+  { day: 'Sex', plays: 210 },
+  { day: 'Sáb', plays: 189 },
+  { day: 'Dom', plays: 156 },
+];
+
+const getMedalIcon = (position: number) => {
+  if (position === 1) return <Crown className="w-5 h-5 text-yellow-400" />;
+  if (position === 2) return <Medal className="w-5 h-5 text-gray-300" />;
+  if (position === 3) return <Award className="w-5 h-5 text-amber-600" />;
+  return <span className="w-5 h-5 flex items-center justify-center text-sm font-bold text-muted-foreground">{position}</span>;
+};
+
+const getTrendColor = (trend: string) => {
+  if (trend === 'up') return 'text-success';
+  if (trend === 'down') return 'text-destructive';
+  return 'text-muted-foreground';
+};
+
+const getStyleColor = (style: string) => {
+  const colors: Record<string, string> = {
+    'SERTANEJO': 'bg-primary/20 text-primary border-primary/30',
+    'PAGODE': 'bg-accent/20 text-accent border-accent/30',
+    'POP/VARIADO': 'bg-success/20 text-success border-success/30',
+    'DANCE': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    'AGRONEJO': 'bg-warning/20 text-warning border-warning/30',
+  };
+  return colors[style] || 'bg-muted text-muted-foreground';
+};
+
+export function RankingView() {
+  const maxPlays = Math.max(...rankingData.map((r) => r.plays));
+
+  return (
+    <div className="p-6 space-y-6 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Ranking TOP50</h2>
+          <p className="text-muted-foreground">Músicas mais tocadas e estatísticas detalhadas</p>
+        </div>
+        <Badge className="bg-primary/20 text-primary border border-primary/30 px-4 py-2">
+          <TrendingUp className="w-4 h-4 mr-2" />
+          Atualizado agora
+        </Badge>
+      </div>
+
+      {/* Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="glass-card border-yellow-500/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-yellow-500/10 flex items-center justify-center">
+                <Crown className="w-6 h-6 text-yellow-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Líder Absoluto</p>
+                <p className="font-bold text-foreground">Evidências</p>
+                <p className="text-xs text-yellow-400">847 reproduções</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card border-primary/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Music className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total Ranqueadas</p>
+                <p className="text-2xl font-bold text-foreground">247</p>
+                <p className="text-xs text-primary">+12 esta semana</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card border-accent/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center">
+                <BarChart3 className="w-6 h-6 text-accent" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total Reproduções</p>
+                <p className="text-2xl font-bold text-foreground">8.4K</p>
+                <p className="text-xs text-accent">Últimos 7 dias</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card border-success/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-success/10 flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-success" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Estilo Dominante</p>
+                <p className="font-bold text-foreground">Sertanejo</p>
+                <p className="text-xs text-success">45% do TOP50</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="ranking" className="space-y-6">
+        <TabsList className="bg-secondary/50">
+          <TabsTrigger value="ranking">Ranking</TabsTrigger>
+          <TabsTrigger value="charts">Gráficos</TabsTrigger>
+          <TabsTrigger value="trends">Tendências</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="ranking">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Top 10 List */}
+            <Card className="glass-card lg:col-span-2">
+              <CardHeader className="border-b border-border">
+                <CardTitle className="flex items-center gap-2">
+                  <Crown className="w-5 h-5 text-yellow-400" />
+                  TOP 10 - Músicas Mais Tocadas
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y divide-border">
+                  {rankingData.map((song) => (
+                    <div
+                      key={song.position}
+                      className={`p-4 flex items-center gap-4 hover:bg-secondary/30 transition-colors ${
+                        song.position <= 3 ? 'bg-gradient-to-r from-primary/5 to-transparent' : ''
+                      }`}
+                    >
+                      <div className="w-8 flex justify-center">{getMedalIcon(song.position)}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground truncate">{song.title}</p>
+                        <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
+                      </div>
+                      <Badge variant="outline" className={getStyleColor(song.style)}>
+                        {song.style}
+                      </Badge>
+                      <div className="w-32 hidden md:block">
+                        <Progress value={(song.plays / maxPlays) * 100} className="h-2" />
+                      </div>
+                      <div className="text-right min-w-16">
+                        <p className="font-mono font-bold text-foreground">{song.plays}</p>
+                        <p className={`text-xs ${getTrendColor(song.trend)}`}>
+                          {song.trend === 'up' ? '↑' : song.trend === 'down' ? '↓' : '→'}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Style Distribution */}
+            <Card className="glass-card">
+              <CardHeader className="border-b border-border">
+                <CardTitle>Distribuição por Estilo</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={styleDistribution}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {styleDistribution.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(220, 18%, 11%)',
+                          border: '1px solid hsl(220, 20%, 18%)',
+                          borderRadius: '8px',
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                  {styleDistribution.map((style) => (
+                    <div key={style.name} className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: style.color }} />
+                      <span className="text-xs text-muted-foreground">{style.name}</span>
+                      <span className="text-xs font-mono text-foreground ml-auto">{style.value}%</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="charts">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Bar Chart */}
+            <Card className="glass-card">
+              <CardHeader className="border-b border-border">
+                <CardTitle>TOP 10 - Reproduções</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={top50Data} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 20%, 18%)" />
+                      <XAxis type="number" stroke="hsl(215, 15%, 55%)" fontSize={12} />
+                      <YAxis dataKey="name" type="category" stroke="hsl(215, 15%, 55%)" fontSize={10} width={100} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(220, 18%, 11%)',
+                          border: '1px solid hsl(220, 20%, 18%)',
+                          borderRadius: '8px',
+                        }}
+                      />
+                      <Bar dataKey="plays" fill="hsl(190, 95%, 50%)" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Weekly Trend */}
+            <Card className="glass-card">
+              <CardHeader className="border-b border-border">
+                <CardTitle>Reproduções Semanais</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={weeklyTrend}>
+                      <defs>
+                        <linearGradient id="colorPlays" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 20%, 18%)" />
+                      <XAxis dataKey="day" stroke="hsl(215, 15%, 55%)" fontSize={12} />
+                      <YAxis stroke="hsl(215, 15%, 55%)" fontSize={12} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(220, 18%, 11%)',
+                          border: '1px solid hsl(220, 20%, 18%)',
+                          borderRadius: '8px',
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="plays"
+                        stroke="hsl(190, 95%, 50%)"
+                        fillOpacity={1}
+                        fill="url(#colorPlays)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="trends">
+          <Card className="glass-card">
+            <CardHeader className="border-b border-border">
+              <CardTitle>Análise de Tendências</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="p-4 rounded-lg bg-success/10 border border-success/20">
+                  <h4 className="font-medium text-success mb-3">🔥 Em Alta</h4>
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-success" />
+                      <span className="text-foreground">Atrasadinha</span>
+                      <span className="text-success ml-auto">+23%</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-success" />
+                      <span className="text-foreground">Medo Bobo</span>
+                      <span className="text-success ml-auto">+18%</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-success" />
+                      <span className="text-foreground">Deixa Eu Te Amar</span>
+                      <span className="text-success ml-auto">+15%</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="p-4 rounded-lg bg-muted/30 border border-border">
+                  <h4 className="font-medium text-muted-foreground mb-3">→ Estáveis</h4>
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex items-center gap-2">
+                      <span className="w-4 h-4 text-center text-muted-foreground">—</span>
+                      <span className="text-foreground">Hear Me Now</span>
+                      <span className="text-muted-foreground ml-auto">0%</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-4 h-4 text-center text-muted-foreground">—</span>
+                      <span className="text-foreground">Shallow</span>
+                      <span className="text-muted-foreground ml-auto">0%</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-4 h-4 text-center text-muted-foreground">—</span>
+                      <span className="text-foreground">Esse Cara Sou Eu</span>
+                      <span className="text-muted-foreground ml-auto">0%</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+                  <h4 className="font-medium text-destructive mb-3">📉 Em Queda</h4>
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-destructive rotate-180" />
+                      <span className="text-foreground">Propaganda</span>
+                      <span className="text-destructive ml-auto">-8%</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-destructive rotate-180" />
+                      <span className="text-foreground">Blinding Lights</span>
+                      <span className="text-destructive ml-auto">-5%</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
