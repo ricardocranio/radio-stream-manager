@@ -1,10 +1,11 @@
-import { Radio, Settings, Music, ListMusic, Activity, Clock, FolderOpen, AlertTriangle } from 'lucide-react';
+import { Radio, Settings, Music, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
   id: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  badge?: string;
 }
 
 const navItems: NavItem[] = [
@@ -12,6 +13,9 @@ const navItems: NavItem[] = [
   { id: 'stations', label: 'Emissoras', icon: Radio },
   { id: 'sequence', label: 'Sequência', icon: ListMusic },
   { id: 'schedule', label: 'Programação', icon: Clock },
+  { id: 'ranking', label: 'Ranking TOP50', icon: TrendingUp, badge: 'NOVO' },
+  { id: 'logs', label: 'Logs', icon: Terminal },
+  { id: 'export', label: 'Exportar Grade', icon: Download },
   { id: 'folders', label: 'Pastas', icon: FolderOpen },
   { id: 'missing', label: 'Faltando', icon: AlertTriangle },
   { id: 'settings', label: 'Configurações', icon: Settings },
@@ -39,7 +43,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -48,14 +52,21 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
               key={item.id}
               onClick={() => onTabChange(item.id)}
               className={cn(
-                'w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200',
+                'w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200',
                 isActive
                   ? 'bg-primary/10 text-primary border border-primary/20'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
               )}
             >
-              <Icon className={cn('w-5 h-5', isActive && 'text-primary')} />
-              {item.label}
+              <div className="flex items-center gap-3">
+                <Icon className={cn('w-5 h-5', isActive && 'text-primary')} />
+                {item.label}
+              </div>
+              {item.badge && (
+                <span className="text-[10px] font-bold bg-accent text-accent-foreground px-1.5 py-0.5 rounded">
+                  {item.badge}
+                </span>
+              )}
             </button>
           );
         })}

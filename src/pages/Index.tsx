@@ -8,6 +8,9 @@ import { ScheduleView } from '@/components/views/ScheduleView';
 import { FoldersView } from '@/components/views/FoldersView';
 import { MissingView } from '@/components/views/MissingView';
 import { SettingsView } from '@/components/views/SettingsView';
+import { RankingView } from '@/components/views/RankingView';
+import { LogsView } from '@/components/views/LogsView';
+import { ExportView } from '@/components/views/ExportView';
 import { useRadioStore } from '@/store/radioStore';
 import { CapturedSong } from '@/types/radio';
 
@@ -49,6 +52,12 @@ const Index = () => {
         return <SequenceView />;
       case 'schedule':
         return <ScheduleView />;
+      case 'ranking':
+        return <RankingView />;
+      case 'logs':
+        return <LogsView />;
+      case 'export':
+        return <ExportView />;
       case 'folders':
         return <FoldersView />;
       case 'missing':
