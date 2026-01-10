@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { GripVertical, Music, Clock, Save, RotateCcw, Plus, Trash2, Newspaper } from 'lucide-react';
+import { GripVertical, Music, Clock, Save, RotateCcw, Plus, Trash2, Newspaper, FileText, Copy, BookmarkPlus, Bookmark, Download } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -22,11 +22,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 
 interface SortableSongProps {
   song: BlockSong;
   onRemove: () => void;
+}
+
+interface BlockTemplate {
+  id: string;
+  name: string;
+  songs: BlockSong[];
+  createdAt: Date;
 }
 
 function SortableSong({ song, onRemove }: SortableSongProps) {
@@ -112,11 +120,36 @@ const fixedContentPool: Omit<BlockSong, 'id'>[] = [
   { title: 'As Últimas do Esporte', artist: 'Conteúdo Fixo', file: 'AS_ULTIMAS_DO_ESPORTE.mp3', source: 'FIXO', isFixed: true },
 ];
 
+// Default templates
+const defaultTemplates: BlockTemplate[] = [
+  {
+    id: 'morning-hits',
+    name: 'Manhã de Hits',
+    songs: songPool.slice(0, 8).map((s, i) => ({ ...s, id: `template-morning-${i}` })),
+    createdAt: new Date(),
+  },
+  {
+    id: 'afternoon-mix',
+    name: 'Tarde Mix',
+    songs: [...songPool.slice(2, 6), fixedContentPool[0], ...songPool.slice(6, 10)].map((s, i) => ({ ...s, id: `template-afternoon-${i}` })),
+    createdAt: new Date(),
+  },
+  {
+    id: 'news-block',
+    name: 'Bloco com Notícias',
+    songs: [fixedContentPool[0], ...songPool.slice(0, 5), fixedContentPool[2], ...songPool.slice(5, 8)].map((s, i) => ({ ...s, id: `template-news-${i}` })),
+    createdAt: new Date(),
+  },
+];
+
 export function BlockEditorView() {
-  const { blockSongs, setBlockSongs, fixedContent } = useRadioStore();
+  const { blockSongs, setBlockSongs, fixedContent, programs } = useRadioStore();
   const { toast } = useToast();
   const [selectedHour, setSelectedHour] = useState(14);
   const [selectedMinute, setSelectedMinute] = useState(0);
+  const [templates, setTemplates] = useState<BlockTemplate[]>(defaultTemplates);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [showTemplateInput, setShowTemplateInput] = useState(false);
 
   const timeKey = `${selectedHour.toString().padStart(2, '0')}:${selectedMinute.toString().padStart(2, '0')}`;
 
@@ -126,6 +159,25 @@ export function BlockEditorView() {
     // Generate default songs
     return songPool.slice(0, 10).map((s, i) => ({ ...s, id: `${timeKey}-${i}` }));
   }, [blockSongs, timeKey]);
+
+  // Get program name for current hour
+  const getProgramForHour = (hour: number) => {
+    for (const prog of programs) {
+      const [start, end] = prog.timeRange.split('-').map(Number);
+      if (hour >= start && hour <= end) {
+        return prog.programName;
+      }
+    }
+    return 'PROGRAMA';
+  };
+
+  // Generate .txt line preview
+  const generateTxtLine = useMemo(() => {
+    const time = `${selectedHour.toString().padStart(2, '0')}:${selectedMinute.toString().padStart(2, '0')}`;
+    const program = getProgramForHour(selectedHour);
+    const songFiles = currentSongs.map(s => `"${s.file}"`).join(',vht,');
+    return `${time} (ID=${program}) ${songFiles}`;
+  }, [currentSongs, selectedHour, selectedMinute, programs]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -165,6 +217,39 @@ export function BlockEditorView() {
     toast({ title: 'Bloco salvo', description: `Bloco ${timeKey} foi atualizado.` });
   };
 
+  const handleCopyTxt = () => {
+    navigator.clipboard.writeText(generateTxtLine);
+    toast({ title: 'Copiado!', description: 'Linha copiada para a área de transferência.' });
+  };
+
+  const handleSaveTemplate = () => {
+    if (!newTemplateName.trim()) {
+      toast({ title: 'Erro', description: 'Digite um nome para o template.', variant: 'destructive' });
+      return;
+    }
+    const newTemplate: BlockTemplate = {
+      id: `template-${Date.now()}`,
+      name: newTemplateName,
+      songs: currentSongs.map((s, i) => ({ ...s, id: `saved-${Date.now()}-${i}` })),
+      createdAt: new Date(),
+    };
+    setTemplates([...templates, newTemplate]);
+    setNewTemplateName('');
+    setShowTemplateInput(false);
+    toast({ title: 'Template salvo!', description: `"${newTemplateName}" disponível para reutilização.` });
+  };
+
+  const handleLoadTemplate = (template: BlockTemplate) => {
+    const loadedSongs = template.songs.map((s, i) => ({ ...s, id: `${timeKey}-loaded-${i}-${Date.now()}` }));
+    setBlockSongs(timeKey, loadedSongs);
+    toast({ title: 'Template carregado', description: `"${template.name}" aplicado ao bloco ${timeKey}.` });
+  };
+
+  const handleDeleteTemplate = (templateId: string) => {
+    setTemplates(templates.filter(t => t.id !== templateId));
+    toast({ title: 'Template removido' });
+  };
+
   // Get scheduled fixed content for this time
   const scheduledFixed = fixedContent.filter((c) =>
     c.enabled && c.timeSlots.some((s) => s.hour === selectedHour && s.minute === selectedMinute)
@@ -184,7 +269,7 @@ export function BlockEditorView() {
               <SelectTrigger className="w-20 border-0 bg-transparent">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-popover border border-border z-50">
                 {Array.from({ length: 24 }, (_, i) => (
                   <SelectItem key={i} value={i.toString()}>
                     {i.toString().padStart(2, '0')}h
@@ -197,7 +282,7 @@ export function BlockEditorView() {
               <SelectTrigger className="w-20 border-0 bg-transparent">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-popover border border-border z-50">
                 <SelectItem value="0">00</SelectItem>
                 <SelectItem value="30">30</SelectItem>
               </SelectContent>
@@ -213,6 +298,34 @@ export function BlockEditorView() {
           </Button>
         </div>
       </div>
+
+      {/* Live .TXT Preview */}
+      <Card className="glass-card border-primary/30">
+        <CardHeader className="py-3 border-b border-border">
+          <CardTitle className="text-sm flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-primary" />
+              Preview ao Vivo - Linha no Arquivo .txt
+            </div>
+            <Button variant="ghost" size="sm" onClick={handleCopyTxt}>
+              <Copy className="w-4 h-4 mr-2" />
+              Copiar
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4">
+          <div className="bg-background/80 rounded-lg p-4 font-mono text-xs overflow-x-auto border border-border">
+            <pre className="whitespace-pre-wrap break-all text-foreground">
+              {generateTxtLine}
+            </pre>
+          </div>
+          <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+            <span>📄 Arquivo: SEX.txt (exemplo)</span>
+            <span>🕐 Bloco: {timeKey}</span>
+            <span>🎵 {currentSongs.length} itens</span>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Block Editor */}
@@ -236,7 +349,7 @@ export function BlockEditorView() {
           <CardContent className="p-4">
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={currentSongs.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
                   {currentSongs.map((song, index) => (
                     <div key={song.id} className="flex items-center gap-2">
                       <span className="w-6 text-center text-sm font-mono text-muted-foreground">
@@ -261,8 +374,75 @@ export function BlockEditorView() {
           </CardContent>
         </Card>
 
-        {/* Add Items Panel */}
-        <div className="space-y-6">
+        {/* Right Panel */}
+        <div className="space-y-4">
+          {/* Templates Section */}
+          <Card className="glass-card border-accent/20">
+            <CardHeader className="border-b border-border py-3">
+              <CardTitle className="text-sm flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Bookmark className="w-4 h-4 text-accent" />
+                  Templates Salvos
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowTemplateInput(!showTemplateInput)}
+                >
+                  <BookmarkPlus className="w-4 h-4" />
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-2">
+              {showTemplateInput && (
+                <div className="p-2 mb-2 rounded-lg bg-secondary/30 space-y-2">
+                  <Input
+                    placeholder="Nome do template..."
+                    value={newTemplateName}
+                    onChange={(e) => setNewTemplateName(e.target.value)}
+                    className="text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <Button size="sm" className="flex-1" onClick={handleSaveTemplate}>
+                      <Save className="w-3 h-3 mr-1" />
+                      Salvar
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setShowTemplateInput(false)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {templates.map((template) => (
+                  <div
+                    key={template.id}
+                    className="flex items-center gap-2 p-2 rounded hover:bg-secondary/50 transition-colors group"
+                  >
+                    <button
+                      onClick={() => handleLoadTemplate(template)}
+                      className="flex-1 flex items-center gap-2 text-left"
+                    >
+                      <Download className="w-4 h-4 text-accent" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{template.name}</p>
+                        <p className="text-xs text-muted-foreground">{template.songs.length} itens</p>
+                      </div>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDeleteTemplate(template.id)}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Add Fixed Content */}
           <Card className="glass-card">
             <CardHeader className="border-b border-border py-3">
@@ -272,7 +452,7 @@ export function BlockEditorView() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-2">
-              <div className="space-y-1 max-h-48 overflow-y-auto">
+              <div className="space-y-1 max-h-36 overflow-y-auto">
                 {fixedContentPool.map((content, i) => (
                   <button
                     key={i}
@@ -301,7 +481,7 @@ export function BlockEditorView() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-2">
-              <div className="space-y-1 max-h-64 overflow-y-auto">
+              <div className="space-y-1 max-h-48 overflow-y-auto">
                 {songPool.map((song, i) => (
                   <button
                     key={i}
@@ -330,9 +510,9 @@ export function BlockEditorView() {
               <h4 className="text-sm font-medium text-primary mb-2">💡 Dicas</h4>
               <ul className="text-xs text-muted-foreground space-y-1">
                 <li>• Arraste os itens para reordenar</li>
-                <li>• Conteúdos fixos aparecem em laranja</li>
-                <li>• Músicas aparecem em azul</li>
-                <li>• Clique no X para remover um item</li>
+                <li>• Preview atualiza em tempo real</li>
+                <li>• Salve templates para reutilizar</li>
+                <li>• Clique no template para carregar</li>
               </ul>
             </CardContent>
           </Card>
