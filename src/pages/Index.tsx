@@ -10,6 +10,7 @@ import { MissingView } from '@/components/views/MissingView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { RankingView } from '@/components/views/RankingView';
 import { LogsView } from '@/components/views/LogsView';
+import { GradeBuilderView } from '@/components/views/GradeBuilderView';
 import { ExportView } from '@/components/views/ExportView';
 import { useRadioStore } from '@/store/radioStore';
 import { CapturedSong } from '@/types/radio';
@@ -52,6 +53,8 @@ const Index = () => {
         return <SequenceView />;
       case 'schedule':
         return <ScheduleView />;
+      case 'gradebuilder':
+        return <GradeBuilderView />;
       case 'ranking':
         return <RankingView />;
       case 'logs':
