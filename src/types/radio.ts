@@ -2,6 +2,7 @@ export interface RadioStation {
   id: string;
   name: string;
   urls: string[];
+  scrapeUrl?: string; // URL for real-time scraping (mytuner-radio, etc.)
   styles: string[];
   enabled: boolean;
 }
