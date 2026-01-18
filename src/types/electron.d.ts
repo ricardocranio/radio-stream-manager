@@ -74,6 +74,12 @@ interface ElectronAPI {
   scrapeStations: (stations: StationConfig[]) => Promise<ScrapeResult>;
   scrapeStation: (station: StationConfig) => Promise<{ success: boolean; songs: ScrapedSong[]; error?: string }>;
   
+  // Auto-update
+  checkForUpdates: () => Promise<void>;
+  onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: string }) => void) => void;
+  onUpdateDownloaded: (callback: (info: { version: string }) => void) => void;
+  onDownloadProgress: (callback: (progress: { percent: number }) => void) => void;
+  
   // Platform detection
   platform: string;
   isElectron: boolean;

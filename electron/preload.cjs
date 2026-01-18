@@ -1,5 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+console.log('Electron preload script loaded');
+
 // Expose protected methods to renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
   // App info
@@ -24,10 +26,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scrapeStations: (stations) => ipcRenderer.invoke('scrape-stations', stations),
   scrapeStation: (station) => ipcRenderer.invoke('scrape-station', station),
   
+  // Auto-update
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (_, info) => callback(info)),
+  onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (_, info) => callback(info)),
+  onDownloadProgress: (callback) => ipcRenderer.on('download-progress', (_, progress) => callback(progress)),
+  
   // Platform detection
   platform: process.platform,
   isElectron: true,
 });
-
-// Log that preload is running
-console.log('Electron preload script loaded');

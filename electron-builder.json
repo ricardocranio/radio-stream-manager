@@ -59,5 +59,10 @@
     "icon": "public",
     "category": "Utility"
   },
-  "publish": null
+  "publish": {
+    "provider": "github",
+    "owner": "SEU_USUARIO_GITHUB",
+    "repo": "programador-radio",
+    "releaseType": "release"
+  }
 }
