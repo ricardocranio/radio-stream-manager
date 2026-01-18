@@ -535,6 +535,57 @@ export function MissingView() {
         </div>
       </div>
 
+      {/* Download Mode Toggle Card */}
+      <Card className={`glass-card ${deezerConfig.autoDownload ? 'border-green-500/50 bg-green-500/5' : 'border-blue-500/50 bg-blue-500/5'}`}>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${deezerConfig.autoDownload ? 'bg-green-500/20' : 'bg-blue-500/20'}`}>
+                {deezerConfig.autoDownload ? (
+                  <PlayCircle className="w-6 h-6 text-green-500" />
+                ) : (
+                  <Download className="w-6 h-6 text-blue-500" />
+                )}
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  Modo de Download
+                  <Badge className={deezerConfig.autoDownload ? 'bg-green-500/20 text-green-500 border-green-500/30' : 'bg-blue-500/20 text-blue-500 border-blue-500/30'}>
+                    {deezerConfig.autoDownload ? 'Automático' : 'Manual'}
+                  </Badge>
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {deezerConfig.autoDownload 
+                    ? 'Downloads iniciarão automaticamente para novas músicas faltantes'
+                    : 'Você precisa clicar para iniciar o download de cada música'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="auto-download" className="text-sm text-muted-foreground mr-2">
+                Manual
+              </Label>
+              <Switch
+                id="auto-download"
+                checked={deezerConfig.autoDownload}
+                onCheckedChange={(checked) => {
+                  useRadioStore.getState().setDeezerConfig({ autoDownload: checked });
+                  toast({
+                    title: checked ? 'Download Automático Ativado' : 'Download Manual Ativado',
+                    description: checked 
+                      ? 'Novas músicas faltantes serão baixadas automaticamente'
+                      : 'Você controla quando cada música é baixada',
+                  });
+                }}
+              />
+              <Label htmlFor="auto-download" className="text-sm text-muted-foreground ml-2">
+                Auto
+              </Label>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Simulation Mode Card */}
       <Card className={`glass-card ${simulationMode ? 'border-amber-500/50 bg-amber-500/5' : 'border-muted'}`}>
         <CardContent className="p-4">

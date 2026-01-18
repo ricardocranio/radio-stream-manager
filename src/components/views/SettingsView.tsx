@@ -142,7 +142,7 @@ export function SettingsView() {
 
                 <div className="space-y-2">
                   <Label htmlFor="downloadFolder">Pasta de Download</Label>
-                  <div className="relative">
+                  <div className="flex gap-2">
                     <Input
                       id="downloadFolder"
                       value={localDeezerConfig.downloadFolder}
@@ -150,9 +150,53 @@ export function SettingsView() {
                         setLocalDeezerConfig((prev) => ({ ...prev, downloadFolder: e.target.value }))
                       }
                       placeholder="C:\Playlist\Downloads"
-                      className="pr-10"
+                      className="flex-1"
                     />
-                    <FolderOpen className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={async () => {
+                        // Check if running in Electron
+                        const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+                        
+                        if (isElectron && window.electronAPI?.selectFolder) {
+                          // Use Electron's native folder picker
+                          const folder = await window.electronAPI.selectFolder();
+                          if (folder) {
+                            setLocalDeezerConfig((prev) => ({ ...prev, downloadFolder: folder }));
+                          }
+                        } else {
+                          // Use File System Access API for browser
+                          try {
+                            if ('showDirectoryPicker' in window) {
+                              const dirHandle = await (window as unknown as { showDirectoryPicker: () => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker();
+                              setLocalDeezerConfig((prev) => ({ ...prev, downloadFolder: dirHandle.name }));
+                              toast({
+                                title: 'Pasta selecionada',
+                                description: `Pasta "${dirHandle.name}" selecionada. No navegador, os downloads serão salvos na pasta de downloads padrão.`,
+                              });
+                            } else {
+                              toast({
+                                title: 'Não suportado',
+                                description: 'Seu navegador não suporta seleção de pasta. Use o app desktop ou digite o caminho manualmente.',
+                                variant: 'destructive',
+                              });
+                            }
+                          } catch (err) {
+                            // User cancelled or error
+                            if ((err as Error).name !== 'AbortError') {
+                              toast({
+                                title: 'Erro ao selecionar pasta',
+                                description: 'Não foi possível selecionar a pasta.',
+                                variant: 'destructive',
+                              });
+                            }
+                          }
+                        }
+                      }}
+                    >
+                      <FolderOpen className="w-4 h-4" />
+                    </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Pasta onde as músicas baixadas serão salvas
