@@ -21,24 +21,24 @@ import { useAutoDownload } from '@/hooks/useAutoDownload';
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
-// Extended song database for realistic simulation
+// Extended song database for realistic simulation - Updated with real radio songs
 const simulatedSongsDatabase = {
   'BH FM': [
-    { title: 'Evidências', artist: 'Chitãozinho e Xororo' },
-    { title: 'Medo Bobo', artist: 'Maiara e Maraisa' },
-    { title: 'Propaganda', artist: 'Jorge e Mateus' },
-    { title: 'Atrasadinha', artist: 'Felipe Araujo' },
-    { title: 'Péssimo Negócio', artist: 'Henrique e Juliano' },
-    { title: 'Amando Individual', artist: 'Gusttavo Lima' },
-    { title: 'Milu', artist: 'Luan Santana' },
-    { title: 'Deixa Eu Te Amar', artist: 'Sorriso Maroto' },
-    { title: 'Bebi Liguei', artist: 'Marilia Mendonca' },
+    { title: 'Ciumeira', artist: 'Marilia Mendonca' },
+    { title: 'Mete Um Block Nele', artist: 'Joao Gomes' },
+    { title: 'Entregador de Flor', artist: 'Diego e Victor Hugo' },
+    { title: 'Depois do Prazer', artist: 'Alexandre Pires' },
+    { title: 'Saudade Sua', artist: 'Joao Gomes' },
+    { title: 'Facas', artist: 'Diego e Victor Hugo' },
+    { title: 'Radar', artist: 'Joao Gomes' },
+    { title: 'Menos e Mais', artist: 'Jorge e Mateus' },
+    { title: 'Dengo', artist: 'Joao Gomes' },
+    { title: 'Enquanto Eu Brindo Ce Chora', artist: 'Matheus e Kauan' },
+    { title: 'Gostoso Demais', artist: 'Marilia Mendonca' },
     { title: 'Infiel', artist: 'Marilia Mendonca' },
-    { title: 'Te Assumi Pro Brasil', artist: 'Matheus e Kauan' },
-    { title: 'Corpo Sensual', artist: 'Pabllo Vittar' },
-    { title: 'Regime Fechado', artist: 'Simone e Simaria' },
-    { title: 'Nessas Horas', artist: 'Matheus e Kauan' },
-    { title: 'Amor da Sua Cama', artist: 'Bruno e Marrone' },
+    { title: 'Se For Amor', artist: 'Joao Gomes' },
+    { title: 'Lapada Dela', artist: 'Joao Gomes' },
+    { title: 'Aquelas Coisas', artist: 'Gusttavo Lima' },
   ],
   'Band FM': [
     { title: 'Sorte', artist: 'Thiaguinho' },
