@@ -1,7 +1,7 @@
 @echo off
 echo ========================================
 echo   Programador Radio - Build Script
-echo   (Versao Portatil - Sem Instalador)
+echo   (Instalador + Versao Portatil)
 echo ========================================
 echo.
 
@@ -25,8 +25,8 @@ if errorlevel 1 (
 echo OK!
 echo.
 
-echo [4/5] Empacotando com Electron Builder (Portatil)...
-call npx electron-builder --win --x64 --dir
+echo [4/5] Empacotando com Electron Builder...
+call npx electron-builder --win --x64
 if errorlevel 1 (
     echo ERRO: Falha no Electron Builder!
     pause
@@ -39,7 +39,7 @@ echo [5/5] Criando arquivo ZIP para distribuicao...
 if exist "release\Programador-Radio-Portable.zip" del "release\Programador-Radio-Portable.zip"
 powershell -Command "Compress-Archive -Path 'release\win-unpacked\*' -DestinationPath 'release\Programador-Radio-Portable.zip' -Force"
 if errorlevel 1 (
-    echo AVISO: Falha ao criar ZIP, mas a pasta portatil esta disponivel.
+    echo AVISO: Falha ao criar ZIP, mas os arquivos estao disponiveis.
 ) else (
     echo OK!
 )
@@ -49,12 +49,15 @@ echo ========================================
 echo   BUILD CONCLUIDO COM SUCESSO!
 echo ========================================
 echo.
-echo Arquivos gerados:
+echo Arquivos gerados em release\:
 echo.
-echo   [PASTA] release\win-unpacked\
-echo           Execute: Programador Radio.exe
+echo   [INSTALADOR] Programador Radio-Setup-X.X.X.exe
+echo                Para distribuicao oficial
 echo.
-echo   [ZIP]   release\Programador-Radio-Portable.zip
-echo           Pronto para distribuicao!
+echo   [PASTA]      win-unpacked\
+echo                Versao portatil (sem instalacao)
+echo.
+echo   [ZIP]        Programador-Radio-Portable.zip
+echo                Versao portatil compactada
 echo.
 pause
