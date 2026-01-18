@@ -12,9 +12,9 @@
   },
   "files": [
     "dist/**/*",
-    "electron/main.cjs",
-    "electron/preload.cjs",
-    "public/favicon.ico"
+    "electron/**/*",
+    "public/favicon.ico",
+    "index.js"
   ],
   "extraResources": [
     {
