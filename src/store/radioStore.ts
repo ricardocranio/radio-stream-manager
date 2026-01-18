@@ -27,6 +27,16 @@ export interface BlockSong {
   isFixed: boolean;
 }
 
+export interface MissingSong {
+  id: string;
+  title: string;
+  artist: string;
+  station: string;
+  timestamp: Date;
+  status: 'missing' | 'downloading' | 'downloaded' | 'error';
+  dna?: string;
+}
+
 interface RadioState {
   // Radio Stations
   stations: RadioStation[];
@@ -65,8 +75,12 @@ interface RadioState {
   setLastUpdate: (date: Date) => void;
   
   // Missing Songs
-  missingSongs: CapturedSong[];
-  setMissingSongs: (songs: CapturedSong[]) => void;
+  missingSongs: MissingSong[];
+  setMissingSongs: (songs: MissingSong[]) => void;
+  addMissingSong: (song: MissingSong) => void;
+  updateMissingSong: (id: string, updates: Partial<MissingSong>) => void;
+  removeMissingSong: (id: string) => void;
+  clearMissingSongs: () => void;
 
   // Fixed Content
   fixedContent: FixedContent[];
@@ -78,8 +92,19 @@ interface RadioState {
   // Block Songs (for drag-and-drop)
   blockSongs: Record<string, BlockSong[]>;
   setBlockSongs: (timeKey: string, songs: BlockSong[]) => void;
+
+  // Batch Download State
+  batchDownloadProgress: {
+    isRunning: boolean;
+    total: number;
+    completed: number;
+    failed: number;
+    current: string;
+  };
+  setBatchDownloadProgress: (progress: Partial<RadioState['batchDownloadProgress']>) => void;
 }
 
+// V21 Configuration - Updated from FINAL_PGM_V21.py
 const defaultStations: RadioStation[] = [
   {
     id: 'bh',
@@ -98,26 +123,13 @@ const defaultStations: RadioStation[] = [
   {
     id: 'clube',
     name: 'Clube FM',
-    urls: ['https://onlineradiobox.com/br/clube/playlist/', 'https://radiosaovivo.net/clube-brasilia/'],
+    urls: ['https://www.clubefm.com.br/o-que-tocou', 'https://radiosaovivo.net/clube-brasilia/', 'https://www.radio-ao-vivo.com/radio-clube-fm'],
     styles: ['SERTANEJO', 'PAGODE', 'POP/VARIADO'],
-    enabled: true,
-  },
-  {
-    id: 'disney',
-    name: 'Disney FM',
-    urls: ['https://onlineradiobox.com/br/disney/playlist/', 'https://radiosaovivo.net/disney/'],
-    styles: ['POP/VARIADO', 'TEEN/HITS', 'DANCE'],
-    enabled: true,
-  },
-  {
-    id: 'metro',
-    name: 'Metropolitana',
-    urls: ['https://onlineradiobox.com/br/metropolitana/playlist/', 'https://radiosaovivo.net/metropolitana-fm/'],
-    styles: ['POP/VARIADO', 'DANCE', 'HITS'],
     enabled: true,
   },
 ];
 
+// V21 Program IDs
 const defaultPrograms: ProgramSchedule[] = [
   { timeRange: '1-5', programName: 'Nossa Madrugada' },
   { timeRange: '6-8', programName: 'Happy Hour' },
@@ -132,39 +144,50 @@ const defaultPrograms: ProgramSchedule[] = [
   { timeRange: '0-0', programName: 'Noite NOSSA' },
 ];
 
+// V21 Sequence - Based on pos_map: 1-4=bh, 5-7=band, 8-10=clube
 const defaultSequence: SequenceConfig[] = [
   { position: 1, radioSource: 'bh' },
   { position: 2, radioSource: 'bh' },
   { position: 3, radioSource: 'bh' },
   { position: 4, radioSource: 'bh' },
-  { position: 5, radioSource: 'bh' },
+  { position: 5, radioSource: 'band' },
   { position: 6, radioSource: 'band' },
   { position: 7, radioSource: 'band' },
-  { position: 8, radioSource: 'band' },
-  { position: 9, radioSource: 'band' },
-  { position: 10, radioSource: 'random_pop' },
+  { position: 8, radioSource: 'clube' },
+  { position: 9, radioSource: 'clube' },
+  { position: 10, radioSource: 'clube' },
 ];
 
+// V21 System Config
 const defaultConfig: SystemConfig = {
   musicFolders: ['C:\\Users\\Radio\\Music\\PGM-FM', 'C:\\Playlist\\Músicas'],
   gradeFolder: 'C:\\Playlist\\pgm\\Grades',
   contentFolder: 'G:\\Outros computadores\\Meu computador\\Conteudos KF',
-  rankingFile: 'C:\\Playlist\\pgm\\ranking_sucessos.json',
+  rankingFile: 'C:\\Playlist\\pgm\\Grades\\ranking_sucessos.json',
   updateIntervalMinutes: 20,
   artistRepetitionMinutes: 60,
   safetyMarginMinutes: 5,
   coringaCode: 'mus',
+  // V21 additions
+  vozBrasilFolder: 'C:\\Playlist\\A Voz do Brasil',
+  vozBrasilTime: '20:35',
+  dnaLearningFile: 'C:\\Playlist\\pgm\\Grades\\dna_learning.json',
+  inventoryCacheDuration: 3600,
+  hardResetInterval: 3600,
+  monitorInterval: 300,
+  forbiddenWords: ['1.FM', 'Love Classics', 'Solitaire', 'Mahjong', 'Dayspedia', 'Games', 'Online', 'METROPOLITANA - SP', 'BAND FM'],
+  funkWords: ['funk', 'mc ', 'sequencia', 'proibidão', 'baile', 'kondzilla', 'gr6'],
 };
 
 const defaultDeezerConfig: DeezerConfig = {
-  arl: '',
+  arl: '04b2d26d75ab4326fd20b66bffd71ca2393a2f2d7893b44453ea5b6f560038ee327caf42b5458fc5776838427d655108d36af2a999c5a661c4c00bb3ca72dfc1c5929881ccdfec2a464bca3a2502e7c006342baed4deac609ad946ef67972f5d',
   downloadFolder: 'C:\\Playlist\\Downloads',
   quality: 'MP3_320',
-  enabled: false,
+  enabled: true,
 };
 
 const defaultFixedContent: FixedContent[] = [
-  { id: '1', name: 'Notícia da Hora', fileName: 'NOTICIA_DA_HORA_{HH}HORAS', type: 'news', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 9, minute: 0 }, { hour: 10, minute: 0 }, { hour: 11, minute: 0 }, { hour: 12, minute: 0 }, { hour: 14, minute: 0 }, { hour: 15, minute: 0 }, { hour: 16, minute: 0 }, { hour: 17, minute: 0 }, { hour: 18, minute: 0 }], enabled: true },
+  { id: '1', name: 'Notícia da Hora', fileName: 'NOTICIA_DA_HORA_{HH}HORAS', type: 'news', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 9, minute: 0 }, { hour: 10, minute: 0 }, { hour: 11, minute: 0 }, { hour: 12, minute: 0 }, { hour: 14, minute: 0 }, { hour: 15, minute: 0 }, { hour: 16, minute: 0 }, { hour: 17, minute: 0 }], enabled: true },
   { id: '2', name: 'Horóscopo do Dia', fileName: 'HOROSCOPO_DO_DIA_EDICAO{ED}', type: 'horoscope', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 8, minute: 30 }, { hour: 9, minute: 30 }, { hour: 10, minute: 30 }, { hour: 11, minute: 30 }], enabled: true },
   { id: '3', name: 'As Últimas do Esporte', fileName: 'AS_ULTIMAS_DO_ESPORTE_EDICAO{ED}', type: 'sports', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 12, minute: 0 }, { hour: 12, minute: 30 }], enabled: true },
   { id: '4', name: 'Clima Brasil Sudeste', fileName: 'CLIMA_BRASIL_SUDESTE', type: 'weather', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 12, minute: 30 }], enabled: true },
@@ -220,6 +243,19 @@ export const useRadioStore = create<RadioState>((set) => ({
 
   missingSongs: [],
   setMissingSongs: (missingSongs) => set({ missingSongs }),
+  addMissingSong: (song) =>
+    set((state) => ({ missingSongs: [...state.missingSongs, song] })),
+  updateMissingSong: (id, updates) =>
+    set((state) => ({
+      missingSongs: state.missingSongs.map((s) =>
+        s.id === id ? { ...s, ...updates } : s
+      ),
+    })),
+  removeMissingSong: (id) =>
+    set((state) => ({
+      missingSongs: state.missingSongs.filter((s) => s.id !== id),
+    })),
+  clearMissingSongs: () => set({ missingSongs: [] }),
 
   fixedContent: defaultFixedContent,
   setFixedContent: (fixedContent) => set({ fixedContent }),
@@ -240,5 +276,17 @@ export const useRadioStore = create<RadioState>((set) => ({
   setBlockSongs: (timeKey, songs) =>
     set((state) => ({
       blockSongs: { ...state.blockSongs, [timeKey]: songs },
+    })),
+
+  batchDownloadProgress: {
+    isRunning: false,
+    total: 0,
+    completed: 0,
+    failed: 0,
+    current: '',
+  },
+  setBatchDownloadProgress: (progress) =>
+    set((state) => ({
+      batchDownloadProgress: { ...state.batchDownloadProgress, ...progress },
     })),
 }));

@@ -29,6 +29,15 @@ export interface SystemConfig {
   artistRepetitionMinutes: number;
   safetyMarginMinutes: number;
   coringaCode: string;
+  // V21 additions
+  vozBrasilFolder?: string;
+  vozBrasilTime?: string;
+  dnaLearningFile?: string;
+  inventoryCacheDuration?: number;
+  hardResetInterval?: number;
+  monitorInterval?: number;
+  forbiddenWords?: string[];
+  funkWords?: string[];
 }
 
 export interface SequenceConfig {
