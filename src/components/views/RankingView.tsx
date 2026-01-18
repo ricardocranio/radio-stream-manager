@@ -98,14 +98,26 @@ const getStyleColor = (style: string) => {
 };
 
 export function RankingView() {
-  const { clearRanking } = useRadioStore();
+  const { rankingSongs, clearRanking, setRankingSongs } = useRadioStore();
   const { toast } = useToast();
   const [selectedStyle, setSelectedStyle] = useState<string>('all');
   const [dateRange, setDateRange] = useState<string>('7d');
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Use store data if available, otherwise use demo data
+  const currentRankingData = rankingSongs.length > 0 
+    ? rankingSongs.map((song, index) => ({
+        position: index + 1,
+        title: song.title,
+        artist: song.artist,
+        plays: song.plays,
+        style: song.style,
+        trend: song.trend,
+      }))
+    : rankingData;
+  
   // Filter ranking data
-  const filteredRanking = rankingData.filter(song => {
+  const filteredRanking = currentRankingData.filter(song => {
     const matchesStyle = selectedStyle === 'all' || song.style === selectedStyle;
     const matchesSearch = searchTerm === '' || 
       song.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -116,10 +128,33 @@ export function RankingView() {
   const maxPlays = Math.max(...filteredRanking.map((r) => r.plays), 1);
 
   const handleResetRanking = () => {
+    // Also clear the demo data visual by resetting everything
     clearRanking();
+    
+    // Force re-render with empty data
     toast({
       title: '🔄 Ranking Zerado!',
-      description: 'Todas as contagens foram resetadas. A nova validação começará do zero.',
+      description: rankingSongs.length > 0 
+        ? `${rankingSongs.length} músicas removidas do ranking. A nova validação começará do zero.`
+        : 'O ranking foi resetado. A nova validação começará do zero.',
+    });
+  };
+
+  // Load demo data into ranking if empty (first time)
+  const handleLoadDemoData = () => {
+    const demoSongs = rankingData.map((song, index) => ({
+      id: `demo-${index}`,
+      title: song.title,
+      artist: song.artist,
+      plays: song.plays,
+      style: song.style,
+      trend: song.trend as 'up' | 'down' | 'stable',
+      lastPlayed: new Date(),
+    }));
+    setRankingSongs(demoSongs);
+    toast({
+      title: '📊 Dados Demo Carregados',
+      description: `${demoSongs.length} músicas adicionadas ao ranking para demonstração.`,
     });
   };
 
@@ -168,6 +203,17 @@ export function RankingView() {
           <p className="text-muted-foreground">Curadoria através do monitoramento das rádios</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
+          {/* Show badge indicating data source */}
+          {rankingSongs.length === 0 ? (
+            <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">
+              Exibindo dados demo
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="border-success/50 text-success">
+              {rankingSongs.length} músicas reais
+            </Badge>
+          )}
+          
           <Button variant="outline" className="gap-2 border-primary/50 text-primary hover:bg-primary/10" onClick={handleExportJSON}>
             <FileJson className="w-4 h-4" />
             Exportar JSON

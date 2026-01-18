@@ -13,12 +13,11 @@ import { radioScraperApi, findStationConfig, syncStationsWithKnown, knownStation
 import { useAutoScraping } from '@/hooks/useAutoScraping';
 
 export function StationsView() {
-  const { stations, updateStation, setStations, addCapturedSong } = useRadioStore();
+  const { stations, updateStation, setStations, addCapturedSong, autoScrapeEnabled, setAutoScrapeEnabled } = useRadioStore();
   const { toast } = useToast();
   const [editingStation, setEditingStation] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<RadioStation | null>(null);
   const [scrapingStation, setScrapingStation] = useState<string | null>(null);
-  const [autoScrapeEnabled, setAutoScrapeEnabled] = useState(false);
   const [lastAutoScrape, setLastAutoScrape] = useState<Date | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ synced: number; unmatched: string[] } | null>(null);
@@ -139,10 +138,12 @@ export function StationsView() {
     });
   };
 
-  // Sync auto scrape state
+  // Start auto scraping on mount if enabled (persisted setting)
   useEffect(() => {
-    setAutoScrapeEnabled(isRunning);
-  }, [isRunning]);
+    if (autoScrapeEnabled && !isRunning) {
+      startAutoScraping(5); // 5 minutes
+    }
+  }, []); // Only run once on mount
 
   const handleToggleAutoScrape = () => {
     if (autoScrapeEnabled) {
@@ -158,7 +159,7 @@ export function StationsView() {
       setLastAutoScrape(new Date());
       toast({
         title: 'Scraping automático ativado',
-        description: 'Músicas serão capturadas automaticamente a cada 5 minutos.',
+        description: 'Músicas serão capturadas automaticamente a cada 5 minutos. Configuração salva!',
       });
     }
   };
