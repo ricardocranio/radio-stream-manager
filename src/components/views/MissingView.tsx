@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle, History, RotateCcw, TrendingUp, Clock, FlaskConical } from 'lucide-react';
+import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle, History, RotateCcw, TrendingUp, Clock, FlaskConical, Wrench } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry, getDownloadStats } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -56,7 +56,24 @@ export function MissingView() {
   const [activeTab, setActiveTab] = useState('missing');
   const [simulationMode, setSimulationMode] = useState(!isElectron); // Auto-enable in web
   const [simulationSuccessRate, setSimulationSuccessRate] = useState(80); // 80% success rate
+  const [isInstallingDeemix, setIsInstallingDeemix] = useState(false);
+  const [deemixInstallMessage, setDeemixInstallMessage] = useState<string | null>(null);
   const { toast } = useToast();
+
+  // Listen for deemix install progress
+  useEffect(() => {
+    if (isElectron && window.electronAPI?.onDeemixInstallProgress) {
+      window.electronAPI.onDeemixInstallProgress((progress) => {
+        setDeemixInstallMessage(progress.message);
+        if (progress.status === 'success' || progress.status === 'error') {
+          setIsInstallingDeemix(false);
+          if (progress.status === 'success') {
+            setDeemixInstalled(true);
+          }
+        }
+      });
+    }
+  }, []);
 
   // Check if deemix is installed on mount
   useEffect(() => {
@@ -75,6 +92,52 @@ export function MissingView() {
       setDeemixInstalled(false);
     }
     setIsCheckingDeemix(false);
+  };
+
+  const handleInstallDeemix = async () => {
+    if (!isElectron || !window.electronAPI?.installDeemix) return;
+    
+    setIsInstallingDeemix(true);
+    setDeemixInstallMessage('Iniciando instalação...');
+    
+    try {
+      const result = await window.electronAPI.installDeemix();
+      
+      if (result.success) {
+        toast({
+          title: '✅ deemix Instalado!',
+          description: result.message || 'Instalação concluída com sucesso.',
+        });
+        setDeemixInstalled(true);
+      } else {
+        toast({
+          title: '❌ Erro na instalação',
+          description: result.error || 'Falha ao instalar deemix.',
+          variant: 'destructive',
+        });
+        
+        if (result.needsPython) {
+          // Open Python download page
+          window.electronAPI?.openExternal('https://www.python.org/downloads/');
+        }
+        
+        if (result.needsRestart) {
+          toast({
+            title: '🔄 Reinicie o aplicativo',
+            description: 'O deemix foi instalado. Reinicie o aplicativo para detectá-lo.',
+          });
+        }
+      }
+    } catch (err) {
+      toast({
+        title: 'Erro',
+        description: err instanceof Error ? err.message : 'Erro desconhecido',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsInstallingDeemix(false);
+      setDeemixInstallMessage(null);
+    }
   };
 
   // Demo missing songs for display
@@ -766,36 +829,87 @@ export function MissingView() {
         <Card className={`glass-card ${deemixInstalled === false ? 'border-destructive/50 bg-destructive/5' : deemixInstalled === true ? 'border-green-500/30 bg-green-500/5' : 'border-muted'}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              {deemixInstalled === false && <AlertCircle className="h-5 w-5 text-destructive" />}
-              {deemixInstalled === true && <CheckCircle className="h-5 w-5 text-green-500" />}
-              {deemixInstalled === null && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+              {isInstallingDeemix && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
+              {!isInstallingDeemix && deemixInstalled === false && <AlertCircle className="h-5 w-5 text-destructive" />}
+              {!isInstallingDeemix && deemixInstalled === true && <CheckCircle className="h-5 w-5 text-green-500" />}
+              {!isInstallingDeemix && deemixInstalled === null && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
               Configuração do deemix
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div className="space-y-2">
-                <p className="font-medium text-foreground">1. Instalar deemix:</p>
-                <code className="block bg-muted/50 px-3 py-2 rounded text-xs font-mono">
-                  pip install deemix
-                </code>
+            {/* Auto Install Section */}
+            {deemixInstalled === false && (
+              <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                    <Wrench className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-foreground">Instalação Automática</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Clique para instalar o deemix automaticamente (requer Python instalado)
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleInstallDeemix}
+                    disabled={isInstallingDeemix}
+                    className="gap-2"
+                  >
+                    {isInstallingDeemix ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Instalando...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4" />
+                        Instalar deemix
+                      </>
+                    )}
+                  </Button>
+                </div>
+                
+                {isInstallingDeemix && deemixInstallMessage && (
+                  <div className="bg-background/50 rounded px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    {deemixInstallMessage}
+                  </div>
+                )}
               </div>
-              <div className="space-y-2">
-                <p className="font-medium text-foreground">2. Rebuild do app:</p>
-                <code className="block bg-muted/50 px-3 py-2 rounded text-xs font-mono">
-                  npm run electron:build
-                </code>
-              </div>
-            </div>
+            )}
+
+            {/* Manual instructions (collapsed if not installed) */}
+            {deemixInstalled === false && (
+              <details className="text-sm">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+                  📋 Ou instale manualmente via terminal
+                </summary>
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <p className="font-medium text-foreground">1. Instalar deemix:</p>
+                    <code className="block bg-muted/50 px-3 py-2 rounded text-xs font-mono">
+                      pip install deemix
+                    </code>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-medium text-foreground">2. Rebuild do app:</p>
+                    <code className="block bg-muted/50 px-3 py-2 rounded text-xs font-mono">
+                      npm run build
+                    </code>
+                  </div>
+                </div>
+              </details>
+            )}
             
             <div className="flex items-center justify-between pt-2 border-t border-border/50">
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-muted-foreground">Status:</span>
                 {deemixInstalled === true && <Badge className="bg-green-500/20 text-green-500 border-green-500/30">Instalado ✓</Badge>}
-                {deemixInstalled === false && <Badge variant="destructive">Não encontrado</Badge>}
-                {deemixInstalled === null && <Badge variant="outline">Verificando...</Badge>}
+                {deemixInstalled === false && !isInstallingDeemix && <Badge variant="destructive">Não encontrado</Badge>}
+                {isInstallingDeemix && <Badge className="bg-primary/20 text-primary border-primary/30">Instalando...</Badge>}
+                {deemixInstalled === null && !isInstallingDeemix && <Badge variant="outline">Verificando...</Badge>}
               </div>
-              <Button variant="outline" size="sm" onClick={checkDeemixStatus} disabled={isCheckingDeemix}>
+              <Button variant="outline" size="sm" onClick={checkDeemixStatus} disabled={isCheckingDeemix || isInstallingDeemix}>
                 {isCheckingDeemix ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
                 Verificar deemix
               </Button>
