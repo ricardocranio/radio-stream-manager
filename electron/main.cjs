@@ -204,6 +204,66 @@ ipcMain.handle('open-external', (event, url) => {
   shell.openExternal(url);
 });
 
-ipcMain.handle('open-path', (event, path) => {
-  shell.openPath(path);
+ipcMain.handle('open-path', (event, filePath) => {
+  shell.openPath(filePath);
+});
+
+// Deezer Download Handler
+ipcMain.handle('download-from-deezer', async (event, params) => {
+  const { artist, title, arl, outputFolder, quality } = params;
+  const fs = require('fs');
+  const https = require('https');
+  const crypto = require('crypto');
+  
+  try {
+    // Ensure output folder exists
+    if (!fs.existsSync(outputFolder)) {
+      fs.mkdirSync(outputFolder, { recursive: true });
+    }
+
+    // Search for track on Deezer API
+    const searchQuery = encodeURIComponent(`${artist} ${title}`);
+    const searchUrl = `https://api.deezer.com/search?q=${searchQuery}&limit=1`;
+    
+    const searchResult = await new Promise((resolve, reject) => {
+      https.get(searchUrl, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(new Error('Falha ao parsear resposta do Deezer'));
+          }
+        });
+      }).on('error', reject);
+    });
+
+    if (!searchResult.data || searchResult.data.length === 0) {
+      return { success: false, error: 'Música não encontrada no Deezer' };
+    }
+
+    const track = searchResult.data[0];
+    
+    // For now, return track info - full download requires deemix or similar
+    // This is a placeholder that shows the track was found
+    // Real implementation would use deemix CLI or deezer-downloader
+    
+    return { 
+      success: true, 
+      track: {
+        id: track.id,
+        title: track.title,
+        artist: track.artist.name,
+        album: track.album.title,
+        duration: track.duration,
+        preview: track.preview,
+      },
+      message: `Música encontrada: ${track.artist.name} - ${track.title}. Para download completo, use deemix CLI.`
+    };
+    
+  } catch (error) {
+    console.error('Deezer download error:', error);
+    return { success: false, error: error.message || 'Erro ao baixar do Deezer' };
+  }
 });

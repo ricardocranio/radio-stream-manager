@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule } from '@/types/radio';
 
+export interface DeezerConfig {
+  arl: string;
+  downloadFolder: string;
+  quality: 'MP3_128' | 'MP3_320' | 'FLAC';
+  enabled: boolean;
+}
+
 export interface FixedContent {
   id: string;
   name: string;
@@ -38,6 +45,10 @@ interface RadioState {
   // System Config
   config: SystemConfig;
   setConfig: (config: Partial<SystemConfig>) => void;
+  
+  // Deezer Config
+  deezerConfig: DeezerConfig;
+  setDeezerConfig: (config: Partial<DeezerConfig>) => void;
   
   // Sequence Config
   sequence: SequenceConfig[];
@@ -145,6 +156,13 @@ const defaultConfig: SystemConfig = {
   coringaCode: 'mus',
 };
 
+const defaultDeezerConfig: DeezerConfig = {
+  arl: '',
+  downloadFolder: 'C:\\Playlist\\Downloads',
+  quality: 'MP3_320',
+  enabled: false,
+};
+
 const defaultFixedContent: FixedContent[] = [
   { id: '1', name: 'Notícia da Hora', fileName: 'NOTICIA_DA_HORA_{HH}HORAS', type: 'news', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 9, minute: 0 }, { hour: 10, minute: 0 }, { hour: 11, minute: 0 }, { hour: 12, minute: 0 }, { hour: 14, minute: 0 }, { hour: 15, minute: 0 }, { hour: 16, minute: 0 }, { hour: 17, minute: 0 }, { hour: 18, minute: 0 }], enabled: true },
   { id: '2', name: 'Horóscopo do Dia', fileName: 'HOROSCOPO_DO_DIA_EDICAO{ED}', type: 'horoscope', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 8, minute: 30 }, { hour: 9, minute: 30 }, { hour: 10, minute: 30 }, { hour: 11, minute: 30 }], enabled: true },
@@ -184,6 +202,10 @@ export const useRadioStore = create<RadioState>((set) => ({
   config: defaultConfig,
   setConfig: (config) =>
     set((state) => ({ config: { ...state.config, ...config } })),
+
+  deezerConfig: defaultDeezerConfig,
+  setDeezerConfig: (config) =>
+    set((state) => ({ deezerConfig: { ...state.deezerConfig, ...config } })),
 
   sequence: defaultSequence,
   setSequence: (sequence) => set({ sequence }),

@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   openPath: (path) => ipcRenderer.invoke('open-path', path),
   
+  // Deezer download
+  downloadFromDeezer: (params) => ipcRenderer.invoke('download-from-deezer', params),
+  
   // Platform detection
   platform: process.platform,
   isElectron: true,
