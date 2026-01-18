@@ -1,6 +1,7 @@
 import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
+import logo from '@/assets/logo.png';
 
 interface NavItem {
   id: string;
@@ -52,9 +53,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       {/* Logo */}
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-            <Radio className="w-5 h-5 text-primary-foreground" />
-          </div>
+          <img src={logo} alt="AudioSolutions" className="w-10 h-10 rounded-lg" />
           <div>
             <h1 className="font-bold text-lg text-foreground">Programador</h1>
             <p className="text-xs text-primary font-medium">RÁDIO</p>
