@@ -1,14 +1,17 @@
-import { Radio, Music, CheckCircle, XCircle, Clock, TrendingUp, Timer } from 'lucide-react';
-import { useRadioStore } from '@/store/radioStore';
+import { Radio, Music, CheckCircle, XCircle, TrendingUp, Timer, History, Trash2 } from 'lucide-react';
+import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 export function DashboardView() {
-  const { stations, capturedSongs, missingSongs, isRunning, config } = useRadioStore();
-  const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds } = useCountdown();
+  const { stations, capturedSongs, missingSongs, isRunning, config, gradeHistory, clearGradeHistory } = useRadioStore();
+  const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
 
   const stats = {
     activeStations: stations.filter((s) => s.enabled).length,
@@ -16,6 +19,16 @@ export function DashboardView() {
     foundSongs: capturedSongs.filter((s) => s.status === 'found').length,
     missingSongsCount: missingSongs.length,
   };
+
+  // Demo grade history if empty
+  const displayGradeHistory: GradeHistoryEntry[] = gradeHistory.length > 0 
+    ? gradeHistory
+    : [
+        { id: '1', timestamp: new Date(Date.now() - 30 * 60000), blockTime: '21:00', songsProcessed: 10, songsFound: 9, songsMissing: 1, programName: 'Noite NOSSA' },
+        { id: '2', timestamp: new Date(Date.now() - 60 * 60000), blockTime: '20:30', songsProcessed: 10, songsFound: 10, songsMissing: 0, programName: 'FIXO' },
+        { id: '3', timestamp: new Date(Date.now() - 90 * 60000), blockTime: '20:00', songsProcessed: 10, songsFound: 8, songsMissing: 2, programName: 'FIXO' },
+        { id: '4', timestamp: new Date(Date.now() - 120 * 60000), blockTime: '19:30', songsProcessed: 10, songsFound: 10, songsMissing: 0, programName: 'TOP10' },
+      ];
 
   // Simulated captured songs for demo
   const recentCaptures = capturedSongs.length > 0 
@@ -170,13 +183,20 @@ export function DashboardView() {
                     <Timer className="w-4 h-4" />
                     Próxima Grade
                   </span>
-                  <span className={`text-sm font-mono ${nextGradeSeconds <= 60 ? 'text-amber-500 animate-pulse' : 'text-primary'}`}>
-                    {nextGradeCountdown}
-                  </span>
+                  <div className="text-right">
+                    <span className={`text-sm font-mono ${nextGradeSeconds <= 60 ? 'text-amber-500 animate-pulse' : 'text-primary'}`}>
+                      {nextGradeCountdown}
+                    </span>
+                    {isRunning && (
+                      <p className="text-xs text-muted-foreground">
+                        Bloco {nextBlockTime} (monta às {buildTime})
+                      </p>
+                    )}
+                  </div>
                 </div>
                 {isRunning && (
                   <Progress 
-                    value={Math.max(0, 100 - (nextGradeSeconds / (config.updateIntervalMinutes * 60)) * 100)} 
+                    value={Math.max(0, 100 - (nextGradeSeconds / 600) * 100)} 
                     className="h-1"
                   />
                 )}
@@ -218,6 +238,74 @@ export function DashboardView() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Grade History */}
+      <Card className="glass-card">
+        <CardHeader className="border-b border-border">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <History className="w-5 h-5 text-primary" />
+              Histórico de Grades
+            </CardTitle>
+            {gradeHistory.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearGradeHistory}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Limpar
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <ScrollArea className="h-[200px]">
+            {displayGradeHistory.length === 0 ? (
+              <div className="p-6 text-center text-muted-foreground">
+                <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p>Nenhuma grade gerada ainda</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {displayGradeHistory.slice(0, 10).map((entry, index) => (
+                  <div
+                    key={entry.id}
+                    className="p-3 flex items-center justify-between hover:bg-secondary/30 transition-colors"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <span className="text-sm font-bold text-primary">{entry.blockTime}</span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground text-sm">{entry.programName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {format(new Date(entry.timestamp), "HH:mm:ss", { locale: ptBR })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="font-mono text-xs border-success/40 text-success bg-success/10">
+                        ✓ {entry.songsFound}
+                      </Badge>
+                      {entry.songsMissing > 0 && (
+                        <Badge variant="outline" className="font-mono text-xs border-destructive/40 text-destructive bg-destructive/10">
+                          ✗ {entry.songsMissing}
+                        </Badge>
+                      )}
+                      <span className="text-xs text-muted-foreground ml-1">
+                        / {entry.songsProcessed}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </CardContent>
+      </Card>
     </div>
   );
 }

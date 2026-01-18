@@ -51,6 +51,17 @@ export interface DownloadHistoryEntry {
   duration?: number; // download time in ms
 }
 
+// Grade update history entry
+export interface GradeHistoryEntry {
+  id: string;
+  timestamp: Date;
+  blockTime: string; // e.g., "18:00"
+  songsProcessed: number;
+  songsFound: number;
+  songsMissing: number;
+  programName: string;
+}
+
 interface RadioState {
   // Radio Stations
   stations: RadioStation[];
@@ -121,6 +132,11 @@ interface RadioState {
   downloadHistory: DownloadHistoryEntry[];
   addDownloadHistory: (entry: DownloadHistoryEntry) => void;
   clearDownloadHistory: () => void;
+
+  // Grade History
+  gradeHistory: GradeHistoryEntry[];
+  addGradeHistory: (entry: GradeHistoryEntry) => void;
+  clearGradeHistory: () => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
@@ -323,6 +339,14 @@ export const useRadioStore = create<RadioState>()(
           downloadHistory: [entry, ...state.downloadHistory].slice(0, 500), // Keep last 500 entries
         })),
       clearDownloadHistory: () => set({ downloadHistory: [] }),
+
+      // Grade History
+      gradeHistory: [],
+      addGradeHistory: (entry) =>
+        set((state) => ({
+          gradeHistory: [entry, ...state.gradeHistory].slice(0, 100), // Keep last 100 entries
+        })),
+      clearGradeHistory: () => set({ gradeHistory: [] }),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
@@ -338,6 +362,7 @@ export const useRadioStore = create<RadioState>()(
         blockSongs: state.blockSongs,
         missingSongs: state.missingSongs,
         downloadHistory: state.downloadHistory,
+        gradeHistory: state.gradeHistory,
       }),
       // Handle Date objects that get serialized as strings
       onRehydrateStorage: () => (state) => {
