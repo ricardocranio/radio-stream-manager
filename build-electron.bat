@@ -1,6 +1,7 @@
 @echo off
 echo ========================================
 echo   Programador Radio - Build Script
+echo   (Versao Portatil - Sem Instalador)
 echo ========================================
 echo.
 
@@ -24,8 +25,8 @@ if errorlevel 1 (
 echo OK!
 echo.
 
-echo [4/4] Empacotando com Electron Builder...
-call npx electron-builder --win --x64
+echo [4/4] Empacotando com Electron Builder (Portatil)...
+call npx electron-builder --win --x64 --dir
 if errorlevel 1 (
     echo ERRO: Falha no Electron Builder!
     pause
@@ -38,6 +39,9 @@ echo ========================================
 echo   BUILD CONCLUIDO COM SUCESSO!
 echo ========================================
 echo.
-echo O instalador esta em: release\
+echo A aplicacao portatil esta em:
+echo release\win-unpacked\
+echo.
+echo Execute: Programador Radio.exe
 echo.
 pause

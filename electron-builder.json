@@ -26,24 +26,11 @@
   "win": {
     "target": [
       {
-        "target": "nsis",
+        "target": "dir",
         "arch": ["x64"]
       }
     ],
-    "icon": "public/favicon.ico",
-    "artifactName": "${productName}-Setup-${version}.${ext}"
-  },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true,
-    "allowElevation": true,
-    "installerIcon": "public/favicon.ico",
-    "uninstallerIcon": "public/favicon.ico",
-    "installerHeaderIcon": "public/favicon.ico",
-    "createDesktopShortcut": true,
-    "createStartMenuShortcut": true,
-    "shortcutName": "Programador Rádio",
-    "include": "build/installer.nsh"
+    "icon": "public/favicon.ico"
   },
   "mac": {
     "target": ["dmg"],
