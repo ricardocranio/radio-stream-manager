@@ -3,6 +3,9 @@
   "appId": "com.pgmfm.programador-radio",
   "productName": "Programador Rádio",
   "copyright": "Copyright © 2024 PGM-FM",
+  "extraMetadata": {
+    "main": "electron/main.cjs"
+  },
   "directories": {
     "output": "release",
     "buildResources": "build"
