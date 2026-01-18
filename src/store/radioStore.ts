@@ -62,6 +62,17 @@ export interface GradeHistoryEntry {
   programName: string;
 }
 
+// Ranking data
+export interface RankingSong {
+  id: string;
+  title: string;
+  artist: string;
+  plays: number;
+  style: string;
+  trend: 'up' | 'down' | 'stable';
+  lastPlayed: Date;
+}
+
 interface RadioState {
   // Radio Stations
   stations: RadioStation[];
@@ -137,6 +148,12 @@ interface RadioState {
   gradeHistory: GradeHistoryEntry[];
   addGradeHistory: (entry: GradeHistoryEntry) => void;
   clearGradeHistory: () => void;
+
+  // Ranking
+  rankingSongs: RankingSong[];
+  setRankingSongs: (songs: RankingSong[]) => void;
+  addRankingPlay: (songId: string) => void;
+  clearRanking: () => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
@@ -347,6 +364,17 @@ export const useRadioStore = create<RadioState>()(
           gradeHistory: [entry, ...state.gradeHistory].slice(0, 100), // Keep last 100 entries
         })),
       clearGradeHistory: () => set({ gradeHistory: [] }),
+
+      // Ranking
+      rankingSongs: [],
+      setRankingSongs: (rankingSongs) => set({ rankingSongs }),
+      addRankingPlay: (songId) =>
+        set((state) => ({
+          rankingSongs: state.rankingSongs.map((s) =>
+            s.id === songId ? { ...s, plays: s.plays + 1, lastPlayed: new Date() } : s
+          ),
+        })),
+      clearRanking: () => set({ rankingSongs: [] }),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
@@ -363,6 +391,7 @@ export const useRadioStore = create<RadioState>()(
         missingSongs: state.missingSongs,
         downloadHistory: state.downloadHistory,
         gradeHistory: state.gradeHistory,
+        rankingSongs: state.rankingSongs,
       }),
       // Handle Date objects that get serialized as strings
       onRehydrateStorage: () => (state) => {
