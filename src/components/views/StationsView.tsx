@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Radio, Plus, Trash2, ExternalLink, Save, X, RefreshCw, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Radio, Plus, Trash2, ExternalLink, Save, X, RefreshCw, Loader2, Play, Pause, Clock } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { RadioStation } from '@/types/radio';
 import { useToast } from '@/hooks/use-toast';
 import { radioScraperApi } from '@/lib/api/radioScraper';
+import { useAutoScraping } from '@/hooks/useAutoScraping';
 
 export function StationsView() {
   const { stations, updateStation, setStations, addCapturedSong } = useRadioStore();
@@ -17,6 +18,44 @@ export function StationsView() {
   const [editingStation, setEditingStation] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<RadioStation | null>(null);
   const [scrapingStation, setScrapingStation] = useState<string | null>(null);
+  const [autoScrapeEnabled, setAutoScrapeEnabled] = useState(false);
+  const [lastAutoScrape, setLastAutoScrape] = useState<Date | null>(null);
+  
+  const { scrapeAllStations, startAutoScraping, stopAutoScraping, isRunning } = useAutoScraping();
+
+  // Sync auto scrape state
+  useEffect(() => {
+    setAutoScrapeEnabled(isRunning);
+  }, [isRunning]);
+
+  const handleToggleAutoScrape = () => {
+    if (autoScrapeEnabled) {
+      stopAutoScraping();
+      setAutoScrapeEnabled(false);
+      toast({
+        title: 'Scraping automático desativado',
+        description: 'A captura automática de músicas foi pausada.',
+      });
+    } else {
+      startAutoScraping(5); // 5 minutes
+      setAutoScrapeEnabled(true);
+      setLastAutoScrape(new Date());
+      toast({
+        title: 'Scraping automático ativado',
+        description: 'Músicas serão capturadas automaticamente a cada 5 minutos.',
+      });
+    }
+  };
+
+  const handleManualScrapeAll = async () => {
+    setScrapingStation('all');
+    try {
+      const result = await scrapeAllStations();
+      setLastAutoScrape(new Date());
+    } finally {
+      setScrapingStation(null);
+    }
+  };
 
   const handleEdit = (station: RadioStation) => {
     setEditingStation(station.id);
@@ -125,11 +164,65 @@ export function StationsView() {
           <h2 className="text-2xl font-bold text-foreground">Emissoras</h2>
           <p className="text-muted-foreground">Gerencie os links e configurações das emissoras de rádio</p>
         </div>
-        <Button className="gap-2">
-          <Plus className="w-4 h-4" />
-          Nova Emissora
-        </Button>
+        <div className="flex items-center gap-4">
+          {/* Auto Scraping Controls */}
+          <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-secondary/50 border border-border">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                {lastAutoScrape 
+                  ? `Última: ${lastAutoScrape.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                  : 'Nunca executado'
+                }
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleManualScrapeAll}
+              disabled={scrapingStation === 'all'}
+            >
+              {scrapingStation === 'all' ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              Atualizar Todas
+            </Button>
+            <Button
+              variant={autoScrapeEnabled ? 'destructive' : 'default'}
+              size="sm"
+              onClick={handleToggleAutoScrape}
+            >
+              {autoScrapeEnabled ? (
+                <>
+                  <Pause className="w-4 h-4 mr-2" />
+                  Parar Auto (5min)
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 mr-2" />
+                  Iniciar Auto (5min)
+                </>
+              )}
+            </Button>
+          </div>
+          <Button className="gap-2">
+            <Plus className="w-4 h-4" />
+            Nova Emissora
+          </Button>
+        </div>
       </div>
+
+      {/* Auto Scraping Status Banner */}
+      {autoScrapeEnabled && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          <span className="text-sm text-foreground">
+            Scraping automático ativo - Capturando músicas de {stations.filter(s => s.enabled && s.scrapeUrl).length} emissoras a cada 5 minutos
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {stations.map((station) => {
