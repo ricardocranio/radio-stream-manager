@@ -67,8 +67,32 @@ function createWindow() {
   if (app.isPackaged) {
     // In packaged app, use app.getAppPath() which returns the root of app.asar
     const appPath = app.getAppPath();
+    const indexPath = path.join(appPath, 'dist', 'index.html');
     console.log('App path:', appPath);
-    mainWindow.loadFile(path.join(appPath, 'dist', 'index.html'));
+    console.log('Loading:', indexPath);
+    
+    // Check if file exists
+    const fs = require('fs');
+    if (fs.existsSync(indexPath)) {
+      console.log('File exists!');
+    } else {
+      console.log('File NOT found! Listing app contents:');
+      try {
+        const files = fs.readdirSync(appPath);
+        console.log('Root files:', files);
+        if (files.includes('dist')) {
+          const distFiles = fs.readdirSync(path.join(appPath, 'dist'));
+          console.log('Dist files:', distFiles);
+        }
+      } catch (e) {
+        console.log('Error listing:', e.message);
+      }
+    }
+    
+    mainWindow.loadFile(indexPath);
+    
+    // Open DevTools to see errors
+    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadURL('http://localhost:5173');
     // Open DevTools in development
