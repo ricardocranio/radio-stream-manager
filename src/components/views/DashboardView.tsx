@@ -1,4 +1,5 @@
-import { Radio, Music, CheckCircle, XCircle, TrendingUp, Timer, History, Trash2, ExternalLink } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Radio, Music, CheckCircle, XCircle, TrendingUp, Timer, History, Trash2, ExternalLink, Filter, X } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +13,10 @@ import { ptBR } from 'date-fns/locale';
 export function DashboardView() {
   const { stations, capturedSongs, missingSongs, isRunning, config, gradeHistory, clearGradeHistory } = useRadioStore();
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
+  
+  // Filter state
+  const [selectedSource, setSelectedSource] = useState<string | null>(null);
+  const [selectedStation, setSelectedStation] = useState<string | null>(null);
 
   const stats = {
     activeStations: stations.filter((s) => s.enabled).length,
@@ -45,22 +50,6 @@ export function DashboardView() {
 
   const displaySongs = capturedSongs.length > 0 ? capturedSongs : demoSongs;
 
-  // Get enabled stations from store
-  const enabledStations = stations.filter(s => s.enabled);
-
-  // Group songs by station - songs now carry their own source URL
-  const songsByStation = enabledStations.reduce((acc, station) => {
-    acc[station.name] = displaySongs.filter(song => song.station === station.name);
-    return acc;
-  }, {} as Record<string, typeof displaySongs>);
-
-  // If there are songs from stations not in the store (demo), add them
-  displaySongs.forEach(song => {
-    if (!songsByStation[song.station]) {
-      songsByStation[song.station] = [song];
-    }
-  });
-
   // Helper to extract domain from URL for display
   const getDomainFromUrl = (url: string): string => {
     try {
@@ -70,6 +59,61 @@ export function DashboardView() {
       return url.slice(0, 20);
     }
   };
+
+  // Get unique sources from songs
+  const uniqueSources = useMemo(() => {
+    const sources = new Set<string>();
+    displaySongs.forEach(song => {
+      if (song.source) {
+        sources.add(getDomainFromUrl(song.source));
+      }
+    });
+    return Array.from(sources);
+  }, [displaySongs]);
+
+  // Get unique stations
+  const uniqueStations = useMemo(() => {
+    const stationSet = new Set<string>();
+    displaySongs.forEach(song => stationSet.add(song.station));
+    return Array.from(stationSet);
+  }, [displaySongs]);
+
+  // Filter songs based on selected source and station
+  const filteredSongs = useMemo(() => {
+    return displaySongs.filter(song => {
+      if (selectedStation && song.station !== selectedStation) return false;
+      if (selectedSource && song.source) {
+        const songSourceDomain = getDomainFromUrl(song.source);
+        if (songSourceDomain !== selectedSource) return false;
+      } else if (selectedSource && !song.source) {
+        return false;
+      }
+      return true;
+    });
+  }, [displaySongs, selectedSource, selectedStation]);
+
+  // Get enabled stations from store
+  const enabledStations = stations.filter(s => s.enabled);
+
+  // Group filtered songs by station
+  const songsByStation = useMemo(() => {
+    const grouped: Record<string, typeof displaySongs> = {};
+    
+    // Initialize with enabled stations
+    enabledStations.forEach(station => {
+      grouped[station.name] = filteredSongs.filter(song => song.station === station.name);
+    });
+    
+    // Add songs from stations not in the store (demo)
+    filteredSongs.forEach(song => {
+      if (!grouped[song.station]) {
+        grouped[song.station] = [song];
+      }
+    });
+    
+    return grouped;
+  }, [enabledStations, filteredSongs]);
+
 
   // Dynamic color palette for stations
   const colorPalette = [
@@ -158,10 +202,71 @@ export function DashboardView() {
 
       {/* Radio Stations Windows */}
       <div>
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-          Captura em Tempo Real
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+            Captura em Tempo Real
+            {(selectedSource || selectedStation) && (
+              <Badge variant="secondary" className="ml-2 text-xs">
+                {filteredSongs.length} de {displaySongs.length}
+              </Badge>
+            )}
+          </h3>
+          
+          {/* Filters */}
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            
+            {/* Station Filter */}
+            <div className="flex flex-wrap gap-1">
+              {uniqueStations.slice(0, 4).map(station => (
+                <Button
+                  key={station}
+                  variant={selectedStation === station ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={() => setSelectedStation(selectedStation === station ? null : station)}
+                >
+                  {station}
+                </Button>
+              ))}
+            </div>
+            
+            {/* Source Filter */}
+            {uniqueSources.length > 0 && (
+              <div className="flex flex-wrap gap-1 ml-2 pl-2 border-l border-border">
+                {uniqueSources.map(source => (
+                  <Button
+                    key={source}
+                    variant={selectedSource === source ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 text-xs px-2"
+                    onClick={() => setSelectedSource(selectedSource === source ? null : source)}
+                  >
+                    <ExternalLink className="w-3 h-3 mr-1" />
+                    {source}
+                  </Button>
+                ))}
+              </div>
+            )}
+            
+            {/* Clear Filters */}
+            {(selectedSource || selectedStation) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs px-2 text-muted-foreground"
+                onClick={() => {
+                  setSelectedSource(null);
+                  setSelectedStation(null);
+                }}
+              >
+                <X className="w-3 h-3 mr-1" />
+                Limpar
+              </Button>
+            )}
+          </div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Object.entries(songsByStation).map(([stationName, songs]) => {
             const colors = getStationColor(stationName);
