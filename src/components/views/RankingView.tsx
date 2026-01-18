@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { TrendingUp, Music, Crown, Medal, Award, BarChart3, RotateCcw, AlertTriangle, Search, Filter, Calendar, Download, FileJson } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -104,17 +104,15 @@ export function RankingView() {
   const [dateRange, setDateRange] = useState<string>('7d');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Use store data if available, otherwise use demo data
-  const currentRankingData = rankingSongs.length > 0 
-    ? rankingSongs.map((song, index) => ({
-        position: index + 1,
-        title: song.title,
-        artist: song.artist,
-        plays: song.plays,
-        style: song.style,
-        trend: song.trend,
-      }))
-    : rankingData;
+  // Use store data only - no demo fallback when ranking is cleared
+  const currentRankingData = rankingSongs.map((song, index) => ({
+    position: index + 1,
+    title: song.title,
+    artist: song.artist,
+    plays: song.plays,
+    style: song.style,
+    trend: song.trend,
+  }));
   
   // Filter ranking data
   const filteredRanking = currentRankingData.filter(song => {
@@ -127,11 +125,42 @@ export function RankingView() {
   
   const maxPlays = Math.max(...filteredRanking.map((r) => r.plays), 1);
 
-  const handleResetRanking = () => {
-    // Also clear the demo data visual by resetting everything
-    clearRanking();
+  // Dynamic style distribution based on current data
+  const dynamicStyleDistribution = useMemo(() => {
+    if (currentRankingData.length === 0) return [];
     
-    // Force re-render with empty data
+    const styleColors: Record<string, string> = {
+      'SERTANEJO': 'hsl(190, 95%, 50%)',
+      'PAGODE': 'hsl(25, 95%, 55%)',
+      'POP/VARIADO': 'hsl(150, 80%, 45%)',
+      'DANCE': 'hsl(280, 70%, 55%)',
+      'AGRONEJO': 'hsl(40, 95%, 55%)',
+    };
+    
+    const styleCounts: Record<string, number> = {};
+    for (const song of currentRankingData) {
+      styleCounts[song.style] = (styleCounts[song.style] || 0) + 1;
+    }
+    
+    const total = currentRankingData.length;
+    return Object.entries(styleCounts).map(([name, count]) => ({
+      name,
+      value: Math.round((count / total) * 100),
+      color: styleColors[name] || 'hsl(0, 0%, 50%)',
+    }));
+  }, [currentRankingData]);
+
+  // Dynamic top 10 chart data
+  const dynamicTop10Data = useMemo(() => {
+    return filteredRanking.slice(0, 10).map((item, index) => ({
+      name: item.title.length > 12 ? item.title.substring(0, 12) + '...' : item.title,
+      plays: item.plays,
+      fill: index < 3 ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
+    }));
+  }, [filteredRanking]);
+
+  const handleResetRanking = () => {
+    clearRanking();
     toast({
       title: '🔄 Ranking Zerado!',
       description: rankingSongs.length > 0 
@@ -250,10 +279,22 @@ export function RankingView() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Load Demo Data button - only show when ranking is empty */}
+          {rankingSongs.length === 0 && (
+            <Button 
+              variant="outline" 
+              className="gap-2 border-primary/50 text-primary hover:bg-primary/10"
+              onClick={handleLoadDemoData}
+            >
+              <Music className="w-4 h-4" />
+              Carregar Demo
+            </Button>
+          )}
           
           <Badge className="bg-primary/20 text-primary border border-primary/30 px-4 py-2">
             <TrendingUp className="w-4 h-4 mr-2" />
-            Atualizado agora
+            {rankingSongs.length > 0 ? `${rankingSongs.length} músicas` : 'Sem dados'}
           </Badge>
         </div>
       </div>
@@ -327,10 +368,10 @@ export function RankingView() {
               className="cursor-pointer"
               onClick={() => setSelectedStyle('all')}
             >
-              Todos ({rankingData.length})
+              Todos ({currentRankingData.length})
             </Badge>
             {allStyles.map(style => {
-              const count = rankingData.filter(s => s.style === style).length;
+              const count = currentRankingData.filter(s => s.style === style).length;
               return (
                 <Badge 
                   key={style}
@@ -356,8 +397,12 @@ export function RankingView() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Líder Absoluto</p>
-                <p className="font-bold text-foreground">Evidências</p>
-                <p className="text-xs text-yellow-400">847 reproduções</p>
+                <p className="font-bold text-foreground truncate max-w-[120px]">
+                  {currentRankingData[0]?.title || 'Sem dados'}
+                </p>
+                <p className="text-xs text-yellow-400">
+                  {currentRankingData[0]?.plays ? `${currentRankingData[0].plays} reproduções` : '-'}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -371,8 +416,8 @@ export function RankingView() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Total Ranqueadas</p>
-                <p className="text-2xl font-bold text-foreground">247</p>
-                <p className="text-xs text-primary">+12 esta semana</p>
+                <p className="text-2xl font-bold text-foreground">{currentRankingData.length}</p>
+                <p className="text-xs text-primary">músicas</p>
               </div>
             </div>
           </CardContent>
@@ -386,8 +431,10 @@ export function RankingView() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Total Reproduções</p>
-                <p className="text-2xl font-bold text-foreground">8.4K</p>
-                <p className="text-xs text-accent">Últimos 7 dias</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {currentRankingData.reduce((acc, s) => acc + s.plays, 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-accent">acumulado</p>
               </div>
             </div>
           </CardContent>
@@ -401,8 +448,12 @@ export function RankingView() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Estilo Dominante</p>
-                <p className="font-bold text-foreground">Sertanejo</p>
-                <p className="text-xs text-success">45% do TOP50</p>
+                <p className="font-bold text-foreground">
+                  {dynamicStyleDistribution[0]?.name || 'Sem dados'}
+                </p>
+                <p className="text-xs text-success">
+                  {dynamicStyleDistribution[0]?.value ? `${dynamicStyleDistribution[0].value}% do TOP50` : '-'}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -427,34 +478,42 @@ export function RankingView() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="divide-y divide-border">
-                  {rankingData.map((song) => (
-                    <div
-                      key={song.position}
-                      className={`p-4 flex items-center gap-4 hover:bg-secondary/30 transition-colors ${
-                        song.position <= 3 ? 'bg-gradient-to-r from-primary/5 to-transparent' : ''
-                      }`}
-                    >
-                      <div className="w-8 flex justify-center">{getMedalIcon(song.position)}</div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground truncate">{song.title}</p>
-                        <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
+                {filteredRanking.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <Music className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+                    <p className="text-muted-foreground">Nenhuma música no ranking</p>
+                    <p className="text-sm text-muted-foreground/70 mt-1">Os dados serão preenchidos conforme as músicas são capturadas</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {filteredRanking.slice(0, 10).map((song, index) => (
+                      <div
+                        key={`${song.title}-${index}`}
+                        className={`p-4 flex items-center gap-4 hover:bg-secondary/30 transition-colors ${
+                          index < 3 ? 'bg-gradient-to-r from-primary/5 to-transparent' : ''
+                        }`}
+                      >
+                        <div className="w-8 flex justify-center">{getMedalIcon(index + 1)}</div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-foreground truncate">{song.title}</p>
+                          <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
+                        </div>
+                        <Badge variant="outline" className={getStyleColor(song.style)}>
+                          {song.style}
+                        </Badge>
+                        <div className="w-32 hidden md:block">
+                          <Progress value={(song.plays / maxPlays) * 100} className="h-2" />
+                        </div>
+                        <div className="text-right min-w-16">
+                          <p className="font-mono font-bold text-foreground">{song.plays}</p>
+                          <p className={`text-xs ${getTrendColor(song.trend)}`}>
+                            {song.trend === 'up' ? '↑' : song.trend === 'down' ? '↓' : '→'}
+                          </p>
+                        </div>
                       </div>
-                      <Badge variant="outline" className={getStyleColor(song.style)}>
-                        {song.style}
-                      </Badge>
-                      <div className="w-32 hidden md:block">
-                        <Progress value={(song.plays / maxPlays) * 100} className="h-2" />
-                      </div>
-                      <div className="text-right min-w-16">
-                        <p className="font-mono font-bold text-foreground">{song.plays}</p>
-                        <p className={`text-xs ${getTrendColor(song.trend)}`}>
-                          {song.trend === 'up' ? '↑' : song.trend === 'down' ? '↓' : '→'}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -464,41 +523,49 @@ export function RankingView() {
                 <CardTitle>Distribuição por Estilo</CardTitle>
               </CardHeader>
               <CardContent className="p-4">
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={styleDistribution}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={5}
-                        dataKey="value"
-                      >
-                        {styleDistribution.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(220, 18%, 11%)',
-                          border: '1px solid hsl(220, 20%, 18%)',
-                          borderRadius: '8px',
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mt-4">
-                  {styleDistribution.map((style) => (
-                    <div key={style.name} className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: style.color }} />
-                      <span className="text-xs text-muted-foreground">{style.name}</span>
-                      <span className="text-xs font-mono text-foreground ml-auto">{style.value}%</span>
-                    </div>
-                  ))}
-                </div>
+                {dynamicStyleDistribution.length === 0 ? (
+                  <div className="h-64 flex items-center justify-center">
+                    <p className="text-muted-foreground text-sm">Sem dados para exibir</p>
+                  </div>
+                ) : (
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={dynamicStyleDistribution}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={80}
+                          paddingAngle={5}
+                          dataKey="value"
+                        >
+                          {dynamicStyleDistribution.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(220, 18%, 11%)',
+                            border: '1px solid hsl(220, 20%, 18%)',
+                            borderRadius: '8px',
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+                {dynamicStyleDistribution.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 mt-4">
+                    {dynamicStyleDistribution.map((style) => (
+                      <div key={style.name} className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: style.color }} />
+                        <span className="text-xs text-muted-foreground">{style.name}</span>
+                        <span className="text-xs font-mono text-foreground ml-auto">{style.value}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -512,23 +579,29 @@ export function RankingView() {
                 <CardTitle>TOP 10 - Reproduções</CardTitle>
               </CardHeader>
               <CardContent className="p-4">
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={top50Data} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 20%, 18%)" />
-                      <XAxis type="number" stroke="hsl(215, 15%, 55%)" fontSize={12} />
-                      <YAxis dataKey="name" type="category" stroke="hsl(215, 15%, 55%)" fontSize={10} width={100} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(220, 18%, 11%)',
-                          border: '1px solid hsl(220, 20%, 18%)',
-                          borderRadius: '8px',
-                        }}
-                      />
-                      <Bar dataKey="plays" fill="hsl(190, 95%, 50%)" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                {dynamicTop10Data.length === 0 ? (
+                  <div className="h-80 flex items-center justify-center">
+                    <p className="text-muted-foreground text-sm">Sem dados para exibir</p>
+                  </div>
+                ) : (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={dynamicTop10Data} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 20%, 18%)" />
+                        <XAxis type="number" stroke="hsl(215, 15%, 55%)" fontSize={12} />
+                        <YAxis dataKey="name" type="category" stroke="hsl(215, 15%, 55%)" fontSize={10} width={100} />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(220, 18%, 11%)',
+                            border: '1px solid hsl(220, 20%, 18%)',
+                            borderRadius: '8px',
+                          }}
+                        />
+                        <Bar dataKey="plays" fill="hsl(190, 95%, 50%)" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
