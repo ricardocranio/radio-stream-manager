@@ -129,11 +129,20 @@ export const knownStations: Record<string, StationConfig> = {
   },
 };
 
+export interface ScrapeOptions {
+  forceRefresh?: boolean;
+  timeout?: number;
+}
+
 export const radioScraperApi = {
   /**
-   * Scrape a single radio station
+   * Scrape a single radio station with retry and fallback support
    */
-  async scrapeStation(stationName: string, customUrl?: string): Promise<RadioScrapeResult> {
+  async scrapeStation(
+    stationName: string, 
+    customUrl?: string, 
+    options: ScrapeOptions = {}
+  ): Promise<RadioScrapeResult> {
     const station = knownStations[stationName];
     const scrapeUrl = customUrl || station?.scrapeUrl;
 
@@ -146,15 +155,18 @@ export const radioScraperApi = {
     }
 
     try {
+      console.log(`[RadioScraper] Scraping ${stationName}...`);
+      
       const { data, error } = await supabase.functions.invoke('scrape-radio', {
         body: { 
           stationUrl: scrapeUrl,
           stationName,
+          forceRefresh: options.forceRefresh || false,
         },
       });
 
       if (error) {
-        console.error('Error scraping station:', error);
+        console.error(`[RadioScraper] Error scraping ${stationName}:`, error);
         return {
           success: false,
           stationName,
@@ -162,9 +174,17 @@ export const radioScraperApi = {
         };
       }
 
-      return data as RadioScrapeResult;
+      const result = data as RadioScrapeResult;
+      
+      if (result.success && result.nowPlaying) {
+        console.log(`[RadioScraper] ✓ ${stationName}: ${result.nowPlaying.artist} - ${result.nowPlaying.title}`);
+      } else {
+        console.warn(`[RadioScraper] ✗ ${stationName}: No song data`);
+      }
+
+      return result;
     } catch (error) {
-      console.error('Error calling scrape function:', error);
+      console.error(`[RadioScraper] Exception scraping ${stationName}:`, error);
       return {
         success: false,
         stationName,
@@ -174,23 +194,42 @@ export const radioScraperApi = {
   },
 
   /**
-   * Scrape multiple radio stations
+   * Scrape multiple radio stations in parallel batches
    */
-  async scrapeMultipleStations(stationNames: string[]): Promise<RadioScrapeResult[]> {
-    const results = await Promise.allSettled(
-      stationNames.map(name => this.scrapeStation(name))
-    );
+  async scrapeMultipleStations(
+    stationNames: string[], 
+    options: ScrapeOptions & { batchSize?: number } = {}
+  ): Promise<RadioScrapeResult[]> {
+    const batchSize = options.batchSize || 3;
+    const allResults: RadioScrapeResult[] = [];
 
-    return results.map((result, index) => {
-      if (result.status === 'fulfilled') {
-        return result.value;
+    for (let i = 0; i < stationNames.length; i += batchSize) {
+      const batch = stationNames.slice(i, i + batchSize);
+      
+      const batchResults = await Promise.allSettled(
+        batch.map(name => this.scrapeStation(name, undefined, options))
+      );
+
+      for (let j = 0; j < batchResults.length; j++) {
+        const result = batchResults[j];
+        if (result.status === 'fulfilled') {
+          allResults.push(result.value);
+        } else {
+          allResults.push({
+            success: false,
+            stationName: batch[j],
+            error: result.reason?.message || 'Unknown error',
+          });
+        }
       }
-      return {
-        success: false,
-        stationName: stationNames[index],
-        error: result.reason?.message || 'Unknown error',
-      };
-    });
+
+      // Small delay between batches
+      if (i + batchSize < stationNames.length) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+
+    return allResults;
   },
 
   /**
@@ -198,5 +237,19 @@ export const radioScraperApi = {
    */
   getAvailableStations(): string[] {
     return Object.keys(knownStations);
+  },
+
+  /**
+   * Check if station has scrape URL configured
+   */
+  hasStation(stationName: string): boolean {
+    return stationName in knownStations;
+  },
+
+  /**
+   * Get station config
+   */
+  getStationConfig(stationName: string): StationConfig | undefined {
+    return knownStations[stationName];
   },
 };

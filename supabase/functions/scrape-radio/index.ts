@@ -15,6 +15,131 @@ interface RadioScrapeResult {
   nowPlaying?: ScrapedSong;
   recentSongs?: ScrapedSong[];
   error?: string;
+  source?: string;
+  scrapedAt?: string;
+}
+
+interface FallbackSource {
+  name: string;
+  urlPattern: (stationName: string) => string | null;
+}
+
+// Multiple fallback sources for radio stations
+const fallbackSources: FallbackSource[] = [
+  {
+    name: 'mytuner-radio',
+    urlPattern: (name) => null, // Primary URL provided by user
+  },
+  {
+    name: 'radio-browser',
+    urlPattern: (name) => `https://www.radio-browser.info/search?name=${encodeURIComponent(name)}&order=votes`,
+  },
+  {
+    name: 'tunein',
+    urlPattern: (name) => `https://tunein.com/search/?query=${encodeURIComponent(name)}`,
+  },
+];
+
+// Retry configuration
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  retryDelay: 1000,
+  timeout: 15000,
+};
+
+async function scrapeWithRetry(
+  apiKey: string,
+  url: string,
+  retries = RETRY_CONFIG.maxRetries
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[Attempt ${attempt}/${retries}] Scraping: ${url}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), RETRY_CONFIG.timeout);
+
+      const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url,
+          formats: ['markdown', 'html'],
+          onlyMainContent: false,
+          waitFor: 10000,
+          actions: [
+            { type: 'wait', milliseconds: 6000 },
+            { type: 'scroll', direction: 'down', amount: 300 },
+            { type: 'wait', milliseconds: 2000 },
+          ],
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      const data = await response.json();
+
+      if (response.ok && data.success !== false) {
+        return { success: true, data };
+      }
+
+      console.warn(`[Attempt ${attempt}] API returned error:`, data.error);
+      
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, RETRY_CONFIG.retryDelay * attempt));
+      }
+    } catch (error) {
+      console.error(`[Attempt ${attempt}] Request failed:`, error);
+      
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, RETRY_CONFIG.retryDelay * attempt));
+      }
+    }
+  }
+
+  return { success: false, error: 'All retry attempts failed' };
+}
+
+async function tryFallbackSources(
+  apiKey: string,
+  stationName: string,
+  primaryUrl: string
+): Promise<{ success: boolean; data?: any; source?: string; error?: string }> {
+  // Try primary URL first
+  const primaryResult = await scrapeWithRetry(apiKey, primaryUrl, 2);
+  if (primaryResult.success && primaryResult.data) {
+    const parsed = parseRadioContent(primaryResult.data, stationName, primaryUrl);
+    if (parsed.nowPlaying) {
+      return { success: true, data: primaryResult.data, source: 'primary' };
+    }
+  }
+
+  console.log('[Fallback] Primary source failed or returned no data, trying fallbacks...');
+
+  // Try alternative MyTuner URL formats
+  const mytunerVariations = [
+    primaryUrl.replace('/pt/', '/'),
+    primaryUrl.replace('mytuner-radio.com/pt', 'mytuner-radio.com'),
+    `https://mytuner-radio.com/radio/${stationName.toLowerCase().replace(/\s+/g, '-')}/`,
+  ];
+
+  for (const altUrl of mytunerVariations) {
+    if (altUrl !== primaryUrl) {
+      console.log(`[Fallback] Trying MyTuner variation: ${altUrl}`);
+      const result = await scrapeWithRetry(apiKey, altUrl, 1);
+      if (result.success && result.data) {
+        const parsed = parseRadioContent(result.data, stationName, altUrl);
+        if (parsed.nowPlaying) {
+          return { success: true, data: result.data, source: 'mytuner-alt' };
+        }
+      }
+    }
+  }
+
+  return { success: false, error: 'No fallback sources returned valid data' };
 }
 
 Deno.serve(async (req) => {
@@ -23,7 +148,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { stationUrl, stationName } = await req.json();
+    const { stationUrl, stationName, forceRefresh } = await req.json();
 
     if (!stationUrl) {
       return new Response(
@@ -47,43 +172,28 @@ Deno.serve(async (req) => {
       formattedUrl = `https://${formattedUrl}`;
     }
 
-    console.log('Scraping radio station:', formattedUrl);
+    console.log('Scraping radio station:', formattedUrl, '| forceRefresh:', forceRefresh);
 
-    // Use Firecrawl to scrape the page with extended wait for dynamic content
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: formattedUrl,
-        formats: ['markdown', 'html'],
-        onlyMainContent: false, // Get full page to capture all dynamic elements
-        waitFor: 8000, // Wait 8 seconds for JavaScript to populate song data
-        actions: [
-          // Wait for the song history element to be populated
-          { type: 'wait', milliseconds: 5000 },
-        ],
-      }),
-    });
+    // Try with fallback sources if primary fails
+    const scrapeResult = await tryFallbackSources(apiKey, stationName || 'Unknown', formattedUrl);
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('Firecrawl API error:', data);
+    if (!scrapeResult.success || !scrapeResult.data) {
+      console.error('All scrape attempts failed');
       return new Response(
         JSON.stringify({ 
           success: false, 
           stationName: stationName || 'Unknown',
-          error: data.error || `Request failed with status ${response.status}` 
+          error: scrapeResult.error || 'Failed to scrape from all sources',
+          scrapedAt: new Date().toISOString(),
         }),
-        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Parse the scraped content to extract song information
-    const result = parseRadioContent(data, stationName || 'Unknown', formattedUrl);
+    // Parse the scraped content
+    const result = parseRadioContent(scrapeResult.data, stationName || 'Unknown', formattedUrl);
+    result.source = scrapeResult.source;
+    result.scrapedAt = new Date().toISOString();
     
     console.log('Scrape successful:', JSON.stringify(result, null, 2));
     return new Response(
@@ -94,7 +204,7 @@ Deno.serve(async (req) => {
     console.error('Error scraping radio:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to scrape';
     return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
+      JSON.stringify({ success: false, error: errorMessage, scrapedAt: new Date().toISOString() }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
