@@ -137,9 +137,53 @@ Edite `package.json`:
 }
 ```
 
+## Auto-Update (Atualização Automática)
+
+O aplicativo possui sistema de atualização automática integrado usando `electron-updater`.
+
+### Configuração do GitHub Releases
+
+1. **Configure o repositório em `electron-builder.json`:**
+```json
+{
+  "publish": {
+    "provider": "github",
+    "owner": "SEU_USUARIO_GITHUB",
+    "repo": "programador-radio",
+    "releaseType": "release"
+  }
+}
+```
+
+2. **Crie um Personal Access Token no GitHub:**
+   - Vá em Settings → Developer settings → Personal access tokens
+   - Crie um token com permissão `repo`
+   - Defina a variável de ambiente: `GH_TOKEN=seu_token`
+
+3. **Para publicar uma nova versão:**
+```bash
+# Atualize a versão no package.json
+# Então execute:
+npm run build
+npx electron-builder --win --x64 --publish always
+```
+
+4. **Criar release manual:**
+   - Faça upload dos arquivos em GitHub Releases
+   - Inclua: `Programador Radio-Setup-X.X.X.exe` e `latest.yml`
+
+### Como Funciona
+
+- O app verifica atualizações 5 segundos após iniciar
+- Menu: Ajuda → Verificar Atualizações (verificação manual)
+- Notificação Windows quando há atualização disponível
+- Barra de progresso na taskbar durante download
+- Diálogo para reiniciar e instalar após download
+
 ## Notas
 
 - O app minimiza para a bandeja do sistema ao fechar
 - Duplo clique no ícone da bandeja abre o app
 - Apenas uma instância pode rodar por vez
 - Dados são salvos em `%APPDATA%/programador-radio`
+- Atualizações automáticas via GitHub Releases

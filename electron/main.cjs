@@ -5,6 +5,16 @@ const fs = require('fs');
 const https = require('https');
 const http = require('http');
 
+// Auto-updater (only in packaged app)
+let autoUpdater = null;
+if (app.isPackaged) {
+  try {
+    autoUpdater = require('electron-updater').autoUpdater;
+  } catch (e) {
+    console.log('electron-updater not available:', e.message);
+  }
+}
+
 // Scraped songs cache to avoid duplicates
 let scrapedSongsCache = new Map();
 
@@ -138,21 +148,44 @@ function createWindow() {
       label: 'Ajuda',
       submenu: [
         {
+          label: 'Verificar Atualizações',
+          click: async () => {
+            if (autoUpdater) {
+              try {
+                await autoUpdater.checkForUpdates();
+              } catch (error) {
+                dialog.showMessageBox(mainWindow, {
+                  type: 'error',
+                  title: 'Erro',
+                  message: 'Não foi possível verificar atualizações',
+                  detail: error.message,
+                });
+              }
+            } else {
+              dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: 'Auto-Update',
+                message: 'Auto-update não disponível',
+                detail: 'O sistema de atualização automática só funciona na versão instalada.',
+              });
+            }
+          },
+        },
+        { type: 'separator' },
+        {
           label: 'Sobre',
           click: () => {
-            const { dialog } = require('electron');
             dialog.showMessageBox(mainWindow, {
               type: 'info',
               title: 'Sobre',
               message: 'Programador Rádio',
-              detail: 'Versão 5.1 (V21)\n\nSistema de geração automática de grades de programação para rádios FM.\n\nIntegração Deezer via deemix.\n\n© 2024 PGM-FM',
+              detail: `Versão ${app.getVersion()}\n\nSistema de geração automática de grades de programação para rádios FM.\n\nIntegração Deezer via deemix.\n\n© 2024 PGM-FM`,
             });
           },
         },
         {
           label: 'Verificar deemix',
           click: async () => {
-            const { dialog } = require('electron');
             const installed = await checkDeemixInstalled();
             dialog.showMessageBox(mainWindow, {
               type: installed ? 'info' : 'warning',
@@ -203,7 +236,7 @@ function createTray() {
     },
   ]);
 
-  tray.setToolTip('Programador Rádio - v5.1');
+  tray.setToolTip(`Programador Rádio - v${app.getVersion()}`);
   tray.setContextMenu(contextMenu);
 
   tray.on('click', () => {
@@ -211,10 +244,116 @@ function createTray() {
   });
 }
 
+// Configure auto-updater
+function setupAutoUpdater() {
+  if (!autoUpdater) return;
+  
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  
+  autoUpdater.on('checking-for-update', () => {
+    console.log('Verificando atualizações...');
+  });
+  
+  autoUpdater.on('update-available', (info) => {
+    console.log('Atualização disponível:', info.version);
+    
+    // Send to renderer
+    if (mainWindow) {
+      mainWindow.webContents.send('update-available', { 
+        version: info.version, 
+        releaseNotes: info.releaseNotes 
+      });
+    }
+    
+    showNotification(
+      '🔄 Atualização Disponível',
+      `Nova versão ${info.version} disponível. Clique para baixar.`,
+      () => {
+        autoUpdater.downloadUpdate();
+      }
+    );
+    
+    // Also show dialog
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Atualização Disponível',
+      message: `Nova versão ${info.version} disponível!`,
+      detail: `Deseja baixar e instalar a atualização agora?\n\nNotas: ${info.releaseNotes || 'Sem notas de versão.'}`,
+      buttons: ['Baixar Agora', 'Mais Tarde'],
+      defaultId: 0,
+    }).then(({ response }) => {
+      if (response === 0) {
+        autoUpdater.downloadUpdate();
+      }
+    });
+  });
+  
+  autoUpdater.on('update-not-available', () => {
+    console.log('Nenhuma atualização disponível.');
+  });
+  
+  autoUpdater.on('download-progress', (progress) => {
+    const percent = Math.round(progress.percent);
+    console.log(`Download: ${percent}%`);
+    
+    // Send progress to renderer
+    if (mainWindow) {
+      mainWindow.webContents.send('download-progress', { percent: progress.percent });
+      mainWindow.setProgressBar(progress.percent / 100);
+    }
+  });
+  
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('Atualização baixada:', info.version);
+    
+    // Send to renderer
+    if (mainWindow) {
+      mainWindow.webContents.send('update-downloaded', { version: info.version });
+      mainWindow.setProgressBar(-1); // Remove progress bar
+    }
+    
+    showNotification(
+      '✅ Atualização Pronta',
+      `Versão ${info.version} pronta para instalar. Reinicie o aplicativo.`,
+      () => {
+        autoUpdater.quitAndInstall(false, true);
+      }
+    );
+    
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Atualização Pronta',
+      message: `Versão ${info.version} baixada com sucesso!`,
+      detail: 'A atualização será instalada quando você reiniciar o aplicativo. Deseja reiniciar agora?',
+      buttons: ['Reiniciar Agora', 'Mais Tarde'],
+      defaultId: 0,
+    }).then(({ response }) => {
+      if (response === 0) {
+        autoUpdater.quitAndInstall(false, true);
+      }
+    });
+  });
+  
+  autoUpdater.on('error', (error) => {
+    console.error('Erro no auto-updater:', error);
+  });
+}
+
 // App ready
 app.whenReady().then(() => {
   createWindow();
   createTray();
+  setupAutoUpdater();
+  
+  // Check for updates after window is ready (only in production)
+  if (autoUpdater && app.isPackaged) {
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch(err => {
+        console.log('Auto-update check failed:', err.message);
+      });
+    }, 5000); // Wait 5 seconds after startup
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -285,6 +424,19 @@ ipcMain.handle('show-notification', (event, { title, body }) => {
     mainWindow.show();
     mainWindow.focus();
   });
+});
+
+// Auto-update IPC handler
+ipcMain.handle('check-for-updates', async () => {
+  if (autoUpdater) {
+    try {
+      await autoUpdater.checkForUpdates();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+  return { success: false, error: 'Auto-updater not available' };
 });
 
 // Search track on Deezer API
