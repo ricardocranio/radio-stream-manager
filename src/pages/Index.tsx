@@ -18,6 +18,7 @@ import { VozBrasilView } from '@/components/views/VozBrasilView';
 import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { CapturedSong } from '@/types/radio';
 import { useAutoDownload } from '@/hooks/useAutoDownload';
+import logo from '@/assets/logo.png';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -272,8 +273,9 @@ const Index = () => {
       <div className="flex-1 flex flex-col">
         <Header />
         <main className="flex-1 overflow-auto">{renderView()}</main>
-        <footer className="border-t border-border bg-secondary/30 px-4 py-2 text-center text-xs text-muted-foreground">
-          Desenvolvido por <span className="font-medium text-foreground">Ricardo Amaral</span> - Contato: <a href="tel:+5531988467222" className="text-primary hover:underline">+55 (31) 98846-7222</a>
+        <footer className="border-t border-border bg-secondary/30 px-4 py-2 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+          <img src={logo} alt="AudioSolutions" className="h-6 w-6 rounded" />
+          <span>Desenvolvido por <span className="font-medium text-foreground">Ricardo Amaral</span> - Contato: <a href="tel:+5531988467222" className="text-primary hover:underline">+55 (31) 98846-7222</a></span>
         </footer>
       </div>
     </div>
