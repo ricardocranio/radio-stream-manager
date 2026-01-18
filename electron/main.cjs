@@ -66,7 +66,9 @@ function createWindow() {
   // Load the app
   if (app.isPackaged) {
     const appPath = app.getAppPath();
-    mainWindow.loadFile(path.join(appPath, 'dist', 'index.html'));
+    const indexPath = path.join(appPath, 'dist', 'index.html');
+    // Use loadURL with file:// protocol and hash to ensure HashRouter works
+    mainWindow.loadURL(`file://${indexPath}#/`);
   } else {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
