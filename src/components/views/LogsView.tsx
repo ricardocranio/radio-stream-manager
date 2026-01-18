@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore } from '@/store/radioStore';
+import { useCountdown } from '@/hooks/useCountdown';
 
 interface LogEntry {
   id: string;
@@ -40,6 +41,7 @@ const demoLogs: LogEntry[] = [
 
 export function LogsView() {
   const { isRunning } = useRadioStore();
+  const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds } = useCountdown();
   const [logs, setLogs] = useState<LogEntry[]>(demoLogs);
   const [isPaused, setIsPaused] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -257,10 +259,14 @@ export function LogsView() {
           {/* Status Bar */}
           <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-secondary/30 text-xs text-muted-foreground">
             <div className="flex items-center gap-4">
-              <span>🕒 Próxima Grade: 18:32</span>
-              <span>🧹 Auto-Clean: 04:21</span>
+              <span className={nextGradeSeconds <= 60 ? 'text-amber-500 animate-pulse font-medium' : ''}>
+                🕒 Próxima Grade: {nextGradeCountdown}
+              </span>
+              <span className={autoCleanSeconds <= 60 ? 'text-amber-500 animate-pulse font-medium' : ''}>
+                🧹 Auto-Clean: {autoCleanCountdown}
+              </span>
             </div>
-            <span>Sistema Ativo ✅</span>
+            <span>{isRunning ? 'Sistema Ativo ✅' : 'Sistema Parado ⏸️'}</span>
           </div>
         </CardContent>
       </Card>
