@@ -184,6 +184,14 @@ const defaultStations: RadioStation[] = [
     styles: ['SERTANEJO', 'PAGODE', 'POP/VARIADO'],
     enabled: true,
   },
+  {
+    id: 'showfm',
+    name: 'Show FM 101.1',
+    urls: ['https://mytuner-radio.com/pt/radio/show-fm-oliveira-504298/'],
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/show-fm-oliveira-504298/',
+    styles: ['SERTANEJO', 'POP/VARIADO'],
+    enabled: true,
+  },
 ];
 
 // V21 Program IDs - Atualizado com nova grade
@@ -202,18 +210,18 @@ const defaultPrograms: ProgramSchedule[] = [
   { timeRange: '0-0', programName: 'Romance' },
 ];
 
-// V21 Sequence - Based on pos_map: 1-4=bh, 5-7=band, 8-10=clube
+// V21 Sequence - Based on pos_map: 1-3=bh, 4-6=band, 7-8=clube, 9-10=showfm
 const defaultSequence: SequenceConfig[] = [
   { position: 1, radioSource: 'bh' },
   { position: 2, radioSource: 'bh' },
   { position: 3, radioSource: 'bh' },
-  { position: 4, radioSource: 'bh' },
+  { position: 4, radioSource: 'band' },
   { position: 5, radioSource: 'band' },
   { position: 6, radioSource: 'band' },
-  { position: 7, radioSource: 'band' },
+  { position: 7, radioSource: 'clube' },
   { position: 8, radioSource: 'clube' },
-  { position: 9, radioSource: 'clube' },
-  { position: 10, radioSource: 'clube' },
+  { position: 9, radioSource: 'showfm' },
+  { position: 10, radioSource: 'showfm' },
 ];
 
 // V21 System Config
