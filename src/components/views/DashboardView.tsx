@@ -1,4 +1,4 @@
-import { Radio, Music, CheckCircle, XCircle, TrendingUp, Timer, History, Trash2 } from 'lucide-react';
+import { Radio, Music, CheckCircle, XCircle, TrendingUp, Timer, History, Trash2, ExternalLink } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -45,21 +45,40 @@ export function DashboardView() {
 
   const displaySongs = capturedSongs.length > 0 ? capturedSongs : demoSongs;
 
-  // Get enabled stations from store
+  // Get enabled stations from store with their scrape URLs
   const enabledStations = stations.filter(s => s.enabled);
 
   // Group songs by station - include all enabled stations even if no songs
   const songsByStation = enabledStations.reduce((acc, station) => {
-    acc[station.name] = displaySongs.filter(song => song.station === station.name);
+    acc[station.name] = {
+      songs: displaySongs.filter(song => song.station === station.name),
+      scrapeUrl: station.scrapeUrl || '',
+      urls: station.urls || [],
+    };
     return acc;
-  }, {} as Record<string, typeof displaySongs>);
+  }, {} as Record<string, { songs: typeof displaySongs; scrapeUrl: string; urls: string[] }>);
 
   // If there are songs from stations not in the store (demo), add them
   displaySongs.forEach(song => {
     if (!songsByStation[song.station]) {
-      songsByStation[song.station] = [song];
+      const station = stations.find(s => s.name === song.station);
+      songsByStation[song.station] = {
+        songs: [song],
+        scrapeUrl: station?.scrapeUrl || '',
+        urls: station?.urls || [],
+      };
     }
   });
+
+  // Helper to extract domain from URL for display
+  const getDomainFromUrl = (url: string): string => {
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname.replace('www.', '').split('.')[0];
+    } catch {
+      return url.slice(0, 20);
+    }
+  };
 
   // Dynamic color palette for stations
   const colorPalette = [
@@ -153,10 +172,14 @@ export function DashboardView() {
           Captura em Tempo Real
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Object.entries(songsByStation).map(([stationName, songs]) => {
+          {Object.entries(songsByStation).map(([stationName, stationData]) => {
             const colors = getStationColor(stationName);
+            const { songs, scrapeUrl, urls } = stationData;
             const foundCount = songs.filter(s => s.status === 'found').length;
             const missingCount = songs.filter(s => s.status === 'missing').length;
+            
+            // Collect all source URLs
+            const allUrls = [scrapeUrl, ...urls].filter(Boolean);
             
             return (
               <Card key={stationName} className={`glass-card ${colors.border}`}>
@@ -177,9 +200,30 @@ export function DashboardView() {
                       )}
                     </div>
                   </CardTitle>
+                  {/* Source URLs */}
+                  {allUrls.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {allUrls.slice(0, 3).map((url, idx) => (
+                        <a
+                          key={idx}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-background/50 text-muted-foreground hover:text-primary transition-colors"
+                          title={url}
+                        >
+                          <ExternalLink className="w-2.5 h-2.5" />
+                          {getDomainFromUrl(url)}
+                        </a>
+                      ))}
+                      {allUrls.length > 3 && (
+                        <span className="text-[10px] text-muted-foreground px-1">+{allUrls.length - 3}</span>
+                      )}
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent className="p-0">
-                  <ScrollArea className="h-[180px]">
+                  <ScrollArea className="h-[160px]">
                     <div className="divide-y divide-border">
                       {songs.slice(0, 5).map((song, index) => (
                         <div
@@ -208,6 +252,11 @@ export function DashboardView() {
                           </Badge>
                         </div>
                       ))}
+                      {songs.length === 0 && (
+                        <div className="p-4 text-center text-muted-foreground text-sm">
+                          Aguardando captura...
+                        </div>
+                      )}
                     </div>
                   </ScrollArea>
                 </CardContent>

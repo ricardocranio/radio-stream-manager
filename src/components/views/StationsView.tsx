@@ -22,35 +22,65 @@ export function StationsView() {
   const [lastAutoScrape, setLastAutoScrape] = useState<Date | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ synced: number; unmatched: string[] } | null>(null);
+  const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   
   const { scrapeAllStations, startAutoScraping, stopAutoScraping, isRunning, stats } = useAutoScraping();
 
-  // Auto-sync stations with known URLs on mount
-  useEffect(() => {
+  // Auto-sync function
+  const performAutoSync = useCallback(() => {
     const syncResult = syncStationsWithKnown(stations);
+    let updated = 0;
     
-    if (syncResult.newUrls > 0) {
-      // Update stations with matched URLs
-      for (const syncedStation of syncResult.synced) {
-        if (syncedStation.matched) {
-          const station = stations.find(s => s.id === syncedStation.id);
-          if (station && station.scrapeUrl !== syncedStation.scrapeUrl) {
-            updateStation(station.id, { scrapeUrl: syncedStation.scrapeUrl });
-          }
+    for (const syncedStation of syncResult.synced) {
+      if (syncedStation.matched) {
+        const station = stations.find(s => s.id === syncedStation.id);
+        if (station && station.scrapeUrl !== syncedStation.scrapeUrl) {
+          updateStation(station.id, { scrapeUrl: syncedStation.scrapeUrl });
+          updated++;
         }
       }
-      
-      toast({
-        title: '🔗 URLs Sincronizadas',
-        description: `${syncResult.newUrls} emissoras atualizadas com URLs da base de dados.`,
-      });
     }
     
     setSyncStatus({
       synced: syncResult.synced.filter(s => s.matched).length,
       unmatched: syncResult.unmatched,
     });
+    
+    setLastAutoSync(new Date());
+    
+    return { updated, synced: syncResult.synced.length };
+  }, [stations, updateStation]);
+
+  // Auto-sync on mount
+  useEffect(() => {
+    const result = performAutoSync();
+    
+    if (result.updated > 0) {
+      toast({
+        title: '🔗 URLs Sincronizadas',
+        description: `${result.updated} emissoras atualizadas com URLs da base de dados.`,
+      });
+    }
   }, []); // Run once on mount
+
+  // Auto-sync every 15 minutes
+  useEffect(() => {
+    const SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+    
+    const intervalId = setInterval(() => {
+      console.log('[AutoSync] Running automatic URL sync...');
+      const result = performAutoSync();
+      
+      if (result.updated > 0) {
+        toast({
+          title: '🔗 Sincronização Automática',
+          description: `${result.updated} URLs atualizadas automaticamente.`,
+        });
+      }
+    }, SYNC_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, [performAutoSync, toast]);
 
   // Check if a station has a known URL match
   const getStationMatchStatus = useCallback((stationName: string): 'matched' | 'custom' | 'none' => {
@@ -304,17 +334,6 @@ export function StationsView() {
           <p className="text-muted-foreground">Gerencie os links e configurações das emissoras de rádio</p>
         </div>
         <div className="flex items-center gap-4">
-          {/* Sync Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSyncAllStations}
-            className="gap-2"
-          >
-            <Link2 className="w-4 h-4" />
-            Sincronizar URLs
-          </Button>
-          
           {/* Auto Scraping Controls */}
           <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-secondary/50 border border-border">
             <div className="flex items-center gap-2">
@@ -365,23 +384,31 @@ export function StationsView() {
         </div>
       </div>
 
-      {/* Sync Status Banner */}
+      {/* Sync Status Banner - Auto sync every 15 min */}
       {syncStatus && (
         <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-secondary/50 border border-border">
           <div className="flex items-center gap-3">
             <CheckCircle2 className="w-4 h-4 text-green-500" />
             <span className="text-sm text-foreground">
-              <strong>{syncStatus.synced}</strong> emissoras com URLs oficiais sincronizadas
+              <strong>{syncStatus.synced}</strong> emissoras com URLs oficiais
               {syncStatus.unmatched.length > 0 && (
                 <span className="text-muted-foreground ml-2">
-                  ({syncStatus.unmatched.length} sem correspondência: {syncStatus.unmatched.slice(0, 3).join(', ')}{syncStatus.unmatched.length > 3 ? '...' : ''})
+                  • {syncStatus.unmatched.length} customizadas
                 </span>
               )}
             </span>
           </div>
-          <Badge variant="outline" className="text-xs">
-            {Object.keys(knownStations).length} rádios na base
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs">
+              <Link2 className="w-3 h-3 mr-1" />
+              Sync auto: 15min
+            </Badge>
+            {lastAutoSync && (
+              <span className="text-xs text-muted-foreground">
+                Última: {lastAutoSync.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
