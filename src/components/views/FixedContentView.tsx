@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Newspaper, Plus, Trash2, Save, Clock, Calendar, Edit2, Check, X, Star, CloudSun, Heart, Lightbulb, Trophy, Music, TrendingUp } from 'lucide-react';
+import { Newspaper, Plus, Trash2, Save, Clock, Calendar, Edit2, Check, X, Star, CloudSun, Heart, Lightbulb, Trophy, Music, TrendingUp, Mic } from 'lucide-react';
 import { useRadioStore, FixedContent } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ const typeIcons: Record<string, React.ReactNode> = {
   curiosity: <Lightbulb className="w-4 h-4" />,
   other: <Music className="w-4 h-4" />,
   top50: <TrendingUp className="w-4 h-4" />,
+  vozbrasil: <Mic className="w-4 h-4" />,
 };
 
 const typeLabels: Record<string, string> = {
@@ -31,6 +32,7 @@ const typeLabels: Record<string, string> = {
   curiosity: 'Curiosidades',
   other: 'Outros',
   top50: 'TOP50 (Curadoria)',
+  vozbrasil: 'A Voz do Brasil',
 };
 
 const typeColors: Record<string, string> = {
@@ -42,6 +44,7 @@ const typeColors: Record<string, string> = {
   curiosity: 'bg-warning/20 text-warning border-warning/30',
   other: 'bg-muted text-muted-foreground border-muted-foreground/30',
   top50: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  vozbrasil: 'bg-green-500/20 text-green-400 border-green-500/30',
 };
 
 
@@ -165,20 +168,7 @@ export function FixedContentView() {
                   className="mt-1"
                 />
               </div>
-              {newContent.type !== 'top50' ? (
-                <div>
-                  <Label>Nome do Arquivo (padrão)</Label>
-                  <Input
-                    value={newContent.fileName}
-                    onChange={(e) => setNewContent({ ...newContent, fileName: e.target.value })}
-                    placeholder="Ex: NOTICIA_DA_HORA_{HH}HORAS"
-                    className="mt-1 font-mono text-sm"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Use {'{HH}'} para hora, {'{ED}'} para edição, {'{DIA}'} para dia da semana
-                  </p>
-                </div>
-              ) : (
+              {newContent.type === 'top50' ? (
                 <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
                   <div className="flex items-center gap-2 text-yellow-400 mb-2">
                     <TrendingUp className="w-4 h-4" />
@@ -203,6 +193,33 @@ export function FixedContentView() {
                       Na grade: "POSICAO1.MP3",vht,"POSICAO5.MP3"... (posições aleatórias)
                     </p>
                   </div>
+                </div>
+              ) : newContent.type === 'vozbrasil' ? (
+                <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                  <div className="flex items-center gap-2 text-green-400 mb-2">
+                    <Mic className="w-4 h-4" />
+                    <span className="font-medium text-sm">A Voz do Brasil</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Programa obrigatório baixado automaticamente de Seg-Sex.
+                    <br />
+                    Arquivo: VOZ_DO_BRASIL.MP3
+                    <br />
+                    Configure o download na aba "Voz do Brasil".
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <Label>Nome do Arquivo (padrão)</Label>
+                  <Input
+                    value={newContent.fileName}
+                    onChange={(e) => setNewContent({ ...newContent, fileName: e.target.value })}
+                    placeholder="Ex: NOTICIA_DA_HORA_{HH}HORAS"
+                    className="mt-1 font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Use {'{HH}'} para hora, {'{ED}'} para edição, {'{DIA}'} para dia da semana
+                  </p>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-4">
@@ -386,6 +403,10 @@ export function FixedContentView() {
                         {content.type === 'top50' ? (
                           <p className="text-xs font-mono text-yellow-400/80 truncate mt-1">
                             POSICAO1.MP3, POSICAO2.MP3... ({content.top50Count || 5} músicas aleatórias)
+                          </p>
+                        ) : content.type === 'vozbrasil' ? (
+                          <p className="text-xs font-mono text-green-400/80 truncate mt-1">
+                            VOZ_DO_BRASIL.MP3 (download automático)
                           </p>
                         ) : (
                           <p className="text-xs font-mono text-muted-foreground truncate mt-1">
