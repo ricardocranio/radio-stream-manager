@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Deezer/deemix integration
   downloadFromDeezer: (params) => ipcRenderer.invoke('download-from-deezer', params),
   checkDeemix: () => ipcRenderer.invoke('check-deemix'),
+  installDeemix: () => ipcRenderer.invoke('install-deemix'),
+  onDeemixInstallProgress: (callback) => ipcRenderer.on('deemix-install-progress', (_, progress) => callback(progress)),
   
   // Notifications
   showNotification: (title, body) => ipcRenderer.invoke('show-notification', { title, body }),

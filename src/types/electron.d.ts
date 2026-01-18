@@ -65,6 +65,15 @@ interface ElectronAPI {
   // Deezer/deemix integration
   downloadFromDeezer: (params: DeezerDownloadParams) => Promise<DeezerDownloadResult>;
   checkDeemix: () => Promise<boolean>;
+  installDeemix: () => Promise<{
+    success: boolean;
+    error?: string;
+    output?: string;
+    message?: string;
+    needsPython?: boolean;
+    needsRestart?: boolean;
+  }>;
+  onDeemixInstallProgress: (callback: (progress: { status: string; message: string }) => void) => void;
   
   // Notifications
   showNotification: (title: string, body: string) => Promise<void>;

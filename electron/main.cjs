@@ -36,6 +36,92 @@ function checkDeemixInstalled() {
   });
 }
 
+// Check if Python/pip is available
+function checkPythonAvailable() {
+  return new Promise((resolve) => {
+    // Try pip first
+    exec('pip --version', (error) => {
+      if (!error) {
+        resolve({ available: true, command: 'pip' });
+        return;
+      }
+      // Try pip3
+      exec('pip3 --version', (error2) => {
+        if (!error2) {
+          resolve({ available: true, command: 'pip3' });
+          return;
+        }
+        // Try python -m pip
+        exec('python -m pip --version', (error3) => {
+          if (!error3) {
+            resolve({ available: true, command: 'python -m pip' });
+            return;
+          }
+          // Try python3 -m pip
+          exec('python3 -m pip --version', (error4) => {
+            if (!error4) {
+              resolve({ available: true, command: 'python3 -m pip' });
+              return;
+            }
+            resolve({ available: false, command: null });
+          });
+        });
+      });
+    });
+  });
+}
+
+// Install deemix via pip
+function installDeemix() {
+  return new Promise(async (resolve) => {
+    const pythonStatus = await checkPythonAvailable();
+    
+    if (!pythonStatus.available) {
+      resolve({ 
+        success: false, 
+        error: 'Python/pip não encontrado. Instale Python primeiro: https://www.python.org/downloads/',
+        needsPython: true 
+      });
+      return;
+    }
+
+    const installCommand = `${pythonStatus.command} install deemix`;
+    console.log(`Installing deemix with: ${installCommand}`);
+
+    exec(installCommand, { timeout: 120000 }, (error, stdout, stderr) => {
+      if (error) {
+        console.error('deemix installation error:', error);
+        resolve({ 
+          success: false, 
+          error: stderr || error.message,
+          output: stdout 
+        });
+        return;
+      }
+
+      console.log('deemix installation output:', stdout);
+      
+      // Verify installation
+      exec('deemix --help', (verifyError) => {
+        if (verifyError) {
+          resolve({ 
+            success: false, 
+            error: 'Instalação concluída mas deemix não está no PATH. Reinicie o aplicativo.',
+            output: stdout,
+            needsRestart: true
+          });
+        } else {
+          resolve({ 
+            success: true, 
+            output: stdout,
+            message: 'deemix instalado com sucesso!'
+          });
+        }
+      });
+    });
+  });
+}
+
 // Show Windows notification
 function showNotification(title, body, onClick) {
   if (Notification.isSupported()) {
@@ -416,6 +502,29 @@ ipcMain.handle('select-folder', async () => {
 // Check if deemix is available
 ipcMain.handle('check-deemix', async () => {
   return await checkDeemixInstalled();
+});
+
+// Install deemix automatically
+ipcMain.handle('install-deemix', async () => {
+  // Send notification that installation is starting
+  if (mainWindow) {
+    mainWindow.webContents.send('deemix-install-progress', { status: 'starting', message: 'Iniciando instalação do deemix...' });
+  }
+
+  const result = await installDeemix();
+  
+  if (result.success) {
+    showNotification('deemix Instalado!', 'O deemix foi instalado com sucesso. Você pode começar a baixar músicas!');
+    if (mainWindow) {
+      mainWindow.webContents.send('deemix-install-progress', { status: 'success', message: result.message });
+    }
+  } else {
+    if (mainWindow) {
+      mainWindow.webContents.send('deemix-install-progress', { status: 'error', message: result.error });
+    }
+  }
+
+  return result;
 });
 
 // Show notification from renderer
