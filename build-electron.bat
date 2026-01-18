@@ -5,17 +5,17 @@ echo   (Versao Portatil - Sem Instalador)
 echo ========================================
 echo.
 
-echo [1/4] Limpando pasta release anterior...
+echo [1/5] Limpando pasta release anterior...
 if exist release rmdir /s /q release
 echo OK!
 echo.
 
-echo [2/4] Instalando dependencias...
+echo [2/5] Instalando dependencias...
 call npm install
 echo OK!
 echo.
 
-echo [3/4] Gerando build do Vite...
+echo [3/5] Gerando build do Vite...
 call npm run build
 if errorlevel 1 (
     echo ERRO: Falha no build do Vite!
@@ -25,7 +25,7 @@ if errorlevel 1 (
 echo OK!
 echo.
 
-echo [4/4] Empacotando com Electron Builder (Portatil)...
+echo [4/5] Empacotando com Electron Builder (Portatil)...
 call npx electron-builder --win --x64 --dir
 if errorlevel 1 (
     echo ERRO: Falha no Electron Builder!
@@ -35,13 +35,26 @@ if errorlevel 1 (
 echo OK!
 echo.
 
+echo [5/5] Criando arquivo ZIP para distribuicao...
+if exist "release\Programador-Radio-Portable.zip" del "release\Programador-Radio-Portable.zip"
+powershell -Command "Compress-Archive -Path 'release\win-unpacked\*' -DestinationPath 'release\Programador-Radio-Portable.zip' -Force"
+if errorlevel 1 (
+    echo AVISO: Falha ao criar ZIP, mas a pasta portatil esta disponivel.
+) else (
+    echo OK!
+)
+echo.
+
 echo ========================================
 echo   BUILD CONCLUIDO COM SUCESSO!
 echo ========================================
 echo.
-echo A aplicacao portatil esta em:
-echo release\win-unpacked\
+echo Arquivos gerados:
 echo.
-echo Execute: Programador Radio.exe
+echo   [PASTA] release\win-unpacked\
+echo           Execute: Programador Radio.exe
+echo.
+echo   [ZIP]   release\Programador-Radio-Portable.zip
+echo           Pronto para distribuicao!
 echo.
 pause
