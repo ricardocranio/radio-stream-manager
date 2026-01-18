@@ -535,6 +535,79 @@ export function MissingView() {
         </div>
       </div>
 
+      {/* Download Folder Selection Card */}
+      <Card className="glass-card border-primary/30 bg-primary/5">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-primary/20">
+                <FolderOpen className="w-6 h-6 text-primary" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  Pasta de Downloads
+                  {!isElectron && (
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30">
+                      Desktop Only
+                    </Badge>
+                  )}
+                </h3>
+                <p className="text-sm text-muted-foreground font-mono">
+                  {deezerConfig.downloadFolder || 'Nenhuma pasta selecionada'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (isElectron && window.electronAPI?.selectFolder) {
+                    try {
+                      const folder = await window.electronAPI.selectFolder();
+                      if (folder) {
+                        useRadioStore.getState().setDeezerConfig({ downloadFolder: folder });
+                        toast({
+                          title: '📁 Pasta selecionada',
+                          description: `Downloads serão salvos em: ${folder}`,
+                        });
+                      }
+                    } catch (err) {
+                      toast({
+                        title: 'Erro',
+                        description: 'Não foi possível abrir o seletor de pastas.',
+                        variant: 'destructive',
+                      });
+                    }
+                  } else {
+                    toast({
+                      title: '🖥️ Recurso Desktop',
+                      description: 'A seleção de pasta com árvore de diretórios só funciona no aplicativo desktop (Electron).',
+                      variant: 'destructive',
+                    });
+                  }
+                }}
+              >
+                <FolderOpen className="w-4 h-4 mr-2" />
+                Selecionar Pasta
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={openDownloadFolder}
+                disabled={!deezerConfig.downloadFolder}
+                title="Abrir pasta no explorador"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+          {!isElectron && (
+            <p className="text-xs text-amber-500/80 mt-3 pt-3 border-t border-amber-500/20">
+              ⚠️ No navegador web, a seleção de pasta com árvore de diretórios não está disponível. Use o app desktop para essa funcionalidade.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Download Mode Toggle Card */}
       <Card className={`glass-card ${deezerConfig.autoDownload ? 'border-green-500/50 bg-green-500/5' : 'border-blue-500/50 bg-blue-500/5'}`}>
         <CardContent className="p-4">
