@@ -30,16 +30,40 @@ export function DashboardView() {
         { id: '4', timestamp: new Date(Date.now() - 120 * 60000), blockTime: '19:30', songsProcessed: 10, songsFound: 10, songsMissing: 0, programName: 'TOP10' },
       ];
 
-  // Simulated captured songs for demo
-  const recentCaptures = capturedSongs.length > 0 
-    ? capturedSongs.slice(0, 8)
-    : [
-        { id: '1', title: 'Evidências', artist: 'Chitãozinho & Xororó', station: 'BH FM', timestamp: new Date(), status: 'found' as const },
-        { id: '2', title: 'Atrasadinha', artist: 'Felipe Araújo', station: 'Band FM', timestamp: new Date(), status: 'found' as const },
-        { id: '3', title: 'Shallow', artist: 'Lady Gaga', station: 'Disney FM', timestamp: new Date(), status: 'missing' as const },
-        { id: '4', title: 'Medo Bobo', artist: 'Maiara & Maraisa', station: 'BH FM', timestamp: new Date(), status: 'found' as const },
-        { id: '5', title: 'Hear Me Now', artist: 'Alok', station: 'Metropolitana', timestamp: new Date(), status: 'found' as const },
-      ];
+  // Simulated captured songs grouped by station for demo
+  const demoSongs = [
+    { id: '1', title: 'Evidências', artist: 'Chitãozinho & Xororó', station: 'BH FM', timestamp: new Date(), status: 'found' as const },
+    { id: '2', title: 'Atrasadinha', artist: 'Felipe Araújo', station: 'BH FM', timestamp: new Date(), status: 'found' as const },
+    { id: '3', title: 'Medo Bobo', artist: 'Maiara & Maraisa', station: 'BH FM', timestamp: new Date(), status: 'found' as const },
+    { id: '4', title: 'Shallow', artist: 'Lady Gaga', station: 'Band FM', timestamp: new Date(), status: 'missing' as const },
+    { id: '5', title: 'Propaganda', artist: 'Jorge & Mateus', station: 'Band FM', timestamp: new Date(), status: 'found' as const },
+    { id: '6', title: 'Hear Me Now', artist: 'Alok', station: 'Band FM', timestamp: new Date(), status: 'found' as const },
+    { id: '7', title: 'Deixa Eu Te Amar', artist: 'Sorriso Maroto', station: 'Clube FM', timestamp: new Date(), status: 'found' as const },
+    { id: '8', title: 'Blinding Lights', artist: 'The Weeknd', station: 'Clube FM', timestamp: new Date(), status: 'missing' as const },
+    { id: '9', title: 'Péssimo Negócio', artist: 'Henrique & Juliano', station: 'Clube FM', timestamp: new Date(), status: 'found' as const },
+  ];
+
+  const displaySongs = capturedSongs.length > 0 ? capturedSongs : demoSongs;
+
+  // Group songs by station
+  const songsByStation = displaySongs.reduce((acc, song) => {
+    if (!acc[song.station]) acc[song.station] = [];
+    acc[song.station].push(song);
+    return acc;
+  }, {} as Record<string, typeof displaySongs>);
+
+  // Get station info with colors
+  const stationColors: Record<string, { bg: string; border: string; text: string }> = {
+    'BH FM': { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' },
+    'Band FM': { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400' },
+    'Clube FM': { bg: 'bg-green-500/10', border: 'border-green-500/30', text: 'text-green-400' },
+    'Disney FM': { bg: 'bg-purple-500/10', border: 'border-purple-500/30', text: 'text-purple-400' },
+    'Metropolitana': { bg: 'bg-pink-500/10', border: 'border-pink-500/30', text: 'text-pink-400' },
+  };
+
+  const getStationColor = (station: string) => {
+    return stationColors[station] || { bg: 'bg-primary/10', border: 'border-primary/30', text: 'text-primary' };
+  };
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
@@ -102,54 +126,79 @@ export function DashboardView() {
         </Card>
       </div>
 
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Live Feed */}
-        <Card className="glass-card lg:col-span-2">
-          <CardHeader className="border-b border-border">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-              Captura em Tempo Real
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
-              {recentCaptures.map((song, index) => (
-                <div
-                  key={song.id}
-                  className="p-4 flex items-center justify-between hover:bg-secondary/30 transition-colors animate-slide-in"
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
-                      <Music className="w-5 h-5 text-primary" />
+      {/* Radio Stations Windows */}
+      <div>
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+          Captura em Tempo Real
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Object.entries(songsByStation).map(([stationName, songs]) => {
+            const colors = getStationColor(stationName);
+            const foundCount = songs.filter(s => s.status === 'found').length;
+            const missingCount = songs.filter(s => s.status === 'missing').length;
+            
+            return (
+              <Card key={stationName} className={`glass-card ${colors.border}`}>
+                <CardHeader className={`py-3 px-4 border-b border-border ${colors.bg}`}>
+                  <CardTitle className="flex items-center justify-between text-base">
+                    <div className="flex items-center gap-2">
+                      <Radio className={`w-4 h-4 ${colors.text}`} />
+                      <span className={colors.text}>{stationName}</span>
                     </div>
-                    <div>
-                      <p className="font-medium text-foreground">{song.title}</p>
-                      <p className="text-sm text-muted-foreground">{song.artist}</p>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="border-success/40 text-success bg-success/10 text-xs">
+                        ✓ {foundCount}
+                      </Badge>
+                      {missingCount > 0 && (
+                        <Badge variant="outline" className="border-destructive/40 text-destructive bg-destructive/10 text-xs">
+                          ✗ {missingCount}
+                        </Badge>
+                      )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge
-                      variant="outline"
-                      className={
-                        song.status === 'found'
-                          ? 'border-success/40 text-success bg-success/10'
-                          : 'border-destructive/40 text-destructive bg-destructive/10'
-                      }
-                    >
-                      {song.status === 'found' ? 'Encontrada' : 'Faltando'}
-                    </Badge>
-                    <Badge variant="secondary" className="font-mono text-xs">
-                      {song.station}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ScrollArea className="h-[180px]">
+                    <div className="divide-y divide-border">
+                      {songs.slice(0, 5).map((song, index) => (
+                        <div
+                          key={song.id}
+                          className="p-3 flex items-center justify-between hover:bg-secondary/30 transition-colors animate-slide-in"
+                          style={{ animationDelay: `${index * 50}ms` }}
+                        >
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className={`w-8 h-8 rounded flex items-center justify-center ${colors.bg}`}>
+                              <Music className={`w-4 h-4 ${colors.text}`} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-foreground text-sm truncate">{song.title}</p>
+                              <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                            </div>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={`ml-2 text-xs ${
+                              song.status === 'found'
+                                ? 'border-success/40 text-success bg-success/10'
+                                : 'border-destructive/40 text-destructive bg-destructive/10'
+                            }`}
+                          >
+                            {song.status === 'found' ? '✓' : '✗'}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
 
+      {/* Status Panel and Grade History */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Status Panel */}
         <Card className="glass-card">
           <CardHeader className="border-b border-border">
@@ -237,75 +286,75 @@ export function DashboardView() {
             </div>
           </CardContent>
         </Card>
-      </div>
 
-      {/* Grade History */}
-      <Card className="glass-card">
-        <CardHeader className="border-b border-border">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <History className="w-5 h-5 text-primary" />
-              Histórico de Grades
-            </CardTitle>
-            {gradeHistory.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearGradeHistory}
-                className="text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 className="w-4 h-4 mr-1" />
-                Limpar
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[200px]">
-            {displayGradeHistory.length === 0 ? (
-              <div className="p-6 text-center text-muted-foreground">
-                <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p>Nenhuma grade gerada ainda</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {displayGradeHistory.slice(0, 10).map((entry, index) => (
-                  <div
-                    key={entry.id}
-                    className="p-3 flex items-center justify-between hover:bg-secondary/30 transition-colors"
-                    style={{ animationDelay: `${index * 50}ms` }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <span className="text-sm font-bold text-primary">{entry.blockTime}</span>
+        {/* Grade History */}
+        <Card className="glass-card">
+          <CardHeader className="border-b border-border">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <History className="w-5 h-5 text-primary" />
+                Histórico de Grades
+              </CardTitle>
+              {gradeHistory.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearGradeHistory}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Limpar
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="h-[280px]">
+              {displayGradeHistory.length === 0 ? (
+                <div className="p-6 text-center text-muted-foreground">
+                  <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma grade gerada ainda</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {displayGradeHistory.slice(0, 10).map((entry, index) => (
+                    <div
+                      key={entry.id}
+                      className="p-3 flex items-center justify-between hover:bg-secondary/30 transition-colors"
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <span className="text-sm font-bold text-primary">{entry.blockTime}</span>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground text-sm">{entry.programName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {format(new Date(entry.timestamp), "HH:mm:ss", { locale: ptBR })}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-foreground text-sm">{entry.programName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(entry.timestamp), "HH:mm:ss", { locale: ptBR })}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="font-mono text-xs border-success/40 text-success bg-success/10">
-                        ✓ {entry.songsFound}
-                      </Badge>
-                      {entry.songsMissing > 0 && (
-                        <Badge variant="outline" className="font-mono text-xs border-destructive/40 text-destructive bg-destructive/10">
-                          ✗ {entry.songsMissing}
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="font-mono text-xs border-success/40 text-success bg-success/10">
+                          ✓ {entry.songsFound}
                         </Badge>
-                      )}
-                      <span className="text-xs text-muted-foreground ml-1">
-                        / {entry.songsProcessed}
-                      </span>
+                        {entry.songsMissing > 0 && (
+                          <Badge variant="outline" className="font-mono text-xs border-destructive/40 text-destructive bg-destructive/10">
+                            ✗ {entry.songsMissing}
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground ml-1">
+                          / {entry.songsProcessed}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-        </CardContent>
-      </Card>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

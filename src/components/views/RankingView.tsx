@@ -1,9 +1,23 @@
 import { useState } from 'react';
-import { TrendingUp, Music, Crown, Medal, Award, BarChart3 } from 'lucide-react';
+import { TrendingUp, Music, Crown, Medal, Award, BarChart3, RotateCcw, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { useRadioStore } from '@/store/radioStore';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import {
   BarChart,
   Bar,
@@ -84,7 +98,17 @@ const getStyleColor = (style: string) => {
 };
 
 export function RankingView() {
+  const { clearRanking } = useRadioStore();
+  const { toast } = useToast();
   const maxPlays = Math.max(...rankingData.map((r) => r.plays));
+
+  const handleResetRanking = () => {
+    clearRanking();
+    toast({
+      title: '🔄 Ranking Zerado!',
+      description: 'Todas as contagens foram resetadas. A nova validação começará do zero.',
+    });
+  };
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
@@ -93,10 +117,44 @@ export function RankingView() {
           <h2 className="text-2xl font-bold text-foreground">Ranking TOP50</h2>
           <p className="text-muted-foreground">Músicas mais tocadas e estatísticas detalhadas</p>
         </div>
-        <Badge className="bg-primary/20 text-primary border border-primary/30 px-4 py-2">
-          <TrendingUp className="w-4 h-4 mr-2" />
-          Atualizado agora
-        </Badge>
+        <div className="flex items-center gap-3">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" className="gap-2 border-amber-500/50 text-amber-500 hover:bg-amber-500/10">
+                <RotateCcw className="w-4 h-4" />
+                Zerar Contagem
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                  Zerar Ranking TOP50?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação irá resetar todas as contagens de reprodução. 
+                  A nova validação começará do zero e todas as estatísticas serão perdidas.
+                  <br /><br />
+                  <strong>Esta ação não pode ser desfeita.</strong>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={handleResetRanking}
+                  className="bg-amber-500 hover:bg-amber-600 text-white"
+                >
+                  Zerar Ranking
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          
+          <Badge className="bg-primary/20 text-primary border border-primary/30 px-4 py-2">
+            <TrendingUp className="w-4 h-4 mr-2" />
+            Atualizado agora
+          </Badge>
+        </div>
       </div>
 
       {/* Stats Overview */}
