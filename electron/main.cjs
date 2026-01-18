@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification } = require('electron');
+const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification, dialog } = require('electron');
 const path = require('path');
 const { spawn, exec } = require('child_process');
 const fs = require('fs');
@@ -256,6 +256,20 @@ ipcMain.handle('open-external', (event, url) => {
 
 ipcMain.handle('open-path', (event, filePath) => {
   shell.openPath(filePath);
+});
+
+// Select folder dialog
+ipcMain.handle('select-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory'],
+    title: 'Selecionar pasta de download',
+  });
+  
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  
+  return result.filePaths[0];
 });
 
 // Check if deemix is available
