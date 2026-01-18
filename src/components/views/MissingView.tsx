@@ -58,6 +58,8 @@ export function MissingView() {
   const [simulationSuccessRate, setSimulationSuccessRate] = useState(80); // 80% success rate
   const [isInstallingDeemix, setIsInstallingDeemix] = useState(false);
   const [deemixInstallMessage, setDeemixInstallMessage] = useState<string | null>(null);
+  const [pythonStatus, setPythonStatus] = useState<{ available: boolean; command: string | null } | null>(null);
+  const [isCheckingPython, setIsCheckingPython] = useState(false);
   const { toast } = useToast();
 
   // Listen for deemix install progress
@@ -79,8 +81,21 @@ export function MissingView() {
   useEffect(() => {
     if (isElectron && deezerConfig.enabled) {
       checkDeemixStatus();
+      checkPythonStatus();
     }
   }, [deezerConfig.enabled]);
+
+  const checkPythonStatus = async () => {
+    if (!isElectron || !window.electronAPI?.checkPython) return;
+    setIsCheckingPython(true);
+    try {
+      const status = await window.electronAPI.checkPython();
+      setPythonStatus(status);
+    } catch {
+      setPythonStatus({ available: false, command: null });
+    }
+    setIsCheckingPython(false);
+  };
 
   const checkDeemixStatus = async () => {
     if (!isElectron) return;
@@ -837,8 +852,66 @@ export function MissingView() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {/* Auto Install Section */}
-            {deemixInstalled === false && (
+            {/* Python Status Check */}
+            {deemixInstalled === false && pythonStatus !== null && !pythonStatus.available && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                    <AlertTriangle className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-foreground flex items-center gap-2">
+                      Python não encontrado
+                      <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30">Requisito</Badge>
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      O Python é necessário para instalar e executar o deemix
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => window.electronAPI?.openExternal('https://www.python.org/downloads/')}
+                    variant="outline"
+                    className="gap-2 border-amber-500/50 text-amber-500 hover:bg-amber-500/10"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Baixar Python
+                  </Button>
+                </div>
+                
+                <div className="bg-background/50 rounded-lg p-3 space-y-2 text-sm">
+                  <p className="font-medium text-foreground">📋 Instruções de instalação do Python:</p>
+                  <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                    <li>Baixe o instalador do Python em <span className="text-primary">python.org/downloads</span></li>
+                    <li>Execute o instalador e <strong className="text-foreground">marque "Add Python to PATH"</strong></li>
+                    <li>Complete a instalação e <strong className="text-foreground">reinicie este aplicativo</strong></li>
+                    <li>Após reiniciar, clique em "Instalar deemix"</li>
+                  </ol>
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={checkPythonStatus}
+                  disabled={isCheckingPython}
+                  className="w-full"
+                >
+                  {isCheckingPython ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                  Verificar Python novamente
+                </Button>
+              </div>
+            )}
+
+            {/* Python OK Badge */}
+            {deemixInstalled === false && pythonStatus?.available && (
+              <div className="flex items-center gap-2 text-sm bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2">
+                <CheckCircle className="w-4 h-4 text-green-500" />
+                <span className="text-green-500">Python detectado:</span>
+                <code className="text-xs bg-background/50 px-2 py-0.5 rounded">{pythonStatus.command}</code>
+              </div>
+            )}
+
+            {/* Auto Install Section - only show if Python is available */}
+            {deemixInstalled === false && (pythonStatus === null || pythonStatus.available) && (
               <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 space-y-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
@@ -847,12 +920,14 @@ export function MissingView() {
                   <div className="flex-1">
                     <h4 className="font-semibold text-foreground">Instalação Automática</h4>
                     <p className="text-sm text-muted-foreground">
-                      Clique para instalar o deemix automaticamente (requer Python instalado)
+                      {pythonStatus?.available 
+                        ? 'Python detectado! Clique para instalar o deemix automaticamente'
+                        : 'Verificando Python... Clique para instalar o deemix'}
                     </p>
                   </div>
                   <Button
                     onClick={handleInstallDeemix}
-                    disabled={isInstallingDeemix}
+                    disabled={isInstallingDeemix || (pythonStatus !== null && !pythonStatus.available)}
                     className="gap-2"
                   >
                     {isInstallingDeemix ? (

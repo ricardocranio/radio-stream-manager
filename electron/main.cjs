@@ -504,6 +504,11 @@ ipcMain.handle('check-deemix', async () => {
   return await checkDeemixInstalled();
 });
 
+// Check if Python is available
+ipcMain.handle('check-python', async () => {
+  return await checkPythonAvailable();
+});
+
 // Install deemix automatically
 ipcMain.handle('install-deemix', async () => {
   // Send notification that installation is starting
