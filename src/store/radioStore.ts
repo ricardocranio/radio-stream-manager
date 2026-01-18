@@ -484,6 +484,20 @@ export const useRadioStore = create<RadioState>()(
               timestamp: new Date(entry.timestamp),
             }));
           }
+          // Convert rankingSongs lastPlayed to Date objects
+          if (state.rankingSongs) {
+            state.rankingSongs = state.rankingSongs.map((song) => ({
+              ...song,
+              lastPlayed: new Date(song.lastPlayed),
+            }));
+          }
+          // Convert gradeHistory timestamps
+          if (state.gradeHistory) {
+            state.gradeHistory = state.gradeHistory.map((entry) => ({
+              ...entry,
+              timestamp: new Date(entry.timestamp),
+            }));
+          }
         }
       },
       version: 1, // For future migrations
