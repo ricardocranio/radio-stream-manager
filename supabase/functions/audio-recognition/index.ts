@@ -126,6 +126,20 @@ serve(async (req) => {
     const data: AudDResponse = await response.json();
     console.log('[AudioRecognition] Recognition response:', JSON.stringify(data));
 
+    // Check for API errors
+    if (data.status === 'error' && data.error) {
+      console.error('[AudioRecognition] API Error:', data.error);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          stationName: stationName || 'Unknown',
+          error: `Recognition failed: ${data.error.error_message}`,
+          source: 'audd',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     if (data.status === 'success' && data.result) {
       const result: RecognitionResult = {
         success: true,
