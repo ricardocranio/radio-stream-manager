@@ -6,62 +6,108 @@ interface CountdownState {
   autoCleanCountdown: string;
   nextGradeSeconds: number;
   autoCleanSeconds: number;
+  nextBlockTime: string; // The block time that will be built (e.g., "18:30")
+  buildTime: string; // When the grade will be built (e.g., "18:20")
 }
 
 export function useCountdown() {
-  const { config, lastUpdate, isRunning } = useRadioStore();
+  const { config, isRunning } = useRadioStore();
   const [countdown, setCountdown] = useState<CountdownState>({
     nextGradeCountdown: '--:--',
     autoCleanCountdown: '--:--',
     nextGradeSeconds: 0,
     autoCleanSeconds: 0,
+    nextBlockTime: '--:--',
+    buildTime: '--:--',
   });
 
-  // Calculate next grade time based on last update + interval
+  // Calculate next grade time - 10 minutes before the next block
+  // Blocks are every 30 minutes: 00:00, 00:30, 01:00, 01:30, etc.
   const calculateNextGrade = useCallback(() => {
-    if (!isRunning) return { seconds: 0, formatted: '--:--' };
+    if (!isRunning) return { seconds: 0, formatted: '--:--', nextBlockTime: '--:--', buildTime: '--:--' };
     
     const now = new Date();
-    const intervalMs = config.updateIntervalMinutes * 60 * 1000;
+    const safetyMargin = config.safetyMarginMinutes || 10; // Default 10 minutes before block
     
-    // If we have lastUpdate, calculate from there
-    // Otherwise, calculate from the next interval boundary
-    let nextGradeTime: Date;
+    // Find the next block time (blocks are at :00 and :30 of each hour)
+    const currentMinutes = now.getMinutes();
+    const currentHour = now.getHours();
     
-    if (lastUpdate) {
-      nextGradeTime = new Date(new Date(lastUpdate).getTime() + intervalMs);
-      // If nextGradeTime is in the past, calculate next occurrence
-      while (nextGradeTime <= now) {
-        nextGradeTime = new Date(nextGradeTime.getTime() + intervalMs);
-      }
+    let nextBlockHour = currentHour;
+    let nextBlockMinute: number;
+    
+    if (currentMinutes < 30 - safetyMargin) {
+      // Next block is at :30, build at :30 - safetyMargin
+      nextBlockMinute = 30;
+    } else if (currentMinutes < 30) {
+      // Between :20 and :30, next block is at next hour :00
+      nextBlockHour = (currentHour + 1) % 24;
+      nextBlockMinute = 0;
+    } else if (currentMinutes < 60 - safetyMargin) {
+      // Next block is at :00 of next hour, build at :00 - safetyMargin
+      nextBlockHour = (currentHour + 1) % 24;
+      nextBlockMinute = 0;
     } else {
-      // Calculate next interval from current time
-      const minutes = now.getMinutes();
-      const nextInterval = Math.ceil(minutes / config.updateIntervalMinutes) * config.updateIntervalMinutes;
-      nextGradeTime = new Date(now);
-      nextGradeTime.setMinutes(nextInterval, 0, 0);
-      if (nextGradeTime <= now) {
-        nextGradeTime = new Date(nextGradeTime.getTime() + intervalMs);
+      // Between :50 and :00, next block is at next hour :30
+      nextBlockHour = (currentHour + 1) % 24;
+      nextBlockMinute = 30;
+    }
+    
+    // Calculate build time (safetyMargin minutes before block)
+    let buildHour = nextBlockHour;
+    let buildMinute = nextBlockMinute - safetyMargin;
+    if (buildMinute < 0) {
+      buildMinute += 60;
+      buildHour = (buildHour - 1 + 24) % 24;
+    }
+    
+    // Create the build time date
+    const nextBuildTime = new Date(now);
+    nextBuildTime.setHours(buildHour, buildMinute, 0, 0);
+    
+    // If build time is in the past, it means we're waiting for the next cycle
+    if (nextBuildTime <= now) {
+      // Move to next block
+      if (nextBlockMinute === 30) {
+        nextBlockHour = (nextBlockHour + 1) % 24;
+        nextBlockMinute = 0;
+      } else {
+        nextBlockMinute = 30;
+      }
+      buildMinute = nextBlockMinute - safetyMargin;
+      buildHour = nextBlockHour;
+      if (buildMinute < 0) {
+        buildMinute += 60;
+        buildHour = (buildHour - 1 + 24) % 24;
+      }
+      nextBuildTime.setHours(buildHour, buildMinute, 0, 0);
+      // If still in the past (crossed midnight), add a day
+      if (nextBuildTime <= now) {
+        nextBuildTime.setDate(nextBuildTime.getDate() + 1);
       }
     }
     
-    const diffMs = nextGradeTime.getTime() - now.getTime();
+    const diffMs = nextBuildTime.getTime() - now.getTime();
     const seconds = Math.max(0, Math.floor(diffMs / 1000));
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     
+    const formatTime = (h: number, m: number) => 
+      `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    
     return {
       seconds,
       formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
+      nextBlockTime: formatTime(nextBlockHour, nextBlockMinute),
+      buildTime: formatTime(buildHour, buildMinute),
     };
-  }, [config.updateIntervalMinutes, lastUpdate, isRunning]);
+  }, [config.safetyMarginMinutes, isRunning]);
 
-  // Calculate auto-clean countdown (runs at hardResetInterval - default 1 hour)
+  // Calculate auto-clean countdown (runs every hour on the hour)
   const calculateAutoClean = useCallback(() => {
     if (!isRunning) return { seconds: 0, formatted: '--:--' };
     
     const now = new Date();
-    const hardResetInterval = config.hardResetInterval || 3600; // seconds
     
     // Auto-clean runs every hour on the hour
     const nextHour = new Date(now);
@@ -77,7 +123,7 @@ export function useCountdown() {
       seconds,
       formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
     };
-  }, [config.hardResetInterval, isRunning]);
+  }, [isRunning]);
 
   useEffect(() => {
     const updateCountdowns = () => {
@@ -89,6 +135,8 @@ export function useCountdown() {
         autoCleanCountdown: clean.formatted,
         nextGradeSeconds: grade.seconds,
         autoCleanSeconds: clean.seconds,
+        nextBlockTime: grade.nextBlockTime,
+        buildTime: grade.buildTime,
       });
     };
 

@@ -260,10 +260,10 @@ export function LogsView() {
           <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-secondary/30 text-xs text-muted-foreground">
             <div className="flex items-center gap-4">
               <span className={nextGradeSeconds <= 60 ? 'text-amber-500 animate-pulse font-medium' : ''}>
-                🕒 Próxima Grade: {nextGradeCountdown}
+                🕒 Próxima: {nextGradeCountdown}
               </span>
               <span className={autoCleanSeconds <= 60 ? 'text-amber-500 animate-pulse font-medium' : ''}>
-                🧹 Auto-Clean: {autoCleanCountdown}
+                🧹 Clean: {autoCleanCountdown}
               </span>
             </div>
             <span>{isRunning ? 'Sistema Ativo ✅' : 'Sistema Parado ⏸️'}</span>
