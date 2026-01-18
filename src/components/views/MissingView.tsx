@@ -1,12 +1,14 @@
-import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { useRadioStore, MissingSong } from '@/store/radioStore';
+import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle, History, RotateCcw, TrendingUp, Clock } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { useRadioStore, MissingSong, DownloadHistoryEntry, getDownloadStats } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,11 +26,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from '@/components/ui/alert';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -46,11 +43,15 @@ export function MissingView() {
     updateMissingSong,
     removeMissingSong,
     clearMissingSongs,
+    downloadHistory,
+    addDownloadHistory,
+    clearDownloadHistory,
   } = useRadioStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
   const [deemixInstalled, setDeemixInstalled] = useState<boolean | null>(null);
   const [isCheckingDeemix, setIsCheckingDeemix] = useState(false);
+  const [activeTab, setActiveTab] = useState('missing');
   const { toast } = useToast();
 
   // Check if deemix is installed on mount
@@ -95,6 +96,15 @@ export function MissingView() {
     return acc;
   }, {} as Record<string, typeof filteredSongs>);
 
+  // Compute download stats
+  const stats = useMemo(() => getDownloadStats(), [downloadHistory]);
+
+  // Get failed downloads for retry
+  const failedDownloads = useMemo(() => 
+    downloadHistory.filter(e => e.status === 'error'),
+    [downloadHistory]
+  );
+
   // External search URLs
   const getSearchUrl = (artist: string, title: string, service: 'deezer' | 'tidal' | 'youtube' | 'spotify') => {
     const query = encodeURIComponent(`${artist} ${title}`);
@@ -124,7 +134,7 @@ export function MissingView() {
     }
   };
 
-  const handleDeezerDownload = async (songId: string, artist: string, title: string) => {
+  const handleDeezerDownload = async (songId: string, artist: string, title: string, isRetry = false) => {
     if (!deezerConfig.enabled || !deezerConfig.arl) {
       toast({
         title: 'Deezer não configurado',
@@ -144,7 +154,11 @@ export function MissingView() {
     }
 
     setDownloadStatus((prev) => ({ ...prev, [songId]: 'downloading' }));
-    updateMissingSong(songId, { status: 'downloading' });
+    if (!isRetry) {
+      updateMissingSong(songId, { status: 'downloading' });
+    }
+
+    const startTime = Date.now();
 
     try {
       const result = await window.electronAPI?.downloadFromDeezer({
@@ -160,9 +174,25 @@ export function MissingView() {
         throw new Error('deemix não está instalado');
       }
 
+      const duration = Date.now() - startTime;
+
       if (result?.success) {
         setDownloadStatus((prev) => ({ ...prev, [songId]: 'success' }));
-        updateMissingSong(songId, { status: 'downloaded' });
+        if (!isRetry) {
+          updateMissingSong(songId, { status: 'downloaded' });
+        }
+        
+        // Add to history
+        addDownloadHistory({
+          id: crypto.randomUUID(),
+          songId,
+          title,
+          artist,
+          timestamp: new Date(),
+          status: 'success',
+          duration,
+        });
+
         toast({
           title: 'Download concluído!',
           description: `${artist} - ${title} baixado com sucesso.`,
@@ -171,14 +201,62 @@ export function MissingView() {
         throw new Error(result?.error || 'Erro desconhecido');
       }
     } catch (error) {
+      const duration = Date.now() - startTime;
       setDownloadStatus((prev) => ({ ...prev, [songId]: 'error' }));
-      updateMissingSong(songId, { status: 'error' });
+      if (!isRetry) {
+        updateMissingSong(songId, { status: 'error' });
+      }
+
+      // Add to history
+      addDownloadHistory({
+        id: crypto.randomUUID(),
+        songId,
+        title,
+        artist,
+        timestamp: new Date(),
+        status: 'error',
+        errorMessage: error instanceof Error ? error.message : 'Erro desconhecido',
+        duration,
+      });
+
       toast({
         title: 'Erro no download',
         description: error instanceof Error ? error.message : 'Falha ao baixar do Deezer.',
         variant: 'destructive',
       });
     }
+  };
+
+  // Retry a failed download
+  const handleRetryDownload = async (entry: DownloadHistoryEntry) => {
+    await handleDeezerDownload(entry.songId, entry.artist, entry.title, true);
+  };
+
+  // Retry all failed downloads
+  const handleRetryAllFailed = async () => {
+    if (failedDownloads.length === 0) {
+      toast({
+        title: 'Nenhuma falha para tentar novamente',
+        description: 'Não há downloads com erro no histórico.',
+      });
+      return;
+    }
+
+    toast({
+      title: 'Iniciando retry em lote',
+      description: `Tentando novamente ${failedDownloads.length} downloads...`,
+    });
+
+    for (const entry of failedDownloads) {
+      await handleDeezerDownload(entry.songId, entry.artist, entry.title, true);
+      // 30 second delay between retries
+      await new Promise(resolve => setTimeout(resolve, 30000));
+    }
+
+    toast({
+      title: 'Retry concluído',
+      description: 'Todos os downloads com falha foram tentados novamente.',
+    });
   };
 
   // Batch download all missing songs
@@ -247,6 +325,8 @@ export function MissingView() {
       setDownloadStatus((prev) => ({ ...prev, [song.id]: 'downloading' }));
       updateMissingSong(song.id, { status: 'downloading' });
 
+      const startTime = Date.now();
+
       try {
         const result = await window.electronAPI?.downloadFromDeezer({
           artist: song.artist,
@@ -256,19 +336,54 @@ export function MissingView() {
           quality: deezerConfig.quality,
         });
 
+        const duration = Date.now() - startTime;
+
         if (result?.success) {
           completed++;
           setDownloadStatus((prev) => ({ ...prev, [song.id]: 'success' }));
           updateMissingSong(song.id, { status: 'downloaded' });
+          
+          addDownloadHistory({
+            id: crypto.randomUUID(),
+            songId: song.id,
+            title: song.title,
+            artist: song.artist,
+            timestamp: new Date(),
+            status: 'success',
+            duration,
+          });
         } else {
           failed++;
           setDownloadStatus((prev) => ({ ...prev, [song.id]: 'error' }));
           updateMissingSong(song.id, { status: 'error' });
+          
+          addDownloadHistory({
+            id: crypto.randomUUID(),
+            songId: song.id,
+            title: song.title,
+            artist: song.artist,
+            timestamp: new Date(),
+            status: 'error',
+            errorMessage: result?.error || 'Erro desconhecido',
+            duration,
+          });
         }
-      } catch {
+      } catch (err) {
+        const duration = Date.now() - startTime;
         failed++;
         setDownloadStatus((prev) => ({ ...prev, [song.id]: 'error' }));
         updateMissingSong(song.id, { status: 'error' });
+        
+        addDownloadHistory({
+          id: crypto.randomUUID(),
+          songId: song.id,
+          title: song.title,
+          artist: song.artist,
+          timestamp: new Date(),
+          status: 'error',
+          errorMessage: err instanceof Error ? err.message : 'Erro desconhecido',
+          duration,
+        });
       }
 
       setBatchDownloadProgress({ completed, failed });
@@ -476,169 +591,371 @@ export function MissingView() {
         </Card>
       )}
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar música ou artista..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10"
-        />
-      </div>
+      {/* Tabs: Missing Songs / Download History */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="missing" className="gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            Músicas Faltando ({filteredSongs.length})
+          </TabsTrigger>
+          <TabsTrigger value="history" className="gap-2">
+            <History className="w-4 h-4" />
+            Histórico ({downloadHistory.length})
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="glass-card border-destructive/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-8 h-8 text-destructive" />
-              <div>
-                <p className="text-2xl font-bold">{filteredSongs.length}</p>
-                <p className="text-xs text-muted-foreground">Total Faltando</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        {Object.entries(groupedByStation)
-          .slice(0, 3)
-          .map(([station, songs]) => (
-            <Card key={station} className="glass-card">
+        {/* Missing Songs Tab */}
+        <TabsContent value="missing" className="space-y-4">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar música ou artista..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card className="glass-card border-destructive/20">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <Music className="w-8 h-8 text-primary" />
+                  <AlertTriangle className="w-8 h-8 text-destructive" />
                   <div>
-                    <p className="text-2xl font-bold">{songs.length}</p>
-                    <p className="text-xs text-muted-foreground">{station}</p>
+                    <p className="text-2xl font-bold">{filteredSongs.length}</p>
+                    <p className="text-xs text-muted-foreground">Total Faltando</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-          ))}
-      </div>
-
-      {/* Grouped Lists */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {Object.entries(groupedByStation).map(([station, songs]) => (
-          <Card key={station} className="glass-card">
-            <CardHeader className="border-b border-border">
-              <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-destructive" />
-                  {station}
-                </span>
-                <Badge variant="destructive">{songs.length}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
-                {songs.map((song) => (
-                  <div
-                    key={song.id}
-                    className={`p-4 flex items-center justify-between hover:bg-secondary/30 transition-colors ${
-                      song.status === 'downloaded' ? 'bg-green-500/5' : 
-                      song.status === 'error' ? 'bg-destructive/5' : ''
-                    }`}
-                  >
+            {Object.entries(groupedByStation)
+              .slice(0, 3)
+              .map(([station, songs]) => (
+                <Card key={station} className="glass-card">
+                  <CardContent className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        song.status === 'downloaded' ? 'bg-green-500/10' :
-                        song.status === 'error' ? 'bg-destructive/10' :
-                        'bg-destructive/10'
-                      }`}>
-                        {song.status === 'downloaded' ? (
-                          <CheckCircle className="w-5 h-5 text-green-500" />
-                        ) : song.status === 'downloading' ? (
-                          <Loader2 className="w-5 h-5 text-primary animate-spin" />
-                        ) : (
-                          <Music className={`w-5 h-5 ${song.status === 'error' ? 'text-destructive' : 'text-destructive'}`} />
-                        )}
-                      </div>
+                      <Music className="w-8 h-8 text-primary" />
                       <div>
-                        <p className="font-medium text-foreground">{song.title}</p>
-                        <p className="text-sm text-muted-foreground">{song.artist}</p>
+                        <p className="text-2xl font-bold">{songs.length}</p>
+                        <p className="text-xs text-muted-foreground">{station}</p>
                       </div>
                     </div>
-                    <div className="flex gap-1">
-                      {/* Deezer Download Button */}
-                      {deezerConfig.enabled && deezerConfig.arl && song.status !== 'downloaded' && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-primary hover:text-primary"
-                          onClick={() => handleDeezerDownload(song.id, song.artist, song.title)}
-                          disabled={downloadStatus[song.id] === 'downloading' || batchDownloadProgress.isRunning || deemixInstalled === false}
-                          title="Baixar do Deezer"
-                        >
-                          {getStatusIcon(song.id)}
-                        </Button>
-                      )}
-                      
-                      {/* Remove from list */}
-                      {song.status === 'downloaded' && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-green-500 hover:text-green-600"
-                          onClick={() => removeMissingSong(song.id)}
-                          title="Remover da lista"
-                        >
-                          <CheckCircle className="w-4 h-4" />
-                        </Button>
-                      )}
-                      
-                      {/* External Search Dropdown */}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" title="Buscar em serviços">
-                            <ExternalLink className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-popover border-border">
-                          <DropdownMenuItem
-                            onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'deezer'))}
-                          >
-                            🎵 Buscar no Deezer
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'tidal'))}
-                          >
-                            🌊 Buscar no Tidal
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'youtube'))}
-                          >
-                            ▶️ Buscar no YouTube
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'spotify'))}
-                          >
-                            💚 Buscar no Spotify
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                  </CardContent>
+                </Card>
+              ))}
+          </div>
+
+          {/* Grouped Lists */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {Object.entries(groupedByStation).map(([station, songs]) => (
+              <Card key={station} className="glass-card">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-destructive" />
+                      {station}
+                    </span>
+                    <Badge variant="destructive">{songs.length}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
+                    {songs.map((song) => (
+                      <div
+                        key={song.id}
+                        className={`p-4 flex items-center justify-between hover:bg-secondary/30 transition-colors ${
+                          song.status === 'downloaded' ? 'bg-green-500/5' : 
+                          song.status === 'error' ? 'bg-destructive/5' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                            song.status === 'downloaded' ? 'bg-green-500/10' :
+                            song.status === 'error' ? 'bg-destructive/10' :
+                            'bg-destructive/10'
+                          }`}>
+                            {song.status === 'downloaded' ? (
+                              <CheckCircle className="w-5 h-5 text-green-500" />
+                            ) : song.status === 'downloading' ? (
+                              <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                            ) : (
+                              <Music className={`w-5 h-5 ${song.status === 'error' ? 'text-destructive' : 'text-destructive'}`} />
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-medium text-foreground">{song.title}</p>
+                            <p className="text-sm text-muted-foreground">{song.artist}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          {/* Deezer Download Button */}
+                          {deezerConfig.enabled && deezerConfig.arl && song.status !== 'downloaded' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-primary hover:text-primary"
+                              onClick={() => handleDeezerDownload(song.id, song.artist, song.title)}
+                              disabled={downloadStatus[song.id] === 'downloading' || batchDownloadProgress.isRunning || deemixInstalled === false}
+                              title="Baixar do Deezer"
+                            >
+                              {getStatusIcon(song.id)}
+                            </Button>
+                          )}
+                          
+                          {/* Remove from list */}
+                          {song.status === 'downloaded' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-green-500 hover:text-green-600"
+                              onClick={() => removeMissingSong(song.id)}
+                              title="Remover da lista"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </Button>
+                          )}
+                          
+                          {/* External Search Dropdown */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" title="Buscar em serviços">
+                                <ExternalLink className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="bg-popover border-border">
+                              <DropdownMenuItem
+                                onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'deezer'))}
+                              >
+                                🎵 Buscar no Deezer
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'tidal'))}
+                              >
+                                🌊 Buscar no Tidal
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'youtube'))}
+                              >
+                                ▶️ Buscar no YouTube
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'spotify'))}
+                              >
+                                💚 Buscar no Spotify
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {filteredSongs.length === 0 && (
+            <Card className="glass-card">
+              <CardContent className="p-12 text-center">
+                <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
+                  <Music className="w-8 h-8 text-success" />
+                </div>
+                <h3 className="text-lg font-medium">Nenhuma música faltando!</h3>
+                <p className="text-muted-foreground mt-2">
+                  Todas as músicas detectadas foram encontradas no acervo.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Download History Tab */}
+        <TabsContent value="history" className="space-y-4">
+          {/* History Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card className="glass-card">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <Download className="w-8 h-8 text-primary" />
+                  <div>
+                    <p className="text-2xl font-bold">{stats.total}</p>
+                    <p className="text-xs text-muted-foreground">Total Downloads</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-green-500/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="w-8 h-8 text-green-500" />
+                  <div>
+                    <p className="text-2xl font-bold">{stats.success}</p>
+                    <p className="text-xs text-muted-foreground">Sucesso</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-destructive/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <XCircle className="w-8 h-8 text-destructive" />
+                  <div>
+                    <p className="text-2xl font-bold">{stats.failed}</p>
+                    <p className="text-xs text-muted-foreground">Falhas</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-blue-500/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <TrendingUp className="w-8 h-8 text-blue-500" />
+                  <div>
+                    <p className="text-2xl font-bold">{stats.successRate}%</p>
+                    <p className="text-xs text-muted-foreground">Taxa de Sucesso</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Retry Actions */}
+          {failedDownloads.length > 0 && (
+            <Card className="glass-card border-destructive/30 bg-destructive/5">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-destructive/20 flex items-center justify-center">
+                      <RotateCcw className="w-6 h-6 text-destructive" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground">Downloads com Falha</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {failedDownloads.length} downloads falharam. Tente novamente.
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleRetryAllFailed}
+                    disabled={batchDownloadProgress.isRunning || deemixInstalled === false}
+                    className="gap-2"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Retry Todos ({failedDownloads.length})
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* History List */}
+          <Card className="glass-card">
+            <CardHeader className="border-b border-border flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <History className="w-5 h-5" />
+                Histórico de Downloads
+              </CardTitle>
+              {downloadHistory.length > 0 && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Limpar Histórico
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Limpar histórico de downloads?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta ação não pode ser desfeita. Todo o histórico de {downloadHistory.length} downloads será removido.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={clearDownloadHistory}>Limpar</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </CardHeader>
+            <CardContent className="p-0">
+              {downloadHistory.length === 0 ? (
+                <div className="p-12 text-center">
+                  <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                    <History className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-medium">Nenhum download ainda</h3>
+                  <p className="text-muted-foreground mt-2">
+                    O histórico de downloads aparecerá aqui.
+                  </p>
+                </div>
+              ) : (
+                <ScrollArea className="h-[400px]">
+                  <div className="divide-y divide-border">
+                    {downloadHistory.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className={`p-4 flex items-center justify-between hover:bg-secondary/30 transition-colors ${
+                          entry.status === 'success' ? 'bg-green-500/5' : 'bg-destructive/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                            entry.status === 'success' ? 'bg-green-500/10' : 'bg-destructive/10'
+                          }`}>
+                            {entry.status === 'success' ? (
+                              <CheckCircle className="w-5 h-5 text-green-500" />
+                            ) : (
+                              <XCircle className="w-5 h-5 text-destructive" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-foreground truncate">{entry.title}</p>
+                            <p className="text-sm text-muted-foreground truncate">{entry.artist}</p>
+                            {entry.errorMessage && (
+                              <p className="text-xs text-destructive truncate mt-1">{entry.errorMessage}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {new Date(entry.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                            <div>
+                              {new Date(entry.timestamp).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                            </div>
+                            {entry.duration && (
+                              <div className="text-[10px]">
+                                {Math.round(entry.duration / 1000)}s
+                              </div>
+                            )}
+                          </div>
+                          {entry.status === 'error' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRetryDownload(entry)}
+                              disabled={batchDownloadProgress.isRunning || deemixInstalled === false}
+                              title="Tentar novamente"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
             </CardContent>
           </Card>
-        ))}
-      </div>
-
-      {filteredSongs.length === 0 && (
-        <Card className="glass-card">
-          <CardContent className="p-12 text-center">
-            <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
-              <Music className="w-8 h-8 text-success" />
-            </div>
-            <h3 className="text-lg font-medium">Nenhuma música faltando!</h3>
-            <p className="text-muted-foreground mt-2">
-              Todas as músicas detectadas foram encontradas no acervo.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -37,6 +37,17 @@ export interface MissingSong {
   dna?: string;
 }
 
+export interface DownloadHistoryEntry {
+  id: string;
+  songId: string;
+  title: string;
+  artist: string;
+  timestamp: Date;
+  status: 'success' | 'error';
+  errorMessage?: string;
+  duration?: number; // download time in ms
+}
+
 interface RadioState {
   // Radio Stations
   stations: RadioStation[];
@@ -102,6 +113,11 @@ interface RadioState {
     current: string;
   };
   setBatchDownloadProgress: (progress: Partial<RadioState['batchDownloadProgress']>) => void;
+
+  // Download History
+  downloadHistory: DownloadHistoryEntry[];
+  addDownloadHistory: (entry: DownloadHistoryEntry) => void;
+  clearDownloadHistory: () => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
@@ -289,4 +305,22 @@ export const useRadioStore = create<RadioState>((set) => ({
     set((state) => ({
       batchDownloadProgress: { ...state.batchDownloadProgress, ...progress },
     })),
+
+  // Download History
+  downloadHistory: [],
+  addDownloadHistory: (entry) =>
+    set((state) => ({
+      downloadHistory: [entry, ...state.downloadHistory].slice(0, 500), // Keep last 500 entries
+    })),
+  clearDownloadHistory: () => set({ downloadHistory: [] }),
 }));
+
+// Helper function to get download stats
+export const getDownloadStats = () => {
+  const state = useRadioStore.getState();
+  const total = state.downloadHistory.length;
+  const success = state.downloadHistory.filter((e) => e.status === 'success').length;
+  const failed = state.downloadHistory.filter((e) => e.status === 'error').length;
+  const successRate = total > 0 ? Math.round((success / total) * 100) : 0;
+  return { total, success, failed, successRate };
+};
