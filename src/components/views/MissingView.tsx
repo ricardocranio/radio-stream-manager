@@ -1,14 +1,30 @@
-import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search } from 'lucide-react';
+import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+// Check if running in Electron
+const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+
+interface DownloadStatus {
+  [songId: string]: 'idle' | 'downloading' | 'success' | 'error';
+}
 
 export function MissingView() {
-  const { missingSongs, stations } = useRadioStore();
+  const { missingSongs, stations, deezerConfig } = useRadioStore();
   const [searchTerm, setSearchTerm] = useState('');
+  const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
+  const { toast } = useToast();
 
   // Demo missing songs
   const demoMissing = [
@@ -33,6 +49,92 @@ export function MissingView() {
     return acc;
   }, {} as Record<string, typeof filteredSongs>);
 
+  // External search URLs
+  const getSearchUrl = (artist: string, title: string, service: 'deezer' | 'tidal' | 'youtube' | 'spotify') => {
+    const query = encodeURIComponent(`${artist} ${title}`);
+    switch (service) {
+      case 'deezer':
+        return `https://www.deezer.com/search/${query}`;
+      case 'tidal':
+        return `https://listen.tidal.com/search?q=${query}`;
+      case 'youtube':
+        return `https://www.youtube.com/results?search_query=${query}`;
+      case 'spotify':
+        return `https://open.spotify.com/search/${query}`;
+    }
+  };
+
+  const openExternalLink = (url: string) => {
+    if (isElectron && window.electronAPI?.openExternal) {
+      window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank');
+    }
+  };
+
+  const handleDeezerDownload = async (songId: string, artist: string, title: string) => {
+    if (!deezerConfig.enabled || !deezerConfig.arl) {
+      toast({
+        title: 'Deezer não configurado',
+        description: 'Configure seu ARL nas Configurações para baixar do Deezer.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!isElectron) {
+      toast({
+        title: 'Apenas no Desktop',
+        description: 'Download automático só funciona no app desktop (Electron).',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setDownloadStatus((prev) => ({ ...prev, [songId]: 'downloading' }));
+
+    try {
+      const result = await window.electronAPI?.downloadFromDeezer({
+        artist,
+        title,
+        arl: deezerConfig.arl,
+        outputFolder: deezerConfig.downloadFolder,
+        quality: deezerConfig.quality,
+      });
+
+      if (result?.success) {
+        setDownloadStatus((prev) => ({ ...prev, [songId]: 'success' }));
+        toast({
+          title: 'Download concluído!',
+          description: `${artist} - ${title} baixado com sucesso.`,
+        });
+      } else {
+        throw new Error(result?.error || 'Erro desconhecido');
+      }
+    } catch (error) {
+      setDownloadStatus((prev) => ({ ...prev, [songId]: 'error' }));
+      toast({
+        title: 'Erro no download',
+        description: error instanceof Error ? error.message : 'Falha ao baixar do Deezer.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const getStatusIcon = (songId: string) => {
+    const status = downloadStatus[songId];
+    switch (status) {
+      case 'downloading':
+        return <Loader2 className="w-4 h-4 animate-spin" />;
+      case 'success':
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case 'error':
+        return <XCircle className="w-4 h-4 text-destructive" />;
+      default:
+        return <Download className="w-4 h-4" />;
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -43,6 +145,11 @@ export function MissingView() {
           </p>
         </div>
         <div className="flex gap-2">
+          {deezerConfig.enabled && deezerConfig.arl && (
+            <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
+              Deezer Conectado
+            </Badge>
+          )}
           <Button variant="outline">
             <RefreshCw className="w-4 h-4 mr-2" />
             Verificar Novamente
@@ -124,9 +231,52 @@ export function MissingView() {
                         <p className="text-sm text-muted-foreground">{song.artist}</p>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="text-primary hover:text-primary">
-                      <Download className="w-4 h-4" />
-                    </Button>
+                    <div className="flex gap-1">
+                      {/* Deezer Download Button */}
+                      {deezerConfig.enabled && deezerConfig.arl && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-primary hover:text-primary"
+                          onClick={() => handleDeezerDownload(song.id, song.artist, song.title)}
+                          disabled={downloadStatus[song.id] === 'downloading'}
+                          title="Baixar do Deezer"
+                        >
+                          {getStatusIcon(song.id)}
+                        </Button>
+                      )}
+                      
+                      {/* External Search Dropdown */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" title="Buscar em serviços">
+                            <ExternalLink className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="bg-popover border-border">
+                          <DropdownMenuItem
+                            onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'deezer'))}
+                          >
+                            🎵 Buscar no Deezer
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'tidal'))}
+                          >
+                            🌊 Buscar no Tidal
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'youtube'))}
+                          >
+                            ▶️ Buscar no YouTube
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'spotify'))}
+                          >
+                            💚 Buscar no Spotify
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
                 ))}
               </div>
