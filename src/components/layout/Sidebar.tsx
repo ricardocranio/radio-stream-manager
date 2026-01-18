@@ -55,8 +55,8 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         <div className="flex items-center gap-3">
           <img src={logo} alt="AudioSolutions" className="w-10 h-10 rounded-lg" />
           <div>
-            <h1 className="font-bold text-lg text-foreground">Programador</h1>
-            <p className="text-xs text-primary font-medium">RÁDIO</p>
+            <h1 className="font-bold text-lg text-foreground">MAKER</h1>
+            <p className="text-xs text-primary font-medium">PROGRAMAÇÃO</p>
           </div>
         </div>
       </div>
