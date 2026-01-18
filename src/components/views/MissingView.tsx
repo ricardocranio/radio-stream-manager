@@ -273,8 +273,8 @@ export function MissingView() {
 
       setBatchDownloadProgress({ completed, failed });
 
-      // Small delay between downloads to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // 30 second delay between downloads to avoid Deezer rate limiting
+      await new Promise(resolve => setTimeout(resolve, 30000));
     }
 
     setBatchDownloadProgress({ isRunning: false, current: '' });
@@ -374,20 +374,51 @@ export function MissingView() {
         </div>
       </div>
 
-      {/* deemix Warning */}
-      {isElectron && deezerConfig.enabled && deemixInstalled === false && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>deemix não encontrado</AlertTitle>
-          <AlertDescription className="flex items-center justify-between">
-            <span>
-              Para baixar do Deezer, instale o deemix: <code className="bg-destructive/20 px-1 rounded">pip install deemix</code>
-            </span>
-            <Button variant="outline" size="sm" onClick={checkDeemixStatus} disabled={isCheckingDeemix}>
-              {isCheckingDeemix ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Verificar novamente'}
-            </Button>
-          </AlertDescription>
-        </Alert>
+      {/* deemix Installation Instructions */}
+      {isElectron && deezerConfig.enabled && (
+        <Card className={`glass-card ${deemixInstalled === false ? 'border-destructive/50 bg-destructive/5' : deemixInstalled === true ? 'border-green-500/30 bg-green-500/5' : 'border-muted'}`}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              {deemixInstalled === false && <AlertCircle className="h-5 w-5 text-destructive" />}
+              {deemixInstalled === true && <CheckCircle className="h-5 w-5 text-green-500" />}
+              {deemixInstalled === null && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+              Configuração do deemix
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2">
+                <p className="font-medium text-foreground">1. Instalar deemix:</p>
+                <code className="block bg-muted/50 px-3 py-2 rounded text-xs font-mono">
+                  pip install deemix
+                </code>
+              </div>
+              <div className="space-y-2">
+                <p className="font-medium text-foreground">2. Rebuild do app:</p>
+                <code className="block bg-muted/50 px-3 py-2 rounded text-xs font-mono">
+                  npm run electron:build
+                </code>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between pt-2 border-t border-border/50">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Status:</span>
+                {deemixInstalled === true && <Badge className="bg-green-500/20 text-green-500 border-green-500/30">Instalado ✓</Badge>}
+                {deemixInstalled === false && <Badge variant="destructive">Não encontrado</Badge>}
+                {deemixInstalled === null && <Badge variant="outline">Verificando...</Badge>}
+              </div>
+              <Button variant="outline" size="sm" onClick={checkDeemixStatus} disabled={isCheckingDeemix}>
+                {isCheckingDeemix ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                Verificar deemix
+              </Button>
+            </div>
+            
+            <p className="text-xs text-muted-foreground">
+              ⏱️ Delay de 30s entre downloads para evitar rate limiting do Deezer
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       {/* Batch Download Section */}
