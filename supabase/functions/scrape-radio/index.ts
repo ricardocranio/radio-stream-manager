@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
 
     console.log('Scraping radio station:', formattedUrl);
 
-    // Use Firecrawl to scrape the page
+    // Use Firecrawl to scrape the page with extended wait for dynamic content
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -59,8 +59,12 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         url: formattedUrl,
         formats: ['markdown', 'html'],
-        onlyMainContent: true,
-        waitFor: 3000, // Wait for dynamic content to load
+        onlyMainContent: false, // Get full page to capture all dynamic elements
+        waitFor: 8000, // Wait 8 seconds for JavaScript to populate song data
+        actions: [
+          // Wait for the song history element to be populated
+          { type: 'wait', milliseconds: 5000 },
+        ],
       }),
     });
 
