@@ -307,6 +307,26 @@ export function GradeBuilderView() {
                     })}
                   </div>
                 </div>
+
+                {/* TOP50 Source */}
+                <div className="mt-4 p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/20">
+                  <h4 className="text-xs font-medium text-yellow-400 mb-3 flex items-center gap-2">
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                      <polyline points="17 6 23 6 23 12" />
+                    </svg>
+                    TOP50 (Curadoria do Monitoramento)
+                  </h4>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Músicas do ranking TOP50 são inseridas como posições aleatórias na grade.
+                  </p>
+                  <div className="bg-background/60 rounded p-2 font-mono text-xs text-yellow-400/80">
+                    "POSICAO1.MP3",vht,"POSICAO12.MP3",vht,"POSICAO7.MP3"...
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Configure em <strong>Conteúdos Fixos</strong> → <strong>TOP50 (Curadoria)</strong>
+                  </p>
+                </div>
               </CardContent>
             </Card>
           </div>

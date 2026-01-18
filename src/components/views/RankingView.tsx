@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendingUp, Music, Crown, Medal, Award, BarChart3, RotateCcw, AlertTriangle, Search, Filter, Calendar } from 'lucide-react';
+import { TrendingUp, Music, Crown, Medal, Award, BarChart3, RotateCcw, AlertTriangle, Search, Filter, Calendar, Download, FileJson } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -123,6 +123,41 @@ export function RankingView() {
     });
   };
 
+  const handleExportJSON = () => {
+    const exportData = {
+      exportDate: new Date().toISOString(),
+      totalSongs: filteredRanking.length,
+      filters: {
+        style: selectedStyle,
+        dateRange: dateRange,
+        searchTerm: searchTerm,
+      },
+      ranking: filteredRanking.map((song, index) => ({
+        position: index + 1,
+        title: song.title,
+        artist: song.artist,
+        plays: song.plays,
+        style: song.style,
+        trend: song.trend,
+        // File format for grade: POSICAO{N}.MP3
+        gradeFileName: `POSICAO${index + 1}.MP3`,
+      })),
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ranking_top50_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: '📥 Exportação concluída!',
+      description: `${filteredRanking.length} músicas exportadas para JSON.`,
+    });
+  };
+
   const allStyles = ['SERTANEJO', 'PAGODE', 'POP/VARIADO', 'DANCE', 'AGRONEJO'];
 
   return (
@@ -133,6 +168,11 @@ export function RankingView() {
           <p className="text-muted-foreground">Curadoria através do monitoramento das rádios</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
+          <Button variant="outline" className="gap-2 border-primary/50 text-primary hover:bg-primary/10" onClick={handleExportJSON}>
+            <FileJson className="w-4 h-4" />
+            Exportar JSON
+          </Button>
+          
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="outline" className="gap-2 border-amber-500/50 text-amber-500 hover:bg-amber-500/10">

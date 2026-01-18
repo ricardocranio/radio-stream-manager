@@ -15,10 +15,12 @@ export interface FixedContent {
   id: string;
   name: string;
   fileName: string;
-  type: 'news' | 'horoscope' | 'sports' | 'weather' | 'romance' | 'curiosity' | 'other';
+  type: 'news' | 'horoscope' | 'sports' | 'weather' | 'romance' | 'curiosity' | 'other' | 'top50';
   dayPattern: string; // WEEKDAYS, WEEKEND, ALL, or specific days
   timeSlots: { hour: number; minute: number }[];
   enabled: boolean;
+  // TOP50 specific config
+  top50Count?: number; // How many songs from TOP50 to include
 }
 
 export interface BlockSong {
@@ -257,6 +259,7 @@ const defaultFixedContent: FixedContent[] = [
   { id: '11', name: 'Raridades', fileName: 'RARIDADES_BLOCO{ED}', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 12, minute: 0 }, { hour: 12, minute: 30 }], enabled: true },
   { id: '12', name: 'Mamãe Cheguei', fileName: 'MAMAE_CHEGUEI', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 21, minute: 0 }], enabled: true },
   { id: '13', name: 'Curiosidades', fileName: 'CURIOSIDADES', type: 'curiosity', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 22, minute: 30 }], enabled: true },
+  { id: '14', name: 'TOP50 Curadoria', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 18, minute: 0 }, { hour: 18, minute: 30 }], enabled: true, top50Count: 5 },
 ];
 
 export const useRadioStore = create<RadioState>()(
