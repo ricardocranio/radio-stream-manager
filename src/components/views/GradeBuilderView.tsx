@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { useRadioStore } from '@/store/radioStore';
+import { sanitizeFilename } from '@/lib/sanitizeFilename';
 
 interface GradeFormat {
   timeFormat: string;
@@ -79,7 +80,8 @@ export function GradeBuilderView() {
   };
 
   const formatSong = (song: { file: string; source: string }) => {
-    let result = song.file;
+    // Sanitize filename: remove accents, replace & with "e", remove special chars
+    let result = sanitizeFilename(song.file);
     if (format.songQuotes) result = `"${result}"`;
     if (format.includeSource) result = `[${song.source}] ${result}`;
     return result;
