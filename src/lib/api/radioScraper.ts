@@ -123,6 +123,10 @@ export const knownStations: Record<string, StationConfig> = {
     name: 'Jovem Pan Rock',
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/jovem-pan-rock-498046/',
   },
+  'Show FM 101.1': {
+    name: 'Show FM 101.1',
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/show-fm-oliveira-504298/',
+  },
 };
 
 export const radioScraperApi = {
