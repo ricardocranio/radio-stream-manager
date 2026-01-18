@@ -7,7 +7,8 @@ export interface DeezerConfig {
   downloadFolder: string;
   quality: 'MP3_128' | 'MP3_320' | 'FLAC';
   enabled: boolean;
-  autoDownload: boolean; // Toggle for automatic vs manual download
+  autoDownload: boolean;
+  autoDownloadIntervalMinutes: number; // Interval between auto-downloads
 }
 
 export interface FixedContent {
@@ -202,7 +203,8 @@ const defaultDeezerConfig: DeezerConfig = {
   downloadFolder: 'C:\\Playlist\\Downloads',
   quality: 'MP3_320',
   enabled: true,
-  autoDownload: false, // Default to manual download
+  autoDownload: false,
+  autoDownloadIntervalMinutes: 20, // Default 20 minutes between downloads
 };
 
 const defaultFixedContent: FixedContent[] = [
