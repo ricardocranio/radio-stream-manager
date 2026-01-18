@@ -1,5 +1,8 @@
-const { app, BrowserWindow, Menu, Tray, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification } = require('electron');
 const path = require('path');
+const { spawn, exec } = require('child_process');
+const fs = require('fs');
+const https = require('https');
 
 let mainWindow;
 let tray = null;
@@ -8,6 +11,34 @@ let tray = null;
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
+}
+
+// Check if deemix is installed
+function checkDeemixInstalled() {
+  return new Promise((resolve) => {
+    exec('deemix --help', (error) => {
+      resolve(!error);
+    });
+  });
+}
+
+// Show Windows notification
+function showNotification(title, body, onClick) {
+  if (Notification.isSupported()) {
+    const notification = new Notification({
+      title,
+      body,
+      icon: path.join(__dirname, '../public/favicon.ico'),
+      silent: false,
+    });
+    
+    if (onClick) {
+      notification.on('click', onClick);
+    }
+    
+    notification.show();
+    return notification;
+  }
 }
 
 function createWindow() {
@@ -24,7 +55,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   });
 
@@ -108,7 +139,22 @@ function createWindow() {
               type: 'info',
               title: 'Sobre',
               message: 'Programador Rádio',
-              detail: 'Versão 5.1\n\nSistema de geração automática de grades de programação para rádios FM.\n\n© 2024 PGM-FM',
+              detail: 'Versão 5.1 (V21)\n\nSistema de geração automática de grades de programação para rádios FM.\n\nIntegração Deezer via deemix.\n\n© 2024 PGM-FM',
+            });
+          },
+        },
+        {
+          label: 'Verificar deemix',
+          click: async () => {
+            const { dialog } = require('electron');
+            const installed = await checkDeemixInstalled();
+            dialog.showMessageBox(mainWindow, {
+              type: installed ? 'info' : 'warning',
+              title: 'Status do deemix',
+              message: installed ? 'deemix está instalado!' : 'deemix NÃO encontrado',
+              detail: installed 
+                ? 'O deemix CLI está configurado corretamente.'
+                : 'Instale o deemix com: pip install deemix\n\nOu baixe em: https://deemix.app',
             });
           },
         },
@@ -208,62 +254,201 @@ ipcMain.handle('open-path', (event, filePath) => {
   shell.openPath(filePath);
 });
 
-// Deezer Download Handler
-ipcMain.handle('download-from-deezer', async (event, params) => {
-  const { artist, title, arl, outputFolder, quality } = params;
-  const fs = require('fs');
-  const https = require('https');
-  const crypto = require('crypto');
+// Check if deemix is available
+ipcMain.handle('check-deemix', async () => {
+  return await checkDeemixInstalled();
+});
+
+// Show notification from renderer
+ipcMain.handle('show-notification', (event, { title, body }) => {
+  showNotification(title, body, () => {
+    mainWindow.show();
+    mainWindow.focus();
+  });
+});
+
+// Search track on Deezer API
+async function searchDeezerTrack(artist, title) {
+  return new Promise((resolve, reject) => {
+    const searchQuery = encodeURIComponent(`${artist} ${title}`);
+    const searchUrl = `https://api.deezer.com/search?q=${searchQuery}&limit=5`;
+    
+    https.get(searchUrl, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(data);
+          if (result.data && result.data.length > 0) {
+            resolve(result.data[0]);
+          } else {
+            reject(new Error('Música não encontrada no Deezer'));
+          }
+        } catch (e) {
+          reject(new Error('Falha ao parsear resposta do Deezer'));
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
+// Save ARL to deemix config
+function saveArlToDeemixConfig(arl) {
+  const deemixConfigDir = path.join(app.getPath('home'), '.config', 'deemix');
+  const arlFile = path.join(deemixConfigDir, '.arl');
   
   try {
+    if (!fs.existsSync(deemixConfigDir)) {
+      fs.mkdirSync(deemixConfigDir, { recursive: true });
+    }
+    fs.writeFileSync(arlFile, arl, 'utf8');
+    return true;
+  } catch (error) {
+    console.error('Failed to save ARL:', error);
+    return false;
+  }
+}
+
+// Deezer Download Handler using deemix CLI
+ipcMain.handle('download-from-deezer', async (event, params) => {
+  const { artist, title, arl, outputFolder, quality } = params;
+  
+  try {
+    // First check if deemix is installed
+    const deemixInstalled = await checkDeemixInstalled();
+    
+    if (!deemixInstalled) {
+      return { 
+        success: false, 
+        error: 'deemix não está instalado. Instale com: pip install deemix',
+        needsInstall: true
+      };
+    }
+
     // Ensure output folder exists
     if (!fs.existsSync(outputFolder)) {
       fs.mkdirSync(outputFolder, { recursive: true });
     }
 
-    // Search for track on Deezer API
-    const searchQuery = encodeURIComponent(`${artist} ${title}`);
-    const searchUrl = `https://api.deezer.com/search?q=${searchQuery}&limit=1`;
-    
-    const searchResult = await new Promise((resolve, reject) => {
-      https.get(searchUrl, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch (e) {
-            reject(new Error('Falha ao parsear resposta do Deezer'));
-          }
-        });
-      }).on('error', reject);
-    });
+    // Save ARL to deemix config
+    saveArlToDeemixConfig(arl);
 
-    if (!searchResult.data || searchResult.data.length === 0) {
-      return { success: false, error: 'Música não encontrada no Deezer' };
-    }
-
-    const track = searchResult.data[0];
+    // Search for track on Deezer API to get the URL
+    const track = await searchDeezerTrack(artist, title);
+    const deezerUrl = track.link || `https://www.deezer.com/track/${track.id}`;
     
-    // For now, return track info - full download requires deemix or similar
-    // This is a placeholder that shows the track was found
-    // Real implementation would use deemix CLI or deezer-downloader
-    
-    return { 
-      success: true, 
-      track: {
-        id: track.id,
-        title: track.title,
-        artist: track.artist.name,
-        album: track.album.title,
-        duration: track.duration,
-        preview: track.preview,
-      },
-      message: `Música encontrada: ${track.artist.name} - ${track.title}. Para download completo, use deemix CLI.`
+    // Map quality setting to deemix format
+    const qualityMap = {
+      'MP3_128': '128',
+      'MP3_320': '320',
+      'FLAC': 'flac'
     };
+    const deemixQuality = qualityMap[quality] || '320';
+
+    // Run deemix CLI
+    return new Promise((resolve) => {
+      const args = [
+        deezerUrl,
+        '-p', outputFolder,
+        '-b', deemixQuality,
+      ];
+
+      console.log(`Running: deemix ${args.join(' ')}`);
+      
+      const deemixProcess = spawn('deemix', args, {
+        shell: true,
+        env: { ...process.env }
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      deemixProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+        console.log('deemix stdout:', data.toString());
+      });
+
+      deemixProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+        console.log('deemix stderr:', data.toString());
+      });
+
+      deemixProcess.on('close', (code) => {
+        if (code === 0) {
+          // Show Windows notification
+          showNotification(
+            '✅ Download Concluído',
+            `${track.artist.name} - ${track.title}`,
+            () => {
+              shell.openPath(outputFolder);
+            }
+          );
+
+          resolve({ 
+            success: true, 
+            track: {
+              id: track.id,
+              title: track.title,
+              artist: track.artist.name,
+              album: track.album.title,
+              duration: track.duration,
+            },
+            output: stdout,
+            message: `Download concluído: ${track.artist.name} - ${track.title}`
+          });
+        } else {
+          resolve({ 
+            success: false, 
+            error: stderr || `deemix saiu com código ${code}`,
+            output: stdout + stderr
+          });
+        }
+      });
+
+      deemixProcess.on('error', (error) => {
+        resolve({ 
+          success: false, 
+          error: `Erro ao executar deemix: ${error.message}`
+        });
+      });
+
+      // Timeout after 2 minutes
+      setTimeout(() => {
+        deemixProcess.kill();
+        resolve({ 
+          success: false, 
+          error: 'Timeout: download demorou mais de 2 minutos'
+        });
+      }, 120000);
+    });
     
   } catch (error) {
     console.error('Deezer download error:', error);
     return { success: false, error: error.message || 'Erro ao baixar do Deezer' };
   }
+});
+
+// Batch download notification
+ipcMain.handle('notify-batch-complete', (event, { completed, failed, total, outputFolder }) => {
+  showNotification(
+    '📦 Download em Lote Concluído',
+    `✅ ${completed} baixadas | ❌ ${failed} falharam | Total: ${total}`,
+    () => {
+      if (outputFolder) {
+        shell.openPath(outputFolder);
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }
+  );
+});
+
+// Open folder in explorer
+ipcMain.handle('open-folder', (event, folderPath) => {
+  if (fs.existsSync(folderPath)) {
+    shell.openPath(folderPath);
+    return { success: true };
+  }
+  return { success: false, error: 'Pasta não encontrada' };
 });

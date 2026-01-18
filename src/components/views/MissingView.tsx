@@ -1,5 +1,5 @@
-import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle } from 'lucide-react';
-import { useState } from 'react';
+import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@/components/ui/alert';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -35,7 +40,6 @@ interface DownloadStatus {
 export function MissingView() {
   const { 
     missingSongs, 
-    stations, 
     deezerConfig, 
     batchDownloadProgress,
     setBatchDownloadProgress,
@@ -45,14 +49,35 @@ export function MissingView() {
   } = useRadioStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
+  const [deemixInstalled, setDeemixInstalled] = useState<boolean | null>(null);
+  const [isCheckingDeemix, setIsCheckingDeemix] = useState(false);
   const { toast } = useToast();
+
+  // Check if deemix is installed on mount
+  useEffect(() => {
+    if (isElectron && deezerConfig.enabled) {
+      checkDeemixStatus();
+    }
+  }, [deezerConfig.enabled]);
+
+  const checkDeemixStatus = async () => {
+    if (!isElectron) return;
+    setIsCheckingDeemix(true);
+    try {
+      const installed = await window.electronAPI?.checkDeemix();
+      setDeemixInstalled(installed ?? false);
+    } catch {
+      setDeemixInstalled(false);
+    }
+    setIsCheckingDeemix(false);
+  };
 
   // Demo missing songs for display
   const demoMissing: MissingSong[] = [
-    { id: '1', title: 'Bohemian Rhapsody', artist: 'Queen', station: 'Metro', timestamp: new Date(), status: 'missing' },
-    { id: '2', title: 'Shallow', artist: 'Lady Gaga', station: 'Disney FM', timestamp: new Date(), status: 'missing' },
-    { id: '3', title: 'Blinding Lights', artist: 'The Weeknd', station: 'Metro', timestamp: new Date(), status: 'missing' },
-    { id: '4', title: 'Dance Monkey', artist: 'Tones and I', station: 'Disney FM', timestamp: new Date(), status: 'missing' },
+    { id: '1', title: 'Bohemian Rhapsody', artist: 'Queen', station: 'BH FM', timestamp: new Date(), status: 'missing' },
+    { id: '2', title: 'Shallow', artist: 'Lady Gaga', station: 'Band FM', timestamp: new Date(), status: 'missing' },
+    { id: '3', title: 'Blinding Lights', artist: 'The Weeknd', station: 'Clube FM', timestamp: new Date(), status: 'missing' },
+    { id: '4', title: 'Dance Monkey', artist: 'Tones and I', station: 'Band FM', timestamp: new Date(), status: 'missing' },
     { id: '5', title: 'Watermelon Sugar', artist: 'Harry Styles', station: 'BH FM', timestamp: new Date(), status: 'missing' },
   ];
 
@@ -93,6 +118,12 @@ export function MissingView() {
     }
   };
 
+  const openDownloadFolder = () => {
+    if (isElectron && window.electronAPI?.openFolder) {
+      window.electronAPI.openFolder(deezerConfig.downloadFolder);
+    }
+  };
+
   const handleDeezerDownload = async (songId: string, artist: string, title: string) => {
     if (!deezerConfig.enabled || !deezerConfig.arl) {
       toast({
@@ -123,6 +154,11 @@ export function MissingView() {
         outputFolder: deezerConfig.downloadFolder,
         quality: deezerConfig.quality,
       });
+
+      if (result?.needsInstall) {
+        setDeemixInstalled(false);
+        throw new Error('deemix não está instalado');
+      }
 
       if (result?.success) {
         setDownloadStatus((prev) => ({ ...prev, [songId]: 'success' }));
@@ -165,6 +201,15 @@ export function MissingView() {
       return;
     }
 
+    if (deemixInstalled === false) {
+      toast({
+        title: 'deemix não instalado',
+        description: 'Instale o deemix primeiro: pip install deemix',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const songsToDownload = filteredSongs.filter(s => s.status === 'missing' || s.status === 'error');
     
     if (songsToDownload.length === 0) {
@@ -185,9 +230,15 @@ export function MissingView() {
 
     let completed = 0;
     let failed = 0;
+    let shouldStop = false;
 
     for (const song of songsToDownload) {
-      if (!batchDownloadProgress.isRunning) break; // Allow cancellation
+      // Check if user requested stop
+      const currentProgress = useRadioStore.getState().batchDownloadProgress;
+      if (!currentProgress.isRunning) {
+        shouldStop = true;
+        break;
+      }
       
       setBatchDownloadProgress({
         current: `${song.artist} - ${song.title}`,
@@ -223,13 +274,23 @@ export function MissingView() {
       setBatchDownloadProgress({ completed, failed });
 
       // Small delay between downloads to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
     setBatchDownloadProgress({ isRunning: false, current: '' });
 
+    // Send Windows notification
+    if (isElectron && window.electronAPI?.notifyBatchComplete) {
+      window.electronAPI.notifyBatchComplete({
+        completed,
+        failed,
+        total: songsToDownload.length,
+        outputFolder: deezerConfig.downloadFolder,
+      });
+    }
+
     toast({
-      title: 'Download em lote concluído',
+      title: shouldStop ? 'Download interrompido' : 'Download em lote concluído',
       description: `${completed} baixadas, ${failed} falharam de ${songsToDownload.length} músicas.`,
     });
   };
@@ -237,8 +298,8 @@ export function MissingView() {
   const handleStopBatchDownload = () => {
     setBatchDownloadProgress({ isRunning: false });
     toast({
-      title: 'Download cancelado',
-      description: 'O download em lote foi interrompido.',
+      title: 'Parando download...',
+      description: 'Aguardando o download atual terminar.',
     });
   };
 
@@ -271,19 +332,30 @@ export function MissingView() {
         </div>
         <div className="flex gap-2">
           {deezerConfig.enabled && deezerConfig.arl && (
-            <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
-              Deezer Conectado
-            </Badge>
+            <>
+              <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
+                Deezer Conectado
+              </Badge>
+              {deemixInstalled === true && (
+                <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/30">
+                  deemix OK
+                </Badge>
+              )}
+            </>
           )}
+          <Button variant="outline" onClick={openDownloadFolder} disabled={!isElectron}>
+            <FolderOpen className="w-4 h-4 mr-2" />
+            Abrir Pasta
+          </Button>
           <Button variant="outline">
             <RefreshCw className="w-4 h-4 mr-2" />
-            Verificar Novamente
+            Verificar
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive">
                 <Trash2 className="w-4 h-4 mr-2" />
-                Limpar Lista
+                Limpar
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -302,6 +374,22 @@ export function MissingView() {
         </div>
       </div>
 
+      {/* deemix Warning */}
+      {isElectron && deezerConfig.enabled && deemixInstalled === false && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>deemix não encontrado</AlertTitle>
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              Para baixar do Deezer, instale o deemix: <code className="bg-destructive/20 px-1 rounded">pip install deemix</code>
+            </span>
+            <Button variant="outline" size="sm" onClick={checkDeemixStatus} disabled={isCheckingDeemix}>
+              {isCheckingDeemix ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Verificar novamente'}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Batch Download Section */}
       {deezerConfig.enabled && deezerConfig.arl && (
         <Card className="glass-card border-primary/30 bg-primary/5">
@@ -312,7 +400,7 @@ export function MissingView() {
                   <Music className="w-6 h-6 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-foreground">Download em Lote</h3>
+                  <h3 className="font-semibold text-foreground">Download em Lote via deemix</h3>
                   <p className="text-sm text-muted-foreground">
                     Baixar todas as {filteredSongs.filter(s => s.status === 'missing' || s.status === 'error').length} músicas faltantes do Deezer
                   </p>
@@ -325,7 +413,11 @@ export function MissingView() {
                   Parar Download
                 </Button>
               ) : (
-                <Button onClick={handleBatchDownload} className="gap-2">
+                <Button 
+                  onClick={handleBatchDownload} 
+                  className="gap-2"
+                  disabled={deemixInstalled === false}
+                >
                   <PlayCircle className="w-4 h-4" />
                   Iniciar Download em Lote
                 </Button>
@@ -444,7 +536,7 @@ export function MissingView() {
                           size="icon"
                           className="text-primary hover:text-primary"
                           onClick={() => handleDeezerDownload(song.id, song.artist, song.title)}
-                          disabled={downloadStatus[song.id] === 'downloading' || batchDownloadProgress.isRunning}
+                          disabled={downloadStatus[song.id] === 'downloading' || batchDownloadProgress.isRunning || deemixInstalled === false}
                           title="Baixar do Deezer"
                         >
                           {getStatusIcon(song.id)}
