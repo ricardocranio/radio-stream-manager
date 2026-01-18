@@ -19,6 +19,7 @@ export interface CapturedSong {
   station: string;
   timestamp: Date;
   status: 'found' | 'missing' | 'curated';
+  source?: string; // URL from where the song was captured
 }
 
 export interface SystemConfig {

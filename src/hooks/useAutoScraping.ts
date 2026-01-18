@@ -52,15 +52,17 @@ export function useAutoScraping() {
         return {
           success: true,
           stationName,
+          scrapeUrl, // Include the source URL
           nowPlaying: result.nowPlaying,
           recentSongs: result.recentSongs || [],
+          source: result.source, // Source type from scraper (primary, mytuner-alt, etc)
         };
       }
       
-      return { success: false, stationName, error: result.error };
+      return { success: false, stationName, scrapeUrl, error: result.error };
     } catch (error) {
       console.error(`[AutoScraping] Error scraping ${stationName}:`, error);
-      return { success: false, stationName, error: String(error) };
+      return { success: false, stationName, scrapeUrl, error: String(error) };
     }
   }, []);
 
@@ -92,15 +94,18 @@ export function useAutoScraping() {
       const batch = enabledStations.slice(i, i + batchSize);
       
       const batchResults = await Promise.allSettled(
-        batch.map(station => scrapeStation(station.name, station.scrapeUrl))
+        batch.map(station => scrapeStation(station.name, station.scrapeUrl!))
       );
 
-      for (const result of batchResults) {
+      for (let j = 0; j < batchResults.length; j++) {
+        const result = batchResults[j];
+        const station = batch[j];
+        
         if (result.status === 'fulfilled' && result.value.success) {
           successCount++;
-          const { stationName, nowPlaying, recentSongs } = result.value;
+          const { stationName, nowPlaying, recentSongs, scrapeUrl } = result.value;
           
-          // Add now playing song
+          // Add now playing song with source URL
           if (nowPlaying) {
             addCapturedSong({
               id: `${stationName}-${Date.now()}`,
@@ -109,11 +114,12 @@ export function useAutoScraping() {
               station: stationName,
               timestamp: new Date(),
               status: 'found',
+              source: scrapeUrl, // Include the source URL
             });
             newSongsCount++;
           }
 
-          // Add recent songs (limit to 3)
+          // Add recent songs (limit to 3) with source URL
           for (const song of (recentSongs || []).slice(0, 3)) {
             addCapturedSong({
               id: `${stationName}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -122,6 +128,7 @@ export function useAutoScraping() {
               station: stationName,
               timestamp: new Date(song.timestamp),
               status: 'found',
+              source: scrapeUrl, // Include the source URL
             });
             newSongsCount++;
           }
