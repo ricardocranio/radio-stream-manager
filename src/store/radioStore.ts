@@ -15,7 +15,7 @@ export interface FixedContent {
   id: string;
   name: string;
   fileName: string;
-  type: 'news' | 'horoscope' | 'sports' | 'weather' | 'romance' | 'curiosity' | 'other' | 'top50';
+  type: 'news' | 'horoscope' | 'sports' | 'weather' | 'romance' | 'curiosity' | 'other' | 'top50' | 'vozbrasil';
   dayPattern: string; // WEEKDAYS, WEEKEND, ALL, or specific days
   timeSlots: { hour: number; minute: number }[];
   enabled: boolean;
@@ -186,7 +186,7 @@ const defaultStations: RadioStation[] = [
   },
 ];
 
-// V21 Program IDs
+// V21 Program IDs - Atualizado com nova grade
 const defaultPrograms: ProgramSchedule[] = [
   { timeRange: '1-5', programName: 'Nossa Madrugada' },
   { timeRange: '6-8', programName: 'Happy Hour' },
@@ -195,10 +195,11 @@ const defaultPrograms: ProgramSchedule[] = [
   { timeRange: '14-16', programName: 'Tarde Animada' },
   { timeRange: '17-17', programName: 'Happy Hour' },
   { timeRange: '18-18', programName: 'TOP10' },
-  { timeRange: '19-19', programName: 'FIXO' },
+  { timeRange: '19-19', programName: 'TOP50' }, // TOP50 às 19:00 e 19:30
   { timeRange: '20-20', programName: 'FIXO' },
-  { timeRange: '21-23', programName: 'Noite NOSSA' },
-  { timeRange: '0-0', programName: 'Noite NOSSA' },
+  { timeRange: '21-21', programName: 'VOZ_BRASIL' }, // A Voz do Brasil às 21:00
+  { timeRange: '22-23', programName: 'Romance' }, // Romance às 22:00-00:00
+  { timeRange: '0-0', programName: 'Romance' },
 ];
 
 // V21 Sequence - Based on pos_map: 1-4=bh, 5-7=band, 8-10=clube
@@ -255,11 +256,17 @@ const defaultFixedContent: FixedContent[] = [
   { id: '7', name: 'Top 10 Mix', fileName: 'TOP_10_MIX_BLOCO{ED}', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 18, minute: 0 }, { hour: 18, minute: 30 }], enabled: true },
   { id: '8', name: 'Papo Sério', fileName: 'PAPO_SERIO', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 20, minute: 0 }], enabled: true },
   { id: '9', name: 'Momento de Reflexão', fileName: 'MOMENTO_DE_REFLEXAO', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 20, minute: 30 }], enabled: true },
-  { id: '10', name: 'Romance', fileName: 'ROMANCE_BLOCO{ED}', type: 'romance', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 20, minute: 0 }, { hour: 20, minute: 30 }, { hour: 21, minute: 0 }, { hour: 22, minute: 30 }], enabled: true },
+  // Romance movido para 22:00-00:00
+  { id: '10', name: 'Romance', fileName: 'ROMANCE_BLOCO{ED}', type: 'romance', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 22, minute: 0 }, { hour: 22, minute: 30 }, { hour: 23, minute: 0 }, { hour: 23, minute: 30 }, { hour: 0, minute: 0 }], enabled: true },
   { id: '11', name: 'Raridades', fileName: 'RARIDADES_BLOCO{ED}', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 12, minute: 0 }, { hour: 12, minute: 30 }], enabled: true },
-  { id: '12', name: 'Mamãe Cheguei', fileName: 'MAMAE_CHEGUEI', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 21, minute: 0 }], enabled: true },
-  { id: '13', name: 'Curiosidades', fileName: 'CURIOSIDADES', type: 'curiosity', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 22, minute: 30 }], enabled: true },
-  { id: '14', name: 'TOP50 Curadoria', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 18, minute: 0 }, { hour: 18, minute: 30 }], enabled: true, top50Count: 5 },
+  { id: '12', name: 'Mamãe Cheguei', fileName: 'MAMAE_CHEGUEI', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 20, minute: 0 }], enabled: true },
+  { id: '13', name: 'Curiosidades', fileName: 'CURIOSIDADES', type: 'curiosity', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 17, minute: 30 }], enabled: true },
+  // TOP50 às 19:00 - 10 músicas
+  { id: '14', name: 'TOP50 Bloco 19h', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 19, minute: 0 }], enabled: true, top50Count: 10 },
+  // TOP50 às 19:30 - 10 músicas
+  { id: '15', name: 'TOP50 Bloco 19h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 19, minute: 30 }], enabled: true, top50Count: 10 },
+  // A Voz do Brasil às 21:00
+  { id: '16', name: 'A Voz do Brasil', fileName: 'VOZ_DO_BRASIL', type: 'vozbrasil', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 21, minute: 0 }], enabled: true },
 ];
 
 export const useRadioStore = create<RadioState>()(
