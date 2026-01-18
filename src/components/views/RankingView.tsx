@@ -101,27 +101,57 @@ export function RankingView() {
   const { rankingSongs, clearRanking, setRankingSongs } = useRadioStore();
   const { toast } = useToast();
   const [selectedStyle, setSelectedStyle] = useState<string>('all');
-  const [dateRange, setDateRange] = useState<string>('7d');
+  const [dateRange, setDateRange] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Calculate date filter based on dateRange
+  const getDateThreshold = useMemo(() => {
+    const now = new Date();
+    switch (dateRange) {
+      case '24h':
+        return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      case '7d':
+        return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      case '30d':
+        return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      default:
+        return null; // 'all' - no date filter
+    }
+  }, [dateRange]);
+
   // Use store data only - no demo fallback when ranking is cleared
-  const currentRankingData = rankingSongs.map((song, index) => ({
-    position: index + 1,
-    title: song.title,
-    artist: song.artist,
-    plays: song.plays,
-    style: song.style,
-    trend: song.trend,
-  }));
+  // Also filter by date if dateRange is set
+  const currentRankingData = useMemo(() => {
+    let filtered = rankingSongs;
+    
+    // Apply date filter
+    if (getDateThreshold) {
+      filtered = filtered.filter(song => 
+        song.lastPlayed && new Date(song.lastPlayed) >= getDateThreshold
+      );
+    }
+    
+    return filtered.map((song, index) => ({
+      position: index + 1,
+      title: song.title,
+      artist: song.artist,
+      plays: song.plays,
+      style: song.style,
+      trend: song.trend,
+      lastPlayed: song.lastPlayed,
+    }));
+  }, [rankingSongs, getDateThreshold]);
   
-  // Filter ranking data
-  const filteredRanking = currentRankingData.filter(song => {
-    const matchesStyle = selectedStyle === 'all' || song.style === selectedStyle;
-    const matchesSearch = searchTerm === '' || 
-      song.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      song.artist.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesStyle && matchesSearch;
-  });
+  // Filter ranking data by style and search
+  const filteredRanking = useMemo(() => {
+    return currentRankingData.filter(song => {
+      const matchesStyle = selectedStyle === 'all' || song.style === selectedStyle;
+      const matchesSearch = searchTerm === '' || 
+        song.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        song.artist.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesStyle && matchesSearch;
+    });
+  }, [currentRankingData, selectedStyle, searchTerm]);
   
   const maxPlays = Math.max(...filteredRanking.map((r) => r.plays), 1);
 
@@ -340,20 +370,19 @@ export function RankingView() {
                 onChange={(e) => setDateRange(e.target.value)}
                 className="bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               >
-                <option value="1d">Hoje</option>
+                <option value="24h">Últimas 24h</option>
                 <option value="7d">Últimos 7 dias</option>
                 <option value="30d">Últimos 30 dias</option>
-                <option value="90d">Últimos 90 dias</option>
                 <option value="all">Todo o período</option>
               </select>
             </div>
 
             {/* Active Filters Badge */}
-            {(selectedStyle !== 'all' || searchTerm) && (
+            {(selectedStyle !== 'all' || searchTerm || dateRange !== 'all') && (
               <Button 
                 variant="ghost" 
                 size="sm" 
-                onClick={() => { setSelectedStyle('all'); setSearchTerm(''); }}
+                onClick={() => { setSelectedStyle('all'); setSearchTerm(''); setDateRange('all'); }}
                 className="text-muted-foreground hover:text-foreground"
               >
                 Limpar filtros
