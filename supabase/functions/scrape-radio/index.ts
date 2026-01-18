@@ -239,8 +239,11 @@ function isValidSongPart(text: string): boolean {
   const alphaCount = (text.match(/[a-zA-ZÀ-ÿ]/g) || []).length;
   if (alphaCount < text.length * 0.3) return false;
   
-  // Reject URLs, file paths, technical strings
-  if (text.match(/https?:|www\.|\.com|\.jpg|\.png|\/\/|mzstatic|image\/|thumb\/|rgb\./i)) return false;
+  // Reject URLs, file paths, technical strings, markdown artifacts
+  if (text.match(/https?:|www\.|\.com|\.jpg|\.png|\.gif|\.webp|\.svg|\/\/|mzstatic|image\/|thumb\/|rgb\.|!\[|\]\(/i)) return false;
+  
+  // Reject if contains file extensions or hash-like patterns
+  if (text.match(/\.[a-f0-9]{6,}$/i)) return false;
   
   // Reject common non-song patterns
   const rejectPatterns = [
@@ -249,6 +252,10 @@ function isValidSongPart(text: string): boolean {
     /^(min ago|hour ago)/i,
     /^[\d:]+$/,  // Just timestamps like 14:30
     /^v4\/|^Music\d+|^24UMGIM/i,  // Technical codes
+    /^programas?\s+(em\s+)?destaque/i, // Program names
+    /^radio|^fm\s*\d|^\d+\.\d+\s*fm/i, // Radio names
+    /^-\s*[A-Za-z]/,  // Starts with dash (often technical)
+    /klassik|schweiz|globo.*fm/i, // Known false positives
   ];
   
   for (const pattern of rejectPatterns) {
