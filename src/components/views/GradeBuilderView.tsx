@@ -87,9 +87,14 @@ export function GradeBuilderView() {
     return result;
   };
 
-  const generateLine = (hour: number, minute: number, isFixed: boolean = false) => {
+  const generateLine = (hour: number, minute: number, isFixed: boolean = false, fixedType?: string) => {
     const time = formatTime(hour, minute);
     const program = getProgramForHour(hour);
+
+    // Special format for Voz do Brasil: 21:00 19:01 (FIXO ID=VOZ DO BRASIL)
+    if (fixedType === 'vozbrasil') {
+      return `${time} 19:01 (FIXO ${format.programPrefix}VOZ DO BRASIL)`;
+    }
 
     if (isFixed) {
       return `${time} (${format.fixedBlockText} ${format.programPrefix}${program})`;
@@ -288,6 +293,15 @@ export function GradeBuilderView() {
                   </div>
                 </div>
 
+                <div className="mt-4 space-y-3">
+                  <div className="text-xs text-muted-foreground">Exemplo A Voz do Brasil (21:00 - Seg a Sex):</div>
+                  <div className="bg-background/80 rounded-lg p-4 font-mono text-xs">
+                    <pre className="text-green-400">
+                      {generateLine(21, 0, true, 'vozbrasil')}
+                    </pre>
+                  </div>
+                </div>
+
                 {/* Sequence Legend */}
                 <div className="mt-6 p-4 rounded-lg bg-primary/5 border border-primary/20">
                   <h4 className="text-xs font-medium text-primary mb-3">Sequência de Fontes (Posições 1-10)</h4>
@@ -433,11 +447,16 @@ export function GradeBuilderView() {
                   {Array.from({ length: 24 }, (_, hour) => (
                     [0, 30].map((minute) => {
                       const isFixed = hour === 19;
-                      const line = generateLine(hour, minute, isFixed);
+                      const isVozBrasil = hour === 21 && minute === 0;
+                      const line = isVozBrasil 
+                        ? generateLine(hour, minute, true, 'vozbrasil')
+                        : generateLine(hour, minute, isFixed);
                       return (
                         <div
                           key={`${hour}-${minute}`}
-                          className={`py-1 px-2 rounded hover:bg-secondary/30 ${isFixed ? 'text-muted-foreground' : 'text-foreground'}`}
+                          className={`py-1 px-2 rounded hover:bg-secondary/30 ${
+                            isVozBrasil ? 'text-green-400' : isFixed ? 'text-muted-foreground' : 'text-foreground'
+                          }`}
                         >
                           {line}
                         </div>
