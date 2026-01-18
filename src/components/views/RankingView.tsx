@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendingUp, Music, Crown, Medal, Award, BarChart3, RotateCcw, AlertTriangle } from 'lucide-react';
+import { TrendingUp, Music, Crown, Medal, Award, BarChart3, RotateCcw, AlertTriangle, Search, Filter, Calendar } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -100,7 +100,20 @@ const getStyleColor = (style: string) => {
 export function RankingView() {
   const { clearRanking } = useRadioStore();
   const { toast } = useToast();
-  const maxPlays = Math.max(...rankingData.map((r) => r.plays));
+  const [selectedStyle, setSelectedStyle] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<string>('7d');
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Filter ranking data
+  const filteredRanking = rankingData.filter(song => {
+    const matchesStyle = selectedStyle === 'all' || song.style === selectedStyle;
+    const matchesSearch = searchTerm === '' || 
+      song.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      song.artist.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesStyle && matchesSearch;
+  });
+  
+  const maxPlays = Math.max(...filteredRanking.map((r) => r.plays), 1);
 
   const handleResetRanking = () => {
     clearRanking();
@@ -110,14 +123,16 @@ export function RankingView() {
     });
   };
 
+  const allStyles = ['SERTANEJO', 'PAGODE', 'POP/VARIADO', 'DANCE', 'AGRONEJO'];
+
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Ranking TOP50</h2>
-          <p className="text-muted-foreground">Músicas mais tocadas e estatísticas detalhadas</p>
+          <p className="text-muted-foreground">Curadoria através do monitoramento das rádios</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="outline" className="gap-2 border-amber-500/50 text-amber-500 hover:bg-amber-500/10">
@@ -156,6 +171,94 @@ export function RankingView() {
           </Badge>
         </div>
       </div>
+
+      {/* Filters Card */}
+      <Card className="glass-card border-primary/30">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Search */}
+            <div className="flex-1 min-w-[200px]">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Buscar música ou artista..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-secondary/50 border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+            </div>
+
+            {/* Style Filter */}
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-muted-foreground" />
+              <select
+                value={selectedStyle}
+                onChange={(e) => setSelectedStyle(e.target.value)}
+                className="bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="all">Todos os Estilos</option>
+                {allStyles.map(style => (
+                  <option key={style} value={style}>{style}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date Range Filter */}
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-muted-foreground" />
+              <select
+                value={dateRange}
+                onChange={(e) => setDateRange(e.target.value)}
+                className="bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="1d">Hoje</option>
+                <option value="7d">Últimos 7 dias</option>
+                <option value="30d">Últimos 30 dias</option>
+                <option value="90d">Últimos 90 dias</option>
+                <option value="all">Todo o período</option>
+              </select>
+            </div>
+
+            {/* Active Filters Badge */}
+            {(selectedStyle !== 'all' || searchTerm) && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => { setSelectedStyle('all'); setSearchTerm(''); }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                Limpar filtros
+              </Button>
+            )}
+          </div>
+          
+          {/* Style Badges */}
+          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border/50">
+            <Badge 
+              variant={selectedStyle === 'all' ? 'default' : 'outline'}
+              className="cursor-pointer"
+              onClick={() => setSelectedStyle('all')}
+            >
+              Todos ({rankingData.length})
+            </Badge>
+            {allStyles.map(style => {
+              const count = rankingData.filter(s => s.style === style).length;
+              return (
+                <Badge 
+                  key={style}
+                  variant={selectedStyle === style ? 'default' : 'outline'}
+                  className={`cursor-pointer ${getStyleColor(style)}`}
+                  onClick={() => setSelectedStyle(style)}
+                >
+                  {style} ({count})
+                </Badge>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

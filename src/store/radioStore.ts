@@ -221,7 +221,7 @@ const defaultConfig: SystemConfig = {
   rankingFile: 'C:\\Playlist\\pgm\\Grades\\ranking_sucessos.json',
   updateIntervalMinutes: 20,
   artistRepetitionMinutes: 60,
-  safetyMarginMinutes: 5,
+  safetyMarginMinutes: 7, // Maximum 7 minutes before block
   coringaCode: 'mus',
   // V21 additions
   vozBrasilFolder: 'C:\\Playlist\\A Voz do Brasil',

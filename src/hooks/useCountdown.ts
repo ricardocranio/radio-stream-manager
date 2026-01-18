@@ -21,13 +21,14 @@ export function useCountdown() {
     buildTime: '--:--',
   });
 
-  // Calculate next grade time - 10 minutes before the next block
+  // Calculate next grade time - MAX 7 minutes before the next block
   // Blocks are every 30 minutes: 00:00, 00:30, 01:00, 01:30, etc.
   const calculateNextGrade = useCallback(() => {
     if (!isRunning) return { seconds: 0, formatted: '--:--', nextBlockTime: '--:--', buildTime: '--:--' };
     
     const now = new Date();
-    const safetyMargin = config.safetyMarginMinutes || 10; // Default 10 minutes before block
+    const MAX_TOLERANCE = 7; // Maximum 7 minutes before block
+    const safetyMargin = Math.min(config.safetyMarginMinutes || 7, MAX_TOLERANCE);
     
     // Find the next block time (blocks are at :00 and :30 of each hour)
     const currentMinutes = now.getMinutes();
