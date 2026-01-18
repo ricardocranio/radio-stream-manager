@@ -45,24 +45,44 @@ export function DashboardView() {
 
   const displaySongs = capturedSongs.length > 0 ? capturedSongs : demoSongs;
 
-  // Group songs by station
-  const songsByStation = displaySongs.reduce((acc, song) => {
-    if (!acc[song.station]) acc[song.station] = [];
-    acc[song.station].push(song);
+  // Get enabled stations from store
+  const enabledStations = stations.filter(s => s.enabled);
+
+  // Group songs by station - include all enabled stations even if no songs
+  const songsByStation = enabledStations.reduce((acc, station) => {
+    acc[station.name] = displaySongs.filter(song => song.station === station.name);
     return acc;
   }, {} as Record<string, typeof displaySongs>);
 
-  // Get station info with colors
-  const stationColors: Record<string, { bg: string; border: string; text: string }> = {
-    'BH FM': { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' },
-    'Band FM': { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400' },
-    'Clube FM': { bg: 'bg-green-500/10', border: 'border-green-500/30', text: 'text-green-400' },
-    'Disney FM': { bg: 'bg-purple-500/10', border: 'border-purple-500/30', text: 'text-purple-400' },
-    'Metropolitana': { bg: 'bg-pink-500/10', border: 'border-pink-500/30', text: 'text-pink-400' },
-  };
+  // If there are songs from stations not in the store (demo), add them
+  displaySongs.forEach(song => {
+    if (!songsByStation[song.station]) {
+      songsByStation[song.station] = [song];
+    }
+  });
+
+  // Dynamic color palette for stations
+  const colorPalette = [
+    { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' },
+    { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400' },
+    { bg: 'bg-green-500/10', border: 'border-green-500/30', text: 'text-green-400' },
+    { bg: 'bg-purple-500/10', border: 'border-purple-500/30', text: 'text-purple-400' },
+    { bg: 'bg-pink-500/10', border: 'border-pink-500/30', text: 'text-pink-400' },
+    { bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', text: 'text-cyan-400' },
+    { bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400' },
+    { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
+    { bg: 'bg-indigo-500/10', border: 'border-indigo-500/30', text: 'text-indigo-400' },
+    { bg: 'bg-teal-500/10', border: 'border-teal-500/30', text: 'text-teal-400' },
+  ];
+
+  // Assign colors to stations dynamically
+  const stationColorMap = new Map<string, typeof colorPalette[0]>();
+  Object.keys(songsByStation).forEach((stationName, index) => {
+    stationColorMap.set(stationName, colorPalette[index % colorPalette.length]);
+  });
 
   const getStationColor = (station: string) => {
-    return stationColors[station] || { bg: 'bg-primary/10', border: 'border-primary/30', text: 'text-primary' };
+    return stationColorMap.get(station) || colorPalette[0];
   };
 
   return (
