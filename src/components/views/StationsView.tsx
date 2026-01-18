@@ -122,10 +122,12 @@ export function StationsView() {
       const result = await radioScraperApi.scrapeStation(station.name, station.scrapeUrl);
       
       if (result.success) {
+        const totalSongs = (result.nowPlaying ? 1 : 0) + (result.recentSongs?.length || 0);
+        
         toast({
-          title: 'Scraping bem sucedido!',
+          title: `🎵 ${totalSongs} músicas capturadas!`,
           description: result.nowPlaying 
-            ? `Tocando agora: ${result.nowPlaying.artist} - ${result.nowPlaying.title}`
+            ? `Tocando: ${result.nowPlaying.artist} - ${result.nowPlaying.title}${result.recentSongs?.length ? ` + ${result.recentSongs.length} recentes` : ''}`
             : 'Conexão OK, mas sem música tocando no momento.',
         });
 
@@ -139,6 +141,20 @@ export function StationsView() {
             timestamp: new Date(),
             status: 'found',
           });
+        }
+
+        // Add recent songs (last 5)
+        if (result.recentSongs) {
+          for (const song of result.recentSongs.slice(0, 5)) {
+            addCapturedSong({
+              id: `scrape-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              title: song.title,
+              artist: song.artist,
+              station: station.name,
+              timestamp: new Date(song.timestamp),
+              status: 'found',
+            });
+          }
         }
       } else {
         toast({

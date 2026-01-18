@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
         url: formattedUrl,
         formats: ['markdown', 'html'],
         onlyMainContent: true,
-        waitFor: 2000, // Wait for dynamic content to load
+        waitFor: 3000, // Wait for dynamic content to load
       }),
     });
 
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
     // Parse the scraped content to extract song information
     const result = parseRadioContent(data, stationName || 'Unknown', formattedUrl);
     
-    console.log('Scrape successful:', result);
+    console.log('Scrape successful:', JSON.stringify(result, null, 2));
     return new Response(
       JSON.stringify(result),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -103,49 +103,98 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
   const songs: ScrapedSong[] = [];
   let nowPlaying: ScrapedSong | undefined;
 
+  console.log('Parsing content for:', stationName);
+  console.log('Markdown length:', markdown.length);
+
   // Try to parse mytuner-radio.com format
   if (url.includes('mytuner-radio.com')) {
-    // Look for "Tocando agora" or "Now Playing" section
-    const nowPlayingMatch = markdown.match(/(?:Tocando agora|Now Playing|Currently Playing)[:\s]*\n+([^\n]+)\n+([^\n]+)/i);
-    if (nowPlayingMatch) {
-      nowPlaying = {
-        title: nowPlayingMatch[1].trim(),
-        artist: nowPlayingMatch[2].trim(),
-        timestamp: new Date().toISOString(),
-      };
-    }
-
-    // Look for "As últimas tocadas" or "Recently Played" section
-    const recentSection = markdown.match(/(?:As últimas tocadas|Recently Played|Last Played)[:\s]*\n+([\s\S]*?)(?:\n\n|\n#|$)/i);
-    if (recentSection) {
-      const lines = recentSection[1].split('\n').filter((l: string) => l.trim());
-      for (let i = 0; i < lines.length - 1; i += 2) {
-        const title = lines[i]?.trim();
-        const artist = lines[i + 1]?.trim();
-        if (title && artist && !title.includes('min ago') && !title.includes('hour ago')) {
-          songs.push({
-            title,
-            artist,
-            timestamp: new Date().toISOString(),
-          });
+    // Method 1: Look for bold title followed by artist pattern (most common in mytuner)
+    // Pattern: **Song Title**\nArtist Name
+    const boldPatterns = markdown.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/g);
+    if (boldPatterns) {
+      console.log('Found bold patterns:', boldPatterns.length);
+      for (const pattern of boldPatterns) {
+        const match = pattern.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/);
+        if (match) {
+          const title = match[1].trim();
+          const artist = match[2].trim();
+          
+          // Filter out non-song entries
+          if (title && artist && 
+              title.length > 2 && artist.length > 2 &&
+              !title.toLowerCase().includes('tocando agora') &&
+              !title.toLowerCase().includes('now playing') &&
+              !title.toLowerCase().includes('recently') &&
+              !title.toLowerCase().includes('últimas') &&
+              !artist.includes('min ago') &&
+              !artist.includes('hour ago') &&
+              !artist.match(/^\d+\s*(min|hour|hora)/i)) {
+            
+            songs.push({
+              title,
+              artist,
+              timestamp: new Date().toISOString(),
+            });
+          }
         }
       }
     }
 
-    // Alternative parsing: look for song patterns in markdown
-    const songPatterns = markdown.match(/\*\*([^*]+)\*\*\s*\n\s*([^\n*]+)/g);
-    if (songPatterns && songs.length === 0) {
-      for (const pattern of songPatterns.slice(0, 10)) {
-        const match = pattern.match(/\*\*([^*]+)\*\*\s*\n\s*([^\n*]+)/);
-        if (match) {
-          const title = match[1].trim();
-          const artist = match[2].trim();
-          if (title && artist && title.length > 2 && artist.length > 2) {
-            if (!nowPlaying) {
-              nowPlaying = { title, artist, timestamp: new Date().toISOString() };
-            } else {
-              songs.push({ title, artist, timestamp: new Date().toISOString() });
-            }
+    // Method 2: Look for "Tocando agora" or "Now Playing" specific section
+    const nowPlayingMatch = markdown.match(/(?:Tocando agora|Now Playing|A tocar agora)[:\s]*\n+\*?\*?([^\n*]+)\*?\*?\s*\n+([^\n*]+)/i);
+    if (nowPlayingMatch) {
+      const title = nowPlayingMatch[1].replace(/\*\*/g, '').trim();
+      const artist = nowPlayingMatch[2].replace(/\*\*/g, '').trim();
+      if (title && artist && !artist.match(/^\d+\s*(min|hour)/i)) {
+        nowPlaying = {
+          title,
+          artist,
+          timestamp: new Date().toISOString(),
+        };
+      }
+    }
+
+    // Method 3: Look for list patterns with timestamps like "2 min ago"
+    const listPattern = markdown.match(/([^\n]+)\n([^\n]+)\n\d+\s*(min|hour|hora)/gi);
+    if (listPattern && songs.length < 5) {
+      for (const item of listPattern) {
+        const lines = item.split('\n').filter((l: string) => l.trim());
+        if (lines.length >= 2) {
+          const title = lines[0].replace(/\*\*/g, '').trim();
+          const artist = lines[1].replace(/\*\*/g, '').trim();
+          if (title && artist && 
+              !title.match(/^\d+\s*(min|hour)/i) &&
+              !songs.some(s => s.title === title && s.artist === artist)) {
+            songs.push({
+              title,
+              artist,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        }
+      }
+    }
+
+    // Method 4: Parse HTML for structured data if markdown didn't work well
+    if (songs.length < 3 && html) {
+      // Look for song items in HTML - common patterns in mytuner
+      const songItemRegex = /<div[^>]*class="[^"]*song[^"]*"[^>]*>[\s\S]*?<\/div>/gi;
+      const songItems = html.match(songItemRegex) || [];
+      
+      for (const item of songItems.slice(0, 10)) {
+        // Extract title and artist from song item
+        const titleMatch = item.match(/<[^>]*class="[^"]*title[^"]*"[^>]*>([^<]+)</i);
+        const artistMatch = item.match(/<[^>]*class="[^"]*artist[^"]*"[^>]*>([^<]+)</i);
+        
+        if (titleMatch && artistMatch) {
+          const title = titleMatch[1].trim();
+          const artist = artistMatch[1].trim();
+          if (title && artist && !songs.some(s => s.title === title && s.artist === artist)) {
+            songs.push({
+              title,
+              artist,
+              timestamp: new Date().toISOString(),
+            });
           }
         }
       }
@@ -153,31 +202,58 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
   }
 
   // Generic parsing for other radio sites
-  if (!nowPlaying && !songs.length) {
+  if (songs.length === 0) {
     // Look for common patterns like "Artist - Title" or "Title by Artist"
-    const patterns = [
-      /(?:Now Playing|Tocando|Em reprodução)[:\s]*([^-\n]+)\s*[-–]\s*([^\n]+)/gi,
-      /(?:Artist|Artista)[:\s]*([^\n]+)\n+(?:Song|Track|Música|Title)[:\s]*([^\n]+)/gi,
-    ];
-
-    for (const pattern of patterns) {
-      const matches = markdown.matchAll(pattern);
-      for (const match of matches) {
-        if (!nowPlaying) {
-          nowPlaying = {
-            title: match[2]?.trim() || match[1]?.trim(),
-            artist: match[1]?.trim() || 'Unknown Artist',
-            timestamp: new Date().toISOString(),
-          };
+    const dashPatterns = markdown.match(/([^\n\-–]+)\s*[-–]\s*([^\n]+)/g);
+    if (dashPatterns) {
+      for (const pattern of dashPatterns.slice(0, 10)) {
+        const match = pattern.match(/([^\-–]+)\s*[-–]\s*(.+)/);
+        if (match) {
+          const part1 = match[1].replace(/\*\*/g, '').trim();
+          const part2 = match[2].replace(/\*\*/g, '').trim();
+          if (part1 && part2 && 
+              part1.length > 2 && part2.length > 2 &&
+              part1.length < 100 && part2.length < 100 &&
+              !part1.match(/^\d+:\d+/) && // Not a time
+              !part2.match(/^\d+:\d+/)) {
+            songs.push({
+              title: part2,
+              artist: part1,
+              timestamp: new Date().toISOString(),
+            });
+          }
         }
       }
     }
   }
 
+  // Set now playing as first song if not already set
+  if (!nowPlaying && songs.length > 0) {
+    nowPlaying = songs.shift();
+  }
+
+  // Deduplicate songs
+  const uniqueSongs = songs.reduce((acc: ScrapedSong[], song) => {
+    if (!acc.some(s => s.title.toLowerCase() === song.title.toLowerCase() && 
+                       s.artist.toLowerCase() === song.artist.toLowerCase())) {
+      acc.push(song);
+    }
+    return acc;
+  }, []);
+
+  // Get last 5 songs (excluding now playing)
+  const recentSongs = uniqueSongs.slice(0, 5);
+
+  console.log('Parsed result:', {
+    nowPlaying: nowPlaying ? `${nowPlaying.artist} - ${nowPlaying.title}` : 'none',
+    recentSongsCount: recentSongs.length,
+    recentSongs: recentSongs.map(s => `${s.artist} - ${s.title}`),
+  });
+
   return {
     success: true,
     stationName,
     nowPlaying,
-    recentSongs: songs.slice(0, 10),
+    recentSongs,
   };
 }
