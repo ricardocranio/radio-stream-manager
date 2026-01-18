@@ -19,6 +19,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showNotification: (title, body) => ipcRenderer.invoke('show-notification', { title, body }),
   notifyBatchComplete: (stats) => ipcRenderer.invoke('notify-batch-complete', stats),
   
+  // Radio scraping
+  scrapeStations: (stations) => ipcRenderer.invoke('scrape-stations', stations),
+  scrapeStation: (station) => ipcRenderer.invoke('scrape-station', station),
+  
   // Platform detection
   platform: process.platform,
   isElectron: true,
