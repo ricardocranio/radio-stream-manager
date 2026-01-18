@@ -273,9 +273,13 @@ const Index = () => {
       <div className="flex-1 flex flex-col">
         <Header />
         <main className="flex-1 overflow-auto">{renderView()}</main>
-        <footer className="border-t border-border bg-secondary/30 px-4 py-2 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <footer className="border-t border-border bg-secondary/30 px-4 py-2 flex items-center justify-center gap-3 text-xs text-muted-foreground">
           <img src={logo} alt="AudioSolutions" className="h-6 w-6 rounded" />
-          <span>Desenvolvido por <span className="font-medium text-foreground">Ricardo Amaral</span> - Contato: <a href="tel:+5531988467222" className="text-primary hover:underline">+55 (31) 98846-7222</a></span>
+          <a href="https://audiosolutions.tech/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">audiosolutions.tech</a>
+          <span className="text-muted-foreground/50">|</span>
+          <span>Desenvolvido por <span className="font-medium text-foreground">Ricardo Amaral</span></span>
+          <span className="text-muted-foreground/50">|</span>
+          <span>Contato: <a href="tel:+5531988467222" className="text-primary hover:underline">+55 (31) 98846-7222</a></span>
         </footer>
       </div>
     </div>
