@@ -14,6 +14,7 @@ import { GradeBuilderView } from '@/components/views/GradeBuilderView';
 import { ExportView } from '@/components/views/ExportView';
 import { FixedContentView } from '@/components/views/FixedContentView';
 import { BlockEditorView } from '@/components/views/BlockEditorView';
+import { VozBrasilView } from '@/components/views/VozBrasilView';
 import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { CapturedSong } from '@/types/radio';
 import { useAutoDownload } from '@/hooks/useAutoDownload';
@@ -248,6 +249,8 @@ const Index = () => {
         return <FixedContentView />;
       case 'ranking':
         return <RankingView />;
+      case 'vozbrasil':
+        return <VozBrasilView />;
       case 'logs':
         return <LogsView />;
       case 'export':

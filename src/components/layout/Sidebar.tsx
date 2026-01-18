@@ -1,4 +1,4 @@
-import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers } from 'lucide-react';
+import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 
@@ -19,6 +19,7 @@ const staticNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'blockeditor', label: 'Editor de Blocos', icon: Layers },
   { id: 'fixedcontent', label: 'Conteúdos Fixos', icon: Newspaper },
   { id: 'ranking', label: 'Ranking TOP50', icon: TrendingUp },
+  { id: 'vozbrasil', label: 'Voz do Brasil', icon: Mic },
   { id: 'logs', label: 'Logs', icon: Terminal },
   { id: 'export', label: 'Exportar Config', icon: Download },
   { id: 'folders', label: 'Pastas', icon: FolderOpen },
