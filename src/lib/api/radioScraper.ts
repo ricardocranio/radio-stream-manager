@@ -23,9 +23,8 @@ export interface StationConfig {
 }
 
 // Known radio station URLs for scraping - Brazilian FM stations
-// This is the source of truth for scrape URLs
+// Only stations we actively monitor
 export const knownStations: Record<string, StationConfig> = {
-  // Sertanejo / Pop
   'BH FM': {
     name: 'BH FM',
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-bh-fm-ao-vivo-402270/',
@@ -40,116 +39,6 @@ export const knownStations: Record<string, StationConfig> = {
     name: 'Clube FM',
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/clube-fm-brasilia-469802/',
     aliases: ['Clube', 'ClubeFM', 'Rádio Clube'],
-  },
-  'Jovem Pan': {
-    name: 'Jovem Pan',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/jovem-pan-fm-442891/',
-    aliases: ['JP', 'Pan', 'Jovem Pan FM'],
-  },
-  'Mix FM': {
-    name: 'Mix FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/mix-fm-sao-paulo-418264/',
-    aliases: ['Mix', 'MixFM'],
-  },
-  'Nativa FM': {
-    name: 'Nativa FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/nativa-fm-sao-paulo-430620/',
-    aliases: ['Nativa', 'NativaFM'],
-  },
-  'Antena 1': {
-    name: 'Antena 1',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/antena-1-sao-paulo-473422/',
-    aliases: ['Antena1', 'Antena Um'],
-  },
-  'Transamérica': {
-    name: 'Transamérica',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/transamerica-fm-sao-paulo-417829/',
-    aliases: ['Transamerica', 'TransamericaFM', 'Trans'],
-  },
-  'Alpha FM': {
-    name: 'Alpha FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/alpha-fm-474152/',
-    aliases: ['Alpha', 'AlphaFM'],
-  },
-  'Tupi FM': {
-    name: 'Tupi FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/super-radio-tupi-fm-473456/',
-    aliases: ['Tupi', 'TupiFM', 'Super Tupi'],
-  },
-  'Metropolitana FM': {
-    name: 'Metropolitana FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/metropolitana-fm-464018/',
-    aliases: ['Metropolitana', 'Metro FM'],
-  },
-  'Rede Aleluia': {
-    name: 'Rede Aleluia',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/rede-aleluia-sp-491168/',
-    aliases: ['Aleluia', 'Aleluia FM'],
-  },
-  '89 FM': {
-    name: '89 FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-89-fm-414866/',
-    aliases: ['89FM', 'A Rádio Rock'],
-  },
-  'Cidade FM': {
-    name: 'Cidade FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-cidade-fm-sp-491166/',
-    aliases: ['Cidade', 'CidadeFM'],
-  },
-  'Disney FM': {
-    name: 'Disney FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-disney-brasil-411034/',
-    aliases: ['Disney', 'Radio Disney'],
-  },
-  'Kiss FM': {
-    name: 'Kiss FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/kiss-fm-sao-paulo-431802/',
-    aliases: ['Kiss', 'KissFM'],
-  },
-  'Nova Brasil FM': {
-    name: 'Nova Brasil FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/nova-brasil-fm-sao-paulo-429012/',
-    aliases: ['Nova Brasil', 'NovaBrasil'],
-  },
-  'RPC FM': {
-    name: 'RPC FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/rpc-fm-curitiba-403074/',
-    aliases: ['RPC', 'RPCFM'],
-  },
-  'Energia 97 FM': {
-    name: 'Energia 97 FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/energia-97-fm-463764/',
-    aliases: ['Energia', 'Energia 97', 'Energia97'],
-  },
-  'CBN': {
-    name: 'CBN',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-cbn-sao-paulo-429010/',
-    aliases: ['CBN FM', 'Rádio CBN'],
-  },
-  'Globo FM Rio': {
-    name: 'Globo FM Rio',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-globo-fm-rio-418426/',
-    aliases: ['Globo FM', 'GloboFM'],
-  },
-  'Oi FM': {
-    name: 'Oi FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/oi-fm-rio-459800/',
-    aliases: ['OiFM', 'Oi'],
-  },
-  'Itatiaia FM': {
-    name: 'Itatiaia FM',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-itatiaia-fm-414870/',
-    aliases: ['Itatiaia', 'ItatiaiaFM'],
-  },
-  'Jovem Pan Pop': {
-    name: 'Jovem Pan Pop',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/jovem-pan-pop-498044/',
-    aliases: ['JP Pop', 'Pan Pop'],
-  },
-  'Jovem Pan Rock': {
-    name: 'Jovem Pan Rock',
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/jovem-pan-rock-498046/',
-    aliases: ['JP Rock', 'Pan Rock'],
   },
   'Show FM 101.1': {
     name: 'Show FM 101.1',
