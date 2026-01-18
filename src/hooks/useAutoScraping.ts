@@ -28,7 +28,7 @@ const DEFAULT_CONFIG: AutoScrapingConfig = {
 };
 
 export function useAutoScraping() {
-  const { stations, addCapturedSong, config } = useRadioStore();
+  const { stations, addCapturedSong, addOrUpdateRankingSong, config } = useRadioStore();
   const { toast } = useToast();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const [scrapeConfig, setScrapeConfig] = useState<AutoScrapingConfig>(DEFAULT_CONFIG);
@@ -104,6 +104,8 @@ export function useAutoScraping() {
         if (result.status === 'fulfilled' && result.value.success) {
           successCount++;
           const { stationName, nowPlaying, recentSongs, scrapeUrl } = result.value;
+          const station = batch[j];
+          const stationStyle = station.styles?.[0] || 'POP/VARIADO';
           
           // Add now playing song with source URL
           if (nowPlaying) {
@@ -116,6 +118,10 @@ export function useAutoScraping() {
               status: 'found',
               source: scrapeUrl, // Include the source URL
             });
+            
+            // Update ranking with this song
+            addOrUpdateRankingSong(nowPlaying.title, nowPlaying.artist, stationStyle);
+            
             newSongsCount++;
           }
 
@@ -130,6 +136,10 @@ export function useAutoScraping() {
               status: 'found',
               source: scrapeUrl, // Include the source URL
             });
+            
+            // Update ranking with this song
+            addOrUpdateRankingSong(song.title, song.artist, stationStyle);
+            
             newSongsCount++;
           }
         } else {
@@ -163,6 +173,8 @@ export function useAutoScraping() {
             successCount++;
             errorCount--;
             
+            const stationStyle = station.styles?.[0] || 'POP/VARIADO';
+            
             addCapturedSong({
               id: `${station.name}-${Date.now()}-retry`,
               title: retryResult.nowPlaying.title,
@@ -170,7 +182,12 @@ export function useAutoScraping() {
               station: station.name,
               timestamp: new Date(),
               status: 'found',
+              source: station.scrapeUrl,
             });
+            
+            // Update ranking with this song
+            addOrUpdateRankingSong(retryResult.nowPlaying.title, retryResult.nowPlaying.artist, stationStyle);
+            
             newSongsCount++;
             
             // Remove from failed list
@@ -208,7 +225,7 @@ export function useAutoScraping() {
     }
 
     return { successCount, errorCount, newSongsCount };
-  }, [stations, addCapturedSong, toast, scrapeStation, scrapeConfig]);
+  }, [stations, addCapturedSong, addOrUpdateRankingSong, toast, scrapeStation, scrapeConfig]);
 
   const startAutoScraping = useCallback((intervalMinutes: number = 3) => {
     // Clear existing interval
