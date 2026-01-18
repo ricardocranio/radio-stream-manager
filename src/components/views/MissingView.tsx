@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle, History, RotateCcw, TrendingUp, Clock } from 'lucide-react';
+import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle, History, RotateCcw, TrendingUp, Clock, FlaskConical } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry, getDownloadStats } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,8 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +54,8 @@ export function MissingView() {
   const [deemixInstalled, setDeemixInstalled] = useState<boolean | null>(null);
   const [isCheckingDeemix, setIsCheckingDeemix] = useState(false);
   const [activeTab, setActiveTab] = useState('missing');
+  const [simulationMode, setSimulationMode] = useState(!isElectron); // Auto-enable in web
+  const [simulationSuccessRate, setSimulationSuccessRate] = useState(80); // 80% success rate
   const { toast } = useToast();
 
   // Check if deemix is installed on mount
@@ -131,26 +135,50 @@ export function MissingView() {
   const openDownloadFolder = () => {
     if (isElectron && window.electronAPI?.openFolder) {
       window.electronAPI.openFolder(deezerConfig.downloadFolder);
+    } else if (simulationMode) {
+      toast({
+        title: '📁 Pasta de Downloads (Simulação)',
+        description: `Abriria: ${deezerConfig.downloadFolder}`,
+      });
     }
   };
 
-  const handleDeezerDownload = async (songId: string, artist: string, title: string, isRetry = false) => {
-    if (!deezerConfig.enabled || !deezerConfig.arl) {
-      toast({
-        title: 'Deezer não configurado',
-        description: 'Configure seu ARL nas Configurações para baixar do Deezer.',
-        variant: 'destructive',
-      });
-      return;
-    }
+  // Simulated download function for testing UI
+  const simulateDownload = async (songId: string, artist: string, title: string, isRetry = false): Promise<{ success: boolean; error?: string; duration: number }> => {
+    // Simulate download time (1-3 seconds)
+    const downloadTime = 1000 + Math.random() * 2000;
+    await new Promise(resolve => setTimeout(resolve, downloadTime));
+    
+    // Determine success based on success rate
+    const isSuccess = Math.random() * 100 < simulationSuccessRate;
+    
+    return {
+      success: isSuccess,
+      error: isSuccess ? undefined : 'Simulação: Falha aleatória no download',
+      duration: downloadTime,
+    };
+  };
 
-    if (!isElectron) {
-      toast({
-        title: 'Apenas no Desktop',
-        description: 'Download automático só funciona no app desktop (Electron).',
-        variant: 'destructive',
-      });
-      return;
+  const handleDeezerDownload = async (songId: string, artist: string, title: string, isRetry = false) => {
+    // In simulation mode, skip Deezer checks
+    if (!simulationMode) {
+      if (!deezerConfig.enabled || !deezerConfig.arl) {
+        toast({
+          title: 'Deezer não configurado',
+          description: 'Configure seu ARL nas Configurações para baixar do Deezer.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (!isElectron) {
+        toast({
+          title: 'Apenas no Desktop',
+          description: 'Download automático só funciona no app desktop (Electron). Ative o Modo Simulação para testar.',
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     setDownloadStatus((prev) => ({ ...prev, [songId]: 'downloading' }));
@@ -161,13 +189,21 @@ export function MissingView() {
     const startTime = Date.now();
 
     try {
-      const result = await window.electronAPI?.downloadFromDeezer({
-        artist,
-        title,
-        arl: deezerConfig.arl,
-        outputFolder: deezerConfig.downloadFolder,
-        quality: deezerConfig.quality,
-      });
+      let result: { success: boolean; error?: string; duration?: number; needsInstall?: boolean };
+      
+      if (simulationMode) {
+        // Use simulated download
+        result = await simulateDownload(songId, artist, title, isRetry);
+      } else {
+        // Use real Electron API
+        result = await window.electronAPI?.downloadFromDeezer({
+          artist,
+          title,
+          arl: deezerConfig.arl,
+          outputFolder: deezerConfig.downloadFolder,
+          quality: deezerConfig.quality,
+        }) || { success: false, error: 'API não disponível' };
+      }
 
       if (result?.needsInstall) {
         setDeemixInstalled(false);
@@ -194,8 +230,8 @@ export function MissingView() {
         });
 
         toast({
-          title: 'Download concluído!',
-          description: `${artist} - ${title} baixado com sucesso.`,
+          title: simulationMode ? '✅ Download Simulado!' : 'Download concluído!',
+          description: `${artist} - ${title} ${simulationMode ? '(simulação)' : 'baixado com sucesso'}.`,
         });
       } else {
         throw new Error(result?.error || 'Erro desconhecido');
@@ -220,7 +256,7 @@ export function MissingView() {
       });
 
       toast({
-        title: 'Erro no download',
+        title: simulationMode ? '❌ Falha Simulada' : 'Erro no download',
         description: error instanceof Error ? error.message : 'Falha ao baixar do Deezer.',
         variant: 'destructive',
       });
@@ -261,31 +297,34 @@ export function MissingView() {
 
   // Batch download all missing songs
   const handleBatchDownload = async () => {
-    if (!deezerConfig.enabled || !deezerConfig.arl) {
-      toast({
-        title: 'Deezer não configurado',
-        description: 'Configure seu ARL nas Configurações para baixar do Deezer.',
-        variant: 'destructive',
-      });
-      return;
-    }
+    // Skip checks in simulation mode
+    if (!simulationMode) {
+      if (!deezerConfig.enabled || !deezerConfig.arl) {
+        toast({
+          title: 'Deezer não configurado',
+          description: 'Configure seu ARL nas Configurações para baixar do Deezer.',
+          variant: 'destructive',
+        });
+        return;
+      }
 
-    if (!isElectron) {
-      toast({
-        title: 'Apenas no Desktop',
-        description: 'Download em lote só funciona no app desktop (Electron).',
-        variant: 'destructive',
-      });
-      return;
-    }
+      if (!isElectron) {
+        toast({
+          title: 'Apenas no Desktop',
+          description: 'Download em lote só funciona no app desktop (Electron). Ative o Modo Simulação para testar.',
+          variant: 'destructive',
+        });
+        return;
+      }
 
-    if (deemixInstalled === false) {
-      toast({
-        title: 'deemix não instalado',
-        description: 'Instale o deemix primeiro: pip install deemix',
-        variant: 'destructive',
-      });
-      return;
+      if (deemixInstalled === false) {
+        toast({
+          title: 'deemix não instalado',
+          description: 'Instale o deemix primeiro: pip install deemix',
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     const songsToDownload = filteredSongs.filter(s => s.status === 'missing' || s.status === 'error');
@@ -328,13 +367,19 @@ export function MissingView() {
       const startTime = Date.now();
 
       try {
-        const result = await window.electronAPI?.downloadFromDeezer({
-          artist: song.artist,
-          title: song.title,
-          arl: deezerConfig.arl,
-          outputFolder: deezerConfig.downloadFolder,
-          quality: deezerConfig.quality,
-        });
+        let result: { success: boolean; error?: string; duration?: number };
+        
+        if (simulationMode) {
+          result = await simulateDownload(song.id, song.artist, song.title);
+        } else {
+          result = await window.electronAPI?.downloadFromDeezer({
+            artist: song.artist,
+            title: song.title,
+            arl: deezerConfig.arl,
+            outputFolder: deezerConfig.downloadFolder,
+            quality: deezerConfig.quality,
+          }) || { success: false, error: 'API não disponível' };
+        }
 
         const duration = Date.now() - startTime;
 
@@ -388,14 +433,15 @@ export function MissingView() {
 
       setBatchDownloadProgress({ completed, failed });
 
-      // 30 second delay between downloads to avoid Deezer rate limiting
-      await new Promise(resolve => setTimeout(resolve, 30000));
+      // Shorter delay in simulation mode (2s), longer for real downloads (30s)
+      const delayMs = simulationMode ? 2000 : 30000;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
 
     setBatchDownloadProgress({ isRunning: false, current: '' });
 
-    // Send Windows notification
-    if (isElectron && window.electronAPI?.notifyBatchComplete) {
+    // Send Windows notification (only in Electron)
+    if (!simulationMode && isElectron && window.electronAPI?.notifyBatchComplete) {
       window.electronAPI.notifyBatchComplete({
         completed,
         failed,
@@ -405,7 +451,7 @@ export function MissingView() {
     }
 
     toast({
-      title: shouldStop ? 'Download interrompido' : 'Download em lote concluído',
+      title: shouldStop ? 'Download interrompido' : (simulationMode ? '🧪 Simulação concluída' : 'Download em lote concluído'),
       description: `${completed} baixadas, ${failed} falharam de ${songsToDownload.length} músicas.`,
     });
   };
@@ -489,8 +535,66 @@ export function MissingView() {
         </div>
       </div>
 
+      {/* Simulation Mode Card */}
+      <Card className={`glass-card ${simulationMode ? 'border-amber-500/50 bg-amber-500/5' : 'border-muted'}`}>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${simulationMode ? 'bg-amber-500/20' : 'bg-muted/50'}`}>
+                <FlaskConical className={`w-6 h-6 ${simulationMode ? 'text-amber-500' : 'text-muted-foreground'}`} />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  Modo Simulação
+                  {simulationMode && <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30">Ativo</Badge>}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {simulationMode 
+                    ? `Testando UI sem Electron (${simulationSuccessRate}% taxa de sucesso)`
+                    : 'Ative para testar downloads sem precisar do Electron'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              {simulationMode && (
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="success-rate" className="text-xs text-muted-foreground">Taxa:</Label>
+                  <select
+                    id="success-rate"
+                    value={simulationSuccessRate}
+                    onChange={(e) => setSimulationSuccessRate(Number(e.target.value))}
+                    className="bg-background border border-input rounded px-2 py-1 text-xs"
+                  >
+                    <option value={100}>100%</option>
+                    <option value={80}>80%</option>
+                    <option value={50}>50%</option>
+                    <option value={20}>20%</option>
+                    <option value={0}>0%</option>
+                  </select>
+                </div>
+              )}
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="simulation-mode"
+                  checked={simulationMode}
+                  onCheckedChange={setSimulationMode}
+                />
+                <Label htmlFor="simulation-mode" className="text-sm">
+                  {simulationMode ? 'ON' : 'OFF'}
+                </Label>
+              </div>
+            </div>
+          </div>
+          {simulationMode && (
+            <p className="text-xs text-amber-500/80 mt-3 pt-3 border-t border-amber-500/20">
+              ⚠️ Modo simulação ativo: Downloads são simulados com delay de 1-3s. Nenhum arquivo é realmente baixado.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* deemix Installation Instructions */}
-      {isElectron && deezerConfig.enabled && (
+      {!simulationMode && isElectron && deezerConfig.enabled && (
         <Card className={`glass-card ${deemixInstalled === false ? 'border-destructive/50 bg-destructive/5' : deemixInstalled === true ? 'border-green-500/30 bg-green-500/5' : 'border-muted'}`}>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
@@ -537,7 +641,7 @@ export function MissingView() {
       )}
 
       {/* Batch Download Section */}
-      {deezerConfig.enabled && deezerConfig.arl && (
+      {(simulationMode || (deezerConfig.enabled && deezerConfig.arl)) && (
         <Card className="glass-card border-primary/30 bg-primary/5">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -546,9 +650,12 @@ export function MissingView() {
                   <Music className="w-6 h-6 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-foreground">Download em Lote via deemix</h3>
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    Download em Lote {simulationMode ? '(Simulação)' : 'via deemix'}
+                    {simulationMode && <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30">🧪</Badge>}
+                  </h3>
                   <p className="text-sm text-muted-foreground">
-                    Baixar todas as {filteredSongs.filter(s => s.status === 'missing' || s.status === 'error').length} músicas faltantes do Deezer
+                    {simulationMode ? 'Simular download de' : 'Baixar'} {filteredSongs.filter(s => s.status === 'missing' || s.status === 'error').length} músicas faltantes
                   </p>
                 </div>
               </div>
@@ -562,10 +669,10 @@ export function MissingView() {
                 <Button 
                   onClick={handleBatchDownload} 
                   className="gap-2"
-                  disabled={deemixInstalled === false}
+                  disabled={!simulationMode && deemixInstalled === false}
                 >
                   <PlayCircle className="w-4 h-4" />
-                  Iniciar Download em Lote
+                  {simulationMode ? '🧪 Simular Download em Lote' : 'Iniciar Download em Lote'}
                 </Button>
               )}
             </div>
@@ -691,14 +798,14 @@ export function MissingView() {
                         </div>
                         <div className="flex gap-1">
                           {/* Deezer Download Button */}
-                          {deezerConfig.enabled && deezerConfig.arl && song.status !== 'downloaded' && (
+                          {(simulationMode || (deezerConfig.enabled && deezerConfig.arl)) && song.status !== 'downloaded' && (
                             <Button
                               variant="ghost"
                               size="icon"
                               className="text-primary hover:text-primary"
                               onClick={() => handleDeezerDownload(song.id, song.artist, song.title)}
-                              disabled={downloadStatus[song.id] === 'downloading' || batchDownloadProgress.isRunning || deemixInstalled === false}
-                              title="Baixar do Deezer"
+                              disabled={downloadStatus[song.id] === 'downloading' || batchDownloadProgress.isRunning || (!simulationMode && deemixInstalled === false)}
+                              title={simulationMode ? 'Simular download' : 'Baixar do Deezer'}
                             >
                               {getStatusIcon(song.id)}
                             </Button>
