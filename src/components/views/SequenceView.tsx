@@ -15,6 +15,7 @@ export function SequenceView() {
   const radioOptions = [
     ...stations.map((s) => ({ value: s.id, label: s.name })),
     { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)' },
+    { value: 'top50', label: '🏆 TOP50 (Curadoria)' },
   ];
 
   const handleChange = (position: number, value: string) => {
@@ -47,6 +48,7 @@ export function SequenceView() {
       disney: 'bg-warning/20 text-warning border-warning/30',
       metro: 'bg-destructive/20 text-destructive border-destructive/30',
       random_pop: 'bg-muted text-muted-foreground border-muted-foreground/30',
+      top50: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
     };
     return colors[source] || 'bg-secondary text-secondary-foreground';
   };
@@ -156,6 +158,10 @@ export function SequenceView() {
                     <div className="w-3 h-3 rounded bg-muted" />
                     <span className="text-muted-foreground">Aleatório</span>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded bg-yellow-500/30" />
+                    <span className="text-muted-foreground">TOP50</span>
+                  </div>
                 </div>
               </div>
 
@@ -164,7 +170,8 @@ export function SequenceView() {
                 <p className="text-xs text-muted-foreground">
                   Posições 1-5: Fonte principal (recomendado BH FM)<br />
                   Posições 6-9: Fonte secundária (recomendado Band FM)<br />
-                  Posição 10: Variedade (Disney ou Metropolitana aleatório)
+                  Posição 10: Variedade (Disney, Metro ou TOP50)<br />
+                  <span className="text-yellow-400">TOP50:</span> Usa músicas do ranking de curadoria (POSICAO{'{N}'}.MP3)
                 </p>
               </div>
             </div>

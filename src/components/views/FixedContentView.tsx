@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Newspaper, Plus, Trash2, Save, Clock, Calendar, Edit2, Check, X, Star, CloudSun, Heart, Lightbulb, Trophy, Music } from 'lucide-react';
+import { Newspaper, Plus, Trash2, Save, Clock, Calendar, Edit2, Check, X, Star, CloudSun, Heart, Lightbulb, Trophy, Music, TrendingUp } from 'lucide-react';
 import { useRadioStore, FixedContent } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ const typeIcons: Record<string, React.ReactNode> = {
   romance: <Heart className="w-4 h-4" />,
   curiosity: <Lightbulb className="w-4 h-4" />,
   other: <Music className="w-4 h-4" />,
+  top50: <TrendingUp className="w-4 h-4" />,
 };
 
 const typeLabels: Record<string, string> = {
@@ -29,6 +30,7 @@ const typeLabels: Record<string, string> = {
   romance: 'Romance',
   curiosity: 'Curiosidades',
   other: 'Outros',
+  top50: 'TOP50 (Curadoria)',
 };
 
 const typeColors: Record<string, string> = {
@@ -39,7 +41,9 @@ const typeColors: Record<string, string> = {
   romance: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
   curiosity: 'bg-warning/20 text-warning border-warning/30',
   other: 'bg-muted text-muted-foreground border-muted-foreground/30',
+  top50: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
 };
+
 
 const dayPatterns = [
   { value: 'WEEKDAYS', label: 'Dias úteis (Seg-Sex)' },
@@ -66,6 +70,7 @@ export function FixedContentView() {
     dayPattern: 'WEEKDAYS',
     timeSlots: [],
     enabled: true,
+    top50Count: 5,
   });
   const [newTimeSlot, setNewTimeSlot] = useState({ hour: 12, minute: 0 });
 
@@ -97,15 +102,16 @@ export function FixedContentView() {
   };
 
   const handleAddContent = () => {
-    if (newContent.name && newContent.fileName) {
+    if (newContent.name && (newContent.fileName || newContent.type === 'top50')) {
       const content: FixedContent = {
         id: Date.now().toString(),
         name: newContent.name,
-        fileName: newContent.fileName,
+        fileName: newContent.type === 'top50' ? 'POSICAO{N}' : newContent.fileName || '',
         type: newContent.type as FixedContent['type'],
         dayPattern: newContent.dayPattern || 'WEEKDAYS',
         timeSlots: newContent.timeSlots || [],
         enabled: true,
+        top50Count: newContent.type === 'top50' ? (newContent.top50Count || 5) : undefined,
       };
       addFixedContent(content);
       setShowAddDialog(false);
@@ -116,6 +122,7 @@ export function FixedContentView() {
         dayPattern: 'WEEKDAYS',
         timeSlots: [],
         enabled: true,
+        top50Count: 5,
       });
       toast({ title: 'Conteúdo adicionado', description: `${content.name} foi criado.` });
     }
@@ -158,18 +165,46 @@ export function FixedContentView() {
                   className="mt-1"
                 />
               </div>
-              <div>
-                <Label>Nome do Arquivo (padrão)</Label>
-                <Input
-                  value={newContent.fileName}
-                  onChange={(e) => setNewContent({ ...newContent, fileName: e.target.value })}
-                  placeholder="Ex: NOTICIA_DA_HORA_{HH}HORAS"
-                  className="mt-1 font-mono text-sm"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Use {'{HH}'} para hora, {'{ED}'} para edição, {'{DIA}'} para dia da semana
-                </p>
-              </div>
+              {newContent.type !== 'top50' ? (
+                <div>
+                  <Label>Nome do Arquivo (padrão)</Label>
+                  <Input
+                    value={newContent.fileName}
+                    onChange={(e) => setNewContent({ ...newContent, fileName: e.target.value })}
+                    placeholder="Ex: NOTICIA_DA_HORA_{HH}HORAS"
+                    className="mt-1 font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Use {'{HH}'} para hora, {'{ED}'} para edição, {'{DIA}'} para dia da semana
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                  <div className="flex items-center gap-2 text-yellow-400 mb-2">
+                    <TrendingUp className="w-4 h-4" />
+                    <span className="font-medium text-sm">TOP50 - Curadoria do Monitoramento</span>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Quantidade de músicas aleatórias do TOP50</Label>
+                    <Select
+                      value={(newContent.top50Count || 5).toString()}
+                      onValueChange={(value) => setNewContent({ ...newContent, top50Count: parseInt(value) })}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 5, 8, 10, 15, 20].map((n) => (
+                          <SelectItem key={n} value={n.toString()}>{n} músicas</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Na grade: "POSICAO1.MP3",vht,"POSICAO5.MP3"... (posições aleatórias)
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Tipo</Label>
@@ -348,9 +383,15 @@ export function FixedContentView() {
                             className="scale-75"
                           />
                         </div>
-                        <p className="text-xs font-mono text-muted-foreground truncate mt-1">
-                          {content.fileName}_{'{DIA}'}.mp3
-                        </p>
+                        {content.type === 'top50' ? (
+                          <p className="text-xs font-mono text-yellow-400/80 truncate mt-1">
+                            POSICAO1.MP3, POSICAO2.MP3... ({content.top50Count || 5} músicas aleatórias)
+                          </p>
+                        ) : (
+                          <p className="text-xs font-mono text-muted-foreground truncate mt-1">
+                            {content.fileName}_{'{DIA}'}.mp3
+                          </p>
+                        )}
                         <div className="flex flex-wrap gap-1 mt-2">
                           {content.timeSlots.slice(0, 6).map((slot) => (
                             <Badge key={`${slot.hour}-${slot.minute}`} variant="outline" className="text-xs font-mono">
