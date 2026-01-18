@@ -155,6 +155,7 @@ interface RadioState {
   rankingSongs: RankingSong[];
   setRankingSongs: (songs: RankingSong[]) => void;
   addRankingPlay: (songId: string) => void;
+  addOrUpdateRankingSong: (title: string, artist: string, style: string) => void;
   clearRanking: () => void;
 
   // Auto Scrape Setting (persisted)
@@ -396,6 +397,53 @@ export const useRadioStore = create<RadioState>()(
             s.id === songId ? { ...s, plays: s.plays + 1, lastPlayed: new Date() } : s
           ),
         })),
+      addOrUpdateRankingSong: (title, artist, style) =>
+        set((state) => {
+          // Normalize for comparison (lowercase, trim)
+          const normalizedTitle = title.toLowerCase().trim();
+          const normalizedArtist = artist.toLowerCase().trim();
+          
+          // Find existing song
+          const existingIndex = state.rankingSongs.findIndex(
+            (s) => s.title.toLowerCase().trim() === normalizedTitle && 
+                   s.artist.toLowerCase().trim() === normalizedArtist
+          );
+          
+          if (existingIndex >= 0) {
+            // Update existing song - increment plays
+            const updatedSongs = [...state.rankingSongs];
+            const existing = updatedSongs[existingIndex];
+            updatedSongs[existingIndex] = {
+              ...existing,
+              plays: existing.plays + 1,
+              lastPlayed: new Date(),
+              // Update trend based on play increase
+              trend: existing.plays > 5 ? 'up' : existing.trend,
+            };
+            
+            // Re-sort by plays (descending)
+            updatedSongs.sort((a, b) => b.plays - a.plays);
+            
+            return { rankingSongs: updatedSongs };
+          } else {
+            // Add new song
+            const newSong: RankingSong = {
+              id: `ranking-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              title: title.trim(),
+              artist: artist.trim(),
+              plays: 1,
+              style: style || 'POP/VARIADO',
+              trend: 'stable',
+              lastPlayed: new Date(),
+            };
+            
+            // Add and sort by plays
+            const updatedSongs = [...state.rankingSongs, newSong].sort((a, b) => b.plays - a.plays);
+            
+            // Keep only top 100 songs
+            return { rankingSongs: updatedSongs.slice(0, 100) };
+          }
+        }),
       clearRanking: () => set({ rankingSongs: [] }),
 
       // Auto Scrape Setting
