@@ -134,8 +134,10 @@ export function useAutoDownload() {
         });
       }
 
-      // Wait 30 seconds between downloads to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 30000));
+      // Wait between downloads based on config (default 20 minutes, converted to ms)
+      const intervalMs = (currentState.deezerConfig.autoDownloadIntervalMinutes || 20) * 60 * 1000;
+      console.log(`[AUTO-DL] Waiting ${currentState.deezerConfig.autoDownloadIntervalMinutes || 20} minutes before next download`);
+      await new Promise(resolve => setTimeout(resolve, intervalMs));
     }
 
     isProcessingRef.current = false;

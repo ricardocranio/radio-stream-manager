@@ -227,6 +227,28 @@ export function SettingsView() {
                 </div>
 
                 <div className="space-y-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label>Intervalo de Download Automático</Label>
+                    <span className="text-sm font-mono text-primary">
+                      {localDeezerConfig.autoDownloadIntervalMinutes || 20} min
+                    </span>
+                  </div>
+                  <Slider
+                    value={[localDeezerConfig.autoDownloadIntervalMinutes || 20]}
+                    onValueChange={([value]) =>
+                      setLocalDeezerConfig((prev) => ({ ...prev, autoDownloadIntervalMinutes: value }))
+                    }
+                    min={5}
+                    max={60}
+                    step={5}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Tempo entre cada download automático (padrão: 20 min)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
                   <Label>Como obter o ARL</Label>
                   <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
                     <li>Faça login no Deezer pelo navegador</li>
