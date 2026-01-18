@@ -3,6 +3,7 @@ import { useRadioStore } from '@/store/radioStore';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import logo from '@/assets/logo.png';
 
 export function Header() {
   const { isRunning, setIsRunning, lastUpdate } = useRadioStore();
@@ -14,6 +15,7 @@ export function Header() {
   return (
     <header className="h-16 bg-card border-b border-border px-6 flex items-center justify-between">
       <div className="flex items-center gap-4">
+        <img src={logo} alt="AudioSolutions" className="h-10 w-10 rounded-lg" />
         <div className="flex items-center gap-2">
           {isRunning && (
             <div className="live-indicator">
