@@ -96,6 +96,54 @@ Deno.serve(async (req) => {
   }
 });
 
+// Helper to clean song title/artist - removes URLs, images, markdown artifacts
+function cleanText(text: string): string {
+  if (!text) return '';
+  
+  return text
+    // Remove markdown image syntax ![alt](url)
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
+    // Remove markdown links [text](url)
+    .replace(/\[[^\]]*\]\([^)]+\)/g, '')
+    // Remove plain URLs
+    .replace(/https?:\/\/[^\s]+/gi, '')
+    // Remove image file references
+    .replace(/\.(jpg|jpeg|png|gif|webp|svg|ico)[^\s]*/gi, '')
+    // Remove markdown bold/italic
+    .replace(/\*\*/g, '')
+    .replace(/\*/g, '')
+    // Remove extra whitespace
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Validate if text looks like a valid song title or artist
+function isValidSongPart(text: string): boolean {
+  if (!text || text.length < 2 || text.length > 100) return false;
+  
+  // Reject if it's mostly special characters or numbers
+  const alphaCount = (text.match(/[a-zA-ZÀ-ÿ]/g) || []).length;
+  if (alphaCount < text.length * 0.3) return false;
+  
+  // Reject URLs, file paths, technical strings
+  if (text.match(/https?:|www\.|\.com|\.jpg|\.png|\/\/|mzstatic|image\/|thumb\/|rgb\./i)) return false;
+  
+  // Reject common non-song patterns
+  const rejectPatterns = [
+    /^(tocando agora|now playing|recently|últimas|recentes)/i,
+    /^\d+\s*(min|hour|hora|segundo)/i,
+    /^(min ago|hour ago)/i,
+    /^[\d:]+$/,  // Just timestamps like 14:30
+    /^v4\/|^Music\d+|^24UMGIM/i,  // Technical codes
+  ];
+  
+  for (const pattern of rejectPatterns) {
+    if (pattern.test(text)) return false;
+  }
+  
+  return true;
+}
+
 function parseRadioContent(data: any, stationName: string, url: string): RadioScrapeResult {
   const markdown = data.data?.markdown || '';
   const html = data.data?.html || '';
@@ -116,20 +164,10 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
       for (const pattern of boldPatterns) {
         const match = pattern.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/);
         if (match) {
-          const title = match[1].trim();
-          const artist = match[2].trim();
+          const title = cleanText(match[1]);
+          const artist = cleanText(match[2]);
           
-          // Filter out non-song entries
-          if (title && artist && 
-              title.length > 2 && artist.length > 2 &&
-              !title.toLowerCase().includes('tocando agora') &&
-              !title.toLowerCase().includes('now playing') &&
-              !title.toLowerCase().includes('recently') &&
-              !title.toLowerCase().includes('últimas') &&
-              !artist.includes('min ago') &&
-              !artist.includes('hour ago') &&
-              !artist.match(/^\d+\s*(min|hour|hora)/i)) {
-            
+          if (isValidSongPart(title) && isValidSongPart(artist)) {
             songs.push({
               title,
               artist,
@@ -143,9 +181,9 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
     // Method 2: Look for "Tocando agora" or "Now Playing" specific section
     const nowPlayingMatch = markdown.match(/(?:Tocando agora|Now Playing|A tocar agora)[:\s]*\n+\*?\*?([^\n*]+)\*?\*?\s*\n+([^\n*]+)/i);
     if (nowPlayingMatch) {
-      const title = nowPlayingMatch[1].replace(/\*\*/g, '').trim();
-      const artist = nowPlayingMatch[2].replace(/\*\*/g, '').trim();
-      if (title && artist && !artist.match(/^\d+\s*(min|hour)/i)) {
+      const title = cleanText(nowPlayingMatch[1]);
+      const artist = cleanText(nowPlayingMatch[2]);
+      if (isValidSongPart(title) && isValidSongPart(artist)) {
         nowPlaying = {
           title,
           artist,
@@ -160,10 +198,9 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
       for (const item of listPattern) {
         const lines = item.split('\n').filter((l: string) => l.trim());
         if (lines.length >= 2) {
-          const title = lines[0].replace(/\*\*/g, '').trim();
-          const artist = lines[1].replace(/\*\*/g, '').trim();
-          if (title && artist && 
-              !title.match(/^\d+\s*(min|hour)/i) &&
+          const title = cleanText(lines[0]);
+          const artist = cleanText(lines[1]);
+          if (isValidSongPart(title) && isValidSongPart(artist) && 
               !songs.some(s => s.title === title && s.artist === artist)) {
             songs.push({
               title,
@@ -187,9 +224,10 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
         const artistMatch = item.match(/<[^>]*class="[^"]*artist[^"]*"[^>]*>([^<]+)</i);
         
         if (titleMatch && artistMatch) {
-          const title = titleMatch[1].trim();
-          const artist = artistMatch[1].trim();
-          if (title && artist && !songs.some(s => s.title === title && s.artist === artist)) {
+          const title = cleanText(titleMatch[1]);
+          const artist = cleanText(artistMatch[1]);
+          if (isValidSongPart(title) && isValidSongPart(artist) && 
+              !songs.some(s => s.title === title && s.artist === artist)) {
             songs.push({
               title,
               artist,
@@ -209,13 +247,9 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
       for (const pattern of dashPatterns.slice(0, 10)) {
         const match = pattern.match(/([^\-–]+)\s*[-–]\s*(.+)/);
         if (match) {
-          const part1 = match[1].replace(/\*\*/g, '').trim();
-          const part2 = match[2].replace(/\*\*/g, '').trim();
-          if (part1 && part2 && 
-              part1.length > 2 && part2.length > 2 &&
-              part1.length < 100 && part2.length < 100 &&
-              !part1.match(/^\d+:\d+/) && // Not a time
-              !part2.match(/^\d+:\d+/)) {
+          const part1 = cleanText(match[1]);
+          const part2 = cleanText(match[2]);
+          if (isValidSongPart(part1) && isValidSongPart(part2)) {
             songs.push({
               title: part2,
               artist: part1,
