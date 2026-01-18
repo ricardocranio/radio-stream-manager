@@ -193,17 +193,18 @@ export function StationsView() {
               </span>
             </div>
             <Button
-              variant="outline"
+              variant="secondary"
               size="sm"
               onClick={handleManualScrapeAll}
               disabled={scrapingStation === 'all'}
+              className="bg-orange-500/20 hover:bg-orange-500/30 text-orange-500 border-orange-500/30"
             >
               {scrapingStation === 'all' ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
               ) : (
                 <RefreshCw className="w-4 h-4 mr-2" />
               )}
-              Atualizar Todas
+              Forçar Atualização
             </Button>
             <Button
               variant={autoScrapeEnabled ? 'destructive' : 'default'}
