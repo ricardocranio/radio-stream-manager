@@ -141,7 +141,14 @@ export function SettingsView() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="downloadFolder">Pasta de Download</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="downloadFolder">Pasta de Download</Label>
+                    {!(window.electronAPI?.isElectron) && (
+                      <span className="text-xs text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded">
+                        Seleção disponível no Desktop
+                      </span>
+                    )}
+                  </div>
                   <div className="flex gap-2">
                     <Input
                       id="downloadFolder"
@@ -155,6 +162,7 @@ export function SettingsView() {
                     <Button
                       type="button"
                       variant="outline"
+                      title={window.electronAPI?.isElectron ? "Selecionar pasta" : "Disponível apenas no app desktop"}
                       onClick={async () => {
                         // Check if running in Electron with selectFolder available
                         if (window.electronAPI?.isElectron && window.electronAPI?.selectFolder) {
@@ -179,8 +187,8 @@ export function SettingsView() {
                         } else {
                           // Not in Electron - show message
                           toast({
-                            title: 'Disponível apenas no Desktop',
-                            description: 'A seleção de pasta só funciona no aplicativo desktop. Digite o caminho manualmente.',
+                            title: '🖥️ Recurso Desktop',
+                            description: 'A seleção de pasta com árvore de diretórios só funciona no aplicativo desktop (Electron). No navegador, digite o caminho manualmente.',
                             variant: 'destructive',
                           });
                         }
@@ -190,7 +198,7 @@ export function SettingsView() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Pasta onde as músicas baixadas serão salvas
+                    Pasta onde as músicas baixadas serão salvas. {!(window.electronAPI?.isElectron) && "Digite o caminho completo (ex: C:\\Playlist\\Downloads)"}
                   </p>
                 </div>
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Radio, Plus, Trash2, ExternalLink, Save, X } from 'lucide-react';
+import { Radio, Plus, Trash2, ExternalLink, Save, X, RefreshCw, Loader2 } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,12 +9,14 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { RadioStation } from '@/types/radio';
 import { useToast } from '@/hooks/use-toast';
+import { radioScraperApi } from '@/lib/api/radioScraper';
 
 export function StationsView() {
-  const { stations, updateStation, setStations } = useRadioStore();
+  const { stations, updateStation, setStations, addCapturedSong } = useRadioStore();
   const { toast } = useToast();
   const [editingStation, setEditingStation] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<RadioStation | null>(null);
+  const [scrapingStation, setScrapingStation] = useState<string | null>(null);
 
   const handleEdit = (station: RadioStation) => {
     setEditingStation(station.id);
@@ -75,6 +77,47 @@ export function StationsView() {
 
   const allStyles = ['SERTANEJO', 'PAGODE', 'AGRONEJO', 'POP/VARIADO', 'TEEN/HITS', 'DANCE', 'HITS'];
 
+  const handleTestScrape = async (station: RadioStation) => {
+    setScrapingStation(station.id);
+    try {
+      const result = await radioScraperApi.scrapeStation(station.name, station.scrapeUrl);
+      
+      if (result.success) {
+        toast({
+          title: 'Scraping bem sucedido!',
+          description: result.nowPlaying 
+            ? `Tocando agora: ${result.nowPlaying.artist} - ${result.nowPlaying.title}`
+            : 'Conexão OK, mas sem música tocando no momento.',
+        });
+
+        // Add now playing song to captured songs
+        if (result.nowPlaying) {
+          addCapturedSong({
+            id: `scrape-${Date.now()}`,
+            title: result.nowPlaying.title,
+            artist: result.nowPlaying.artist,
+            station: station.name,
+            timestamp: new Date(),
+            status: 'found',
+          });
+        }
+      } else {
+        toast({
+          title: 'Erro no scraping',
+          description: result.error || 'Não foi possível obter dados da emissora.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Falha ao conectar com o serviço de scraping.',
+        variant: 'destructive',
+      });
+    } finally {
+      setScrapingStation(null);
+    }
+  };
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -172,6 +215,55 @@ export function StationsView() {
                       </Button>
                     )}
                   </div>
+                </div>
+
+                {/* Scrape URL */}
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">URL de Scraping (Tempo Real)</Label>
+                  <div className="mt-2 flex items-center gap-2">
+                    {isEditing ? (
+                      <Input
+                        value={editForm?.scrapeUrl || ''}
+                        onChange={(e) =>
+                          setEditForm((prev) => prev && { ...prev, scrapeUrl: e.target.value })
+                        }
+                        className="flex-1 font-mono text-xs"
+                        placeholder="https://mytuner-radio.com/..."
+                      />
+                    ) : (
+                      <>
+                        {data.scrapeUrl ? (
+                          <a
+                            href={data.scrapeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 flex items-center gap-2 text-xs font-mono text-primary hover:underline truncate"
+                          >
+                            <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{data.scrapeUrl}</span>
+                          </a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">Não configurado</span>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleTestScrape(station)}
+                          disabled={!data.scrapeUrl || scrapingStation === station.id}
+                        >
+                          {scrapingStation === station.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-4 h-4" />
+                          )}
+                          <span className="ml-2">Testar</span>
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    URL do mytuner-radio.com para captura em tempo real
+                  </p>
                 </div>
 
                 {/* Styles */}
