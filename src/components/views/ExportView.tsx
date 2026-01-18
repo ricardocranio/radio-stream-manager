@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useRadioStore } from '@/store/radioStore';
 import { format } from 'date-fns';
+import { sanitizeFilename } from '@/lib/sanitizeFilename';
 
 export function ExportView() {
   const { programs, sequence, config, stations } = useRadioStore();
@@ -53,8 +54,8 @@ export function ExportView() {
     const blocks: string[] = [];
 
     const songsByStation: Record<string, string[]> = {
-      bh: ['Evidências - Chitãozinho & Xororó.mp3', 'Atrasadinha - Felipe Araújo.mp3', 'Medo Bobo - Maiara & Maraisa.mp3', 'Propaganda - Jorge & Mateus.mp3', 'Péssimo Negócio - Henrique & Juliano.mp3'],
-      band: ['Deixa Eu Te Amar - Sorriso Maroto.mp3', 'Sorte - Thiaguinho.mp3', 'Amor Da Sua Cama - Bruno & Marrone.mp3', 'Fatalmente - Turma do Pagode.mp3'],
+      bh: ['Evidencias - Chitaozinho e Xororo.mp3', 'Atrasadinha - Felipe Araujo.mp3', 'Medo Bobo - Maiara e Maraisa.mp3', 'Propaganda - Jorge e Mateus.mp3', 'Pessimo Negocio - Henrique e Juliano.mp3'],
+      band: ['Deixa Eu Te Amar - Sorriso Maroto.mp3', 'Sorte - Thiaguinho.mp3', 'Amor Da Sua Cama - Bruno e Marrone.mp3', 'Fatalmente - Turma do Pagode.mp3'],
       disney: ['Shallow - Lady Gaga.mp3', 'Blinding Lights - The Weeknd.mp3'],
       metro: ['Hear Me Now - Alok.mp3', 'Dance Monkey - Tones and I.mp3'],
     };
@@ -78,7 +79,8 @@ export function ExportView() {
           if (station === 'random_pop') station = Math.random() > 0.5 ? 'disney' : 'metro';
           const stationSongs = songsByStation[station] || songsByStation.bh;
           const song = stationSongs[i % stationSongs.length];
-          songs.push(`"${song}"`);
+          // Sanitize filename for output
+          songs.push(`"${sanitizeFilename(song)}"`);
         }
         blocks.push(`${timeStr} (ID=${programName}) ${songs.join(',vht,')}`);
       }

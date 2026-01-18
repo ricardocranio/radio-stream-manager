@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
 import { GripVertical, Music, Clock, Save, RotateCcw, Plus, Trash2, Newspaper, FileText, Copy, BookmarkPlus, Bookmark, Download, Upload, AlertTriangle, CheckCircle, Eye, Undo2, Redo2, Layers, BarChart3 } from 'lucide-react';
+import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import {
   DndContext,
   closestCenter,
@@ -227,7 +228,8 @@ export function BlockEditorView() {
     const key = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     const program = getProgramForHour(hour);
     const songs = blockSongs[key] || songPool.slice(0, 10).map((s, i) => ({ ...s, id: `${key}-${i}` }));
-    const songFiles = songs.map(s => `"${s.file}"`).join(',vht,');
+    // Sanitize filenames: remove accents, replace & with "e", remove special chars
+    const songFiles = songs.map(s => `"${sanitizeFilename(s.file)}"`).join(',vht,');
     return `${time} (ID=${program}) ${songFiles}`;
   };
 
