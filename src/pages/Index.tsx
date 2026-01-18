@@ -14,8 +14,9 @@ import { GradeBuilderView } from '@/components/views/GradeBuilderView';
 import { ExportView } from '@/components/views/ExportView';
 import { FixedContentView } from '@/components/views/FixedContentView';
 import { BlockEditorView } from '@/components/views/BlockEditorView';
-import { useRadioStore } from '@/store/radioStore';
+import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { CapturedSong } from '@/types/radio';
+import { useAutoDownload } from '@/hooks/useAutoDownload';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -83,7 +84,12 @@ const Index = () => {
     setLastUpdate, 
     stations,
     clearCapturedSongs,
+    addMissingSong,
+    deezerConfig,
   } = useRadioStore();
+  
+  // Initialize auto-download hook
+  useAutoDownload();
   
   const songIndexRef = useRef<Record<string, number>>({
     'BH FM': 0,
@@ -154,8 +160,23 @@ const Index = () => {
     };
     
     addCapturedSong(capturedSong);
+    
+    // If song is missing, add to missing songs list for auto-download
+    if (isMissing) {
+      const missingSong: MissingSong = {
+        id: capturedSong.id,
+        title: song.title,
+        artist: song.artist,
+        station: randomStation,
+        timestamp: new Date(),
+        status: 'missing',
+      };
+      addMissingSong(missingSong);
+      console.log(`[CAPTURE] Missing song added: ${song.artist} - ${song.title}`);
+    }
+    
     setLastUpdate(new Date());
-  }, [addCapturedSong, setLastUpdate]);
+  }, [addCapturedSong, addMissingSong, setLastUpdate]);
 
   // Start capture system
   useEffect(() => {

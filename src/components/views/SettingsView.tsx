@@ -158,10 +158,11 @@ export function SettingsView() {
                       onClick={async () => {
                         // Check if running in Electron
                         const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+                        const electronAPI = window.electronAPI as { selectFolder?: () => Promise<string | null> } | undefined;
                         
-                        if (isElectron && window.electronAPI?.selectFolder) {
+                        if (isElectron && electronAPI?.selectFolder) {
                           // Use Electron's native folder picker
-                          const folder = await window.electronAPI.selectFolder();
+                          const folder = await electronAPI.selectFolder();
                           if (folder) {
                             setLocalDeezerConfig((prev) => ({ ...prev, downloadFolder: folder }));
                           }
