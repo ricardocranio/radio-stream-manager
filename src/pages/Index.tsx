@@ -180,10 +180,10 @@ const Index = () => {
       // Initial scrape
       performRealScrape();
       
-      // Scrape every 5 minutes (300000ms)
+      // Scrape every 20 minutes (1200000ms)
       scrapeIntervalRef.current = setInterval(() => {
         performRealScrape();
-      }, 300000);
+      }, 20 * 60 * 1000);
       
       // Also add simulated songs between scrapes for visual feedback
       const simInterval = setInterval(() => {
