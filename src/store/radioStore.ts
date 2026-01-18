@@ -156,6 +156,10 @@ interface RadioState {
   setRankingSongs: (songs: RankingSong[]) => void;
   addRankingPlay: (songId: string) => void;
   clearRanking: () => void;
+
+  // Auto Scrape Setting (persisted)
+  autoScrapeEnabled: boolean;
+  setAutoScrapeEnabled: (enabled: boolean) => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
@@ -393,6 +397,10 @@ export const useRadioStore = create<RadioState>()(
           ),
         })),
       clearRanking: () => set({ rankingSongs: [] }),
+
+      // Auto Scrape Setting
+      autoScrapeEnabled: false,
+      setAutoScrapeEnabled: (autoScrapeEnabled) => set({ autoScrapeEnabled }),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
@@ -410,6 +418,7 @@ export const useRadioStore = create<RadioState>()(
         downloadHistory: state.downloadHistory,
         gradeHistory: state.gradeHistory,
         rankingSongs: state.rankingSongs,
+        autoScrapeEnabled: state.autoScrapeEnabled,
       }),
       // Handle Date objects that get serialized as strings
       onRehydrateStorage: () => (state) => {
