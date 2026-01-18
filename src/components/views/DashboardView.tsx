@@ -1,11 +1,14 @@
-import { Radio, Music, CheckCircle, XCircle, Clock, TrendingUp } from 'lucide-react';
+import { Radio, Music, CheckCircle, XCircle, Clock, TrendingUp, Timer } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
+import { useCountdown } from '@/hooks/useCountdown';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { format } from 'date-fns';
 
 export function DashboardView() {
   const { stations, capturedSongs, missingSongs, isRunning, config } = useRadioStore();
+  const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds } = useCountdown();
 
   const stats = {
     activeStations: stations.filter((s) => s.enabled).length,
@@ -161,14 +164,37 @@ export function DashboardView() {
                 <span className="text-sm font-mono text-foreground">{config.artistRepetitionMinutes} min</span>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                <span className="text-sm text-muted-foreground">Próxima Grade</span>
-                <span className="text-sm font-mono text-primary">18:32</span>
+              <div className="p-3 rounded-lg bg-secondary/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Timer className="w-4 h-4" />
+                    Próxima Grade
+                  </span>
+                  <span className={`text-sm font-mono ${nextGradeSeconds <= 60 ? 'text-amber-500 animate-pulse' : 'text-primary'}`}>
+                    {nextGradeCountdown}
+                  </span>
+                </div>
+                {isRunning && (
+                  <Progress 
+                    value={Math.max(0, 100 - (nextGradeSeconds / (config.updateIntervalMinutes * 60)) * 100)} 
+                    className="h-1"
+                  />
+                )}
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                <span className="text-sm text-muted-foreground">Auto-Clean</span>
-                <span className="text-sm font-mono text-foreground">04:21</span>
+              <div className="p-3 rounded-lg bg-secondary/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">🧹 Auto-Clean</span>
+                  <span className={`text-sm font-mono ${autoCleanSeconds <= 60 ? 'text-amber-500 animate-pulse' : 'text-foreground'}`}>
+                    {autoCleanCountdown}
+                  </span>
+                </div>
+                {isRunning && (
+                  <Progress 
+                    value={Math.max(0, 100 - (autoCleanSeconds / 3600) * 100)} 
+                    className="h-1"
+                  />
+                )}
               </div>
             </div>
 

@@ -634,28 +634,72 @@ export function MissingView() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
-              <Label htmlFor="auto-download" className="text-sm text-muted-foreground mr-2">
-                Manual
-              </Label>
-              <Switch
-                id="auto-download"
-                checked={deezerConfig.autoDownload}
-                onCheckedChange={(checked) => {
-                  useRadioStore.getState().setDeezerConfig({ autoDownload: checked });
-                  toast({
-                    title: checked ? 'Download Automático Ativado' : 'Download Manual Ativado',
-                    description: checked 
-                      ? 'Novas músicas faltantes serão baixadas automaticamente'
-                      : 'Você controla quando cada música é baixada',
-                  });
-                }}
-              />
-              <Label htmlFor="auto-download" className="text-sm text-muted-foreground ml-2">
-                Auto
-              </Label>
+            <div className="flex items-center gap-4">
+              {/* Force Start Download Button */}
+              <Button
+                onClick={handleBatchDownload}
+                disabled={batchDownloadProgress.isRunning || filteredSongs.filter(s => s.status === 'missing' || s.status === 'error').length === 0}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
+                size="sm"
+              >
+                {batchDownloadProgress.isRunning ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Baixando...
+                  </>
+                ) : (
+                  <>
+                    <PlayCircle className="w-4 h-4" />
+                    Iniciar Downloads
+                  </>
+                )}
+              </Button>
+              
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="auto-download" className="text-sm text-muted-foreground mr-2">
+                  Manual
+                </Label>
+                <Switch
+                  id="auto-download"
+                  checked={deezerConfig.autoDownload}
+                  onCheckedChange={(checked) => {
+                    useRadioStore.getState().setDeezerConfig({ autoDownload: checked });
+                    toast({
+                      title: checked ? 'Download Automático Ativado' : 'Download Manual Ativado',
+                      description: checked 
+                        ? 'Novas músicas faltantes serão baixadas automaticamente'
+                        : 'Você controla quando cada música é baixada',
+                    });
+                  }}
+                />
+                <Label htmlFor="auto-download" className="text-sm text-muted-foreground ml-2">
+                  Auto
+                </Label>
+              </div>
             </div>
           </div>
+          
+          {/* Progress bar when downloading */}
+          {batchDownloadProgress.isRunning && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-muted-foreground truncate max-w-[60%]">
+                  {batchDownloadProgress.current || 'Preparando...'}
+                </span>
+                <span className="text-sm font-mono">
+                  {batchDownloadProgress.completed + batchDownloadProgress.failed}/{batchDownloadProgress.total}
+                </span>
+              </div>
+              <Progress 
+                value={((batchDownloadProgress.completed + batchDownloadProgress.failed) / batchDownloadProgress.total) * 100} 
+                className="h-2"
+              />
+              <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+                <span className="text-green-500">✅ {batchDownloadProgress.completed} baixadas</span>
+                <span className="text-red-500">❌ {batchDownloadProgress.failed} erros</span>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
