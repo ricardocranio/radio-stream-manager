@@ -42,9 +42,9 @@ const fallbackSources: FallbackSource[] = [
 
 // Retry configuration
 const RETRY_CONFIG = {
-  maxRetries: 3,
+  maxRetries: 2,
   retryDelay: 1000,
-  timeout: 15000,
+  timeout: 30000, // 30 seconds - Firecrawl needs time for waitFor + actions
 };
 
 async function scrapeWithRetry(
@@ -69,11 +69,11 @@ async function scrapeWithRetry(
           url,
           formats: ['markdown', 'html'],
           onlyMainContent: false,
-          waitFor: 10000,
+          waitFor: 5000, // Reduced from 10000
           actions: [
-            { type: 'wait', milliseconds: 6000 },
+            { type: 'wait', milliseconds: 3000 }, // Reduced from 6000
             { type: 'scroll', direction: 'down', amount: 300 },
-            { type: 'wait', milliseconds: 2000 },
+            { type: 'wait', milliseconds: 1000 }, // Reduced from 2000
           ],
         }),
         signal: controller.signal,
