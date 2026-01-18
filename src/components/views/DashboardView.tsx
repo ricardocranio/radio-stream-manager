@@ -32,41 +32,32 @@ export function DashboardView() {
 
   // Simulated captured songs grouped by station for demo
   const demoSongs = [
-    { id: '1', title: 'Evidências', artist: 'Chitãozinho & Xororó', station: 'BH FM', timestamp: new Date(), status: 'found' as const },
-    { id: '2', title: 'Atrasadinha', artist: 'Felipe Araújo', station: 'BH FM', timestamp: new Date(), status: 'found' as const },
-    { id: '3', title: 'Medo Bobo', artist: 'Maiara & Maraisa', station: 'BH FM', timestamp: new Date(), status: 'found' as const },
+    { id: '1', title: 'Evidências', artist: 'Chitãozinho & Xororó', station: 'BH FM', timestamp: new Date(), status: 'found' as const, source: 'https://mytuner-radio.com/pt/radio/radio-bh-fm-ao-vivo-402270/' },
+    { id: '2', title: 'Atrasadinha', artist: 'Felipe Araújo', station: 'BH FM', timestamp: new Date(), status: 'found' as const, source: 'https://mytuner-radio.com/pt/radio/radio-bh-fm-ao-vivo-402270/' },
+    { id: '3', title: 'Medo Bobo', artist: 'Maiara & Maraisa', station: 'BH FM', timestamp: new Date(), status: 'found' as const, source: 'https://mytuner-radio.com/pt/radio/radio-bh-fm-ao-vivo-402270/' },
     { id: '4', title: 'Shallow', artist: 'Lady Gaga', station: 'Band FM', timestamp: new Date(), status: 'missing' as const },
-    { id: '5', title: 'Propaganda', artist: 'Jorge & Mateus', station: 'Band FM', timestamp: new Date(), status: 'found' as const },
-    { id: '6', title: 'Hear Me Now', artist: 'Alok', station: 'Band FM', timestamp: new Date(), status: 'found' as const },
-    { id: '7', title: 'Deixa Eu Te Amar', artist: 'Sorriso Maroto', station: 'Clube FM', timestamp: new Date(), status: 'found' as const },
+    { id: '5', title: 'Propaganda', artist: 'Jorge & Mateus', station: 'Band FM', timestamp: new Date(), status: 'found' as const, source: 'https://mytuner-radio.com/pt/radio/band-fm-sao-paulo-485671/' },
+    { id: '6', title: 'Hear Me Now', artist: 'Alok', station: 'Band FM', timestamp: new Date(), status: 'found' as const, source: 'https://mytuner-radio.com/pt/radio/band-fm-sao-paulo-485671/' },
+    { id: '7', title: 'Deixa Eu Te Amar', artist: 'Sorriso Maroto', station: 'Clube FM', timestamp: new Date(), status: 'found' as const, source: 'https://mytuner-radio.com/pt/radio/clube-fm-brasilia-469802/' },
     { id: '8', title: 'Blinding Lights', artist: 'The Weeknd', station: 'Clube FM', timestamp: new Date(), status: 'missing' as const },
-    { id: '9', title: 'Péssimo Negócio', artist: 'Henrique & Juliano', station: 'Clube FM', timestamp: new Date(), status: 'found' as const },
+    { id: '9', title: 'Péssimo Negócio', artist: 'Henrique & Juliano', station: 'Clube FM', timestamp: new Date(), status: 'found' as const, source: 'https://mytuner-radio.com/pt/radio/clube-fm-brasilia-469802/' },
   ];
 
   const displaySongs = capturedSongs.length > 0 ? capturedSongs : demoSongs;
 
-  // Get enabled stations from store with their scrape URLs
+  // Get enabled stations from store
   const enabledStations = stations.filter(s => s.enabled);
 
-  // Group songs by station - include all enabled stations even if no songs
+  // Group songs by station - songs now carry their own source URL
   const songsByStation = enabledStations.reduce((acc, station) => {
-    acc[station.name] = {
-      songs: displaySongs.filter(song => song.station === station.name),
-      scrapeUrl: station.scrapeUrl || '',
-      urls: station.urls || [],
-    };
+    acc[station.name] = displaySongs.filter(song => song.station === station.name);
     return acc;
-  }, {} as Record<string, { songs: typeof displaySongs; scrapeUrl: string; urls: string[] }>);
+  }, {} as Record<string, typeof displaySongs>);
 
   // If there are songs from stations not in the store (demo), add them
   displaySongs.forEach(song => {
     if (!songsByStation[song.station]) {
-      const station = stations.find(s => s.name === song.station);
-      songsByStation[song.station] = {
-        songs: [song],
-        scrapeUrl: station?.scrapeUrl || '',
-        urls: station?.urls || [],
-      };
+      songsByStation[song.station] = [song];
     }
   });
 
@@ -172,14 +163,10 @@ export function DashboardView() {
           Captura em Tempo Real
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Object.entries(songsByStation).map(([stationName, stationData]) => {
+          {Object.entries(songsByStation).map(([stationName, songs]) => {
             const colors = getStationColor(stationName);
-            const { songs, scrapeUrl, urls } = stationData;
             const foundCount = songs.filter(s => s.status === 'found').length;
             const missingCount = songs.filter(s => s.status === 'missing').length;
-            
-            // Collect all source URLs
-            const allUrls = [scrapeUrl, ...urls].filter(Boolean);
             
             return (
               <Card key={stationName} className={`glass-card ${colors.border}`}>
@@ -200,56 +187,50 @@ export function DashboardView() {
                       )}
                     </div>
                   </CardTitle>
-                  {/* Source URLs */}
-                  {allUrls.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {allUrls.slice(0, 3).map((url, idx) => (
-                        <a
-                          key={idx}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-background/50 text-muted-foreground hover:text-primary transition-colors"
-                          title={url}
-                        >
-                          <ExternalLink className="w-2.5 h-2.5" />
-                          {getDomainFromUrl(url)}
-                        </a>
-                      ))}
-                      {allUrls.length > 3 && (
-                        <span className="text-[10px] text-muted-foreground px-1">+{allUrls.length - 3}</span>
-                      )}
-                    </div>
-                  )}
                 </CardHeader>
                 <CardContent className="p-0">
-                  <ScrollArea className="h-[160px]">
+                  <ScrollArea className="h-[180px]">
                     <div className="divide-y divide-border">
                       {songs.slice(0, 5).map((song, index) => (
                         <div
                           key={song.id}
-                          className="p-3 flex items-center justify-between hover:bg-secondary/30 transition-colors animate-slide-in"
+                          className="p-3 hover:bg-secondary/30 transition-colors animate-slide-in"
                           style={{ animationDelay: `${index * 50}ms` }}
                         >
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <div className={`w-8 h-8 rounded flex items-center justify-center ${colors.bg}`}>
-                              <Music className={`w-4 h-4 ${colors.text}`} />
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className={`w-8 h-8 rounded flex items-center justify-center ${colors.bg}`}>
+                                <Music className={`w-4 h-4 ${colors.text}`} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-foreground text-sm truncate">{song.title}</p>
+                                <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                              </div>
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium text-foreground text-sm truncate">{song.title}</p>
-                              <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
-                            </div>
+                            <Badge
+                              variant="outline"
+                              className={`ml-2 text-xs ${
+                                song.status === 'found'
+                                  ? 'border-success/40 text-success bg-success/10'
+                                  : 'border-destructive/40 text-destructive bg-destructive/10'
+                              }`}
+                            >
+                              {song.status === 'found' ? '✓' : '✗'}
+                            </Badge>
                           </div>
-                          <Badge
-                            variant="outline"
-                            className={`ml-2 text-xs ${
-                              song.status === 'found'
-                                ? 'border-success/40 text-success bg-success/10'
-                                : 'border-destructive/40 text-destructive bg-destructive/10'
-                            }`}
-                          >
-                            {song.status === 'found' ? '✓' : '✗'}
-                          </Badge>
+                          {/* Source URL - shown only if song has source */}
+                          {song.source && (
+                            <a
+                              href={song.source}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 mt-1.5 ml-11 px-1.5 py-0.5 rounded text-[9px] bg-background/50 text-muted-foreground hover:text-primary transition-colors"
+                              title={song.source}
+                            >
+                              <ExternalLink className="w-2 h-2" />
+                              {getDomainFromUrl(song.source)}
+                            </a>
+                          )}
                         </div>
                       ))}
                       {songs.length === 0 && (
