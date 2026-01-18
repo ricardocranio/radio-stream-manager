@@ -13,7 +13,7 @@
   "files": [
     "dist/**/*",
     "electron/**/*",
-    "public/favicon.ico",
+    "public/**/*",
     "index.js"
   ],
   "extraResources": [
