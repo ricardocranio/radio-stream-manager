@@ -20,6 +20,7 @@ export function StationsView() {
   const [scrapingStation, setScrapingStation] = useState<string | null>(null);
   const [autoScrapeEnabled, setAutoScrapeEnabled] = useState(false);
   const [lastAutoScrape, setLastAutoScrape] = useState<Date | null>(null);
+  const [isAddingNew, setIsAddingNew] = useState(false);
   
   const { scrapeAllStations, startAutoScraping, stopAutoScraping, isRunning } = useAutoScraping();
 
@@ -57,9 +58,40 @@ export function StationsView() {
     }
   };
 
+  const handleAddNewStation = () => {
+    const newStation: RadioStation = {
+      id: `station-${Date.now()}`,
+      name: 'Nova Emissora',
+      urls: [''],
+      scrapeUrl: '',
+      styles: ['SERTANEJO'],
+      enabled: true,
+    };
+    setStations([...stations, newStation]);
+    setEditingStation(newStation.id);
+    setEditForm(newStation);
+    setIsAddingNew(true);
+    toast({
+      title: 'Nova emissora criada',
+      description: 'Preencha os dados e clique em Salvar.',
+    });
+  };
+
+  const handleDeleteStation = (stationId: string) => {
+    setStations(stations.filter(s => s.id !== stationId));
+    setEditingStation(null);
+    setEditForm(null);
+    setIsAddingNew(false);
+    toast({
+      title: 'Emissora removida',
+      description: 'A emissora foi excluída com sucesso.',
+    });
+  };
+
   const handleEdit = (station: RadioStation) => {
     setEditingStation(station.id);
     setEditForm({ ...station });
+    setIsAddingNew(false);
   };
 
   const handleSave = () => {
@@ -67,6 +99,7 @@ export function StationsView() {
       updateStation(editForm.id, editForm);
       setEditingStation(null);
       setEditForm(null);
+      setIsAddingNew(false);
       toast({
         title: 'Emissora atualizada',
         description: `${editForm.name} foi atualizada com sucesso.`,
@@ -75,8 +108,13 @@ export function StationsView() {
   };
 
   const handleCancel = () => {
+    if (isAddingNew && editForm) {
+      // Remove the newly added station if canceling
+      setStations(stations.filter(s => s.id !== editForm.id));
+    }
     setEditingStation(null);
     setEditForm(null);
+    setIsAddingNew(false);
   };
 
   const handleAddUrl = () => {
@@ -224,7 +262,7 @@ export function StationsView() {
               )}
             </Button>
           </div>
-          <Button className="gap-2">
+          <Button className="gap-2" onClick={handleAddNewStation}>
             <Plus className="w-4 h-4" />
             Nova Emissora
           </Button>
@@ -402,22 +440,34 @@ export function StationsView() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                <div className="flex justify-between gap-2 pt-2 border-t border-border">
                   {isEditing ? (
                     <>
-                      <Button variant="ghost" size="sm" onClick={handleCancel}>
-                        <X className="w-4 h-4 mr-2" />
-                        Cancelar
+                      <Button 
+                        variant="destructive" 
+                        size="sm" 
+                        onClick={() => handleDeleteStation(station.id)}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Excluir
                       </Button>
-                      <Button size="sm" onClick={handleSave}>
-                        <Save className="w-4 h-4 mr-2" />
-                        Salvar
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={handleCancel}>
+                          <X className="w-4 h-4 mr-2" />
+                          Cancelar
+                        </Button>
+                        <Button size="sm" onClick={handleSave}>
+                          <Save className="w-4 h-4 mr-2" />
+                          Salvar
+                        </Button>
+                      </div>
                     </>
                   ) : (
-                    <Button variant="outline" size="sm" onClick={() => handleEdit(station)}>
-                      Editar
-                    </Button>
+                    <div className="flex justify-end w-full">
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(station)}>
+                        Editar
+                      </Button>
+                    </div>
                   )}
                 </div>
               </CardContent>
