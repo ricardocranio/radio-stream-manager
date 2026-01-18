@@ -11,7 +11,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export function DashboardView() {
-  const { stations, capturedSongs, missingSongs, isRunning, config, gradeHistory, clearGradeHistory } = useRadioStore();
+  const { stations, capturedSongs, missingSongs, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs } = useRadioStore();
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
   
   // Filter state
@@ -23,6 +23,7 @@ export function DashboardView() {
     totalCaptured: capturedSongs.length,
     foundSongs: capturedSongs.filter((s) => s.status === 'found').length,
     missingSongsCount: missingSongs.length,
+    rankingTotal: rankingSongs.length,
   };
 
   // Demo grade history if empty
@@ -199,6 +200,35 @@ export function DashboardView() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Ranking Integration Banner */}
+      <Card className="glass-card border-primary/30 bg-gradient-to-r from-primary/5 to-transparent">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Ranking TOP50 Integrado</p>
+                <p className="text-sm text-muted-foreground">
+                  Todas as músicas capturadas são automaticamente adicionadas ao ranking
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-2xl font-bold text-primary">{stats.rankingTotal}</p>
+                <p className="text-xs text-muted-foreground">músicas no ranking</p>
+              </div>
+              <Badge variant="outline" className="border-primary/50 text-primary">
+                <TrendingUp className="w-3 h-3 mr-1" />
+                Sincronizado
+              </Badge>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Radio Stations Windows */}
       <div>

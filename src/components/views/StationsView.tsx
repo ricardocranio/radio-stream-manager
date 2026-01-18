@@ -13,7 +13,7 @@ import { radioScraperApi, findStationConfig, syncStationsWithKnown, knownStation
 import { useAutoScraping } from '@/hooks/useAutoScraping';
 
 export function StationsView() {
-  const { stations, updateStation, setStations, addCapturedSong, autoScrapeEnabled, setAutoScrapeEnabled } = useRadioStore();
+  const { stations, updateStation, setStations, addCapturedSong, addOrUpdateRankingSong, autoScrapeEnabled, setAutoScrapeEnabled } = useRadioStore();
   const { toast } = useToast();
   const [editingStation, setEditingStation] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<RadioStation | null>(null);
@@ -277,6 +277,7 @@ export function StationsView() {
       
       if (result.success) {
         const totalSongs = (result.nowPlaying ? 1 : 0) + (result.recentSongs?.length || 0);
+        const stationStyle = station.styles?.[0] || 'POP/VARIADO';
         
         toast({
           title: `🎵 ${totalSongs} músicas capturadas!`,
@@ -285,7 +286,7 @@ export function StationsView() {
             : 'Conexão OK, mas sem música tocando no momento.',
         });
 
-        // Add now playing song to captured songs
+        // Add now playing song to captured songs AND ranking
         if (result.nowPlaying) {
           addCapturedSong({
             id: `scrape-${Date.now()}`,
@@ -294,10 +295,14 @@ export function StationsView() {
             station: station.name,
             timestamp: new Date(),
             status: 'found',
+            source: station.scrapeUrl,
           });
+          
+          // Update ranking with this song
+          addOrUpdateRankingSong(result.nowPlaying.title, result.nowPlaying.artist, stationStyle);
         }
 
-        // Add recent songs (last 5)
+        // Add recent songs (last 5) to captured songs AND ranking
         if (result.recentSongs) {
           for (const song of result.recentSongs.slice(0, 5)) {
             addCapturedSong({
@@ -307,7 +312,11 @@ export function StationsView() {
               station: station.name,
               timestamp: new Date(song.timestamp),
               status: 'found',
+              source: station.scrapeUrl,
             });
+            
+            // Update ranking with this song
+            addOrUpdateRankingSong(song.title, song.artist, stationStyle);
           }
         }
       } else {
