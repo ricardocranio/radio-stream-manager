@@ -1,20 +1,22 @@
 import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 
 interface NavItem {
   id: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  badge?: string;
+  badge?: string | number;
+  badgeType?: 'static' | 'dynamic';
 }
 
-const navItems: NavItem[] = [
+const staticNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'dashboard', label: 'Dashboard', icon: Activity },
   { id: 'stations', label: 'Emissoras', icon: Radio },
   { id: 'sequence', label: 'Sequência', icon: ListMusic },
   { id: 'schedule', label: 'Programação', icon: Clock },
   { id: 'gradebuilder', label: 'Montagem %dd%', icon: FileCode },
-  { id: 'blockeditor', label: 'Editor de Blocos', icon: Layers, badge: 'NOVO' },
+  { id: 'blockeditor', label: 'Editor de Blocos', icon: Layers },
   { id: 'fixedcontent', label: 'Conteúdos Fixos', icon: Newspaper },
   { id: 'ranking', label: 'Ranking TOP50', icon: TrendingUp },
   { id: 'logs', label: 'Logs', icon: Terminal },
@@ -30,6 +32,20 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+  const { queueLength, isProcessing } = useAutoDownloadStore();
+  
+  // Build nav items with dynamic badges
+  const navItems: NavItem[] = staticNavItems.map(item => {
+    if (item.id === 'missing' && queueLength > 0) {
+      return {
+        ...item,
+        badge: queueLength,
+        badgeType: 'dynamic' as const,
+      };
+    }
+    return item;
+  });
+
   return (
     <aside className="w-64 min-h-screen bg-card border-r border-border flex flex-col">
       {/* Logo */}
@@ -65,8 +81,13 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                 <Icon className={cn('w-5 h-5', isActive && 'text-primary')} />
                 {item.label}
               </div>
-              {item.badge && (
-                <span className="text-[10px] font-bold bg-accent text-accent-foreground px-1.5 py-0.5 rounded">
+              {item.badge !== undefined && (
+                <span className={cn(
+                  "text-[10px] font-bold px-1.5 py-0.5 rounded min-w-[20px] text-center",
+                  item.badgeType === 'dynamic' 
+                    ? "bg-destructive text-destructive-foreground animate-pulse"
+                    : "bg-accent text-accent-foreground"
+                )}>
                   {item.badge}
                 </span>
               )}
@@ -76,7 +97,23 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       </nav>
 
       {/* Status Footer */}
-      <div className="p-4 border-t border-border">
+      <div className="p-4 border-t border-border space-y-2">
+        {/* Auto-download status */}
+        {(queueLength > 0 || isProcessing) && (
+          <div className="glass-card p-3 bg-primary/5 border border-primary/20">
+            <div className="flex items-center gap-2 mb-1">
+              <Download className={cn("w-4 h-4 text-primary", isProcessing && "animate-bounce")} />
+              <span className="text-xs font-medium text-primary">
+                {isProcessing ? 'Baixando...' : 'Na fila'}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {queueLength} música{queueLength !== 1 ? 's' : ''} pendente{queueLength !== 1 ? 's' : ''}
+            </p>
+          </div>
+        )}
+        
+        {/* System status */}
         <div className="glass-card p-3">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-2 h-2 rounded-full bg-success animate-pulse" />

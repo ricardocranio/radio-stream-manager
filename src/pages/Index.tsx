@@ -88,7 +88,7 @@ const Index = () => {
     deezerConfig,
   } = useRadioStore();
   
-  // Initialize auto-download hook
+  // Initialize auto-download hook (manages queue in global store)
   useAutoDownload();
   
   const songIndexRef = useRef<Record<string, number>>({

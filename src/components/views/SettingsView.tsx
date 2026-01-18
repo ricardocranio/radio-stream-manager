@@ -156,43 +156,33 @@ export function SettingsView() {
                       type="button"
                       variant="outline"
                       onClick={async () => {
-                        // Check if running in Electron
-                        const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
-                        const electronAPI = window.electronAPI as { selectFolder?: () => Promise<string | null> } | undefined;
-                        
-                        if (isElectron && electronAPI?.selectFolder) {
-                          // Use Electron's native folder picker
-                          const folder = await electronAPI.selectFolder();
-                          if (folder) {
-                            setLocalDeezerConfig((prev) => ({ ...prev, downloadFolder: folder }));
-                          }
-                        } else {
-                          // Use File System Access API for browser
+                        // Check if running in Electron with selectFolder available
+                        if (window.electronAPI?.isElectron && window.electronAPI?.selectFolder) {
                           try {
-                            if ('showDirectoryPicker' in window) {
-                              const dirHandle = await (window as unknown as { showDirectoryPicker: () => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker();
-                              setLocalDeezerConfig((prev) => ({ ...prev, downloadFolder: dirHandle.name }));
+                            // Use Electron's native folder picker
+                            const folder = await window.electronAPI.selectFolder();
+                            if (folder) {
+                              setLocalDeezerConfig((prev) => ({ ...prev, downloadFolder: folder }));
                               toast({
                                 title: 'Pasta selecionada',
-                                description: `Pasta "${dirHandle.name}" selecionada. No navegador, os downloads serão salvos na pasta de downloads padrão.`,
-                              });
-                            } else {
-                              toast({
-                                title: 'Não suportado',
-                                description: 'Seu navegador não suporta seleção de pasta. Use o app desktop ou digite o caminho manualmente.',
-                                variant: 'destructive',
+                                description: `Pasta "${folder}" selecionada com sucesso.`,
                               });
                             }
                           } catch (err) {
-                            // User cancelled or error
-                            if ((err as Error).name !== 'AbortError') {
-                              toast({
-                                title: 'Erro ao selecionar pasta',
-                                description: 'Não foi possível selecionar a pasta.',
-                                variant: 'destructive',
-                              });
-                            }
+                            console.error('Error selecting folder:', err);
+                            toast({
+                              title: 'Erro ao selecionar pasta',
+                              description: 'Não foi possível abrir o seletor de pastas.',
+                              variant: 'destructive',
+                            });
                           }
+                        } else {
+                          // Not in Electron - show message
+                          toast({
+                            title: 'Disponível apenas no Desktop',
+                            description: 'A seleção de pasta só funciona no aplicativo desktop. Digite o caminho manualmente.',
+                            variant: 'destructive',
+                          });
                         }
                       }}
                     >

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry } from '@/store/radioStore';
+import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -17,6 +18,8 @@ export function useAutoDownload() {
     updateMissingSong,
     addDownloadHistory,
   } = useRadioStore();
+  
+  const { setQueueLength, setIsProcessing } = useAutoDownloadStore();
   
   const downloadQueueRef = useRef<DownloadQueueItem[]>([]);
   const isProcessingRef = useRef(false);
@@ -112,6 +115,7 @@ export function useAutoDownload() {
     }
 
     isProcessingRef.current = true;
+    setIsProcessing(true);
 
     while (downloadQueueRef.current.length > 0) {
       // Check if autoDownload is still enabled
@@ -122,6 +126,7 @@ export function useAutoDownload() {
       }
 
       const item = downloadQueueRef.current.shift();
+      setQueueLength(downloadQueueRef.current.length);
       if (!item) break;
 
       const success = await downloadSong(item.song);
@@ -132,6 +137,7 @@ export function useAutoDownload() {
           song: item.song,
           retryCount: item.retryCount + 1,
         });
+        setQueueLength(downloadQueueRef.current.length);
       }
 
       // Wait between downloads based on config (default 20 minutes, converted to ms)
@@ -141,7 +147,8 @@ export function useAutoDownload() {
     }
 
     isProcessingRef.current = false;
-  }, [downloadSong]);
+    setIsProcessing(false);
+  }, [downloadSong, setQueueLength, setIsProcessing]);
 
   // Watch for new missing songs
   useEffect(() => {
@@ -171,6 +178,9 @@ export function useAutoDownload() {
         retryCount: 0,
       });
     }
+    
+    // Update queue length in store
+    setQueueLength(downloadQueueRef.current.length);
 
     // Update last check
     lastCheckRef.current = currentIds;
@@ -179,11 +189,5 @@ export function useAutoDownload() {
     if (downloadQueueRef.current.length > 0 && !isProcessingRef.current) {
       processQueue();
     }
-  }, [missingSongs, deezerConfig.autoDownload, deezerConfig.enabled, deezerConfig.arl, processQueue]);
-
-  // Expose queue status
-  return {
-    queueLength: downloadQueueRef.current.length,
-    isProcessing: isProcessingRef.current,
-  };
+  }, [missingSongs, deezerConfig.autoDownload, deezerConfig.enabled, deezerConfig.arl, processQueue, setQueueLength]);
 }
