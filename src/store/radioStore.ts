@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule } from '@/types/radio';
 
 export interface DeezerConfig {
@@ -218,102 +219,141 @@ const defaultFixedContent: FixedContent[] = [
   { id: '13', name: 'Curiosidades', fileName: 'CURIOSIDADES', type: 'curiosity', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 22, minute: 30 }], enabled: true },
 ];
 
-export const useRadioStore = create<RadioState>((set) => ({
-  stations: defaultStations,
-  setStations: (stations) => set({ stations }),
-  updateStation: (id, updates) =>
-    set((state) => ({
-      stations: state.stations.map((s) =>
-        s.id === id ? { ...s, ...updates } : s
-      ),
-    })),
+export const useRadioStore = create<RadioState>()(
+  persist(
+    (set) => ({
+      stations: defaultStations,
+      setStations: (stations) => set({ stations }),
+      updateStation: (id, updates) =>
+        set((state) => ({
+          stations: state.stations.map((s) =>
+            s.id === id ? { ...s, ...updates } : s
+          ),
+        })),
 
-  programs: defaultPrograms,
-  setPrograms: (programs) => set({ programs }),
+      programs: defaultPrograms,
+      setPrograms: (programs) => set({ programs }),
 
-  capturedSongs: [],
-  addCapturedSong: (song) =>
-    set((state) => ({
-      capturedSongs: [song, ...state.capturedSongs].slice(0, 100),
-    })),
-  clearCapturedSongs: () => set({ capturedSongs: [] }),
+      capturedSongs: [],
+      addCapturedSong: (song) =>
+        set((state) => ({
+          capturedSongs: [song, ...state.capturedSongs].slice(0, 100),
+        })),
+      clearCapturedSongs: () => set({ capturedSongs: [] }),
 
-  config: defaultConfig,
-  setConfig: (config) =>
-    set((state) => ({ config: { ...state.config, ...config } })),
+      config: defaultConfig,
+      setConfig: (config) =>
+        set((state) => ({ config: { ...state.config, ...config } })),
 
-  deezerConfig: defaultDeezerConfig,
-  setDeezerConfig: (config) =>
-    set((state) => ({ deezerConfig: { ...state.deezerConfig, ...config } })),
+      deezerConfig: defaultDeezerConfig,
+      setDeezerConfig: (config) =>
+        set((state) => ({ deezerConfig: { ...state.deezerConfig, ...config } })),
 
-  sequence: defaultSequence,
-  setSequence: (sequence) => set({ sequence }),
+      sequence: defaultSequence,
+      setSequence: (sequence) => set({ sequence }),
 
-  blocks: [],
-  setBlocks: (blocks) => set({ blocks }),
+      blocks: [],
+      setBlocks: (blocks) => set({ blocks }),
 
-  isRunning: false,
-  setIsRunning: (isRunning) => set({ isRunning }),
-  lastUpdate: null,
-  setLastUpdate: (lastUpdate) => set({ lastUpdate }),
+      isRunning: false,
+      setIsRunning: (isRunning) => set({ isRunning }),
+      lastUpdate: null,
+      setLastUpdate: (lastUpdate) => set({ lastUpdate }),
 
-  missingSongs: [],
-  setMissingSongs: (missingSongs) => set({ missingSongs }),
-  addMissingSong: (song) =>
-    set((state) => ({ missingSongs: [...state.missingSongs, song] })),
-  updateMissingSong: (id, updates) =>
-    set((state) => ({
-      missingSongs: state.missingSongs.map((s) =>
-        s.id === id ? { ...s, ...updates } : s
-      ),
-    })),
-  removeMissingSong: (id) =>
-    set((state) => ({
-      missingSongs: state.missingSongs.filter((s) => s.id !== id),
-    })),
-  clearMissingSongs: () => set({ missingSongs: [] }),
+      missingSongs: [],
+      setMissingSongs: (missingSongs) => set({ missingSongs }),
+      addMissingSong: (song) =>
+        set((state) => ({ missingSongs: [...state.missingSongs, song] })),
+      updateMissingSong: (id, updates) =>
+        set((state) => ({
+          missingSongs: state.missingSongs.map((s) =>
+            s.id === id ? { ...s, ...updates } : s
+          ),
+        })),
+      removeMissingSong: (id) =>
+        set((state) => ({
+          missingSongs: state.missingSongs.filter((s) => s.id !== id),
+        })),
+      clearMissingSongs: () => set({ missingSongs: [] }),
 
-  fixedContent: defaultFixedContent,
-  setFixedContent: (fixedContent) => set({ fixedContent }),
-  addFixedContent: (content) =>
-    set((state) => ({ fixedContent: [...state.fixedContent, content] })),
-  updateFixedContent: (id, updates) =>
-    set((state) => ({
-      fixedContent: state.fixedContent.map((c) =>
-        c.id === id ? { ...c, ...updates } : c
-      ),
-    })),
-  removeFixedContent: (id) =>
-    set((state) => ({
-      fixedContent: state.fixedContent.filter((c) => c.id !== id),
-    })),
+      fixedContent: defaultFixedContent,
+      setFixedContent: (fixedContent) => set({ fixedContent }),
+      addFixedContent: (content) =>
+        set((state) => ({ fixedContent: [...state.fixedContent, content] })),
+      updateFixedContent: (id, updates) =>
+        set((state) => ({
+          fixedContent: state.fixedContent.map((c) =>
+            c.id === id ? { ...c, ...updates } : c
+          ),
+        })),
+      removeFixedContent: (id) =>
+        set((state) => ({
+          fixedContent: state.fixedContent.filter((c) => c.id !== id),
+        })),
 
-  blockSongs: {},
-  setBlockSongs: (timeKey, songs) =>
-    set((state) => ({
-      blockSongs: { ...state.blockSongs, [timeKey]: songs },
-    })),
+      blockSongs: {},
+      setBlockSongs: (timeKey, songs) =>
+        set((state) => ({
+          blockSongs: { ...state.blockSongs, [timeKey]: songs },
+        })),
 
-  batchDownloadProgress: {
-    isRunning: false,
-    total: 0,
-    completed: 0,
-    failed: 0,
-    current: '',
-  },
-  setBatchDownloadProgress: (progress) =>
-    set((state) => ({
-      batchDownloadProgress: { ...state.batchDownloadProgress, ...progress },
-    })),
+      batchDownloadProgress: {
+        isRunning: false,
+        total: 0,
+        completed: 0,
+        failed: 0,
+        current: '',
+      },
+      setBatchDownloadProgress: (progress) =>
+        set((state) => ({
+          batchDownloadProgress: { ...state.batchDownloadProgress, ...progress },
+        })),
 
-  // Download History
-  downloadHistory: [],
-  addDownloadHistory: (entry) =>
-    set((state) => ({
-      downloadHistory: [entry, ...state.downloadHistory].slice(0, 500), // Keep last 500 entries
-    })),
-  clearDownloadHistory: () => set({ downloadHistory: [] }),
-}));
+      // Download History
+      downloadHistory: [],
+      addDownloadHistory: (entry) =>
+        set((state) => ({
+          downloadHistory: [entry, ...state.downloadHistory].slice(0, 500), // Keep last 500 entries
+        })),
+      clearDownloadHistory: () => set({ downloadHistory: [] }),
+    }),
+    {
+      name: 'pgm-radio-storage', // localStorage key
+      storage: createJSONStorage(() => localStorage),
+      // Only persist these fields (not transient state like isRunning, batchDownloadProgress)
+      partialize: (state) => ({
+        stations: state.stations,
+        programs: state.programs,
+        config: state.config,
+        deezerConfig: state.deezerConfig,
+        sequence: state.sequence,
+        fixedContent: state.fixedContent,
+        blockSongs: state.blockSongs,
+        missingSongs: state.missingSongs,
+        downloadHistory: state.downloadHistory,
+      }),
+      // Handle Date objects that get serialized as strings
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          // Convert timestamp strings back to Date objects
+          if (state.missingSongs) {
+            state.missingSongs = state.missingSongs.map((song) => ({
+              ...song,
+              timestamp: new Date(song.timestamp),
+            }));
+          }
+          if (state.downloadHistory) {
+            state.downloadHistory = state.downloadHistory.map((entry) => ({
+              ...entry,
+              timestamp: new Date(entry.timestamp),
+            }));
+          }
+        }
+      },
+      version: 1, // For future migrations
+    }
+  )
+);
 
 // Helper function to get download stats
 export const getDownloadStats = () => {
