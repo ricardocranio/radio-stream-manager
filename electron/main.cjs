@@ -65,10 +65,8 @@ function createWindow() {
 
   // Load the app
   if (app.isPackaged) {
-    // In packaged app, dist is in the same directory as the asar
-    const distPath = path.join(process.resourcesPath, 'app.asar', 'dist', 'index.html');
-    console.log('Loading from:', distPath);
-    mainWindow.loadFile(distPath);
+    // In packaged app, load from the asar archive using __dirname
+    mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
   } else {
     mainWindow.loadURL('http://localhost:5173');
     // Open DevTools in development
