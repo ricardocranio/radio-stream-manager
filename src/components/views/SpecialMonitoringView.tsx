@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore } from '@/store/radioStore';
 import { useToast } from '@/hooks/use-toast';
-import { MonitoringSchedule } from '@/types/radio';
+import { MonitoringSchedule, RadioStation } from '@/types/radio';
 import { supabase } from '@/integrations/supabase/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -43,7 +43,7 @@ interface CapturedSongFromDB {
 }
 
 export function SpecialMonitoringView() {
-  const { stations, updateStation } = useRadioStore();
+  const { stations, updateStation, setStations } = useRadioStore();
   const { toast } = useToast();
   const [selectedStation, setSelectedStation] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -57,6 +57,9 @@ export function SpecialMonitoringView() {
     minute: 0,
     label: '',
     stationId: '',
+    customStationName: '',
+    customStationUrl: '',
+    useCustomStation: false,
   });
 
   const enabledStations = stations.filter(s => s.enabled);
@@ -116,10 +119,48 @@ export function SpecialMonitoringView() {
   }, [allSchedules.length]);
 
   const handleAddSchedule = () => {
-    if (!selectedStation) return;
+    if (!newSchedule.useCustomStation && !selectedStation) return;
+    if (newSchedule.useCustomStation && (!newSchedule.customStationName || !newSchedule.customStationUrl)) return;
 
-    const station = stations.find(s => s.id === selectedStation);
-    if (!station) return;
+    let stationId: string;
+    let stationName: string;
+
+    if (newSchedule.useCustomStation) {
+      // Add new station to the store
+      const newStationId = `special-${Date.now()}`;
+      stationName = newSchedule.customStationName;
+      
+      // Add station to store if not exists
+      const existingStation = stations.find(s => s.name === newSchedule.customStationName);
+      if (!existingStation) {
+        const newStation: RadioStation = {
+          id: newStationId,
+          name: newSchedule.customStationName,
+          urls: [],
+          scrapeUrl: newSchedule.customStationUrl,
+          styles: [],
+          enabled: false, // Not auto-monitored, only for special monitoring
+          monitoringSchedules: [],
+        };
+        setStations([...stations, newStation]);
+        stationId = newStationId;
+      } else {
+        stationId = existingStation.id;
+      }
+    } else {
+      const station = stations.find(s => s.id === selectedStation);
+      if (!station) return;
+      stationId = station.id;
+      stationName = station.name;
+    }
+
+    // Need to get station again after potential state update
+    const currentStations = useRadioStore.getState().stations;
+    const station = currentStations.find(s => s.id === stationId) || {
+      id: stationId,
+      name: stationName!,
+      monitoringSchedules: [],
+    };
 
     const newScheduleEntry: MonitoringSchedule = {
       id: `schedule-${Date.now()}`,
@@ -127,19 +168,21 @@ export function SpecialMonitoringView() {
       minute: newSchedule.minute,
       enabled: true,
       label: newSchedule.label || `Horário ${newSchedule.hour}:${newSchedule.minute.toString().padStart(2, '0')}`,
+      customUrl: newSchedule.useCustomStation ? newSchedule.customStationUrl : undefined,
     };
 
     const currentSchedules = station.monitoringSchedules || [];
-    updateStation(station.id, {
+    updateStation(stationId, {
       monitoringSchedules: [...currentSchedules, newScheduleEntry],
     });
 
+    const displayName = newSchedule.useCustomStation ? newSchedule.customStationName : stations.find(s => s.id === selectedStation)?.name;
     toast({
       title: '⏰ Horário adicionado',
-      description: `${station.name} será monitorada às ${newSchedule.hour}:${newSchedule.minute.toString().padStart(2, '0')}`,
+      description: `${displayName} será monitorada às ${newSchedule.hour}:${newSchedule.minute.toString().padStart(2, '0')}`,
     });
 
-    setNewSchedule({ hour: 18, minute: 0, label: '', stationId: '' });
+    setNewSchedule({ hour: 18, minute: 0, label: '', stationId: '', customStationName: '', customStationUrl: '', useCustomStation: false });
     setSelectedStation(null);
     setIsDialogOpen(false);
   };
@@ -290,24 +333,62 @@ ${exportLines.join('\n')}`;
                     <DialogTitle>Adicionar Horário de Monitoramento</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4 pt-4">
-                    <div>
-                      <label className="text-sm text-muted-foreground">Emissora</label>
-                      <Select value={selectedStation || ''} onValueChange={setSelectedStation}>
-                        <SelectTrigger className="mt-1">
-                          <SelectValue placeholder="Selecione a emissora" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {enabledStations.map(station => (
-                            <SelectItem key={station.id} value={station.id}>
-                              <div className="flex items-center gap-2">
-                                <Radio className="w-4 h-4" />
-                                {station.name}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    {/* Toggle for custom station */}
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 border border-border">
+                      <div>
+                        <p className="text-sm font-medium">Nova emissora</p>
+                        <p className="text-xs text-muted-foreground">Cadastrar link de rádio personalizado</p>
+                      </div>
+                      <Switch
+                        checked={newSchedule.useCustomStation}
+                        onCheckedChange={checked => setNewSchedule(prev => ({ ...prev, useCustomStation: checked }))}
+                      />
                     </div>
+
+                    {newSchedule.useCustomStation ? (
+                      <>
+                        <div>
+                          <label className="text-sm text-muted-foreground">Nome da Emissora</label>
+                          <Input
+                            className="mt-1"
+                            placeholder="Ex: 105 FM, Jovem Pan, etc."
+                            value={newSchedule.customStationName}
+                            onChange={e => setNewSchedule(prev => ({ ...prev, customStationName: e.target.value }))}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm text-muted-foreground">Link da Rádio (mytuner-radio.com)</label>
+                          <Input
+                            className="mt-1"
+                            placeholder="https://mytuner-radio.com/radio/..."
+                            value={newSchedule.customStationUrl}
+                            onChange={e => setNewSchedule(prev => ({ ...prev, customStationUrl: e.target.value }))}
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Cole o link da página da rádio no mytuner-radio.com
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <label className="text-sm text-muted-foreground">Emissora</label>
+                        <Select value={selectedStation || ''} onValueChange={setSelectedStation}>
+                          <SelectTrigger className="mt-1">
+                            <SelectValue placeholder="Selecione a emissora" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {enabledStations.map(station => (
+                              <SelectItem key={station.id} value={station.id}>
+                                <div className="flex items-center gap-2">
+                                  <Radio className="w-4 h-4" />
+                                  {station.name}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -362,7 +443,13 @@ ${exportLines.join('\n')}`;
                       <Button variant="ghost" onClick={() => setIsDialogOpen(false)}>
                         Cancelar
                       </Button>
-                      <Button onClick={handleAddSchedule} disabled={!selectedStation}>
+                      <Button 
+                        onClick={handleAddSchedule} 
+                        disabled={newSchedule.useCustomStation 
+                          ? (!newSchedule.customStationName || !newSchedule.customStationUrl)
+                          : !selectedStation
+                        }
+                      >
                         <Save className="w-4 h-4 mr-2" />
                         Salvar
                       </Button>
