@@ -121,19 +121,7 @@ function SortableSong({ song, onRemove, hasWarning }: SortableSongProps) {
   );
 }
 
-// Demo songs pool
-const songPool: Omit<BlockSong, 'id'>[] = [
-  { title: 'Evidências', artist: 'Chitãozinho & Xororó', file: 'Evidências - Chitãozinho & Xororó.mp3', source: 'BH', isFixed: false },
-  { title: 'Atrasadinha', artist: 'Felipe Araújo', file: 'Atrasadinha - Felipe Araújo.mp3', source: 'BH', isFixed: false },
-  { title: 'Medo Bobo', artist: 'Maiara & Maraisa', file: 'Medo Bobo - Maiara & Maraisa.mp3', source: 'BH', isFixed: false },
-  { title: 'Propaganda', artist: 'Jorge & Mateus', file: 'Propaganda - Jorge & Mateus.mp3', source: 'BH', isFixed: false },
-  { title: 'Péssimo Negócio', artist: 'Henrique & Juliano', file: 'Péssimo Negócio - Henrique & Juliano.mp3', source: 'BH', isFixed: false },
-  { title: 'Deixa Eu Te Amar', artist: 'Sorriso Maroto', file: 'Deixa Eu Te Amar - Sorriso Maroto.mp3', source: 'BAND', isFixed: false },
-  { title: 'Sorte', artist: 'Thiaguinho', file: 'Sorte - Thiaguinho.mp3', source: 'BAND', isFixed: false },
-  { title: 'Shallow', artist: 'Lady Gaga', file: 'Shallow - Lady Gaga.mp3', source: 'DISNEY', isFixed: false },
-  { title: 'Hear Me Now', artist: 'Alok', file: 'Hear Me Now - Alok.mp3', source: 'METRO', isFixed: false },
-  { title: 'Blinding Lights', artist: 'The Weeknd', file: 'Blinding Lights - The Weeknd.mp3', source: 'METRO', isFixed: false },
-];
+// Demo songs pool - REMOVED: Now using dynamicSongPool from captured songs
 
 const fixedContentPool: Omit<BlockSong, 'id'>[] = [
   { title: 'Notícia da Hora', artist: 'Conteúdo Fixo', file: 'NOTICIA_DA_HORA_14HORAS.mp3', source: 'FIXO', isFixed: true },
@@ -142,39 +130,69 @@ const fixedContentPool: Omit<BlockSong, 'id'>[] = [
   { title: 'As Últimas do Esporte', artist: 'Conteúdo Fixo', file: 'AS_ULTIMAS_DO_ESPORTE.mp3', source: 'FIXO', isFixed: true },
 ];
 
-// Default templates
-const defaultTemplates: BlockTemplate[] = [
-  {
-    id: 'morning-hits',
-    name: 'Manhã de Hits',
-    songs: songPool.slice(0, 8).map((s, i) => ({ ...s, id: `template-morning-${i}` })),
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'afternoon-mix',
-    name: 'Tarde Mix',
-    songs: [...songPool.slice(2, 6), fixedContentPool[0], ...songPool.slice(6, 10)].map((s, i) => ({ ...s, id: `template-afternoon-${i}` })),
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'news-block',
-    name: 'Bloco com Notícias',
-    songs: [fixedContentPool[0], ...songPool.slice(0, 5), fixedContentPool[2], ...songPool.slice(5, 8)].map((s, i) => ({ ...s, id: `template-news-${i}` })),
-    createdAt: new Date().toISOString(),
-  },
+// Default templates - now empty, templates are created dynamically from captured songs
+const defaultTemplates: BlockTemplate[] = [];
+
+// Dynamic source colors palette
+const colorPalette = [
+  'bg-primary',
+  'bg-accent', 
+  'bg-emerald-500',
+  'bg-pink-500',
+  'bg-orange-500',
+  'bg-cyan-500',
+  'bg-violet-500',
+  'bg-rose-500',
+  'bg-amber-500',
+  'bg-teal-500',
 ];
 
-// Source colors for statistics
-const sourceColors: Record<string, string> = {
-  'BH': 'bg-primary',
-  'BAND': 'bg-accent',
-  'DISNEY': 'bg-pink-500',
-  'METRO': 'bg-emerald-500',
-  'FIXO': 'bg-purple-500',
-};
-
 export function BlockEditorView() {
-  const { blockSongs, setBlockSongs, fixedContent, programs } = useRadioStore();
+  const { blockSongs, setBlockSongs, fixedContent, programs, stations, capturedSongs } = useRadioStore();
+  
+  // Generate dynamic source colors based on registered stations
+  const sourceColors = useMemo(() => {
+    const colors: Record<string, string> = { 'FIXO': 'bg-purple-500' };
+    stations.forEach((station, index) => {
+      // Use station name abbreviation (first letters or ID)
+      const abbrev = station.name.split(' ').map(w => w[0]).join('').toUpperCase();
+      colors[abbrev] = colorPalette[index % colorPalette.length];
+      colors[station.name] = colorPalette[index % colorPalette.length];
+      colors[station.id.toUpperCase()] = colorPalette[index % colorPalette.length];
+    });
+    return colors;
+  }, [stations]);
+  
+  // Generate song pool from captured songs (real data from stations)
+  const dynamicSongPool = useMemo(() => {
+    if (capturedSongs.length === 0) {
+      // Fallback to station-based demo songs if no captures yet
+      return stations.flatMap((station, stationIndex) => {
+        const abbrev = station.name.split(' ').map(w => w[0]).join('').toUpperCase();
+        return [
+          { title: `Demo Song 1 - ${station.name}`, artist: 'Artista Demo', file: `demo_${station.id}_1.mp3`, source: abbrev, isFixed: false },
+          { title: `Demo Song 2 - ${station.name}`, artist: 'Artista Demo', file: `demo_${station.id}_2.mp3`, source: abbrev, isFixed: false },
+        ];
+      });
+    }
+    
+    // Use real captured songs - get unique songs
+    const uniqueSongs = new Map<string, Omit<BlockSong, 'id'>>();
+    capturedSongs.forEach(song => {
+      const key = `${song.title}-${song.artist}`;
+      if (!uniqueSongs.has(key)) {
+        const stationAbbrev = song.station.split(' ').map(w => w[0]).join('').toUpperCase();
+        uniqueSongs.set(key, {
+          title: song.title,
+          artist: song.artist,
+          file: `${song.artist} - ${song.title}.mp3`,
+          source: stationAbbrev,
+          isFixed: false,
+        });
+      }
+    });
+    return Array.from(uniqueSongs.values()).slice(0, 50); // Max 50 songs
+  }, [capturedSongs, stations]);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedHour, setSelectedHour] = useState(14);
@@ -194,11 +212,11 @@ export function BlockEditorView() {
 
   const timeKey = `${selectedHour.toString().padStart(2, '0')}:${selectedMinute.toString().padStart(2, '0')}`;
 
-  // Initialize songs for this block if not exists
+  // Initialize songs for this block if not exists - use dynamic pool from captured songs
   const currentSongs = useMemo(() => {
     if (blockSongs[timeKey]) return blockSongs[timeKey];
-    return songPool.slice(0, 10).map((s, i) => ({ ...s, id: `${timeKey}-${i}` }));
-  }, [blockSongs, timeKey]);
+    return dynamicSongPool.slice(0, 10).map((s, i) => ({ ...s, id: `${timeKey}-${i}` }));
+  }, [blockSongs, timeKey, dynamicSongPool]);
 
   // Statistics by source
   const sourceStats = useMemo(() => {
@@ -223,15 +241,15 @@ export function BlockEditorView() {
   };
 
   // Generate .txt line for a specific time
-  const generateTxtLineForTime = (hour: number, minute: number) => {
+  const generateTxtLineForTime = useCallback((hour: number, minute: number) => {
     const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     const key = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     const program = getProgramForHour(hour);
-    const songs = blockSongs[key] || songPool.slice(0, 10).map((s, i) => ({ ...s, id: `${key}-${i}` }));
+    const songs = blockSongs[key] || dynamicSongPool.slice(0, 10).map((s, i) => ({ ...s, id: `${key}-${i}` }));
     // Sanitize filenames: remove accents, replace & with "e", remove special chars
     const songFiles = songs.map(s => `"${sanitizeFilename(s.file)}"`).join(',vht,');
     return `${time} (ID=${program}) ${songFiles}`;
-  };
+  }, [blockSongs, dynamicSongPool]);
 
   // Generate .txt line preview for current block
   const generateTxtLine = useMemo(() => {
@@ -379,7 +397,7 @@ export function BlockEditorView() {
 
   const handleReset = () => {
     console.log('[BLOCK-EDITOR] Resetando bloco:', timeKey);
-    const defaultSongs = songPool.slice(0, 10).map((s, i) => ({ ...s, id: `${timeKey}-reset-${i}-${Date.now()}` }));
+    const defaultSongs = dynamicSongPool.slice(0, 10).map((s, i) => ({ ...s, id: `${timeKey}-reset-${i}-${Date.now()}` }));
     console.log('[BLOCK-EDITOR] Novas músicas:', defaultSongs.length);
     setBlockSongs(timeKey, defaultSongs);
     addToHistory(timeKey, defaultSongs, 'Resetar bloco');
@@ -953,35 +971,43 @@ export function BlockEditorView() {
             </CardContent>
           </Card>
 
-          {/* Add Music */}
+          {/* Add Music - Now uses dynamic song pool from captured songs */}
           <Card className="glass-card">
             <CardHeader className="border-b border-border py-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Music className="w-4 h-4 text-primary" />
-                Adicionar Música
+                Adicionar Música ({dynamicSongPool.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="p-2">
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {songPool.map((song, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleAddSong(song)}
-                    className="w-full flex items-center gap-2 p-2 rounded hover:bg-secondary/50 transition-colors text-left"
-                  >
-                    <div className="w-6 h-6 rounded bg-primary/20 flex items-center justify-center">
-                      <Plus className="w-3 h-3 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{song.title}</p>
-                      <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
-                    </div>
-                    <Badge variant="secondary" className="text-xs shrink-0">
-                      {song.source}
-                    </Badge>
-                  </button>
-                ))}
-              </div>
+              {dynamicSongPool.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground text-sm">
+                  <Music className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma música capturada</p>
+                  <p className="text-xs">Ative as emissoras para capturar</p>
+                </div>
+              ) : (
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {dynamicSongPool.map((song, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleAddSong(song)}
+                      className="w-full flex items-center gap-2 p-2 rounded hover:bg-secondary/50 transition-colors text-left"
+                    >
+                      <div className="w-6 h-6 rounded bg-primary/20 flex items-center justify-center">
+                        <Plus className="w-3 h-3 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{song.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                      </div>
+                      <Badge variant="secondary" className="text-xs shrink-0">
+                        {song.source}
+                      </Badge>
+                    </button>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
