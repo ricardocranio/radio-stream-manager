@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle, History, RotateCcw, TrendingUp, Clock, FlaskConical, Wrench } from 'lucide-react';
+import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle, History, RotateCcw, TrendingUp, Clock, FlaskConical, Wrench, RotateCw } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry, getDownloadStats } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -582,7 +582,7 @@ export function MissingView() {
               )}
             </>
           )}
-          <Button variant="outline" onClick={openDownloadFolder} disabled={!isElectron}>
+          <Button variant="outline" onClick={openDownloadFolder} disabled={!isElectron && !simulationMode}>
             <FolderOpen className="w-4 h-4 mr-2" />
             Abrir Pasta
           </Button>
@@ -590,6 +590,34 @@ export function MissingView() {
             <RefreshCw className="w-4 h-4 mr-2" />
             Verificar
           </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="secondary">
+                <RotateCw className="w-4 h-4 mr-2" />
+                Reset
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Resetar lista de músicas faltando?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação irá limpar a lista atual. Uma nova verificação será necessária para repopular com as músicas que realmente faltam no banco musical.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={() => {
+                  clearMissingSongs();
+                  toast({
+                    title: '🔄 Lista resetada',
+                    description: 'A lista de músicas faltando foi limpa. Uma nova verificação será realizada automaticamente.',
+                  });
+                }}>
+                  Resetar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive">
