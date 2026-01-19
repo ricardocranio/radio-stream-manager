@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Clock, Plus, Trash2, Radio, Save, Calendar, Download, Search, Filter, Eye, AlertCircle, CheckCircle, Link } from 'lucide-react';
+import { Clock, Plus, Trash2, Radio, Save, Calendar, Download, Search, Filter, Eye, AlertCircle, CheckCircle, Link, Cloud, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,7 @@ import { MonitoringSchedule, RadioStation, WeekDay } from '@/types/radio';
 import { supabase } from '@/integrations/supabase/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { syncSpecialMonitoringToSupabase, useSyncSpecialMonitoring } from '@/hooks/useSyncSpecialMonitoring';
 import {
   Dialog,
   DialogContent,
@@ -49,6 +50,7 @@ export function SpecialMonitoringView() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [capturedSongs, setCapturedSongs] = useState<CapturedSongFromDB[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStation, setFilterStation] = useState<string>('all');
@@ -64,6 +66,9 @@ export function SpecialMonitoringView() {
     useCustomStation: false,
     weekDays: ['seg', 'ter', 'qua', 'qui', 'sex'] as WeekDay[], // Default: weekdays
   });
+
+  // Auto-sync special monitoring to Cloud
+  useSyncSpecialMonitoring();
 
   const weekDayLabels: Record<WeekDay, string> = {
     dom: 'Dom',
@@ -350,6 +355,36 @@ ${exportLines.join('\n')}`;
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={async () => {
+              setIsSyncing(true);
+              // Collect all schedules for sync
+              const allSchedulesForSync = allSchedules.map(s => ({
+                id: s.id,
+                stationName: s.stationName,
+                scrapeUrl: s.customUrl || s.stationUrl || '',
+                hour: s.hour,
+                minute: s.minute,
+                endHour: s.endHour ?? s.hour + 1,
+                endMinute: s.endMinute ?? 0,
+                weekDays: (s.weekDays || ['seg', 'ter', 'qua', 'qui', 'sex']) as WeekDay[],
+                label: s.label,
+                enabled: s.enabled,
+              }));
+              await syncSpecialMonitoringToSupabase(allSchedulesForSync);
+              setIsSyncing(false);
+            }}
+            disabled={isSyncing || allSchedules.length === 0}
+            className="border-cyan-500/30 text-cyan-500 hover:bg-cyan-500/10"
+          >
+            {isSyncing ? (
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Cloud className="w-4 h-4 mr-2" />
+            )}
+            Sincronizar Cloud
+          </Button>
           <Button
             variant="secondary"
             onClick={fetchCapturedSongs}

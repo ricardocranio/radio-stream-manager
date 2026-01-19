@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scrapeStations: (stations) => ipcRenderer.invoke('scrape-stations', stations),
   scrapeStation: (station) => ipcRenderer.invoke('scrape-station', station),
   
+  // Music library check
+  checkSongExists: (params) => ipcRenderer.invoke('check-song-exists', params),
+  
   // Auto-update
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (_, info) => callback(info)),

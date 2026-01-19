@@ -85,6 +85,51 @@ export type Database = {
           },
         ]
       }
+      special_monitoring: {
+        Row: {
+          created_at: string
+          enabled: boolean | null
+          end_hour: number
+          end_minute: number
+          id: string
+          label: string | null
+          scrape_url: string
+          start_hour: number
+          start_minute: number
+          station_name: string
+          updated_at: string
+          week_days: string[]
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean | null
+          end_hour: number
+          end_minute: number
+          id?: string
+          label?: string | null
+          scrape_url: string
+          start_hour: number
+          start_minute: number
+          station_name: string
+          updated_at?: string
+          week_days?: string[]
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean | null
+          end_hour?: number
+          end_minute?: number
+          id?: string
+          label?: string | null
+          scrape_url?: string
+          start_hour?: number
+          start_minute?: number
+          station_name?: string
+          updated_at?: string
+          week_days?: string[]
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
