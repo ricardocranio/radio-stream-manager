@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Radio, Music, CheckCircle, XCircle, TrendingUp, Timer, History, Trash2, ExternalLink, Filter, X, Bell, BellOff, Database, Clock, Zap, RefreshCw, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Bell, BellOff, Database, Clock, Zap, RefreshCw, Loader2 } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
@@ -10,26 +10,21 @@ import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export function DashboardView() {
-  const { stations, capturedSongs, missingSongs, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs } = useRadioStore();
+  const { stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs } = useRadioStore();
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
   const { stats: realtimeStats, refresh: refreshStats } = useRealtimeStats();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Realtime notifications hook
-  const { requestPermission, hasPermission } = useRealtimeNotifications({
+  const { requestPermission } = useRealtimeNotifications({
     enableBrowserNotifications: notificationsEnabled,
     enableToastNotifications: notificationsEnabled,
   });
-  
-  // Filter state
-  const [selectedSource, setSelectedSource] = useState<string | null>(null);
-  const [selectedStation, setSelectedStation] = useState<string | null>(null);
 
   // Handle notification toggle
   const handleToggleNotifications = async () => {
@@ -50,9 +45,6 @@ export function DashboardView() {
 
   const localStats = {
     activeStations: stations.filter((s) => s.enabled).length,
-    totalCaptured: capturedSongs.length,
-    foundSongs: capturedSongs.filter((s) => s.status === 'found').length,
-    missingSongsCount: missingSongs.length,
     rankingTotal: rankingSongs.length,
   };
 
@@ -66,79 +58,6 @@ export function DashboardView() {
         { id: '4', timestamp: new Date(Date.now() - 120 * 60000), blockTime: '19:30', songsProcessed: 10, songsFound: 10, songsMissing: 0, programName: 'TOP10' },
       ];
 
-  // Simulated captured songs grouped by station for demo
-  const demoSongs = [
-    { id: '1', title: 'Evidências', artist: 'Chitãozinho & Xororó', station: 'BH FM', timestamp: new Date(), status: 'found' as const, source: 'https://mytuner-radio.com/pt/radio/radio-bh-fm-ao-vivo-402270/' },
-    { id: '2', title: 'Atrasadinha', artist: 'Felipe Araújo', station: 'BH FM', timestamp: new Date(), status: 'found' as const, source: 'https://mytuner-radio.com/pt/radio/radio-bh-fm-ao-vivo-402270/' },
-    { id: '3', title: 'Medo Bobo', artist: 'Maiara & Maraisa', station: 'BH FM', timestamp: new Date(), status: 'found' as const, source: 'https://mytuner-radio.com/pt/radio/radio-bh-fm-ao-vivo-402270/' },
-    { id: '4', title: 'Shallow', artist: 'Lady Gaga', station: 'Band FM', timestamp: new Date(), status: 'missing' as const },
-    { id: '5', title: 'Propaganda', artist: 'Jorge & Mateus', station: 'Band FM', timestamp: new Date(), status: 'found' as const, source: 'https://mytuner-radio.com/pt/radio/band-fm-sao-paulo-485671/' },
-  ];
-
-  const displaySongs = capturedSongs.length > 0 ? capturedSongs : demoSongs;
-
-  // Helper to extract domain from URL for display
-  const getDomainFromUrl = (url: string): string => {
-    try {
-      const parsed = new URL(url);
-      return parsed.hostname.replace('www.', '').split('.')[0];
-    } catch {
-      return url.slice(0, 20);
-    }
-  };
-
-  // Get unique sources from songs
-  const uniqueSources = useMemo(() => {
-    const sources = new Set<string>();
-    displaySongs.forEach(song => {
-      if (song.source) {
-        sources.add(getDomainFromUrl(song.source));
-      }
-    });
-    return Array.from(sources);
-  }, [displaySongs]);
-
-  // Get unique stations
-  const uniqueStations = useMemo(() => {
-    const stationSet = new Set<string>();
-    displaySongs.forEach(song => stationSet.add(song.station));
-    return Array.from(stationSet);
-  }, [displaySongs]);
-
-  // Filter songs based on selected source and station
-  const filteredSongs = useMemo(() => {
-    return displaySongs.filter(song => {
-      if (selectedStation && song.station !== selectedStation) return false;
-      if (selectedSource && song.source) {
-        const songSourceDomain = getDomainFromUrl(song.source);
-        if (songSourceDomain !== selectedSource) return false;
-      } else if (selectedSource && !song.source) {
-        return false;
-      }
-      return true;
-    });
-  }, [displaySongs, selectedSource, selectedStation]);
-
-  // Get enabled stations from store
-  const enabledStations = stations.filter(s => s.enabled);
-
-  // Group filtered songs by station
-  const songsByStation = useMemo(() => {
-    const grouped: Record<string, typeof displaySongs> = {};
-    
-    enabledStations.forEach(station => {
-      grouped[station.name] = filteredSongs.filter(song => song.station === station.name);
-    });
-    
-    filteredSongs.forEach(song => {
-      if (!grouped[song.station]) {
-        grouped[song.station] = [song];
-      }
-    });
-    
-    return grouped;
-  }, [enabledStations, filteredSongs]);
-
   // Dynamic color palette for stations
   const colorPalette = [
     { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' },
@@ -148,15 +67,6 @@ export function DashboardView() {
     { bg: 'bg-pink-500/10', border: 'border-pink-500/30', text: 'text-pink-400' },
     { bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', text: 'text-cyan-400' },
   ];
-
-  const stationColorMap = new Map<string, typeof colorPalette[0]>();
-  Object.keys(songsByStation).forEach((stationName, index) => {
-    stationColorMap.set(stationName, colorPalette[index % colorPalette.length]);
-  });
-
-  const getStationColor = (station: string) => {
-    return stationColorMap.get(station) || colorPalette[0];
-  };
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
@@ -263,35 +173,14 @@ export function DashboardView() {
 
       {/* Last Song + Controls */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Last Captured Song */}
+        {/* Last Captured Songs by Station - Stacked */}
         <Card className="glass-card border-primary/30 lg:col-span-2">
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
-                  <Music className="w-7 h-7 text-primary" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Última música capturada</p>
-                  {realtimeStats.lastSong ? (
-                    <>
-                      <p className="text-lg font-bold text-foreground">{realtimeStats.lastSong.title}</p>
-                      <p className="text-sm text-muted-foreground">{realtimeStats.lastSong.artist}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="outline" className="text-xs">
-                          <Radio className="w-3 h-3 mr-1" />
-                          {realtimeStats.lastSong.station}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDistanceToNow(new Date(realtimeStats.lastSong.timestamp), { addSuffix: true, locale: ptBR })}
-                        </span>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-muted-foreground">Aguardando captura...</p>
-                  )}
-                </div>
-              </div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Music className="w-4 h-4" />
+                Últimas músicas capturadas por emissora
+              </p>
               <Button
                 variant="outline"
                 size="sm"
@@ -307,6 +196,45 @@ export function DashboardView() {
                 Atualizar
               </Button>
             </div>
+            
+            {realtimeStats.lastSongsByStation.length > 0 ? (
+              <ScrollArea className="h-[180px]">
+                <div className="space-y-2">
+                  {realtimeStats.lastSongsByStation.map((song, index) => {
+                    const colors = colorPalette[index % colorPalette.length];
+                    return (
+                      <div
+                        key={`${song.station}-${song.timestamp}`}
+                        className={`flex items-center gap-3 p-3 rounded-lg ${colors.bg} ${colors.border} border transition-all hover:scale-[1.01]`}
+                      >
+                        <div className={`w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center ${colors.text}`}>
+                          <Radio className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-foreground text-sm truncate">{song.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <Badge variant="outline" className={`text-xs ${colors.border} ${colors.text}`}>
+                            {song.station}
+                          </Badge>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {formatDistanceToNow(new Date(song.timestamp), { addSuffix: true, locale: ptBR })}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            ) : (
+              <div className="flex items-center justify-center h-[180px] text-muted-foreground">
+                <div className="text-center">
+                  <Music className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>Aguardando capturas...</p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -401,112 +329,75 @@ export function DashboardView() {
         </CardContent>
       </Card>
 
-      {/* Radio Stations Windows */}
+      {/* Radio Stations Windows - Real Data from Supabase */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-            Captura Local (Simulação)
-            {(selectedSource || selectedStation) && (
-              <Badge variant="secondary" className="ml-2 text-xs">
-                {filteredSongs.length} de {displaySongs.length}
-              </Badge>
-            )}
+            Captura em Tempo Real
+            <Badge variant="secondary" className="ml-2 text-xs">
+              <Database className="w-3 h-3 mr-1" />
+              Supabase
+            </Badge>
           </h3>
-          
-          {/* Filters */}
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-muted-foreground" />
-            
-            <div className="flex flex-wrap gap-1">
-              {uniqueStations.slice(0, 4).map(station => (
-                <Button
-                  key={station}
-                  variant={selectedStation === station ? "default" : "outline"}
-                  size="sm"
-                  className="h-7 text-xs px-2"
-                  onClick={() => setSelectedStation(selectedStation === station ? null : station)}
-                >
-                  {station}
-                </Button>
-              ))}
-            </div>
-            
-            {(selectedSource || selectedStation) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs px-2 text-muted-foreground"
-                onClick={() => {
-                  setSelectedSource(null);
-                  setSelectedStation(null);
-                }}
-              >
-                <X className="w-3 h-3 mr-1" />
-                Limpar
-              </Button>
-            )}
-          </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Object.entries(songsByStation).slice(0, 3).map(([stationName, songs]) => {
-            const colors = getStationColor(stationName);
-            const foundCount = songs.filter(s => s.status === 'found').length;
-            const missingCount = songs.filter(s => s.status === 'missing').length;
-            
-            return (
-              <Card key={stationName} className={`glass-card ${colors.border}`}>
-                <CardHeader className={`py-3 px-4 border-b border-border ${colors.bg}`}>
-                  <CardTitle className="flex items-center justify-between text-base">
-                    <div className="flex items-center gap-2">
-                      <Radio className={`w-4 h-4 ${colors.text}`} />
-                      <span className={colors.text}>{stationName}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="border-success/40 text-success bg-success/10 text-xs">
-                        ✓ {foundCount}
+        
+        {Object.keys(realtimeStats.recentSongsByStation).length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Object.entries(realtimeStats.recentSongsByStation).slice(0, 6).map(([stationName, songs], stationIndex) => {
+              const colors = colorPalette[stationIndex % colorPalette.length];
+              
+              return (
+                <Card key={stationName} className={`glass-card ${colors.border}`}>
+                  <CardHeader className={`py-3 px-4 border-b border-border ${colors.bg}`}>
+                    <CardTitle className="flex items-center justify-between text-base">
+                      <div className="flex items-center gap-2">
+                        <Radio className={`w-4 h-4 ${colors.text}`} />
+                        <span className={colors.text}>{stationName}</span>
+                      </div>
+                      <Badge variant="outline" className={`${colors.border} ${colors.text} text-xs`}>
+                        {realtimeStats.stationCounts[stationName] || 0} (24h)
                       </Badge>
-                      {missingCount > 0 && (
-                        <Badge variant="outline" className="border-destructive/40 text-destructive bg-destructive/10 text-xs">
-                          ✗ {missingCount}
-                        </Badge>
-                      )}
-                    </div>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <ScrollArea className="h-[150px]">
-                    <div className="divide-y divide-border">
-                      {songs.slice(0, 4).map((song, index) => (
-                        <div key={song.id} className="p-3 hover:bg-secondary/30 transition-colors">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <Music className={`w-4 h-4 ${colors.text}`} />
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium text-foreground text-sm truncate">{song.title}</p>
-                                <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <ScrollArea className="h-[150px]">
+                      <div className="divide-y divide-border">
+                        {songs.map((song, index) => (
+                          <div key={`${song.timestamp}-${index}`} className="p-3 hover:bg-secondary/30 transition-colors">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <Music className={`w-4 h-4 ${colors.text}`} />
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium text-foreground text-sm truncate">{song.title}</p>
+                                  <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                                </div>
                               </div>
+                              <span className="text-xs text-muted-foreground ml-2 shrink-0">
+                                {formatDistanceToNow(new Date(song.timestamp), { addSuffix: true, locale: ptBR })}
+                              </span>
                             </div>
-                            <Badge
-                              variant="outline"
-                              className={`ml-2 text-xs ${
-                                song.status === 'found'
-                                  ? 'border-success/40 text-success bg-success/10'
-                                  : 'border-destructive/40 text-destructive bg-destructive/10'
-                              }`}
-                            >
-                              {song.status === 'found' ? '✓' : '✗'}
-                            </Badge>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        ) : (
+          <Card className="glass-card border-dashed">
+            <CardContent className="p-8 text-center text-muted-foreground">
+              <Radio className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg font-medium">Nenhuma captura ainda</p>
+              <p className="text-sm mt-2">As músicas capturadas das emissoras aparecerão aqui em tempo real.</p>
+              <p className="text-xs mt-4 text-primary">
+                O sistema captura automaticamente a cada 5 minutos via Edge Function
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Status Panel and Grade History */}
