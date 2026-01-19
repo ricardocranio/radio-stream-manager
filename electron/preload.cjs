@@ -32,6 +32,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Music library check
   checkSongExists: (params) => ipcRenderer.invoke('check-song-exists', params),
   
+  // Voz do Brasil download
+  downloadVozBrasil: (params) => ipcRenderer.invoke('download-voz-brasil', params),
+  cleanupVozBrasil: (params) => ipcRenderer.invoke('cleanup-voz-brasil', params),
+  onVozDownloadProgress: (callback) => ipcRenderer.on('voz-download-progress', (_, progress) => callback(progress)),
+  
   // Auto-update
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (_, info) => callback(info)),

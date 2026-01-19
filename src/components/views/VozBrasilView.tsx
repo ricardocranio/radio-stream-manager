@@ -117,60 +117,105 @@ export function VozBrasilView() {
     return `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`;
   };
 
-  // Simulate download (in real app, this would use Electron IPC)
-  const performDownload = async (isRetry: boolean = false) => {
-    if (!isRetry) {
-      setDownloadStatus({
-        status: 'downloading',
-        lastAttempt: new Date(),
-        attempts: 1,
-        progress: 0,
+  // Generate filename with current date
+  const getFilename = () => {
+    const now = new Date();
+    const day = now.getDate().toString().padStart(2, '0');
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const year = now.getFullYear();
+    return `VozDoBrasil_${day}-${month}-${year}.mp3`;
+  };
+
+  // Listen for download progress (Electron only)
+  useEffect(() => {
+    if (window.electronAPI?.onVozDownloadProgress) {
+      window.electronAPI.onVozDownloadProgress((progressData) => {
+        console.log('[VOZ] Progress:', progressData);
+        setDownloadStatus(prev => ({
+          ...prev,
+          progress: progressData.progress,
+        }));
       });
-    } else {
-      setDownloadStatus(prev => ({
-        ...prev,
-        status: 'retrying',
-        lastAttempt: new Date(),
-        attempts: prev.attempts + 1,
-      }));
     }
+  }, []);
+
+  // Perform real download (Electron) or simulated (web)
+  const performDownload = async (isRetry: boolean = false) => {
+    const currentAttempts = isRetry ? downloadStatus.attempts + 1 : 1;
+    
+    setDownloadStatus({
+      status: isRetry ? 'retrying' : 'downloading',
+      lastAttempt: new Date(),
+      attempts: currentAttempts,
+      progress: 0,
+    });
+
+    const url = getDownloadUrl();
+    const filename = getFilename();
 
     try {
-      // Simulate download progress
-      for (let i = 0; i <= 100; i += 10) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-        setDownloadStatus(prev => ({ ...prev, progress: i }));
-      }
-
-      // Simulate random success/failure (80% success rate)
-      const success = Math.random() > 0.2;
-
-      if (success) {
-        const fileSize = Math.floor(Math.random() * 5000000) + 3000000; // 3-8 MB
-        setDownloadStatus({
-          status: 'success',
-          lastAttempt: new Date(),
-          attempts: downloadStatus.attempts + (isRetry ? 1 : 0),
-          fileSize,
-          progress: 100,
+      // Check if running in Electron
+      if (window.electronAPI?.downloadVozBrasil) {
+        console.log('[VOZ] Starting Electron download...');
+        console.log('[VOZ] URL:', url);
+        console.log('[VOZ] Folder:', config.downloadFolder);
+        console.log('[VOZ] Filename:', filename);
+        
+        const result = await window.electronAPI.downloadVozBrasil({
+          url,
+          outputFolder: config.downloadFolder,
+          filename,
         });
 
-        setDownloadHistory(prev => [{
-          date: new Date().toLocaleDateString('pt-BR'),
-          status: 'success',
-          fileSize,
-          attempts: downloadStatus.attempts + (isRetry ? 1 : 0),
-        }, ...prev.slice(0, 9)]);
+        console.log('[VOZ] Download result:', result);
+
+        if (result.success) {
+          setDownloadStatus({
+            status: 'success',
+            lastAttempt: new Date(),
+            attempts: currentAttempts,
+            fileSize: result.fileSize,
+            progress: 100,
+          });
+
+          setDownloadHistory(prev => [{
+            date: new Date().toLocaleDateString('pt-BR'),
+            status: 'success',
+            fileSize: result.fileSize,
+            attempts: currentAttempts,
+          }, ...prev.slice(0, 9)]);
+
+          toast({
+            title: '✅ Download concluído!',
+            description: `A Voz do Brasil foi salva em ${config.downloadFolder}`,
+          });
+        } else {
+          throw new Error(result.error || 'Erro desconhecido no download');
+        }
+      } else {
+        // Web simulation fallback
+        console.log('[VOZ] Web mode - simulating download...');
+        for (let i = 0; i <= 100; i += 10) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          setDownloadStatus(prev => ({ ...prev, progress: i }));
+        }
 
         toast({
-          title: '✅ Download concluído!',
-          description: `A Voz do Brasil foi baixada com sucesso. (${(fileSize / 1024 / 1024).toFixed(1)} MB)`,
+          title: '⚠️ Modo Web',
+          description: 'Download real disponível apenas no aplicativo desktop.',
+          variant: 'destructive',
         });
-      } else {
-        throw new Error('Falha na conexão com o servidor');
+        
+        setDownloadStatus({
+          status: 'error',
+          lastAttempt: new Date(),
+          attempts: currentAttempts,
+          errorMessage: 'Use o aplicativo desktop para download real',
+          progress: 0,
+        });
       }
     } catch (error) {
-      const currentAttempts = downloadStatus.attempts + (isRetry ? 1 : 0);
+      console.error('[VOZ] Download error:', error);
       
       if (currentAttempts < config.maxRetries) {
         setDownloadStatus(prev => ({
@@ -239,11 +284,42 @@ export function VozBrasilView() {
     toast({ title: 'Download cancelado' });
   };
 
-  const handleCleanup = () => {
-    toast({
-      title: '🗑️ Limpeza executada',
-      description: 'Arquivos antigos da Voz do Brasil foram removidos.',
-    });
+  const handleCleanup = async () => {
+    if (window.electronAPI?.cleanupVozBrasil) {
+      try {
+        const result = await window.electronAPI.cleanupVozBrasil({
+          folder: config.downloadFolder,
+          maxAgeDays: 7, // Delete files older than 7 days
+        });
+        
+        if (result.success) {
+          toast({
+            title: '🗑️ Limpeza executada',
+            description: result.deletedCount && result.deletedCount > 0
+              ? `${result.deletedCount} arquivo(s) antigo(s) removido(s).`
+              : 'Nenhum arquivo antigo encontrado.',
+          });
+        } else {
+          toast({
+            title: '❌ Erro na limpeza',
+            description: result.error || 'Erro desconhecido',
+            variant: 'destructive',
+          });
+        }
+      } catch (error) {
+        console.error('[VOZ] Cleanup error:', error);
+        toast({
+          title: '❌ Erro na limpeza',
+          description: 'Erro ao executar limpeza',
+          variant: 'destructive',
+        });
+      }
+    } else {
+      toast({
+        title: '⚠️ Modo web',
+        description: 'Limpeza disponível apenas no aplicativo desktop.',
+      });
+    }
   };
 
   const handleSelectFolder = async () => {

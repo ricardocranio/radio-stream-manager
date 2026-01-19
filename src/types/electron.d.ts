@@ -54,6 +54,36 @@ interface CheckSongResult {
   path?: string;
 }
 
+interface VozDownloadParams {
+  url: string;
+  outputFolder: string;
+  filename: string;
+}
+
+interface VozDownloadResult {
+  success: boolean;
+  filePath?: string;
+  fileSize?: number;
+  error?: string;
+}
+
+interface VozCleanupParams {
+  folder: string;
+  maxAgeDays: number;
+}
+
+interface VozCleanupResult {
+  success: boolean;
+  deletedCount?: number;
+  error?: string;
+}
+
+interface VozDownloadProgress {
+  progress: number;
+  downloaded: number;
+  total: number;
+}
+
 interface StationConfig {
   id: string;
   name: string;
@@ -97,6 +127,11 @@ interface ElectronAPI {
   
   // Music library check - verify if song exists in local folders
   checkSongExists: (params: CheckSongParams) => Promise<CheckSongResult>;
+  
+  // Voz do Brasil download
+  downloadVozBrasil: (params: VozDownloadParams) => Promise<VozDownloadResult>;
+  cleanupVozBrasil: (params: VozCleanupParams) => Promise<VozCleanupResult>;
+  onVozDownloadProgress: (callback: (progress: VozDownloadProgress) => void) => void;
   
   // Auto-update
   checkForUpdates: () => Promise<void>;
