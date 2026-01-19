@@ -84,6 +84,36 @@ interface VozDownloadProgress {
   total: number;
 }
 
+interface GradeFileParams {
+  folder: string;
+  filename: string;
+  content?: string;
+}
+
+interface GradeFileResult {
+  success: boolean;
+  filePath?: string;
+  content?: string;
+  error?: string;
+}
+
+interface FolderListParams {
+  folder: string;
+  extension?: string;
+}
+
+interface FolderFileInfo {
+  name: string;
+  size: number;
+  modified: string;
+}
+
+interface FolderListResult {
+  success: boolean;
+  files: FolderFileInfo[];
+  error?: string;
+}
+
 interface StationConfig {
   id: string;
   name: string;
@@ -132,6 +162,11 @@ interface ElectronAPI {
   downloadVozBrasil: (params: VozDownloadParams) => Promise<VozDownloadResult>;
   cleanupVozBrasil: (params: VozCleanupParams) => Promise<VozCleanupResult>;
   onVozDownloadProgress: (callback: (progress: VozDownloadProgress) => void) => void;
+  
+  // Grade file operations
+  saveGradeFile: (params: GradeFileParams) => Promise<GradeFileResult>;
+  readGradeFile: (params: Omit<GradeFileParams, 'content'>) => Promise<GradeFileResult>;
+  listFolderFiles: (params: FolderListParams) => Promise<FolderListResult>;
   
   // Auto-update
   checkForUpdates: () => Promise<void>;

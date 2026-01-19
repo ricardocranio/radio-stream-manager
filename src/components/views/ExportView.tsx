@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, FileText, Calendar, Settings, Copy, Check, RefreshCw, Code, FileJson } from 'lucide-react';
+import { Download, FileText, Calendar, Settings, Copy, Check, RefreshCw, Code, FileJson, FolderOpen, Save } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,11 +9,15 @@ import { useRadioStore } from '@/store/radioStore';
 import { format } from 'date-fns';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 
+const isElectron = !!window.electronAPI?.isElectron;
+
 export function ExportView() {
   const { programs, sequence, config, stations } = useRadioStore();
   const { toast } = useToast();
   const [copiedConfig, setCopiedConfig] = useState(false);
   const [copiedGrade, setCopiedGrade] = useState(false);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [isSavingGrade, setIsSavingGrade] = useState(false);
 
   // Generate config.json content for Python script
   const generateConfigJson = () => {
@@ -107,6 +111,109 @@ export function ExportView() {
     });
   };
 
+  // Save config.json directly to grade folder (Electron only)
+  const handleSaveConfigToFolder = async () => {
+    if (!window.electronAPI?.saveGradeFile) {
+      toast({
+        title: '⚠️ Modo Web',
+        description: 'Salvamento direto disponível apenas no aplicativo desktop.',
+      });
+      return;
+    }
+
+    setIsSavingConfig(true);
+    try {
+      const result = await window.electronAPI.saveGradeFile({
+        folder: config.gradeFolder,
+        filename: 'config.json',
+        content: configJson,
+      });
+
+      if (result.success) {
+        toast({
+          title: '✅ Config salvo!',
+          description: `Arquivo salvo em ${result.filePath}`,
+        });
+      } else {
+        toast({
+          title: '❌ Erro ao salvar',
+          description: result.error || 'Erro desconhecido',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error saving config:', error);
+      toast({
+        title: '❌ Erro ao salvar',
+        description: 'Erro ao salvar arquivo',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
+  // Get day code for current day
+  const getDayCode = () => {
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'sáb'];
+    return days[new Date().getDay()];
+  };
+
+  // Save grade file directly to folder (Electron only)
+  const handleSaveGradeToFolder = async () => {
+    if (!window.electronAPI?.saveGradeFile) {
+      toast({
+        title: '⚠️ Modo Web',
+        description: 'Salvamento direto disponível apenas no aplicativo desktop.',
+      });
+      return;
+    }
+
+    setIsSavingGrade(true);
+    try {
+      const filename = `${getDayCode()}.txt`;
+      const result = await window.electronAPI.saveGradeFile({
+        folder: config.gradeFolder,
+        filename,
+        content: gradePreview,
+      });
+
+      if (result.success) {
+        toast({
+          title: '✅ Grade salva!',
+          description: `Arquivo ${filename} salvo em ${config.gradeFolder}`,
+        });
+      } else {
+        toast({
+          title: '❌ Erro ao salvar',
+          description: result.error || 'Erro desconhecido',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error saving grade:', error);
+      toast({
+        title: '❌ Erro ao salvar',
+        description: 'Erro ao salvar arquivo',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingGrade(false);
+    }
+  };
+
+  // Open grade folder (Electron only)
+  const handleOpenFolder = async () => {
+    if (window.electronAPI?.openFolder) {
+      await window.electronAPI.openFolder(config.gradeFolder);
+    } else {
+      toast({
+        title: '⚠️ Modo Web',
+        description: 'Abertura de pasta disponível apenas no aplicativo desktop.',
+      });
+    }
+  };
+
   const handleCopyConfig = () => {
     navigator.clipboard.writeText(configJson);
     setCopiedConfig(true);
@@ -127,13 +234,27 @@ export function ExportView() {
         <div>
           <h2 className="text-2xl font-bold text-foreground">Exportar Configuração</h2>
           <p className="text-muted-foreground">
-            Modo Híbrido: Exporte o config.json para o script Python
+            {isElectron ? 'Salve diretamente na pasta de grades ou exporte' : 'Modo Híbrido: Exporte o config.json para o script Python'}
           </p>
         </div>
-        <Button onClick={handleDownloadConfig} className="gap-2">
-          <Download className="w-4 h-4" />
-          Baixar config.json
-        </Button>
+        <div className="flex gap-2">
+          {isElectron && (
+            <>
+              <Button variant="outline" onClick={handleOpenFolder} className="gap-2">
+                <FolderOpen className="w-4 h-4" />
+                Abrir Pasta
+              </Button>
+              <Button onClick={handleSaveConfigToFolder} className="gap-2" disabled={isSavingConfig}>
+                <Save className="w-4 h-4" />
+                {isSavingConfig ? 'Salvando...' : 'Salvar Config'}
+              </Button>
+            </>
+          )}
+          <Button variant={isElectron ? 'outline' : 'default'} onClick={handleDownloadConfig} className="gap-2">
+            <Download className="w-4 h-4" />
+            Baixar config.json
+          </Button>
+        </div>
       </div>
 
       {/* Workflow Info */}
@@ -231,13 +352,21 @@ export function ExportView() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <FileText className="w-4 h-4" />
-                  Prévia da Grade (Exemplo)
-                  <Badge variant="outline" className="text-xs">Gerado pelo Python</Badge>
+                  Prévia da Grade ({getDayCode()}.txt)
+                  <Badge variant="outline" className="text-xs">{isElectron ? 'Salvar direto' : 'Gerado pelo Python'}</Badge>
                 </CardTitle>
-                <Button variant="outline" size="sm" onClick={handleCopyGrade}>
-                  {copiedGrade ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
-                  {copiedGrade ? 'Copiado!' : 'Copiar'}
-                </Button>
+                <div className="flex gap-2">
+                  {isElectron && (
+                    <Button variant="default" size="sm" onClick={handleSaveGradeToFolder} disabled={isSavingGrade}>
+                      <Save className="w-4 h-4 mr-2" />
+                      {isSavingGrade ? 'Salvando...' : `Salvar ${getDayCode()}.txt`}
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" onClick={handleCopyGrade}>
+                    {copiedGrade ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+                    {copiedGrade ? 'Copiado!' : 'Copiar'}
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -251,10 +380,16 @@ export function ExportView() {
             <CardContent className="p-4 flex items-start gap-3">
               <RefreshCw className="w-5 h-5 text-success shrink-0 mt-0.5" />
               <div>
-                <p className="font-medium text-success text-sm">Grade gerada automaticamente pelo Python</p>
+                <p className="font-medium text-success text-sm">
+                  {isElectron 
+                    ? `Salve diretamente em ${config.gradeFolder}` 
+                    : 'Grade gerada automaticamente pelo Python'}
+                </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  O script Python atualiza a grade a cada 20 minutos e salva em <code className="bg-secondary px-1 rounded">{config.gradeFolder}\SEX.txt</code> (ou o dia atual).
-                  Esta é apenas uma prévia de como ficará o arquivo.
+                  {isElectron 
+                    ? `Clique em "Salvar ${getDayCode()}.txt" para salvar a grade diretamente na pasta configurada.`
+                    : `O script Python atualiza a grade a cada 20 minutos e salva em ${config.gradeFolder}\\${getDayCode()}.txt.`
+                  }
                 </p>
               </div>
             </CardContent>

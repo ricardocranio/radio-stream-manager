@@ -37,6 +37,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cleanupVozBrasil: (params) => ipcRenderer.invoke('cleanup-voz-brasil', params),
   onVozDownloadProgress: (callback) => ipcRenderer.on('voz-download-progress', (_, progress) => callback(progress)),
   
+  // Grade file operations
+  saveGradeFile: (params) => ipcRenderer.invoke('save-grade-file', params),
+  readGradeFile: (params) => ipcRenderer.invoke('read-grade-file', params),
+  listFolderFiles: (params) => ipcRenderer.invoke('list-folder-files', params),
+  
   // Auto-update
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (_, info) => callback(info)),
