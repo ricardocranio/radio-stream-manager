@@ -29,6 +29,7 @@ interface RealtimeStats {
   recentSongsByStation: Record<string, LastSongByStation[]>;
   stationCounts: Record<string, number>;
   isLoading: boolean;
+  lastUpdated: Date | null;
 }
 
 export function useRealtimeStats() {
@@ -43,6 +44,7 @@ export function useRealtimeStats() {
     recentSongsByStation: {},
     stationCounts: {},
     isLoading: true,
+    lastUpdated: null,
   });
 
   const loadStats = useCallback(async () => {
@@ -126,6 +128,7 @@ export function useRealtimeStats() {
         recentSongsByStation,
         stationCounts,
         isLoading: false,
+        lastUpdated: new Date(),
       });
     } catch (error) {
       console.error('Error loading realtime stats:', error);
