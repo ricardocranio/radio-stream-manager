@@ -1182,3 +1182,87 @@ ipcMain.handle('cleanup-voz-brasil', async (event, params) => {
     return { success: false, error: error.message };
   }
 });
+
+// =============== GRADE FILE SAVING ===============
+
+// IPC handler to save grade file
+ipcMain.handle('save-grade-file', async (event, params) => {
+  const { folder, filename, content } = params;
+  
+  console.log(`[GRADE] Save request: ${filename} to ${folder}`);
+  
+  try {
+    // Ensure folder exists
+    if (!fs.existsSync(folder)) {
+      fs.mkdirSync(folder, { recursive: true });
+      console.log(`[GRADE] Created folder: ${folder}`);
+    }
+    
+    const filePath = path.join(folder, filename);
+    fs.writeFileSync(filePath, content, 'utf-8');
+    
+    console.log(`[GRADE] File saved: ${filePath}`);
+    
+    return {
+      success: true,
+      filePath,
+    };
+  } catch (error) {
+    console.error('[GRADE] Save error:', error);
+    return {
+      success: false,
+      error: error.message || 'Erro ao salvar arquivo',
+    };
+  }
+});
+
+// IPC handler to read grade file
+ipcMain.handle('read-grade-file', async (event, params) => {
+  const { folder, filename } = params;
+  
+  try {
+    const filePath = path.join(folder, filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: 'Arquivo não encontrado' };
+    }
+    
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return { success: true, content };
+  } catch (error) {
+    console.error('[GRADE] Read error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC handler to list files in folder
+ipcMain.handle('list-folder-files', async (event, params) => {
+  const { folder, extension } = params;
+  
+  try {
+    if (!fs.existsSync(folder)) {
+      return { success: true, files: [] };
+    }
+    
+    let files = fs.readdirSync(folder);
+    
+    if (extension) {
+      files = files.filter(f => f.endsWith(extension));
+    }
+    
+    const fileDetails = files.map(f => {
+      const filePath = path.join(folder, f);
+      const stats = fs.statSync(filePath);
+      return {
+        name: f,
+        size: stats.size,
+        modified: stats.mtime.toISOString(),
+      };
+    });
+    
+    return { success: true, files: fileDetails };
+  } catch (error) {
+    console.error('[FOLDER] List error:', error);
+    return { success: false, error: error.message, files: [] };
+  }
+});

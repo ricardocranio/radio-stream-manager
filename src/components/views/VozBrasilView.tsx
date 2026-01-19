@@ -58,34 +58,40 @@ export function VozBrasilView() {
   const [nextDownload, setNextDownload] = useState<string>('');
   const [nextCleanup, setNextCleanup] = useState<string>('');
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const schedulerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Save config to localStorage
   useEffect(() => {
     localStorage.setItem('vozBrasilConfig', JSON.stringify(config));
   }, [config]);
 
-  // Calculate next download/cleanup times
+  // Calculate next download/cleanup times and schedule automatic download
   useEffect(() => {
-    const updateTimes = () => {
+    const isWeekday = (d: Date) => d.getDay() >= 1 && d.getDay() <= 5;
+    
+    const getNextDownloadTime = () => {
       const now = new Date();
       const [scheduleHour, scheduleMinute] = config.scheduleTime.split(':').map(Number);
-      const [cleanupHour, cleanupMinute] = config.cleanupTime.split(':').map(Number);
       
-      // Next download
       const nextDl = new Date(now);
       nextDl.setHours(scheduleHour, scheduleMinute, 0, 0);
       
-      // Check if it's a weekday (Mon-Fri = 1-5)
-      const isWeekday = (d: Date) => d.getDay() >= 1 && d.getDay() <= 5;
-      
       if (nextDl <= now || !isWeekday(nextDl)) {
-        // Move to next day
         nextDl.setDate(nextDl.getDate() + 1);
         while (!isWeekday(nextDl)) {
           nextDl.setDate(nextDl.getDate() + 1);
         }
       }
       
+      return nextDl;
+    };
+    
+    const updateTimes = () => {
+      const now = new Date();
+      const [cleanupHour, cleanupMinute] = config.cleanupTime.split(':').map(Number);
+      
+      // Next download
+      const nextDl = getNextDownloadTime();
       const diffDl = nextDl.getTime() - now.getTime();
       const hoursDl = Math.floor(diffDl / (1000 * 60 * 60));
       const minutesDl = Math.floor((diffDl % (1000 * 60 * 60)) / (1000 * 60));
@@ -104,9 +110,56 @@ export function VozBrasilView() {
     };
 
     updateTimes();
-    const interval = setInterval(updateTimes, 60000);
-    return () => clearInterval(interval);
-  }, [config.scheduleTime, config.cleanupTime]);
+    const updateInterval = setInterval(updateTimes, 60000);
+
+    // Automatic scheduler for download (only in Electron and if enabled)
+    const scheduleNextDownload = () => {
+      if (!config.enabled || !window.electronAPI?.downloadVozBrasil) {
+        return;
+      }
+
+      const now = new Date();
+      const nextDl = getNextDownloadTime();
+      const msUntilDownload = nextDl.getTime() - now.getTime();
+
+      console.log(`[VOZ-SCHEDULER] Next scheduled download in ${Math.round(msUntilDownload / 60000)} minutes`);
+
+      // Clear existing scheduler
+      if (schedulerRef.current) {
+        clearTimeout(schedulerRef.current);
+      }
+
+      // Schedule the download (max timeout is ~24 days, so this is fine for daily scheduling)
+      if (msUntilDownload > 0 && msUntilDownload < 86400000) { // Only schedule if within 24h
+        schedulerRef.current = setTimeout(() => {
+          console.log('[VOZ-SCHEDULER] ⏰ Scheduled download triggered!');
+          
+          // Check again if it's a weekday and enabled
+          const currentDay = new Date().getDay();
+          if (config.enabled && currentDay >= 1 && currentDay <= 5) {
+            toast({
+              title: '📻 A Voz do Brasil',
+              description: 'Iniciando download automático programado...',
+            });
+            performDownload();
+          }
+          
+          // Schedule next download
+          setTimeout(scheduleNextDownload, 60000); // Wait 1 min before scheduling next
+        }, msUntilDownload);
+      }
+    };
+
+    // Start scheduler
+    scheduleNextDownload();
+
+    return () => {
+      clearInterval(updateInterval);
+      if (schedulerRef.current) {
+        clearTimeout(schedulerRef.current);
+      }
+    };
+  }, [config.scheduleTime, config.cleanupTime, config.enabled]);
 
   // Generate download URL with current date
   const getDownloadUrl = () => {
