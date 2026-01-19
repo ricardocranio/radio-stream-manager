@@ -1,0 +1,34 @@
+{
+  "configuracao": {
+    "intervalo_minutos": 5,
+    "mostrar_navegador": false,
+    "arquivo_historico": "radio_historico.json",
+    "arquivo_relatorio": "radio_relatorio.txt"
+  },
+  "radios": [
+    {
+      "nome": "BH FM 102.1",
+      "url": "https://mytuner-radio.com/pt/radio/radio-bh-fm-402270",
+      "tipo": "mytuner",
+      "ativo": true
+    },
+    {
+      "nome": "Clube FM Brasília 105.5",
+      "url": "https://mytuner-radio.com/pt/radio/radio-clube-fm-brasilia-1055-406812/",
+      "tipo": "mytuner",
+      "ativo": true
+    },
+    {
+      "nome": "Band FM 96.1",
+      "url": "https://mytuner-radio.com/pt/radio/band-fm-413397/",
+      "tipo": "mytuner",
+      "ativo": true
+    },
+    {
+      "nome": "Rádio Globo RJ 98.1",
+      "url": "https://mytuner-radio.com/pt/radio/radio-globo-rj-402262/",
+      "tipo": "mytuner",
+      "ativo": true
+    }
+  ]
+}
