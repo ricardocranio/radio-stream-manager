@@ -16,6 +16,7 @@ import { ExportView } from '@/components/views/ExportView';
 import { FixedContentView } from '@/components/views/FixedContentView';
 import { BlockEditorView } from '@/components/views/BlockEditorView';
 import { VozBrasilView } from '@/components/views/VozBrasilView';
+import { SpecialMonitoringView } from '@/components/views/SpecialMonitoringView';
 import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { CapturedSong } from '@/types/radio';
 import { useAutoDownload } from '@/hooks/useAutoDownload';
@@ -252,6 +253,8 @@ const Index = () => {
         return <DashboardView />;
       case 'stations':
         return <StationsView />;
+      case 'specialmonitoring':
+        return <SpecialMonitoringView />;
       case 'captured':
         return <CapturedSongsView />;
       case 'sequence':
