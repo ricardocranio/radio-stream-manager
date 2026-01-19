@@ -1,15 +1,33 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Music, Radio, Calendar, Filter, RefreshCw, Download, TrendingUp, Clock, Search, Loader2, Database } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Music, Radio, Calendar, Filter, RefreshCw, Download, TrendingUp, Clock, Search, Loader2, Database, BarChart3, PieChart as PieChartIcon, Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useRadioStore } from '@/store/radioStore';
 import { supabase } from '@/integrations/supabase/client';
-import { format, subDays, subHours } from 'date-fns';
+import { format, subDays, subHours, parseISO, getHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  AreaChart,
+  Area,
+  Legend,
+} from 'recharts';
 
 interface ScrapedSong {
   id: string;
@@ -20,6 +38,18 @@ interface ScrapedSong {
   is_now_playing: boolean;
   source: string | null;
 }
+
+// Colors for charts
+const CHART_COLORS = [
+  'hsl(190, 95%, 50%)',
+  'hsl(25, 95%, 55%)',
+  'hsl(150, 80%, 45%)',
+  'hsl(280, 70%, 55%)',
+  'hsl(40, 95%, 55%)',
+  'hsl(340, 80%, 55%)',
+  'hsl(200, 90%, 50%)',
+  'hsl(60, 85%, 50%)',
+];
 
 export function CapturedSongsView() {
   const { toast } = useToast();
@@ -33,10 +63,12 @@ export function CapturedSongsView() {
   const [stations, setStations] = useState<string[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
+  const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
+  const [activeTab, setActiveTab] = useState('list');
 
   // Load songs from Supabase
-  const loadSongs = async () => {
-    setIsLoading(true);
+  const loadSongs = useCallback(async () => {
     try {
       // Calculate date threshold
       let dateThreshold: Date;
@@ -66,13 +98,13 @@ export function CapturedSongsView() {
         .select('*')
         .gte('scraped_at', dateThreshold.toISOString())
         .order('scraped_at', { ascending: false })
-        .limit(500);
+        .limit(1000);
 
       if (selectedStation !== 'all') {
         query = query.eq('station_name', selectedStation);
       }
 
-      const { data, error, count } = await query;
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -97,20 +129,14 @@ export function CapturedSongsView() {
 
     } catch (error) {
       console.error('Error loading songs:', error);
-      toast({
-        title: 'Erro ao carregar',
-        description: 'Não foi possível carregar as músicas capturadas.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
     }
-  };
+  }, [selectedStation, dateRange]);
 
   // Initial load
   useEffect(() => {
-    loadSongs();
-  }, [selectedStation, dateRange]);
+    setIsLoading(true);
+    loadSongs().finally(() => setIsLoading(false));
+  }, [loadSongs]);
 
   // Refresh every 30 seconds
   useEffect(() => {
@@ -118,7 +144,71 @@ export function CapturedSongsView() {
       loadSongs();
     }, 30000);
     return () => clearInterval(interval);
-  }, [selectedStation, dateRange]);
+  }, [loadSongs]);
+
+  // Sync captured songs to ranking
+  const syncToRanking = useCallback(async (silent = false) => {
+    if (songs.length === 0) return;
+    
+    setIsSyncing(true);
+    try {
+      let synced = 0;
+      for (const song of songs) {
+        // Determine style based on station
+        let style = 'POP/VARIADO';
+        const stationLower = song.station_name.toLowerCase();
+        if (stationLower.includes('bh') || stationLower.includes('sertanejo') || stationLower.includes('clube')) {
+          style = 'SERTANEJO';
+        } else if (stationLower.includes('band') || stationLower.includes('pagode')) {
+          style = 'PAGODE';
+        } else if (stationLower.includes('globo')) {
+          style = 'POP/VARIADO';
+        } else if (stationLower.includes('dance') || stationLower.includes('mix')) {
+          style = 'DANCE';
+        }
+
+        addOrUpdateRankingSong(song.title, song.artist, style);
+        synced++;
+      }
+
+      setLastAutoSync(new Date());
+
+      if (!silent) {
+        toast({
+          title: '✓ Sincronizado com Ranking',
+          description: `${synced} músicas adicionadas/atualizadas no TOP50.`,
+        });
+      } else {
+        console.log(`[AUTO-SYNC] ${synced} músicas sincronizadas com o ranking`);
+      }
+    } catch (error) {
+      if (!silent) {
+        toast({
+          title: 'Erro na sincronização',
+          description: 'Não foi possível sincronizar com o ranking.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [songs, addOrUpdateRankingSong, toast]);
+
+  // Auto-sync every 5 minutes
+  useEffect(() => {
+    if (!autoSyncEnabled) return;
+
+    // Sync immediately when enabled
+    syncToRanking(true);
+
+    // Then sync every 5 minutes
+    const interval = setInterval(() => {
+      console.log('[AUTO-SYNC] Executando sincronização automática...');
+      loadSongs().then(() => syncToRanking(true));
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => clearInterval(interval);
+  }, [autoSyncEnabled, syncToRanking, loadSongs]);
 
   // Handle manual refresh
   const handleRefresh = async () => {
@@ -131,40 +221,15 @@ export function CapturedSongsView() {
     });
   };
 
-  // Sync captured songs to ranking
-  const handleSyncToRanking = async () => {
-    setIsSyncing(true);
-    try {
-      let synced = 0;
-      for (const song of songs) {
-        // Determine style based on station (simplified)
-        let style = 'POP/VARIADO';
-        const stationLower = song.station_name.toLowerCase();
-        if (stationLower.includes('bh') || stationLower.includes('sertanejo')) {
-          style = 'SERTANEJO';
-        } else if (stationLower.includes('band') || stationLower.includes('pagode')) {
-          style = 'PAGODE';
-        } else if (stationLower.includes('globo')) {
-          style = 'POP/VARIADO';
-        }
-
-        addOrUpdateRankingSong(song.title, song.artist, style);
-        synced++;
-      }
-
-      toast({
-        title: '✓ Sincronizado com Ranking',
-        description: `${synced} músicas adicionadas/atualizadas no TOP50.`,
-      });
-    } catch (error) {
-      toast({
-        title: 'Erro na sincronização',
-        description: 'Não foi possível sincronizar com o ranking.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSyncing(false);
-    }
+  // Toggle auto-sync
+  const handleToggleAutoSync = () => {
+    setAutoSyncEnabled(!autoSyncEnabled);
+    toast({
+      title: autoSyncEnabled ? 'Sincronização automática desativada' : 'Sincronização automática ativada',
+      description: autoSyncEnabled 
+        ? 'As músicas não serão mais sincronizadas automaticamente.' 
+        : 'Músicas serão sincronizadas com o ranking a cada 5 minutos.',
+    });
   };
 
   // Filter songs by search term
@@ -186,6 +251,74 @@ export function CapturedSongsView() {
       stats[song.station_name] = (stats[song.station_name] || 0) + 1;
     }
     return Object.entries(stats).sort((a, b) => b[1] - a[1]);
+  }, [songs]);
+
+  // Chart data: Songs per station (Pie Chart)
+  const stationChartData = useMemo(() => {
+    return stationStats.map(([name, value], index) => ({
+      name: name.length > 15 ? name.substring(0, 15) + '...' : name,
+      fullName: name,
+      value,
+      fill: CHART_COLORS[index % CHART_COLORS.length],
+    }));
+  }, [stationStats]);
+
+  // Chart data: Songs per hour (Bar Chart)
+  const hourlyChartData = useMemo(() => {
+    const hourCounts: Record<number, number> = {};
+    for (let i = 0; i < 24; i++) {
+      hourCounts[i] = 0;
+    }
+    
+    for (const song of songs) {
+      const hour = getHours(parseISO(song.scraped_at));
+      hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+    }
+    
+    return Object.entries(hourCounts).map(([hour, count]) => ({
+      hour: `${hour}h`,
+      count,
+    }));
+  }, [songs]);
+
+  // Chart data: Songs over time (Area Chart)
+  const timelineChartData = useMemo(() => {
+    const dateCounts: Record<string, Record<string, number>> = {};
+    
+    for (const song of songs) {
+      const date = format(parseISO(song.scraped_at), 'dd/MM');
+      const station = song.station_name;
+      
+      if (!dateCounts[date]) {
+        dateCounts[date] = {};
+      }
+      dateCounts[date][station] = (dateCounts[date][station] || 0) + 1;
+    }
+    
+    const uniqueStations = [...new Set(songs.map(s => s.station_name))];
+    
+    return Object.entries(dateCounts)
+      .map(([date, stations]) => ({
+        date,
+        ...uniqueStations.reduce((acc, station) => ({
+          ...acc,
+          [station]: stations[station] || 0,
+        }), {}),
+        total: Object.values(stations).reduce((a, b) => a + b, 0),
+      }))
+      .reverse();
+  }, [songs]);
+
+  // Top artists
+  const topArtists = useMemo(() => {
+    const artistCounts: Record<string, number> = {};
+    for (const song of songs) {
+      artistCounts[song.artist] = (artistCounts[song.artist] || 0) + 1;
+    }
+    return Object.entries(artistCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, count]) => ({ name, count }));
   }, [songs]);
 
   // Export songs as JSON
@@ -217,6 +350,9 @@ export function CapturedSongsView() {
     });
   };
 
+  // Unique stations for timeline chart
+  const uniqueStations = useMemo(() => [...new Set(songs.map(s => s.station_name))], [songs]);
+
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       {/* Header */}
@@ -225,11 +361,29 @@ export function CapturedSongsView() {
           <h2 className="text-2xl font-bold text-foreground">Músicas Capturadas</h2>
           <p className="text-muted-foreground">Histórico de músicas detectadas pelo monitoramento</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* Auto-sync toggle */}
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/50 border border-border">
+            <Zap className={`w-4 h-4 ${autoSyncEnabled ? 'text-green-500' : 'text-muted-foreground'}`} />
+            <Label htmlFor="auto-sync" className="text-sm cursor-pointer">
+              Auto-sync
+            </Label>
+            <Switch
+              id="auto-sync"
+              checked={autoSyncEnabled}
+              onCheckedChange={handleToggleAutoSync}
+            />
+            {lastAutoSync && (
+              <span className="text-xs text-muted-foreground">
+                {format(lastAutoSync, 'HH:mm')}
+              </span>
+            )}
+          </div>
+          
           <Button
             variant="outline"
             size="sm"
-            onClick={handleSyncToRanking}
+            onClick={() => syncToRanking(false)}
             disabled={isSyncing || songs.length === 0}
             className="gap-2"
           >
@@ -238,7 +392,7 @@ export function CapturedSongsView() {
             ) : (
               <TrendingUp className="w-4 h-4" />
             )}
-            Sincronizar com Ranking
+            Sincronizar Ranking
           </Button>
           <Button variant="outline" size="sm" onClick={handleExport} className="gap-2">
             <Download className="w-4 h-4" />
@@ -260,6 +414,21 @@ export function CapturedSongsView() {
           </Button>
         </div>
       </div>
+
+      {/* Auto-sync status banner */}
+      {autoSyncEnabled && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          <span className="text-sm text-foreground">
+            Sincronização automática ativa - Músicas são enviadas ao ranking TOP50 a cada 5 minutos
+          </span>
+          {lastAutoSync && (
+            <Badge variant="secondary" className="ml-auto">
+              Último: {format(lastAutoSync, 'HH:mm:ss')}
+            </Badge>
+          )}
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -400,66 +569,246 @@ export function CapturedSongsView() {
         </CardContent>
       </Card>
 
-      {/* Songs List */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Music className="w-5 h-5" />
-            Histórico de Músicas ({filteredSongs.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-          ) : filteredSongs.length === 0 ? (
-            <div className="text-center py-12">
-              <Music className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium mb-2">Nenhuma música encontrada</h3>
-              <p className="text-muted-foreground">
-                {songs.length === 0
-                  ? 'Execute o script Python para começar a capturar músicas.'
-                  : 'Tente ajustar os filtros de busca.'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-[500px] overflow-y-auto">
-              {filteredSongs.map((song, index) => (
-                <div
-                  key={song.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <span className="text-sm font-mono text-muted-foreground w-8">
-                      {index + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{song.title}</p>
-                      <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="hidden sm:flex">
-                      <Radio className="w-3 h-3 mr-1" />
-                      {song.station_name}
-                    </Badge>
-                    {song.is_now_playing && (
-                      <Badge className="bg-green-500/20 text-green-500 border-green-500/30">
-                        AO VIVO
-                      </Badge>
-                    )}
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      <Clock className="w-3 h-3 inline mr-1" />
-                      {format(new Date(song.scraped_at), 'dd/MM HH:mm', { locale: ptBR })}
-                    </span>
-                  </div>
+      {/* Tabs: List / Charts */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsTrigger value="list" className="gap-2">
+            <Music className="w-4 h-4" />
+            Lista
+          </TabsTrigger>
+          <TabsTrigger value="charts" className="gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Gráficos
+          </TabsTrigger>
+          <TabsTrigger value="artists" className="gap-2">
+            <TrendingUp className="w-4 h-4" />
+            Top Artistas
+          </TabsTrigger>
+        </TabsList>
+
+        {/* List Tab */}
+        <TabsContent value="list" className="mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Music className="w-5 h-5" />
+                Histórico de Músicas ({filteredSongs.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              ) : filteredSongs.length === 0 ? (
+                <div className="text-center py-12">
+                  <Music className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-medium mb-2">Nenhuma música encontrada</h3>
+                  <p className="text-muted-foreground">
+                    {songs.length === 0
+                      ? 'Execute o script Python para começar a capturar músicas.'
+                      : 'Tente ajustar os filtros de busca.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                  {filteredSongs.map((song, index) => (
+                    <div
+                      key={song.id}
+                      className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <span className="text-sm font-mono text-muted-foreground w-8">
+                          {index + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{song.title}</p>
+                          <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Badge variant="outline" className="hidden sm:flex">
+                          <Radio className="w-3 h-3 mr-1" />
+                          {song.station_name}
+                        </Badge>
+                        {song.is_now_playing && (
+                          <Badge className="bg-green-500/20 text-green-500 border-green-500/30">
+                            AO VIVO
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          <Clock className="w-3 h-3 inline mr-1" />
+                          {format(new Date(song.scraped_at), 'dd/MM HH:mm', { locale: ptBR })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Charts Tab */}
+        <TabsContent value="charts" className="mt-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Songs per Station (Pie Chart) */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <PieChartIcon className="w-5 h-5" />
+                  Músicas por Emissora
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {stationChartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={stationChartData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={100}
+                        dataKey="value"
+                      >
+                        {stationChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value: number, name: string, props: any) => [value, props.payload.fullName]}
+                        contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    Sem dados para exibir
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Songs per Hour (Bar Chart) */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5" />
+                  Músicas por Hora
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {hourlyChartData.some(d => d.count > 0) ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={hourlyChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis 
+                        dataKey="hour" 
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                        interval={2}
+                      />
+                      <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                        formatter={(value: number) => [value, 'Músicas']}
+                      />
+                      <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    Sem dados para exibir
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Timeline Chart (Area) */}
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5" />
+                  Evolução por Dia e Emissora
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {timelineChartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart data={timelineChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis 
+                        dataKey="date" 
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                      />
+                      <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                      />
+                      <Legend />
+                      {uniqueStations.slice(0, 5).map((station, index) => (
+                        <Area
+                          key={station}
+                          type="monotone"
+                          dataKey={station}
+                          stackId="1"
+                          stroke={CHART_COLORS[index % CHART_COLORS.length]}
+                          fill={CHART_COLORS[index % CHART_COLORS.length]}
+                          fillOpacity={0.6}
+                        />
+                      ))}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    Sem dados para exibir
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Top Artists Tab */}
+        <TabsContent value="artists" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
+                Top 10 Artistas Mais Tocados
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {topArtists.length > 0 ? (
+                <div className="space-y-3">
+                  {topArtists.map((artist, index) => (
+                    <div key={artist.name} className="flex items-center gap-4">
+                      <span className="text-lg font-bold text-muted-foreground w-8">
+                        #{index + 1}
+                      </span>
+                      <div className="flex-1">
+                        <p className="font-medium">{artist.name}</p>
+                        <div className="h-2 bg-secondary rounded-full mt-1 overflow-hidden">
+                          <div 
+                            className="h-full bg-primary rounded-full transition-all"
+                            style={{ width: `${(artist.count / topArtists[0].count) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                      <Badge variant="secondary">{artist.count} músicas</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  Sem dados para exibir
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
