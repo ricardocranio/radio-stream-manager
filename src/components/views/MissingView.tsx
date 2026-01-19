@@ -53,7 +53,7 @@ export function MissingView() {
   } = useRadioStore();
   
   // Auto-download status from global store
-  const { queueLength, isProcessing } = useAutoDownloadStore();
+  const { queueLength, isProcessing, resetQueue } = useAutoDownloadStore();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
@@ -600,26 +600,51 @@ export function MissingView() {
             <AlertDialogTrigger asChild>
               <Button variant="secondary">
                 <RotateCw className="w-4 h-4 mr-2" />
-                Reset
+                Reset Completo
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Resetar lista de músicas faltando?</AlertDialogTitle>
+                <AlertDialogTitle>Resetar toda a base de músicas faltando?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Esta ação irá limpar a lista atual. Uma nova verificação será necessária para repopular com as músicas que realmente faltam no banco musical.
+                  Esta ação irá limpar completamente:
+                  <ul className="list-disc ml-4 mt-2 space-y-1">
+                    <li>Lista de músicas faltando (Total Faltando)</li>
+                    <li>Histórico de downloads</li>
+                    <li>Fila de downloads automáticos</li>
+                    <li>Status de processamento</li>
+                  </ul>
+                  <span className="block mt-2 text-warning">Esta ação não pode ser desfeita.</span>
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={() => {
-                  clearMissingSongs();
-                  toast({
-                    title: '🔄 Lista resetada',
-                    description: 'A lista de músicas faltando foi limpa. Uma nova verificação será realizada automaticamente.',
-                  });
-                }}>
-                  Resetar
+                <AlertDialogAction 
+                  className="bg-destructive hover:bg-destructive/90"
+                  onClick={() => {
+                    // Clear missing songs list
+                    clearMissingSongs();
+                    // Clear download history
+                    clearDownloadHistory();
+                    // Reset download queue
+                    resetQueue();
+                    // Reset batch progress
+                    setBatchDownloadProgress({
+                      isRunning: false,
+                      total: 0,
+                      completed: 0,
+                      failed: 0,
+                      current: '',
+                    });
+                    // Clear local download status
+                    setDownloadStatus({});
+                    
+                    toast({
+                      title: '🔄 Base completamente resetada',
+                      description: 'Todas as listas, histórico e filas foram limpos. Uma nova verificação será necessária.',
+                    });
+                  }}>
+                  Resetar Tudo
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
