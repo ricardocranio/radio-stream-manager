@@ -171,31 +171,53 @@ function parseRadioContent(data: any, stationName: string, url: string): { nowPl
 
   console.log(`[${stationName}] Parsing content, HTML length: ${html.length}, Markdown length: ${markdown.length}`);
   
-  // Log first part of markdown for debugging
-  if (markdown.length > 0) {
-    const tocandoIdx = markdown.toLowerCase().indexOf('tocando agora');
-    const ultimasIdx = markdown.toLowerCase().indexOf('últimas tocadas');
-    console.log(`[${stationName}] Markdown indexes - tocando: ${tocandoIdx}, ultimas: ${ultimasIdx}`);
+  // MyTuner Radio specific pattern: "Tocando agora:" followed by song info
+  // Format: [![Artist - Title](image_url)]\n\nTitle
+  
+  // Pattern 1: Look for "Tocando agora:" section with image and song info
+  const tocandoSection = markdown.match(/Tocando agora:?\s*\n+([\s\S]*?)(?=As últimas tocadas|Últimas tocadas|Recently|Playlist|\n\n\n)/i);
+  
+  if (tocandoSection) {
+    const section = tocandoSection[1];
+    console.log(`[${stationName}] Found tocando section:`, section.substring(0, 300));
     
-    if (tocandoIdx > -1) {
-      const snippet = markdown.substring(tocandoIdx, Math.min(tocandoIdx + 500, markdown.length));
-      console.log(`[${stationName}] Markdown snippet around "tocando agora":`, snippet.substring(0, 200));
+    // Pattern: [![Artist - Title](image)] followed by \n\nTitle or just extract from the alt text
+    const altTextMatch = section.match(/\[!\[([^\]]+)\]/);
+    if (altTextMatch) {
+      const altText = altTextMatch[1];
+      console.log(`[${stationName}] Alt text found: ${altText}`);
+      
+      // Alt text format: "Artist - Title" or "Title - Artist"
+      const dashMatch = altText.match(/^([^-–]+?)\s*[-–]\s*(.+)$/);
+      if (dashMatch) {
+        let part1 = cleanText(dashMatch[1]);
+        let part2 = cleanText(dashMatch[2]);
+        
+        if (isValidSongPart(part1) && isValidSongPart(part2)) {
+          // Usually format is "Artist - Title"
+          nowPlaying = { title: part2, artist: part1, timestamp: new Date().toISOString() };
+          console.log(`[${stationName}] Now playing from alt text: ${part1} - ${part2}`);
+        }
+      }
     }
-  }
-
-  // PRIORITY 1: Parse markdown - usually more reliable with Firecrawl
-  // Look for "Tocando agora" section
-  const tocandoMatch = markdown.match(/(?:Tocando agora|Now Playing)[:\s]*\n+(?:\!\[.*?\]\([^)]+\)\s*)?([^\n]+)\n+([^\n]+)/im);
-  if (tocandoMatch) {
-    const title = cleanText(tocandoMatch[1]);
-    const artist = cleanText(tocandoMatch[2]);
-    if (isValidSongPart(title) && isValidSongPart(artist)) {
-      nowPlaying = { title, artist, timestamp: new Date().toISOString() };
-      console.log(`[${stationName}] Found now playing from markdown: ${artist} - ${title}`);
+    
+    // Fallback: look for bold text or standalone lines after the image
+    if (!nowPlaying) {
+      const afterImage = section.replace(/\[!\[.*?\]\([^)]+\)\s*\\?\s*\\?\s*/g, '').trim();
+      const lines = afterImage.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 2 && !l.startsWith('[') && !l.startsWith('!'));
+      
+      if (lines.length >= 2) {
+        const title = cleanText(lines[0]);
+        const artist = cleanText(lines[1]);
+        if (isValidSongPart(title) && isValidSongPart(artist)) {
+          nowPlaying = { title, artist, timestamp: new Date().toISOString() };
+          console.log(`[${stationName}] Now playing from lines: ${artist} - ${title}`);
+        }
+      }
     }
   }
   
-  // Alternative pattern: **Title** \n Artist
+  // Pattern 2: Direct "Tocando agora" with **bold** format
   if (!nowPlaying) {
     const boldPattern = markdown.match(/Tocando agora[:\s]*\n+(?:.*\n)*?\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/im);
     if (boldPattern) {
@@ -208,40 +230,31 @@ function parseRadioContent(data: any, stationName: string, url: string): { nowPl
     }
   }
   
-  // Alternative: look for [ Title Artist ] pattern
-  if (!nowPlaying) {
-    const bracketPattern = markdown.match(/Tocando agora[:\s\n]+\[([^\]]+)\]\s*\n?\s*([^\n\[]+)/im);
-    if (bracketPattern) {
-      const title = cleanText(bracketPattern[1]);
-      const artist = cleanText(bracketPattern[2]);
-      if (isValidSongPart(title) && isValidSongPart(artist)) {
-        nowPlaying = { title, artist, timestamp: new Date().toISOString() };
-        console.log(`[${stationName}] Found now playing (bracket): ${artist} - ${title}`);
-      }
-    }
-  }
-  
   // Look for "As últimas tocadas" / song history section
-  const historyMatch = markdown.match(/(?:As últimas tocadas|Recently Played)[:\s]*\n+([\s\S]*?)(?=\n\n\n|\n##|$)/im);
+  const historyMatch = markdown.match(/(?:As últimas tocadas|Últimas tocadas|Recently Played)[:\s]*\n+([\s\S]*?)(?=\n\n\n|\n##|Programas|$)/im);
   if (historyMatch) {
     const historySection = historyMatch[1];
     console.log(`[${stationName}] Found history section, length: ${historySection.length}`);
     
-    // Pattern 1: **Title** \n Artist
-    const songMatches = historySection.matchAll(/\*\*([^*\n]+)\*\*\s*\n+([^\n*\[]+)/g);
-    for (const match of songMatches) {
-      const title = cleanText(match[1]);
-      const artist = cleanText(match[2]);
-      if (isValidSongPart(title) && isValidSongPart(artist) && 
-          !songs.some(s => s.title === title && s.artist === artist)) {
-        songs.push({ title, artist, timestamp: new Date().toISOString() });
+    // Pattern for MyTuner: [![Artist - Title](image)] blocks
+    const altMatches = historySection.matchAll(/\[!\[([^\]]+)\]/g);
+    for (const match of altMatches) {
+      const altText = match[1];
+      const dashMatch = altText.match(/^([^-–]+?)\s*[-–]\s*(.+)$/);
+      if (dashMatch) {
+        const artist = cleanText(dashMatch[1]);
+        const title = cleanText(dashMatch[2]);
+        if (isValidSongPart(artist) && isValidSongPart(title) && 
+            !songs.some(s => s.title === title && s.artist === artist)) {
+          songs.push({ title, artist, timestamp: new Date().toISOString() });
+        }
       }
     }
     
-    // Pattern 2: [Title] Artist or Title - Artist
+    // Fallback: **Title** \n Artist pattern
     if (songs.length < 3) {
-      const lineMatches = historySection.matchAll(/\[([^\]]+)\]\s*\n?\s*([^\n\[]+)/g);
-      for (const match of lineMatches) {
+      const songMatches = historySection.matchAll(/\*\*([^*\n]+)\*\*\s*\n+([^\n*\[]+)/g);
+      for (const match of songMatches) {
         const title = cleanText(match[1]);
         const artist = cleanText(match[2]);
         if (isValidSongPart(title) && isValidSongPart(artist) && 
@@ -252,10 +265,10 @@ function parseRadioContent(data: any, stationName: string, url: string): { nowPl
     }
   }
 
-  // PRIORITY 2: HTML parsing as fallback
+  // HTML fallback for now playing
   if (!nowPlaying && html) {
-    // Try to extract now playing from .latest-song
-    const latestSongMatch = html.match(/<div[^>]*class="[^"]*latest-song[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+    // Look for latest-song or now-playing class
+    const latestSongMatch = html.match(/<div[^>]*class="[^"]*(?:latest-song|now-playing|current-song)[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
     if (latestSongMatch) {
       const extracted = extractSongFromHtml(latestSongMatch[1]);
       if (extracted) {
@@ -269,67 +282,12 @@ function parseRadioContent(data: any, stationName: string, url: string): { nowPl
     }
   }
   
-  if (songs.length < 3 && html) {
-    // Extract song history from #song-history
-    const historySection = html.match(/id="song-history"[^>]*>([\s\S]*?)<\/div>\s*(?:<\/div>|<div[^>]*class="(?!song))/i);
-    if (historySection) {
-      const historyHtml = historySection[1];
-      const songEntries = historyHtml.match(/<div[^>]*class="[^"]*song[^"]*"[^>]*>[\s\S]*?<\/div>/gi) || [];
-      
-      for (const entry of songEntries.slice(0, 10)) {
-        const extracted = extractSongFromHtml(entry);
-        if (extracted && !songs.some(s => s.title === extracted.title && s.artist === extracted.artist)) {
-          songs.push({
-            title: extracted.title,
-            artist: extracted.artist,
-            timestamp: new Date().toISOString(),
-          });
-        }
-      }
-    }
-  }
-
-  // Fallback markdown parsing
-  if (!nowPlaying && songs.length === 0) {
-    console.log(`[${stationName}] Using markdown fallback...`);
-    
-    const afterNowPlaying = markdown.match(/Tocando agora:?\s*\n+([\s\S]*?)(?:\n\s*\n|As últimas|Playlist)/i);
-    if (afterNowPlaying) {
-      const section = afterNowPlaying[1];
-      const songMatch = section.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/);
-      if (songMatch) {
-        const title = cleanText(songMatch[1]);
-        const artist = cleanText(songMatch[2]);
-        if (isValidSongPart(title) && isValidSongPart(artist)) {
-          nowPlaying = { title, artist, timestamp: new Date().toISOString() };
-        }
-      }
-    }
-    
-    const afterHistory = markdown.match(/As últimas tocadas:?\s*\n+([\s\S]*?)(?:\n\s*\n\s*\n|$)/i);
-    if (afterHistory) {
-      const section = afterHistory[1];
-      const songPatterns = section.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/g) || [];
-      
-      for (const pattern of songPatterns.slice(0, 10)) {
-        const match = pattern.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/);
-        if (match) {
-          const title = cleanText(match[1]);
-          const artist = cleanText(match[2]);
-          if (isValidSongPart(title) && isValidSongPart(artist) && 
-              !songs.some(s => s.title === title && s.artist === artist)) {
-            songs.push({ title, artist, timestamp: new Date().toISOString() });
-          }
-        }
-      }
-    }
-  }
-
+  // If no songs in history but we have now playing, that's fine
   if (!nowPlaying && songs.length > 0) {
     nowPlaying = songs.shift();
   }
 
-  console.log(`[${stationName}] Parsed: nowPlaying=${nowPlaying ? 'yes' : 'no'}, songs=${songs.length}`);
+  console.log(`[${stationName}] Parsed: nowPlaying=${nowPlaying ? `${nowPlaying.artist} - ${nowPlaying.title}` : 'no'}, songs=${songs.length}`);
   
   return { nowPlaying, recentSongs: songs.slice(0, 5) };
 }
