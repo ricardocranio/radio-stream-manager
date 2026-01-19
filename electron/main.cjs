@@ -1024,3 +1024,161 @@ ipcMain.handle('check-song-exists', async (event, params) => {
     return { exists: false };
   }
 });
+
+// =============== VOZ DO BRASIL DOWNLOAD ===============
+
+// Download file from URL to specified folder
+function downloadFile(url, outputFolder, filename, onProgress) {
+  return new Promise((resolve, reject) => {
+    // Ensure output folder exists
+    if (!fs.existsSync(outputFolder)) {
+      try {
+        fs.mkdirSync(outputFolder, { recursive: true });
+        console.log(`[VOZ] Created folder: ${outputFolder}`);
+      } catch (err) {
+        reject(new Error(`Não foi possível criar a pasta: ${err.message}`));
+        return;
+      }
+    }
+
+    const filePath = path.join(outputFolder, filename);
+    const protocol = url.startsWith('https') ? https : http;
+    
+    console.log(`[VOZ] Starting download from: ${url}`);
+    console.log(`[VOZ] Saving to: ${filePath}`);
+    
+    const options = {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': '*/*',
+      },
+      timeout: 60000,
+    };
+
+    const request = protocol.get(url, options, (response) => {
+      // Handle redirects
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        console.log(`[VOZ] Redirect to: ${response.headers.location}`);
+        downloadFile(response.headers.location, outputFolder, filename, onProgress)
+          .then(resolve)
+          .catch(reject);
+        return;
+      }
+
+      if (response.statusCode !== 200) {
+        reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+        return;
+      }
+
+      const totalSize = parseInt(response.headers['content-length'] || '0', 10);
+      let downloadedSize = 0;
+      
+      console.log(`[VOZ] Total size: ${totalSize} bytes`);
+
+      const fileStream = fs.createWriteStream(filePath);
+      
+      response.on('data', (chunk) => {
+        downloadedSize += chunk.length;
+        if (totalSize > 0 && onProgress) {
+          const progress = Math.round((downloadedSize / totalSize) * 100);
+          onProgress(progress, downloadedSize, totalSize);
+        }
+      });
+
+      response.pipe(fileStream);
+
+      fileStream.on('finish', () => {
+        fileStream.close();
+        console.log(`[VOZ] Download complete: ${filePath} (${downloadedSize} bytes)`);
+        resolve({
+          success: true,
+          filePath,
+          fileSize: downloadedSize,
+        });
+      });
+
+      fileStream.on('error', (err) => {
+        fs.unlink(filePath, () => {}); // Delete partial file
+        reject(err);
+      });
+    });
+
+    request.on('error', (err) => {
+      reject(err);
+    });
+
+    request.on('timeout', () => {
+      request.destroy();
+      reject(new Error('Timeout: download demorou demais'));
+    });
+  });
+}
+
+// IPC handler for Voz do Brasil download
+ipcMain.handle('download-voz-brasil', async (event, params) => {
+  const { url, outputFolder, filename } = params;
+  
+  console.log(`[VOZ] Download request: ${filename}`);
+  console.log(`[VOZ] URL: ${url}`);
+  console.log(`[VOZ] Folder: ${outputFolder}`);
+  
+  try {
+    const result = await downloadFile(url, outputFolder, filename, (progress, downloaded, total) => {
+      // Send progress to renderer
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('voz-download-progress', { progress, downloaded, total });
+      }
+    });
+    
+    // Show notification
+    showNotification(
+      '📻 A Voz do Brasil',
+      `Download concluído: ${filename}`,
+      () => {
+        shell.openPath(outputFolder);
+      }
+    );
+    
+    return result;
+  } catch (error) {
+    console.error('[VOZ] Download error:', error);
+    return {
+      success: false,
+      error: error.message || 'Erro ao baixar arquivo',
+    };
+  }
+});
+
+// IPC handler to delete old Voz do Brasil files
+ipcMain.handle('cleanup-voz-brasil', async (event, params) => {
+  const { folder, maxAgeDays } = params;
+  
+  console.log(`[VOZ] Cleanup request: folder=${folder}, maxAgeDays=${maxAgeDays}`);
+  
+  try {
+    if (!fs.existsSync(folder)) {
+      return { success: true, deletedCount: 0 };
+    }
+    
+    const files = fs.readdirSync(folder);
+    const now = Date.now();
+    const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000;
+    let deletedCount = 0;
+    
+    for (const file of files) {
+      const filePath = path.join(folder, file);
+      const stats = fs.statSync(filePath);
+      
+      if (now - stats.mtimeMs > maxAgeMs) {
+        fs.unlinkSync(filePath);
+        console.log(`[VOZ] Deleted old file: ${file}`);
+        deletedCount++;
+      }
+    }
+    
+    return { success: true, deletedCount };
+  } catch (error) {
+    console.error('[VOZ] Cleanup error:', error);
+    return { success: false, error: error.message };
+  }
+});
