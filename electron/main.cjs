@@ -944,3 +944,83 @@ ipcMain.handle('scrape-station', async (event, station) => {
     return { success: false, error: error.message, songs: [] };
   }
 });
+
+// =============== MUSIC LIBRARY CHECK ===============
+
+// Normalize text for file matching (remove accents, special chars, etc.)
+function normalizeText(text) {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove accents
+    .replace(/[^a-z0-9\s]/g, '') // Remove special chars
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Check if a song exists in the music library folders
+async function checkSongInLibrary(artist, title, musicFolders) {
+  const normalizedArtist = normalizeText(artist);
+  const normalizedTitle = normalizeText(title);
+  
+  for (const folder of musicFolders) {
+    try {
+      if (!fs.existsSync(folder)) continue;
+      
+      // Recursive function to scan directories
+      const scanDir = (dir) => {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          
+          if (entry.isDirectory()) {
+            const result = scanDir(fullPath);
+            if (result) return result;
+          } else if (entry.isFile()) {
+            const ext = path.extname(entry.name).toLowerCase();
+            if (['.mp3', '.flac', '.wav', '.m4a', '.aac', '.ogg', '.wma'].includes(ext)) {
+              const fileName = normalizeText(path.basename(entry.name, ext));
+              
+              // Check if filename contains both artist and title
+              if (fileName.includes(normalizedArtist) && fileName.includes(normalizedTitle)) {
+                return { exists: true, path: fullPath };
+              }
+              
+              // Alternative: check for "artist - title" pattern
+              const pattern1 = `${normalizedArtist} ${normalizedTitle}`;
+              const pattern2 = `${normalizedTitle} ${normalizedArtist}`;
+              if (fileName.includes(pattern1) || fileName.includes(pattern2)) {
+                return { exists: true, path: fullPath };
+              }
+            }
+          }
+        }
+        return null;
+      };
+      
+      const result = scanDir(folder);
+      if (result) return result;
+      
+    } catch (error) {
+      console.error(`Error scanning folder ${folder}:`, error.message);
+    }
+  }
+  
+  return { exists: false };
+}
+
+// IPC handler to check if a song exists in the music library
+ipcMain.handle('check-song-exists', async (event, params) => {
+  const { artist, title, musicFolders } = params;
+  
+  try {
+    console.log(`[LIBRARY] Checking: ${artist} - ${title}`);
+    const result = await checkSongInLibrary(artist, title, musicFolders);
+    console.log(`[LIBRARY] Result: ${result.exists ? 'FOUND at ' + result.path : 'NOT FOUND'}`);
+    return result;
+  } catch (error) {
+    console.error('Error checking song:', error);
+    return { exists: false };
+  }
+});

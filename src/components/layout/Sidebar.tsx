@@ -1,6 +1,7 @@
 import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic, Music, Database, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
+import { useRadioStore } from '@/store/radioStore';
 import logo from '@/assets/logo.png';
 
 interface NavItem {
@@ -37,15 +38,23 @@ interface SidebarProps {
 
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { queueLength, isProcessing } = useAutoDownloadStore();
+  const missingSongs = useRadioStore((state) => state.missingSongs);
+  
+  // Count missing songs (status = 'missing')
+  const missingSongsCount = missingSongs.filter(s => s.status === 'missing').length;
   
   // Build nav items with dynamic badges
   const navItems: NavItem[] = staticNavItems.map(item => {
-    if (item.id === 'missing' && queueLength > 0) {
-      return {
-        ...item,
-        badge: queueLength,
-        badgeType: 'dynamic' as const,
-      };
+    if (item.id === 'missing') {
+      // Show either queue length (if downloading) or missing songs count
+      const badgeCount = queueLength > 0 ? queueLength : missingSongsCount;
+      if (badgeCount > 0) {
+        return {
+          ...item,
+          badge: badgeCount,
+          badgeType: 'dynamic' as const,
+        };
+      }
     }
     return item;
   });
