@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Bell, BellOff, Database, Clock, Zap, RefreshCw, Loader2 } from 'lucide-react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Bell, BellOff, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
@@ -16,7 +16,7 @@ import { GradePreviewCard } from '@/components/dashboard/GradePreviewCard';
 import { MonitoringScheduleCard } from '@/components/dashboard/MonitoringScheduleCard';
 
 export function DashboardView() {
-  const { stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs } = useRadioStore();
+  const { stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs } = useRadioStore();
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
   const { stats: realtimeStats, refresh: refreshStats } = useRealtimeStats();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -73,7 +73,7 @@ export function DashboardView() {
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       {/* Realtime Stats from Supabase */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
         <Card className="glass-card border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -167,6 +167,24 @@ export function DashboardView() {
               </div>
               <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
                 <Radio className="w-5 h-5 text-cyan-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card border-red-500/20 bg-gradient-to-br from-red-500/10 to-red-500/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Faltando</p>
+                <p className="text-2xl font-bold text-foreground">{missingSongs.length}</p>
+                <p className="text-xs text-red-500">
+                  <AlertTriangle className="w-3 h-3 inline mr-1" />
+                  No Banco Musical
+                </p>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-red-500" />
               </div>
             </div>
           </CardContent>
