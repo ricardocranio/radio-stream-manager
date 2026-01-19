@@ -20,6 +20,13 @@ import { CapturedSong } from '@/types/radio';
 import { useAutoDownload } from '@/hooks/useAutoDownload';
 import logo from '@/assets/logo.png';
 
+// Style mapping for stations (for ranking integration)
+const stationStyles: Record<string, string> = {
+  'BH FM': 'SERTANEJO',
+  'Band FM': 'PAGODE',
+  'Clube FM': 'SERTANEJO',
+};
+
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -87,6 +94,7 @@ const Index = () => {
     stations,
     clearCapturedSongs,
     addMissingSong,
+    addOrUpdateRankingSong,
     deezerConfig,
   } = useRadioStore();
   
@@ -136,7 +144,7 @@ const Index = () => {
     }
   }, [stations, addCapturedSong, setLastUpdate]);
 
-  // Simulated capture for web preview
+  // Simulated capture for web preview - INTEGRADO COM RANKING
   const performSimulatedCapture = useCallback(() => {
     const stationNames = ['BH FM', 'Band FM', 'Clube FM'];
     const randomStation = stationNames[Math.floor(Math.random() * stationNames.length)];
@@ -163,6 +171,11 @@ const Index = () => {
     
     addCapturedSong(capturedSong);
     
+    // UPDATE RANKING - Integração com TOP50
+    const stationStyle = stationStyles[randomStation] || 'POP/VARIADO';
+    addOrUpdateRankingSong(song.title, song.artist, stationStyle);
+    console.log(`[RANKING] Música adicionada ao ranking: ${song.artist} - ${song.title} (${stationStyle})`);
+    
     // If song is missing, add to missing songs list for auto-download
     if (isMissing) {
       const missingSong: MissingSong = {
@@ -178,7 +191,7 @@ const Index = () => {
     }
     
     setLastUpdate(new Date());
-  }, [addCapturedSong, addMissingSong, setLastUpdate]);
+  }, [addCapturedSong, addMissingSong, addOrUpdateRankingSong, setLastUpdate]);
 
   // Start capture system
   useEffect(() => {
