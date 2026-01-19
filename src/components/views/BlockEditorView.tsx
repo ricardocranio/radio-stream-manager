@@ -378,10 +378,12 @@ export function BlockEditorView() {
   };
 
   const handleReset = () => {
-    const defaultSongs = songPool.slice(0, 10).map((s, i) => ({ ...s, id: `${timeKey}-${i}-${Date.now()}` }));
+    console.log('[BLOCK-EDITOR] Resetando bloco:', timeKey);
+    const defaultSongs = songPool.slice(0, 10).map((s, i) => ({ ...s, id: `${timeKey}-reset-${i}-${Date.now()}` }));
+    console.log('[BLOCK-EDITOR] Novas músicas:', defaultSongs.length);
     setBlockSongs(timeKey, defaultSongs);
     addToHistory(timeKey, defaultSongs, 'Resetar bloco');
-    toast({ title: 'Bloco resetado' });
+    toast({ title: 'Bloco resetado', description: `${defaultSongs.length} músicas restauradas.` });
   };
 
   const handleSave = () => {
