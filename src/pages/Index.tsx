@@ -98,10 +98,27 @@ const Index = () => {
     addMissingSong,
     addOrUpdateRankingSong,
     deezerConfig,
+    config,
+    missingSongs,
   } = useRadioStore();
   
   // Initialize auto-download hook (manages queue in global store)
   useAutoDownload();
+  
+  // Check if song exists in music library - simulation for now
+  // Real implementation requires Electron API to scan music folders
+  const checkSongInLibrary = useCallback(async (_artist: string, _title: string): Promise<boolean> => {
+    // Simulate: 80% found, 20% missing
+    return Math.random() > 0.2;
+  }, []);
+  
+  // Check if song is already in missing list (avoid duplicates)
+  const isSongAlreadyMissing = useCallback((artist: string, title: string): boolean => {
+    return missingSongs.some(
+      s => s.artist.toLowerCase() === artist.toLowerCase() && 
+           s.title.toLowerCase() === title.toLowerCase()
+    );
+  }, [missingSongs]);
   
   const songIndexRef = useRef<Record<string, number>>({
     'BH FM': 0,
@@ -147,7 +164,7 @@ const Index = () => {
   }, [stations, addCapturedSong, setLastUpdate]);
 
   // Simulated capture for web preview - INTEGRADO COM RANKING
-  const performSimulatedCapture = useCallback(() => {
+  const performSimulatedCapture = useCallback(async () => {
     const stationNames = ['BH FM', 'Band FM', 'Clube FM'];
     const randomStation = stationNames[Math.floor(Math.random() * stationNames.length)];
     const stationSongs = simulatedSongsDatabase[randomStation as keyof typeof simulatedSongsDatabase];
@@ -159,8 +176,9 @@ const Index = () => {
     // Update index for next time
     songIndexRef.current[randomStation] = (currentIndex + 1) % stationSongs.length;
     
-    // Randomly mark some as missing (20% chance)
-    const isMissing = Math.random() < 0.2;
+    // Check if song exists in music library
+    const existsInLibrary = await checkSongInLibrary(song.artist, song.title);
+    const alreadyMissing = isSongAlreadyMissing(song.artist, song.title);
     
     const capturedSong: CapturedSong = {
       id: `sim-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -168,7 +186,7 @@ const Index = () => {
       artist: song.artist,
       station: randomStation,
       timestamp: new Date(),
-      status: isMissing ? 'missing' : 'found',
+      status: existsInLibrary ? 'found' : 'missing',
     };
     
     addCapturedSong(capturedSong);
@@ -178,8 +196,8 @@ const Index = () => {
     addOrUpdateRankingSong(song.title, song.artist, stationStyle);
     console.log(`[RANKING] Música adicionada ao ranking: ${song.artist} - ${song.title} (${stationStyle})`);
     
-    // If song is missing, add to missing songs list for auto-download
-    if (isMissing) {
+    // If song is missing AND not already in missing list, add to missing songs for auto-download
+    if (!existsInLibrary && !alreadyMissing) {
       const missingSong: MissingSong = {
         id: capturedSong.id,
         title: song.title,
@@ -189,11 +207,15 @@ const Index = () => {
         status: 'missing',
       };
       addMissingSong(missingSong);
-      console.log(`[CAPTURE] Missing song added: ${song.artist} - ${song.title}`);
+      console.log(`[CAPTURE] Missing song added (not in library): ${song.artist} - ${song.title}`);
+    } else if (!existsInLibrary && alreadyMissing) {
+      console.log(`[CAPTURE] Song already in missing list: ${song.artist} - ${song.title}`);
+    } else {
+      console.log(`[CAPTURE] Song found in library: ${song.artist} - ${song.title}`);
     }
     
     setLastUpdate(new Date());
-  }, [addCapturedSong, addMissingSong, addOrUpdateRankingSong, setLastUpdate]);
+  }, [addCapturedSong, addMissingSong, addOrUpdateRankingSong, setLastUpdate, checkSongInLibrary, isSongAlreadyMissing]);
 
   // Start capture system
   useEffect(() => {

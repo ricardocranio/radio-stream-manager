@@ -1,3 +1,6 @@
+// Dias da semana para monitoramento
+export type WeekDay = 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab';
+
 // Horários específicos de monitoramento para banco de músicas diferenciado
 export interface MonitoringSchedule {
   id: string;
@@ -8,6 +11,7 @@ export interface MonitoringSchedule {
   enabled: boolean;
   label?: string; // Ex: "Horário nobre", "Música diferenciada"
   customUrl?: string; // URL personalizada para rádios não cadastradas
+  weekDays?: WeekDay[]; // Dias da semana ativos (vazio = todos)
 }
 
 export interface RadioStation {

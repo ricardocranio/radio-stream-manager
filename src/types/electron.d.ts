@@ -43,6 +43,17 @@ interface ScrapeResult {
   timestamp: string;
 }
 
+interface CheckSongParams {
+  artist: string;
+  title: string;
+  musicFolders: string[];
+}
+
+interface CheckSongResult {
+  exists: boolean;
+  path?: string;
+}
+
 interface StationConfig {
   id: string;
   name: string;
@@ -83,6 +94,9 @@ interface ElectronAPI {
   // Radio scraping
   scrapeStations: (stations: StationConfig[]) => Promise<ScrapeResult>;
   scrapeStation: (station: StationConfig) => Promise<{ success: boolean; songs: ScrapedSong[]; error?: string }>;
+  
+  // Music library check - verify if song exists in local folders
+  checkSongExists: (params: CheckSongParams) => Promise<CheckSongResult>;
   
   // Auto-update
   checkForUpdates: () => Promise<void>;
