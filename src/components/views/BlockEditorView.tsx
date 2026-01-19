@@ -167,13 +167,27 @@ export function BlockEditorView() {
   const dynamicSongPool = useMemo(() => {
     if (capturedSongs.length === 0) {
       // Fallback to station-based demo songs if no captures yet
-      return stations.flatMap((station, stationIndex) => {
+      // Generate enough songs to fill 10 slots per block
+      const demoSongs: Omit<BlockSong, 'id'>[] = [];
+      let songIndex = 0;
+      
+      // Keep adding songs until we have at least 10
+      while (demoSongs.length < 12 && stations.length > 0) {
+        const station = stations[songIndex % stations.length];
         const abbrev = station.name.split(' ').map(w => w[0]).join('').toUpperCase();
-        return [
-          { title: `Demo Song 1 - ${station.name}`, artist: 'Artista Demo', file: `demo_${station.id}_1.mp3`, source: abbrev, isFixed: false },
-          { title: `Demo Song 2 - ${station.name}`, artist: 'Artista Demo', file: `demo_${station.id}_2.mp3`, source: abbrev, isFixed: false },
-        ];
-      });
+        const songNum = Math.floor(songIndex / stations.length) + 1;
+        
+        demoSongs.push({
+          title: `Demo Song ${songNum} - ${station.name}`,
+          artist: 'Artista Demo',
+          file: `demo_${station.id}_${songNum}.mp3`,
+          source: abbrev,
+          isFixed: false,
+        });
+        songIndex++;
+      }
+      
+      return demoSongs;
     }
     
     // Use real captured songs - get unique songs
