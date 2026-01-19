@@ -413,16 +413,19 @@ export const useRadioStore = create<RadioState>()(
             // Update existing song - increment plays
             const updatedSongs = [...state.rankingSongs];
             const existing = updatedSongs[existingIndex];
+            const newPlays = existing.plays + 1;
             updatedSongs[existingIndex] = {
               ...existing,
-              plays: existing.plays + 1,
+              plays: newPlays,
               lastPlayed: new Date(),
               // Update trend based on play increase
-              trend: existing.plays > 5 ? 'up' : existing.trend,
+              trend: newPlays > 5 ? 'up' : existing.trend,
             };
             
             // Re-sort by plays (descending)
             updatedSongs.sort((a, b) => b.plays - a.plays);
+            
+            console.log(`[STORE-RANKING] ✅ Música atualizada: ${title} - ${artist} (${newPlays} plays)`);
             
             return { rankingSongs: updatedSongs };
           } else {
@@ -439,6 +442,8 @@ export const useRadioStore = create<RadioState>()(
             
             // Add and sort by plays
             const updatedSongs = [...state.rankingSongs, newSong].sort((a, b) => b.plays - a.plays);
+            
+            console.log(`[STORE-RANKING] 🆕 Nova música adicionada: ${title} - ${artist} (Total: ${updatedSongs.length})`);
             
             // Keep only top 100 songs
             return { rankingSongs: updatedSongs.slice(0, 100) };
