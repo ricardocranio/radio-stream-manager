@@ -40,11 +40,33 @@ const fallbackSources: FallbackSource[] = [
   },
 ];
 
+// CSS Selectors based on Python monitor script for MyTuner Radio
+const MYTUNER_SELECTORS = {
+  nowPlaying: [
+    '.latest-song',
+    '#now-playing + .latest-song',
+    '.now-playing-song',
+    '.current-song',
+    '.slogan-metadata .latest-song',
+    '[class*="latest"]',
+    '[class*="current-song"]',
+  ],
+  songHistory: [
+    '#song-history',
+    '.song-history',
+    '.playlist-history',
+    '.history-list',
+    '.playlist #song-history',
+    '[id*="history"]',
+  ],
+  stationName: ['h1'],
+};
+
 // Retry configuration
 const RETRY_CONFIG = {
   maxRetries: 2,
   retryDelay: 1000,
-  timeout: 30000, // 30 seconds - Firecrawl needs time for waitFor + actions
+  timeout: 45000, // 45 seconds - more time for dynamic content
 };
 
 async function scrapeWithRetry(
@@ -69,11 +91,12 @@ async function scrapeWithRetry(
           url,
           formats: ['markdown', 'html'],
           onlyMainContent: false,
-          waitFor: 5000, // Reduced from 10000
+          // Based on Python monitor script wait times
+          waitFor: 6000, // Wait for page to load
           actions: [
-            { type: 'wait', milliseconds: 3000 }, // Reduced from 6000
-            { type: 'scroll', direction: 'down', amount: 300 },
-            { type: 'wait', milliseconds: 1000 }, // Reduced from 2000
+            { type: 'wait', milliseconds: 4000 }, // Wait for dynamic content (Playwright uses 3s)
+            { type: 'scroll', direction: 'down', amount: 400 }, // Scroll to trigger lazy load
+            { type: 'wait', milliseconds: 2000 }, // Wait after scroll for content
           ],
         }),
         signal: controller.signal,

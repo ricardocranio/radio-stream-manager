@@ -23,17 +23,18 @@ export interface StationConfig {
 }
 
 // Known radio station URLs for scraping - Brazilian FM stations
-// Only stations we actively monitor
+// URLs based on MyTuner Radio format (from Python monitor script)
+// Format: https://mytuner-radio.com/pt/radio/STATION-NAME-ID/
 export const knownStations: Record<string, StationConfig> = {
   'BH FM': {
     name: 'BH FM',
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-bh-fm-ao-vivo-402270/',
-    aliases: ['BH', 'BHFM', 'Rádio BH FM'],
+    aliases: ['BH', 'BHFM', 'Rádio BH FM', 'BH FM 102.1'],
   },
   'Band FM': {
     name: 'Band FM',
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/band-fm-sao-paulo-485671/',
-    aliases: ['Band', 'BandFM', 'Rádio Band'],
+    aliases: ['Band', 'BandFM', 'Rádio Band', 'Band FM SP'],
   },
   'Clube FM': {
     name: 'Clube FM',
@@ -44,6 +45,61 @@ export const knownStations: Record<string, StationConfig> = {
     name: 'Show FM 101.1',
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/show-fm-oliveira-504298/',
     aliases: ['Show FM', 'ShowFM', 'Show 101.1'],
+  },
+  'Jovem Pan': {
+    name: 'Jovem Pan',
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-jovem-pan-fm-sao-paulo-485604/',
+    aliases: ['JP', 'Jovem Pan FM', 'Pan'],
+  },
+  'Mix FM': {
+    name: 'Mix FM',
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/mix-fm-sao-paulo-485616/',
+    aliases: ['Mix', 'MixFM', 'Rádio Mix'],
+  },
+  'Transamérica': {
+    name: 'Transamérica',
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-transamerica-sao-paulo-485686/',
+    aliases: ['Transamerica', 'Trans', 'Rádio Transamérica'],
+  },
+  'Nativa FM': {
+    name: 'Nativa FM',
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/nativa-fm-sao-paulo-485623/',
+    aliases: ['Nativa', 'NativaFM'],
+  },
+  'Metropolitana FM': {
+    name: 'Metropolitana FM',
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-metropolitana-fm-485613/',
+    aliases: ['Metropolitana', 'Metro FM'],
+  },
+  'Alpha FM': {
+    name: 'Alpha FM',
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/alpha-fm-sao-paulo-485598/',
+    aliases: ['Alpha', 'AlphaFM'],
+  },
+  'Antena 1': {
+    name: 'Antena 1',
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/antena-1-sao-paulo-485599/',
+    aliases: ['Antena1', 'Antena Um'],
+  },
+  '89 FM': {
+    name: '89 FM',
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/89-fm-a-radio-rock-485596/',
+    aliases: ['89FM', 'A Rádio Rock', 'Radio Rock'],
+  },
+  'Kiss FM': {
+    name: 'Kiss FM',
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/kiss-fm-sao-paulo-485610/',
+    aliases: ['Kiss', 'KissFM'],
+  },
+  'Tupi FM': {
+    name: 'Tupi FM',
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/super-radio-tupi-485684/',
+    aliases: ['Tupi', 'Super Tupi'],
+  },
+  'Globo FM': {
+    name: 'Globo FM',
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/globo-fm-rio-de-janeiro-469709/',
+    aliases: ['Globo', 'GloboFM', 'Radio Globo'],
   },
 };
 
