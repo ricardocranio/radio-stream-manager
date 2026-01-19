@@ -34,6 +34,8 @@ export function MonitoringScheduleCard() {
   const [newSchedule, setNewSchedule] = useState({
     hour: 18,
     minute: 0,
+    endHour: 19,
+    endMinute: 0,
     label: '',
   });
 
@@ -49,8 +51,10 @@ export function MonitoringScheduleCard() {
       id: `schedule-${Date.now()}`,
       hour: newSchedule.hour,
       minute: newSchedule.minute,
+      endHour: newSchedule.endHour,
+      endMinute: newSchedule.endMinute,
       enabled: true,
-      label: newSchedule.label || `Horário ${newSchedule.hour}:${newSchedule.minute.toString().padStart(2, '0')}`,
+      label: newSchedule.label || `${newSchedule.hour.toString().padStart(2, '0')}:${newSchedule.minute.toString().padStart(2, '0')} - ${newSchedule.endHour.toString().padStart(2, '0')}:${newSchedule.endMinute.toString().padStart(2, '0')}`,
     };
 
     const currentSchedules = station.monitoringSchedules || [];
@@ -63,7 +67,7 @@ export function MonitoringScheduleCard() {
       description: `${station.name} será monitorada às ${newSchedule.hour}:${newSchedule.minute.toString().padStart(2, '0')}`,
     });
 
-    setNewSchedule({ hour: 18, minute: 0, label: '' });
+    setNewSchedule({ hour: 18, minute: 0, endHour: 19, endMinute: 0, label: '' });
     setIsDialogOpen(false);
   };
 
@@ -231,14 +235,15 @@ export function MonitoringScheduleCard() {
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm text-muted-foreground">Hora</label>
+                {/* Time Range: Start */}
+                <div>
+                  <label className="text-sm text-muted-foreground font-medium">Horário de Início</label>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
                     <Select
                       value={newSchedule.hour.toString()}
                       onValueChange={v => setNewSchedule(prev => ({ ...prev, hour: parseInt(v) }))}
                     >
-                      <SelectTrigger className="mt-1">
+                      <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -249,20 +254,54 @@ export function MonitoringScheduleCard() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div>
-                    <label className="text-sm text-muted-foreground">Minuto</label>
                     <Select
                       value={newSchedule.minute.toString()}
                       onValueChange={v => setNewSchedule(prev => ({ ...prev, minute: parseInt(v) }))}
                     >
-                      <SelectTrigger className="mt-1">
+                      <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {[0, 15, 30, 45].map(m => (
                           <SelectItem key={m} value={m.toString()}>
-                            {m.toString().padStart(2, '0')}
+                            {m.toString().padStart(2, '0')} min
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Time Range: End */}
+                <div>
+                  <label className="text-sm text-muted-foreground font-medium">Horário de Fim</label>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <Select
+                      value={newSchedule.endHour.toString()}
+                      onValueChange={v => setNewSchedule(prev => ({ ...prev, endHour: parseInt(v) }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 24 }, (_, i) => (
+                          <SelectItem key={i} value={i.toString()}>
+                            {i.toString().padStart(2, '0')}h
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={newSchedule.endMinute.toString()}
+                      onValueChange={v => setNewSchedule(prev => ({ ...prev, endMinute: parseInt(v) }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[0, 15, 30, 45].map(m => (
+                          <SelectItem key={m} value={m.toString()}>
+                            {m.toString().padStart(2, '0')} min
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -313,23 +352,16 @@ export function MonitoringScheduleCard() {
                       schedule.enabled ? 'bg-cyan-500/10 border border-cyan-500/20' : 'bg-secondary/50'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-lg bg-cyan-500/20 flex flex-col items-center justify-center">
-                        <span className="text-lg font-bold text-cyan-500">
-                          {schedule.hour.toString().padStart(2, '0')}
-                        </span>
-                        <span className="text-xs text-cyan-400">
-                          :{schedule.minute.toString().padStart(2, '0')}
-                        </span>
+                    <div className="flex items-center gap-2">
+                      <div className="px-2 py-1 rounded bg-cyan-500/20 text-cyan-500 text-xs font-bold">
+                        {schedule.hour.toString().padStart(2, '0')}:{schedule.minute.toString().padStart(2, '0')}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-foreground">{schedule.stationName}</p>
-                          <Badge variant="outline" className="text-xs">
-                            <Radio className="w-3 h-3 mr-1" />
-                            Monitorar
-                          </Badge>
-                        </div>
+                      <span className="text-muted-foreground text-xs">→</span>
+                      <div className="px-2 py-1 rounded bg-orange-500/20 text-orange-500 text-xs font-bold">
+                        {(schedule.endHour ?? schedule.hour + 1).toString().padStart(2, '0')}:{(schedule.endMinute ?? 0).toString().padStart(2, '0')}
+                      </div>
+                      <div className="ml-2">
+                        <p className="text-sm font-medium text-foreground">{schedule.stationName}</p>
                         <p className="text-xs text-muted-foreground">
                           {schedule.label || 'Música diferenciada'}
                         </p>

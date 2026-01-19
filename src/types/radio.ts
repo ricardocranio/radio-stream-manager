@@ -1,8 +1,10 @@
 // Horários específicos de monitoramento para banco de músicas diferenciado
 export interface MonitoringSchedule {
   id: string;
-  hour: number;
-  minute: number;
+  hour: number; // Hora de início
+  minute: number; // Minuto de início
+  endHour: number; // Hora de fim
+  endMinute: number; // Minuto de fim
   enabled: boolean;
   label?: string; // Ex: "Horário nobre", "Música diferenciada"
   customUrl?: string; // URL personalizada para rádios não cadastradas
