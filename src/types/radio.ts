@@ -1,3 +1,12 @@
+// Horários específicos de monitoramento para banco de músicas diferenciado
+export interface MonitoringSchedule {
+  id: string;
+  hour: number;
+  minute: number;
+  enabled: boolean;
+  label?: string; // Ex: "Horário nobre", "Música diferenciada"
+}
+
 export interface RadioStation {
   id: string;
   name: string;
@@ -5,6 +14,7 @@ export interface RadioStation {
   scrapeUrl?: string; // URL for real-time scraping (mytuner-radio, etc.)
   styles: string[];
   enabled: boolean;
+  monitoringSchedules?: MonitoringSchedule[]; // Horários específicos para monitoramento
 }
 
 export interface ProgramSchedule {
