@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, Save, RotateCcw, Clock, Users, Shield, Music2, FolderOpen, Eye, EyeOff } from 'lucide-react';
+import { Settings, Save, RotateCcw, Clock, Users, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -257,6 +257,115 @@ export function SettingsView() {
                 </div>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Music Library Folders - NEW */}
+        <Card className="glass-card border-blue-500/20 lg:col-span-2">
+          <CardHeader className="border-b border-border">
+            <CardTitle className="flex items-center gap-2">
+              <Music className="w-5 h-5 text-blue-500" />
+              Banco Musical (Acervo Local)
+              <span className="ml-2 px-2 py-0.5 text-xs bg-blue-500/10 text-blue-500 rounded-full">
+                {localConfig.musicFolders.length} {localConfig.musicFolders.length === 1 ? 'pasta' : 'pastas'}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Configure as pastas onde o sistema irá buscar os arquivos de música para verificar se as músicas capturadas já existem no acervo.
+            </p>
+            
+            {localConfig.musicFolders.map((folder, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <HardDrive className="w-5 h-5 text-blue-500" />
+                </div>
+                <Input
+                  value={folder}
+                  onChange={(e) => {
+                    const newFolders = [...localConfig.musicFolders];
+                    newFolders[index] = e.target.value;
+                    setLocalConfig((prev) => ({ ...prev, musicFolders: newFolders }));
+                  }}
+                  className="flex-1 font-mono text-sm"
+                  placeholder="C:\Caminho\Para\Músicas"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title="Selecionar pasta"
+                  onClick={async () => {
+                    if (window.electronAPI?.isElectron && window.electronAPI?.selectFolder) {
+                      try {
+                        const selectedFolder = await window.electronAPI.selectFolder();
+                        if (selectedFolder) {
+                          const newFolders = [...localConfig.musicFolders];
+                          newFolders[index] = selectedFolder;
+                          setLocalConfig((prev) => ({ ...prev, musicFolders: newFolders }));
+                          toast({
+                            title: '📁 Pasta selecionada',
+                            description: selectedFolder,
+                          });
+                        }
+                      } catch (err) {
+                        toast({
+                          title: 'Erro',
+                          description: 'Não foi possível abrir o seletor de pastas.',
+                          variant: 'destructive',
+                        });
+                      }
+                    } else {
+                      toast({
+                        title: '🖥️ Recurso Desktop',
+                        description: 'A seleção de pasta só funciona no aplicativo desktop.',
+                        variant: 'destructive',
+                      });
+                    }
+                  }}
+                >
+                  <FolderOpen className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => {
+                    if (localConfig.musicFolders.length > 1) {
+                      const newFolders = localConfig.musicFolders.filter((_, i) => i !== index);
+                      setLocalConfig((prev) => ({ ...prev, musicFolders: newFolders }));
+                    } else {
+                      toast({
+                        title: 'Mínimo de 1 pasta',
+                        description: 'Você precisa ter pelo menos uma pasta configurada.',
+                        variant: 'destructive',
+                      });
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+            
+            <Button 
+              variant="outline" 
+              className="w-full border-dashed"
+              onClick={() => {
+                setLocalConfig((prev) => ({ 
+                  ...prev, 
+                  musicFolders: [...prev.musicFolders, ''] 
+                }));
+              }}
+            >
+              <FolderPlus className="w-4 h-4 mr-2" />
+              Adicionar Pasta
+            </Button>
+            
+            <p className="text-xs text-muted-foreground">
+              O sistema vasculha recursivamente todas as subpastas procurando arquivos de áudio (.mp3, .flac, .wav, .m4a, .aac, .ogg, .wma)
+            </p>
           </CardContent>
         </Card>
 
