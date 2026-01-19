@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface LastSongByStation {
@@ -30,7 +30,10 @@ interface RealtimeStats {
   stationCounts: Record<string, number>;
   isLoading: boolean;
   lastUpdated: Date | null;
+  nextRefreshIn: number; // seconds until next auto-refresh
 }
+
+const REFRESH_INTERVAL = 30; // seconds
 
 export function useRealtimeStats() {
   const [stats, setStats] = useState<RealtimeStats>({
@@ -45,7 +48,10 @@ export function useRealtimeStats() {
     stationCounts: {},
     isLoading: true,
     lastUpdated: null,
+    nextRefreshIn: REFRESH_INTERVAL,
   });
+  
+  const countdownRef = useRef<number>(REFRESH_INTERVAL);
 
   const loadStats = useCallback(async () => {
     try {
@@ -112,7 +118,7 @@ export function useRealtimeStats() {
         }
       });
 
-      setStats({
+      setStats(prev => ({
         totalSongs: totalResult.count || 0,
         songsLast24h: last24hResult.count || 0,
         songsLastHour: lastHourResult.count || 0,
@@ -129,7 +135,8 @@ export function useRealtimeStats() {
         stationCounts,
         isLoading: false,
         lastUpdated: new Date(),
-      });
+        nextRefreshIn: prev.nextRefreshIn,
+      }));
     } catch (error) {
       console.error('Error loading realtime stats:', error);
       setStats(prev => ({ ...prev, isLoading: false }));
@@ -141,10 +148,22 @@ export function useRealtimeStats() {
     loadStats();
   }, [loadStats]);
 
-  // Refresh every 30 seconds
+  // Auto-refresh every 30 seconds with countdown
   useEffect(() => {
-    const interval = setInterval(loadStats, 30000);
-    return () => clearInterval(interval);
+    const refreshInterval = setInterval(() => {
+      loadStats();
+      countdownRef.current = REFRESH_INTERVAL;
+    }, REFRESH_INTERVAL * 1000);
+
+    const countdownInterval = setInterval(() => {
+      countdownRef.current = Math.max(0, countdownRef.current - 1);
+      setStats(prev => ({ ...prev, nextRefreshIn: countdownRef.current }));
+    }, 1000);
+
+    return () => {
+      clearInterval(refreshInterval);
+      clearInterval(countdownInterval);
+    };
   }, [loadStats]);
 
   // Subscribe to realtime updates

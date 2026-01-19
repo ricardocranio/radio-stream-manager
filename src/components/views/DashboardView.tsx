@@ -246,11 +246,43 @@ export function DashboardView() {
               {stations.filter(s => s.enabled).length} emissoras
             </Badge>
           </h3>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
+            {/* Auto-refresh countdown */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50 border border-border">
+              <div className="relative w-5 h-5">
+                <svg className="w-5 h-5 -rotate-90" viewBox="0 0 20 20">
+                  <circle
+                    cx="10"
+                    cy="10"
+                    r="8"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="text-muted-foreground/20"
+                  />
+                  <circle
+                    cx="10"
+                    cy="10"
+                    r="8"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeDasharray={2 * Math.PI * 8}
+                    strokeDashoffset={2 * Math.PI * 8 * (1 - realtimeStats.nextRefreshIn / 30)}
+                    className="text-primary transition-all duration-1000"
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-primary">
+                  {realtimeStats.nextRefreshIn}
+                </span>
+              </div>
+              <span className="text-xs text-muted-foreground">próx. atualização</span>
+            </div>
+            
             {realtimeStats.lastUpdated && (
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Clock className="w-3 h-3" />
-                Atualizado: {format(realtimeStats.lastUpdated, 'HH:mm:ss', { locale: ptBR })}
+                {format(realtimeStats.lastUpdated, 'HH:mm:ss', { locale: ptBR })}
               </span>
             )}
             <Button
