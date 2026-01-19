@@ -166,60 +166,92 @@ export function useRealtimeStats() {
     };
   }, [loadStats]);
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates with error handling
   useEffect(() => {
-    const channel = supabase
-      .channel('stats_realtime')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'scraped_songs' },
-        (payload) => {
-          const newSong = payload.new as { title: string; artist: string; station_name: string; scraped_at: string };
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    const setupChannel = () => {
+      console.log('[REALTIME] Setting up channel...');
+      
+      const channel = supabase
+        .channel('stats_realtime')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'scraped_songs' },
+          (payload) => {
+            console.log('[REALTIME] New song received:', payload.new);
+            const newSong = payload.new as { title: string; artist: string; station_name: string; scraped_at: string };
+            
+            setStats(prev => {
+              const newSongData = {
+                title: newSong.title,
+                artist: newSong.artist,
+                station: newSong.station_name,
+                timestamp: newSong.scraped_at,
+              };
+
+              // Update lastSongsByStation
+              const updatedLastSongsByStation = [...prev.lastSongsByStation];
+              const existingIndex = updatedLastSongsByStation.findIndex(s => s.station === newSong.station_name);
+              if (existingIndex >= 0) {
+                updatedLastSongsByStation[existingIndex] = newSongData;
+              } else {
+                updatedLastSongsByStation.unshift(newSongData);
+              }
+
+              // Update recentSongsByStation
+              const updatedRecentSongsByStation = { ...prev.recentSongsByStation };
+              const stationSongs = updatedRecentSongsByStation[newSong.station_name] || [];
+              updatedRecentSongsByStation[newSong.station_name] = [newSongData, ...stationSongs].slice(0, 5);
+
+              return {
+                ...prev,
+                totalSongs: prev.totalSongs + 1,
+                songsLast24h: prev.songsLast24h + 1,
+                songsLastHour: prev.songsLastHour + 1,
+                lastSong: newSongData,
+                lastSongsByStation: updatedLastSongsByStation,
+                recentSongsByStation: updatedRecentSongsByStation,
+                stationCounts: {
+                  ...prev.stationCounts,
+                  [newSong.station_name]: (prev.stationCounts[newSong.station_name] || 0) + 1,
+                },
+              };
+            });
+          }
+        )
+        .subscribe((status) => {
+          console.log('[REALTIME] Subscription status:', status);
           
-          setStats(prev => {
-            const newSongData = {
-              title: newSong.title,
-              artist: newSong.artist,
-              station: newSong.station_name,
-              timestamp: newSong.scraped_at,
-            };
-
-            // Update lastSongsByStation
-            const updatedLastSongsByStation = [...prev.lastSongsByStation];
-            const existingIndex = updatedLastSongsByStation.findIndex(s => s.station === newSong.station_name);
-            if (existingIndex >= 0) {
-              updatedLastSongsByStation[existingIndex] = newSongData;
+          if (status === 'CHANNEL_ERROR') {
+            console.error('[REALTIME] Channel error, retrying...');
+            if (retryCount < maxRetries) {
+              retryCount++;
+              setTimeout(() => {
+                supabase.removeChannel(channel);
+                setupChannel();
+              }, 2000 * retryCount);
             } else {
-              updatedLastSongsByStation.unshift(newSongData);
+              console.error('[REALTIME] Max retries reached, falling back to polling');
+              // Fallback: refresh more frequently when realtime fails
+              loadStats();
             }
+          } else if (status === 'SUBSCRIBED') {
+            console.log('[REALTIME] ✓ Successfully subscribed to updates');
+            retryCount = 0;
+          }
+        });
 
-            // Update recentSongsByStation
-            const updatedRecentSongsByStation = { ...prev.recentSongsByStation };
-            const stationSongs = updatedRecentSongsByStation[newSong.station_name] || [];
-            updatedRecentSongsByStation[newSong.station_name] = [newSongData, ...stationSongs].slice(0, 5);
+      return channel;
+    };
 
-            return {
-              ...prev,
-              totalSongs: prev.totalSongs + 1,
-              songsLast24h: prev.songsLast24h + 1,
-              songsLastHour: prev.songsLastHour + 1,
-              lastSong: newSongData,
-              lastSongsByStation: updatedLastSongsByStation,
-              recentSongsByStation: updatedRecentSongsByStation,
-              stationCounts: {
-                ...prev.stationCounts,
-                [newSong.station_name]: (prev.stationCounts[newSong.station_name] || 0) + 1,
-              },
-            };
-          });
-        }
-      )
-      .subscribe();
+    const channel = setupChannel();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [loadStats]);
 
   return { stats, refresh: loadStats };
 }
