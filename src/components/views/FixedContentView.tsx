@@ -430,6 +430,15 @@ export function FixedContentView() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-primary"
+                          onClick={() => setEditingId(content.id)}
+                          title="Editar horários"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
                           onClick={() => {
                             removeFixedContent(content.id);
@@ -447,6 +456,167 @@ export function FixedContentView() {
           </Card>
         ))}
       </div>
+
+      {/* Edit Content Modal */}
+      {editingId && (() => {
+        const content = fixedContent.find(c => c.id === editingId);
+        if (!content) return null;
+        
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <Card className="w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Edit2 className="w-4 h-4" />
+                  Editar: {content.name}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label>Nome</Label>
+                  <Input
+                    value={content.name}
+                    onChange={(e) => updateFixedContent(content.id, { name: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                
+                {content.type !== 'top50' && content.type !== 'vozbrasil' && (
+                  <div>
+                    <Label>Arquivo</Label>
+                    <Input
+                      value={content.fileName}
+                      onChange={(e) => updateFixedContent(content.id, { fileName: e.target.value })}
+                      className="mt-1 font-mono text-sm"
+                    />
+                  </div>
+                )}
+                
+                {content.type === 'top50' && (
+                  <div>
+                    <Label>Quantidade de músicas</Label>
+                    <Select
+                      value={(content.top50Count || 5).toString()}
+                      onValueChange={(value) => updateFixedContent(content.id, { top50Count: parseInt(value) })}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 5, 8, 10, 15, 20].map((n) => (
+                          <SelectItem key={n} value={n.toString()}>{n} músicas</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                
+                <div>
+                  <Label>Dias</Label>
+                  <Select
+                    value={content.dayPattern}
+                    onValueChange={(value) => updateFixedContent(content.id, { dayPattern: value })}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {dayPatterns.map((pattern) => (
+                        <SelectItem key={pattern.value} value={pattern.value}>
+                          {pattern.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label>Horários Programados</Label>
+                  <div className="flex flex-wrap gap-2 mt-2 p-3 bg-secondary/30 rounded-lg min-h-[60px]">
+                    {content.timeSlots.map((slot) => (
+                      <Badge
+                        key={`${slot.hour}-${slot.minute}`}
+                        variant="secondary"
+                        className="cursor-pointer hover:bg-destructive/20 transition-colors"
+                        onClick={() => {
+                          const newSlots = content.timeSlots.filter(
+                            s => !(s.hour === slot.hour && s.minute === slot.minute)
+                          );
+                          updateFixedContent(content.id, { timeSlots: newSlots });
+                        }}
+                      >
+                        {slot.hour.toString().padStart(2, '0')}:{slot.minute.toString().padStart(2, '0')}
+                        <X className="w-3 h-3 ml-1" />
+                      </Badge>
+                    ))}
+                    {content.timeSlots.length === 0 && (
+                      <span className="text-xs text-muted-foreground">Nenhum horário definido</span>
+                    )}
+                  </div>
+                  
+                  <div className="flex gap-2 mt-2">
+                    <Select
+                      value={newTimeSlot.hour.toString()}
+                      onValueChange={(v) => setNewTimeSlot({ ...newTimeSlot, hour: parseInt(v) })}
+                    >
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 24 }, (_, i) => (
+                          <SelectItem key={i} value={i.toString()}>{i.toString().padStart(2, '0')}h</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={newTimeSlot.minute.toString()}
+                      onValueChange={(v) => setNewTimeSlot({ ...newTimeSlot, minute: parseInt(v) })}
+                    >
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">00</SelectItem>
+                        <SelectItem value="30">30</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const exists = content.timeSlots.some(
+                          s => s.hour === newTimeSlot.hour && s.minute === newTimeSlot.minute
+                        );
+                        if (!exists) {
+                          const newSlots = [...content.timeSlots, { ...newTimeSlot }].sort(
+                            (a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute)
+                          );
+                          updateFixedContent(content.id, { timeSlots: newSlots });
+                        }
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Adicionar
+                    </Button>
+                  </div>
+                </div>
+                
+                <div className="flex gap-2 pt-4">
+                  <Button
+                    onClick={() => {
+                      setEditingId(null);
+                      toast({ title: 'Alterações salvas', description: content.name });
+                    }}
+                    className="flex-1"
+                  >
+                    <Check className="w-4 h-4 mr-2" />
+                    Concluir
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
     </div>
   );
 }
