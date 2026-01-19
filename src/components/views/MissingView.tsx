@@ -1,6 +1,7 @@
-import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle, History, RotateCcw, TrendingUp, Clock, FlaskConical, Wrench, RotateCw } from 'lucide-react';
+import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle, History, RotateCcw, TrendingUp, Clock, FlaskConical, Wrench, RotateCw, Zap, Pause } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry, getDownloadStats } from '@/store/radioStore';
+import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +41,7 @@ export function MissingView() {
   const { 
     missingSongs, 
     deezerConfig, 
+    config,
     batchDownloadProgress,
     setBatchDownloadProgress,
     updateMissingSong,
@@ -49,6 +51,10 @@ export function MissingView() {
     addDownloadHistory,
     clearDownloadHistory,
   } = useRadioStore();
+  
+  // Auto-download status from global store
+  const { queueLength, isProcessing } = useAutoDownloadStore();
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
   const [deemixInstalled, setDeemixInstalled] = useState<boolean | null>(null);
@@ -641,7 +647,107 @@ export function MissingView() {
         </div>
       </div>
 
-      {/* Download Folder Selection Card */}
+      {/* Auto-Download Status Card */}
+      {deezerConfig.enabled && deezerConfig.autoDownload && (
+        <Card className={`glass-card border-2 ${isProcessing ? 'border-green-500/50 bg-green-500/5' : queueLength > 0 ? 'border-amber-500/50 bg-amber-500/5' : 'border-muted bg-muted/5'}`}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${isProcessing ? 'bg-green-500/20' : queueLength > 0 ? 'bg-amber-500/20' : 'bg-muted/20'}`}>
+                  {isProcessing ? (
+                    <Loader2 className="w-6 h-6 text-green-500 animate-spin" />
+                  ) : queueLength > 0 ? (
+                    <Pause className="w-6 h-6 text-amber-500" />
+                  ) : (
+                    <Zap className="w-6 h-6 text-muted-foreground" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    Download Automático
+                    {isProcessing && (
+                      <Badge className="bg-green-500 text-white animate-pulse">
+                        Processando
+                      </Badge>
+                    )}
+                    {!isProcessing && queueLength > 0 && (
+                      <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30">
+                        Aguardando
+                      </Badge>
+                    )}
+                    {!isProcessing && queueLength === 0 && (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        Ocioso
+                      </Badge>
+                    )}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {isProcessing 
+                      ? `Baixando música... (${queueLength} na fila)` 
+                      : queueLength > 0 
+                        ? `${queueLength} músicas aguardando download (intervalo: ${deezerConfig.autoDownloadIntervalMinutes || 20}min)`
+                        : 'Nenhuma música na fila de download automático'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-sm">
+                <div className="text-right">
+                  <p className="text-muted-foreground">Intervalo</p>
+                  <p className="font-mono font-semibold">{deezerConfig.autoDownloadIntervalMinutes || 20} min</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-muted-foreground">Na fila</p>
+                  <p className="font-mono font-semibold text-lg">{queueLength}</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Music Library Folders Card */}
+      <Card className="glass-card border-blue-500/30 bg-blue-500/5">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-blue-500/20">
+              <Music className="w-6 h-6 text-blue-500" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                Banco Musical
+                <Badge variant="outline" className="text-blue-500 border-blue-500/30">
+                  {config.musicFolders.length} {config.musicFolders.length === 1 ? 'pasta' : 'pastas'}
+                </Badge>
+              </h3>
+              <div className="text-sm text-muted-foreground space-y-1 mt-1">
+                {config.musicFolders.length > 0 ? (
+                  config.musicFolders.map((folder, idx) => (
+                    <p key={idx} className="font-mono text-xs truncate max-w-lg">
+                      📁 {folder}
+                    </p>
+                  ))
+                ) : (
+                  <p className="text-amber-500">⚠️ Nenhuma pasta configurada</p>
+                )}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                // Navigate to folders tab
+                toast({
+                  title: '📁 Configurar Pastas',
+                  description: 'Vá para a aba "Pastas" no menu lateral para adicionar mais pastas ao banco musical.',
+                });
+              }}
+            >
+              <Wrench className="w-4 h-4 mr-2" />
+              Configurar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
       <Card className="glass-card border-primary/30 bg-primary/5">
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
