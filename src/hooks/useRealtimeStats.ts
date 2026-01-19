@@ -8,11 +8,17 @@ interface LastSongByStation {
   timestamp: string;
 }
 
+interface RadioStation {
+  name: string;
+  enabled: boolean;
+}
+
 interface RealtimeStats {
   totalSongs: number;
   songsLast24h: number;
   songsLastHour: number;
   activeStations: number;
+  allStations: RadioStation[];
   lastSong: {
     title: string;
     artist: string;
@@ -31,6 +37,7 @@ export function useRealtimeStats() {
     songsLast24h: 0,
     songsLastHour: 0,
     activeStations: 0,
+    allStations: [],
     lastSong: null,
     lastSongsByStation: [],
     recentSongsByStation: {},
@@ -95,11 +102,20 @@ export function useRealtimeStats() {
         }
       });
 
+      // Ensure all stations have entries in recentSongsByStation (even if empty)
+      const allStationsList: RadioStation[] = stationsResult.data?.map(s => ({ name: s.name, enabled: s.enabled ?? true })) || [];
+      allStationsList.forEach(station => {
+        if (!recentSongsByStation[station.name]) {
+          recentSongsByStation[station.name] = [];
+        }
+      });
+
       setStats({
         totalSongs: totalResult.count || 0,
         songsLast24h: last24hResult.count || 0,
         songsLastHour: lastHourResult.count || 0,
         activeStations: stationsResult.data?.length || 0,
+        allStations: allStationsList,
         lastSong: lastSongResult.data ? {
           title: lastSongResult.data.title,
           artist: lastSongResult.data.artist,
