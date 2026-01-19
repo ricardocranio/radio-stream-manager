@@ -55,43 +55,33 @@ export function FoldersView() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Music Folders */}
-        <Card className="glass-card">
+        {/* Info about Music Folders */}
+        <Card className="glass-card border-blue-500/20">
           <CardHeader className="border-b border-border">
             <CardTitle className="flex items-center gap-2">
-              <Folder className="w-5 h-5 text-primary" />
-              Pastas de Músicas
+              <Folder className="w-5 h-5 text-blue-500" />
+              Banco Musical
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 space-y-4">
             <p className="text-sm text-muted-foreground">
-              Pastas onde o sistema irá buscar os arquivos MP3 para a programação.
+              As pastas do banco musical agora são configuradas na aba <strong>Configurações</strong>.
             </p>
-            {localConfig.musicFolders.map((folder, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded bg-secondary flex items-center justify-center">
-                  <HardDrive className="w-4 h-4 text-muted-foreground" />
-                </div>
-                <Input
-                  value={folder}
-                  onChange={(e) => handleMusicFolderChange(index, e.target.value)}
-                  className="flex-1 font-mono text-sm"
-                  placeholder="C:\Caminho\Para\Músicas"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => handleRemoveMusicFolder(index)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+            <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <p className="text-sm text-blue-400 font-medium">
+                📁 {config.musicFolders.length} {config.musicFolders.length === 1 ? 'pasta configurada' : 'pastas configuradas'}
+              </p>
+              <div className="mt-2 space-y-1">
+                {config.musicFolders.map((folder, idx) => (
+                  <p key={idx} className="text-xs text-muted-foreground font-mono truncate">
+                    {folder || '(vazia)'}
+                  </p>
+                ))}
               </div>
-            ))}
-            <Button variant="outline" className="w-full" onClick={handleAddMusicFolder}>
-              <FolderPlus className="w-4 h-4 mr-2" />
-              Adicionar Pasta
-            </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Vá para <strong>Configurações → Banco Musical</strong> para adicionar ou remover pastas.
+            </p>
           </CardContent>
         </Card>
 
