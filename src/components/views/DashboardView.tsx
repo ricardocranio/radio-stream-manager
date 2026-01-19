@@ -329,28 +329,28 @@ export function DashboardView() {
         </CardContent>
       </Card>
 
-      {/* Radio Stations Windows - All Registered Stations */}
+      {/* Radio Stations Windows - Using local store stations (for grade building) */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
             Captura em Tempo Real
             <Badge variant="secondary" className="ml-2 text-xs">
-              <Database className="w-3 h-3 mr-1" />
-              {realtimeStats.allStations.length} emissoras
+              <Radio className="w-3 h-3 mr-1" />
+              {stations.filter(s => s.enabled).length} emissoras
             </Badge>
           </h3>
         </div>
         
-        {realtimeStats.allStations.length > 0 ? (
+        {stations.filter(s => s.enabled).length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {realtimeStats.allStations.map((station, stationIndex) => {
+            {stations.filter(s => s.enabled).map((station, stationIndex) => {
               const colors = colorPalette[stationIndex % colorPalette.length];
               const songs = realtimeStats.recentSongsByStation[station.name] || [];
               const count24h = realtimeStats.stationCounts[station.name] || 0;
               
               return (
-                <Card key={station.name} className={`glass-card ${colors.border}`}>
+                <Card key={station.id} className={`glass-card ${colors.border}`}>
                   <CardHeader className={`py-3 px-4 border-b border-border ${colors.bg}`}>
                     <CardTitle className="flex items-center justify-between text-base">
                       <div className="flex items-center gap-2">
@@ -401,8 +401,8 @@ export function DashboardView() {
           <Card className="glass-card border-dashed">
             <CardContent className="p-8 text-center text-muted-foreground">
               <Radio className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">Nenhuma emissora cadastrada</p>
-              <p className="text-sm mt-2">Adicione emissoras na seção "Emissoras" para começar o monitoramento.</p>
+              <p className="text-lg font-medium">Nenhuma emissora ativa</p>
+              <p className="text-sm mt-2">Ative emissoras na seção "Emissoras" para começar o monitoramento.</p>
             </CardContent>
           </Card>
         )}
