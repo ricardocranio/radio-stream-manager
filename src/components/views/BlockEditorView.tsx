@@ -193,11 +193,56 @@ export function BlockEditorView() {
     });
     return Array.from(uniqueSongs.values()).slice(0, 50); // Max 50 songs
   }, [capturedSongs, stations]);
+  // Generate automatic templates based on station styles
+  const autoTemplates = useMemo(() => {
+    const templates: BlockTemplate[] = [];
+    
+    stations.forEach((station) => {
+      const abbrev = station.name.split(' ').map(w => w[0]).join('').toUpperCase();
+      const stationSongs = dynamicSongPool.filter(s => s.source === abbrev);
+      
+      if (stationSongs.length >= 3) {
+        templates.push({
+          id: `auto-${station.id}`,
+          name: `${station.name} - ${station.styles?.[0] || 'Mix'}`,
+          songs: stationSongs.slice(0, 8).map((s, i) => ({ ...s, id: `auto-${station.id}-${i}` })),
+          createdAt: new Date().toISOString(),
+        });
+      }
+    });
+    
+    // Mixed template with songs from all stations
+    if (dynamicSongPool.length >= 8) {
+      const mixedSongs: typeof dynamicSongPool = [];
+      let index = 0;
+      while (mixedSongs.length < 10 && index < dynamicSongPool.length) {
+        // Distribute songs evenly from different sources
+        const sourcesUsed = new Set(mixedSongs.map(s => s.source));
+        const song = dynamicSongPool[index];
+        if (!sourcesUsed.has(song.source) || mixedSongs.length >= stations.length) {
+          mixedSongs.push(song);
+        }
+        index++;
+      }
+      
+      if (mixedSongs.length >= 5) {
+        templates.push({
+          id: 'auto-mixed',
+          name: 'Mix de Emissoras',
+          songs: mixedSongs.map((s, i) => ({ ...s, id: `auto-mixed-${i}` })),
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+    
+    return templates;
+  }, [stations, dynamicSongPool]);
+  
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedHour, setSelectedHour] = useState(14);
   const [selectedMinute, setSelectedMinute] = useState(0);
-  const [templates, setTemplates] = useState<BlockTemplate[]>(defaultTemplates);
+  const [templates, setTemplates] = useState<BlockTemplate[]>([]);
   const [newTemplateName, setNewTemplateName] = useState('');
   const [showTemplateInput, setShowTemplateInput] = useState(false);
   const [showDayPreview, setShowDayPreview] = useState(false);
@@ -697,7 +742,7 @@ export function BlockEditorView() {
         </div>
       </div>
 
-      {/* Source Statistics */}
+      {/* Source Statistics - Shows ALL registered stations */}
       <Card className="glass-card">
         <CardContent className="p-4">
           <div className="flex items-center gap-4">
@@ -706,25 +751,51 @@ export function BlockEditorView() {
               <span className="text-sm font-medium">Distribuição por Fonte:</span>
             </div>
             <div className="flex-1 flex items-center gap-3 flex-wrap">
-              {Object.entries(sourceStats).map(([source, count]) => (
-                <div key={source} className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${sourceColors[source] || 'bg-muted'}`} />
-                  <span className="text-sm font-medium">{source}</span>
+              {/* Show all registered stations, even if count is 0 */}
+              {stations.map((station) => {
+                const abbrev = station.name.split(' ').map(w => w[0]).join('').toUpperCase();
+                const count = sourceStats[abbrev] || 0;
+                return (
+                  <div key={station.id} className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${sourceColors[abbrev] || 'bg-muted'}`} />
+                    <span className="text-sm font-medium">{abbrev}</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {count} ({totalSongs > 0 ? Math.round((count / totalSongs) * 100) : 0}%)
+                    </Badge>
+                  </div>
+                );
+              })}
+              {/* Show FIXO if present */}
+              {sourceStats['FIXO'] && (
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-purple-500" />
+                  <span className="text-sm font-medium">FIXO</span>
                   <Badge variant="secondary" className="text-xs">
-                    {count} ({Math.round((count / totalSongs) * 100)}%)
+                    {sourceStats['FIXO']} ({Math.round((sourceStats['FIXO'] / totalSongs) * 100)}%)
                   </Badge>
                 </div>
-              ))}
+              )}
             </div>
             <div className="flex h-4 w-48 rounded-full overflow-hidden bg-secondary">
-              {Object.entries(sourceStats).map(([source, count]) => (
+              {stations.map((station) => {
+                const abbrev = station.name.split(' ').map(w => w[0]).join('').toUpperCase();
+                const count = sourceStats[abbrev] || 0;
+                return (
+                  <div 
+                    key={station.id} 
+                    className={`h-full ${sourceColors[abbrev] || 'bg-muted'}`}
+                    style={{ width: totalSongs > 0 ? `${(count / totalSongs) * 100}%` : '0%' }}
+                    title={`${station.name}: ${count}`}
+                  />
+                );
+              })}
+              {sourceStats['FIXO'] && (
                 <div 
-                  key={source} 
-                  className={`h-full ${sourceColors[source] || 'bg-muted'}`}
-                  style={{ width: `${(count / totalSongs) * 100}%` }}
-                  title={`${source}: ${count}`}
+                  className="h-full bg-purple-500"
+                  style={{ width: `${(sourceStats['FIXO'] / totalSongs) * 100}%` }}
+                  title={`FIXO: ${sourceStats['FIXO']}`}
                 />
-              ))}
+              )}
             </div>
           </div>
         </CardContent>
@@ -912,33 +983,71 @@ export function BlockEditorView() {
                   </div>
                 </div>
               )}
-              <div className="space-y-1 max-h-40 overflow-y-auto">
-                {templates.map((template) => (
-                  <div
-                    key={template.id}
-                    className="flex items-center gap-2 p-2 rounded hover:bg-secondary/50 transition-colors group"
-                  >
-                    <button
-                      onClick={() => handleLoadTemplate(template)}
-                      className="flex-1 flex items-center gap-2 text-left"
+              {/* Auto-generated templates based on stations */}
+              {autoTemplates.length > 0 && (
+                <div className="mb-2">
+                  <p className="text-xs text-muted-foreground px-2 mb-1">🤖 Automáticos</p>
+                  {autoTemplates.map((template) => (
+                    <div
+                      key={template.id}
+                      className="flex items-center gap-2 p-2 rounded hover:bg-accent/20 transition-colors"
                     >
-                      <Bookmark className="w-4 h-4 text-accent" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{template.name}</p>
-                        <p className="text-xs text-muted-foreground">{template.songs.length} itens</p>
+                      <button
+                        onClick={() => handleLoadTemplate(template)}
+                        className="flex-1 flex items-center gap-2 text-left"
+                      >
+                        <Layers className="w-4 h-4 text-accent" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{template.name}</p>
+                          <p className="text-xs text-muted-foreground">{template.songs.length} itens</p>
+                        </div>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* User-created templates */}
+              {templates.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground px-2 mb-1">📁 Meus Templates</p>
+                  <div className="space-y-1">
+                    {templates.map((template) => (
+                      <div
+                        key={template.id}
+                        className="flex items-center gap-2 p-2 rounded hover:bg-secondary/50 transition-colors group"
+                      >
+                        <button
+                          onClick={() => handleLoadTemplate(template)}
+                          className="flex-1 flex items-center gap-2 text-left"
+                        >
+                          <Bookmark className="w-4 h-4 text-accent" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{template.name}</p>
+                            <p className="text-xs text-muted-foreground">{template.songs.length} itens</p>
+                          </div>
+                        </button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                          onClick={() => handleDeleteTemplate(template.id)}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
                       </div>
-                    </button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                      onClick={() => handleDeleteTemplate(template.id)}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+              
+              {autoTemplates.length === 0 && templates.length === 0 && (
+                <div className="text-center py-4 text-muted-foreground text-sm">
+                  <Bookmark className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                  <p>Nenhum template</p>
+                  <p className="text-xs">Capture músicas para gerar automáticos</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
