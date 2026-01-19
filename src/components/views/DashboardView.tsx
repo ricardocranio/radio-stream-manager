@@ -246,6 +246,28 @@ export function DashboardView() {
               {stations.filter(s => s.enabled).length} emissoras
             </Badge>
           </h3>
+          <div className="flex items-center gap-3">
+            {realtimeStats.lastUpdated && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                Atualizado: {format(realtimeStats.lastUpdated, 'HH:mm:ss', { locale: ptBR })}
+              </span>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="gap-2"
+            >
+              {isRefreshing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              Atualizar
+            </Button>
+          </div>
         </div>
         
         {stations.filter(s => s.enabled).length > 0 ? (
