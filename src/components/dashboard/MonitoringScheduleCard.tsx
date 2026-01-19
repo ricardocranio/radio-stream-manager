@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Clock, Plus, Trash2, Radio, Save, X, Calendar } from 'lucide-react';
+import { Clock, Plus, Trash2, Radio, Save, Calendar, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore } from '@/store/radioStore';
 import { useToast } from '@/hooks/use-toast';
 import { MonitoringSchedule } from '@/types/radio';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ export function MonitoringScheduleCard() {
   const { toast } = useToast();
   const [selectedStation, setSelectedStation] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [newSchedule, setNewSchedule] = useState({
     hour: 18,
     minute: 0,
@@ -90,6 +92,87 @@ export function MonitoringScheduleCard() {
     updateStation(stationId, { monitoringSchedules: updatedSchedules });
   };
 
+  // Export songs captured at scheduled times
+  const handleExportScheduledSongs = async () => {
+    setIsExporting(true);
+    try {
+      // Get all enabled schedules
+      const schedulesToExport = allSchedules.filter(s => s.enabled);
+      
+      if (schedulesToExport.length === 0) {
+        toast({
+          title: 'Nenhum horário ativo',
+          description: 'Adicione e ative horários para exportar.',
+          variant: 'destructive',
+        });
+        setIsExporting(false);
+        return;
+      }
+
+      // Fetch songs from Supabase that match the scheduled hours
+      const hoursToFetch = [...new Set(schedulesToExport.map(s => s.hour))];
+      const stationNames = [...new Set(schedulesToExport.map(s => s.stationName))];
+
+      const { data: songs, error } = await supabase
+        .from('scraped_songs')
+        .select('title, artist, station_name, scraped_at')
+        .in('station_name', stationNames)
+        .order('scraped_at', { ascending: false })
+        .limit(500);
+
+      if (error) throw error;
+
+      // Filter songs by scheduled hours
+      const filteredSongs = (songs || []).filter(song => {
+        const songHour = new Date(song.scraped_at).getHours();
+        const matchingSchedule = schedulesToExport.find(
+          s => s.hour === songHour && s.stationName === song.station_name
+        );
+        return !!matchingSchedule;
+      });
+
+      if (filteredSongs.length === 0) {
+        toast({
+          title: 'Nenhuma música encontrada',
+          description: 'Não há músicas capturadas nos horários configurados.',
+        });
+        setIsExporting(false);
+        return;
+      }
+
+      // Generate export content
+      const exportLines = filteredSongs.map(song => 
+        `${song.artist} - ${song.title} | ${song.station_name} | ${new Date(song.scraped_at).toLocaleString('pt-BR')}`
+      );
+      
+      const exportContent = `MONITORAMENTO ESPECIAL - BANCO DIFERENCIADO\nExportado em: ${new Date().toLocaleString('pt-BR')}\nTotal: ${filteredSongs.length} músicas\n${'='.repeat(50)}\n\n${exportLines.join('\n')}`;
+
+      // Download as TXT file
+      const blob = new Blob([exportContent], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `monitoramento_especial_${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: '📋 Lista exportada!',
+        description: `${filteredSongs.length} músicas do monitoramento especial.`,
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: 'Erro ao exportar',
+        description: 'Não foi possível exportar a lista.',
+        variant: 'destructive',
+      });
+    }
+    setIsExporting(false);
+  };
+
   // Get all schedules across stations
   const allSchedules = enabledStations.flatMap(station =>
     (station.monitoringSchedules || []).map(schedule => ({
@@ -108,6 +191,16 @@ export function MonitoringScheduleCard() {
             Horários de Monitoramento
           </CardTitle>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="gap-2"
+              onClick={handleExportScheduledSongs}
+              disabled={isExporting || allSchedules.filter(s => s.enabled).length === 0}
+            >
+              <Download className="w-4 h-4" />
+              Exportar Lista
+            </Button>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline" className="gap-2">
                 <Plus className="w-4 h-4" />
