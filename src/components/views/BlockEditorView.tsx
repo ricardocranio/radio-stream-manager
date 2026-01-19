@@ -9,6 +9,10 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  useDroppable,
+  useDraggable,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -116,6 +120,63 @@ function SortableSong({ song, onRemove, hasWarning }: SortableSongProps) {
         onClick={onRemove}
       >
         <Trash2 className="w-3.5 h-3.5" />
+      </Button>
+    </div>
+  );
+}
+
+// Draggable item for fixed content and music pool
+interface DraggablePoolItemProps {
+  item: Omit<BlockSong, 'id'>;
+  index: number;
+  type: 'fixed' | 'music';
+  onAdd: () => void;
+}
+
+function DraggablePoolItem({ item, index, type, onAdd }: DraggablePoolItemProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `pool-${type}-${index}`,
+    data: { item, type },
+  });
+
+  const style = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`w-full flex items-center gap-2 p-2 rounded transition-colors cursor-grab active:cursor-grabbing ${
+        isDragging ? 'bg-primary/20 border border-primary/50' : 'hover:bg-secondary/50'
+      }`}
+      {...attributes}
+      {...listeners}
+    >
+      <div className={`w-6 h-6 rounded flex items-center justify-center ${type === 'fixed' ? 'bg-accent/20' : 'bg-primary/20'}`}>
+        <GripVertical className={`w-3 h-3 ${type === 'fixed' ? 'text-accent' : 'text-primary'}`} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground truncate">{item.title}</p>
+        <p className="text-xs text-muted-foreground truncate">{type === 'fixed' ? item.file : item.artist}</p>
+      </div>
+      {type === 'music' && (
+        <Badge variant="secondary" className="text-xs shrink-0">
+          {item.source}
+        </Badge>
+      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6 shrink-0"
+        onClick={(e) => {
+          e.stopPropagation();
+          onAdd();
+        }}
+        title="Adicionar ao bloco"
+      >
+        <Plus className="w-3 h-3" />
       </Button>
     </div>
   );
@@ -449,12 +510,31 @@ export function BlockEditorView() {
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    
+    // Check if it's a drag from the pool (fixed content or music)
+    const activeId = String(active.id);
+    if (activeId.startsWith('pool-')) {
+      // Adding new item from pool
+      const data = active.data.current as { item: Omit<BlockSong, 'id'>; type: string } | undefined;
+      if (data?.item) {
+        const newSong: BlockSong = { ...data.item, id: `${timeKey}-drag-${Date.now()}` };
+        const newSongs = [...currentSongs, newSong];
+        setBlockSongs(timeKey, newSongs);
+        addToHistory(timeKey, newSongs, `Arrastar ${data.item.title}`);
+        toast({ title: 'Item adicionado', description: data.item.title });
+      }
+      return;
+    }
+    
+    // Reordering within the list
     if (over && active.id !== over.id) {
       const oldIndex = currentSongs.findIndex((s) => s.id === active.id);
       const newIndex = currentSongs.findIndex((s) => s.id === over.id);
-      const newSongs = arrayMove(currentSongs, oldIndex, newIndex);
-      setBlockSongs(timeKey, newSongs);
-      addToHistory(timeKey, newSongs, 'Reordenar músicas');
+      if (oldIndex >= 0 && newIndex >= 0) {
+        const newSongs = arrayMove(currentSongs, oldIndex, newIndex);
+        setBlockSongs(timeKey, newSongs);
+        addToHistory(timeKey, newSongs, 'Reordenar músicas');
+      }
     }
   };
 
@@ -1134,41 +1214,37 @@ export function BlockEditorView() {
             </CardContent>
           </Card>
 
-          {/* Add Fixed Content */}
+          {/* Add Fixed Content - Draggable */}
           <Card className="glass-card">
             <CardHeader className="border-b border-border py-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Newspaper className="w-4 h-4 text-accent" />
-                Adicionar Conteúdo Fixo
+                Conteúdos Fixos
+                <Badge variant="outline" className="text-xs ml-auto">Arraste</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-2">
               <div className="space-y-1 max-h-36 overflow-y-auto">
                 {fixedContentPool.map((content, i) => (
-                  <button
+                  <DraggablePoolItem
                     key={i}
-                    onClick={() => handleAddSong(content)}
-                    className="w-full flex items-center gap-2 p-2 rounded hover:bg-secondary/50 transition-colors text-left"
-                  >
-                    <div className="w-6 h-6 rounded bg-accent/20 flex items-center justify-center">
-                      <Plus className="w-3 h-3 text-accent" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{content.title}</p>
-                      <p className="text-xs text-muted-foreground truncate">{content.file}</p>
-                    </div>
-                  </button>
+                    item={content}
+                    index={i}
+                    type="fixed"
+                    onAdd={() => handleAddSong(content)}
+                  />
                 ))}
               </div>
             </CardContent>
           </Card>
 
-          {/* Add Music - Now uses dynamic song pool from captured songs */}
+          {/* Add Music - Draggable */}
           <Card className="glass-card">
             <CardHeader className="border-b border-border py-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Music className="w-4 h-4 text-primary" />
-                Adicionar Música ({dynamicSongPool.length})
+                Músicas ({dynamicSongPool.length})
+                <Badge variant="outline" className="text-xs ml-auto">Arraste</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-2">
@@ -1181,22 +1257,13 @@ export function BlockEditorView() {
               ) : (
                 <div className="space-y-1 max-h-48 overflow-y-auto">
                   {dynamicSongPool.map((song, i) => (
-                    <button
+                    <DraggablePoolItem
                       key={i}
-                      onClick={() => handleAddSong(song)}
-                      className="w-full flex items-center gap-2 p-2 rounded hover:bg-secondary/50 transition-colors text-left"
-                    >
-                      <div className="w-6 h-6 rounded bg-primary/20 flex items-center justify-center">
-                        <Plus className="w-3 h-3 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{song.title}</p>
-                        <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
-                      </div>
-                      <Badge variant="secondary" className="text-xs shrink-0">
-                        {song.source}
-                      </Badge>
-                    </button>
+                      item={song}
+                      index={i}
+                      type="music"
+                      onAdd={() => handleAddSong(song)}
+                    />
                   ))}
                 </div>
               )}
@@ -1212,6 +1279,7 @@ export function BlockEditorView() {
                 <li>• 📊 Barra mostra distribuição</li>
                 <li>• 🗂️ "Lote" aplica a vários horários</li>
                 <li>• ⚠️ Amarelo = música repetida</li>
+                <li>• 🖱️ Arraste itens para a grade</li>
               </ul>
             </CardContent>
           </Card>
