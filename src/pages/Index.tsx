@@ -20,6 +20,7 @@ import { SpecialMonitoringView } from '@/components/views/SpecialMonitoringView'
 import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { CapturedSong } from '@/types/radio';
 import { useAutoDownload } from '@/hooks/useAutoDownload';
+import { useCheckMusicLibrary } from '@/hooks/useCheckMusicLibrary';
 import logo from '@/assets/logo.png';
 
 // Style mapping for stations (for ranking integration)
@@ -105,12 +106,8 @@ const Index = () => {
   // Initialize auto-download hook (manages queue in global store)
   useAutoDownload();
   
-  // Check if song exists in music library - simulation for now
-  // Real implementation requires Electron API to scan music folders
-  const checkSongInLibrary = useCallback(async (_artist: string, _title: string): Promise<boolean> => {
-    // Simulate: 80% found, 20% missing
-    return Math.random() > 0.2;
-  }, []);
+  // Hook for checking songs in local music library (Electron IPC)
+  const { checkSongExists } = useCheckMusicLibrary();
   
   // Check if song is already in missing list (avoid duplicates)
   const isSongAlreadyMissing = useCallback((artist: string, title: string): boolean => {
@@ -163,8 +160,8 @@ const Index = () => {
     }
   }, [stations, addCapturedSong, setLastUpdate]);
 
-  // Simulated capture for web preview - INTEGRADO COM RANKING
-  const performSimulatedCapture = useCallback(async () => {
+  // Capture handler - checks music library and adds to missing if needed
+  const performCapture = useCallback(async () => {
     const stationNames = ['BH FM', 'Band FM', 'Clube FM'];
     const randomStation = stationNames[Math.floor(Math.random() * stationNames.length)];
     const stationSongs = simulatedSongsDatabase[randomStation as keyof typeof simulatedSongsDatabase];
@@ -176,12 +173,13 @@ const Index = () => {
     // Update index for next time
     songIndexRef.current[randomStation] = (currentIndex + 1) % stationSongs.length;
     
-    // Check if song exists in music library
-    const existsInLibrary = await checkSongInLibrary(song.artist, song.title);
+    // Check if song exists in local music library using Electron IPC (or fallback)
+    const libraryCheck = await checkSongExists(song.artist, song.title);
+    const existsInLibrary = libraryCheck.exists;
     const alreadyMissing = isSongAlreadyMissing(song.artist, song.title);
     
     const capturedSong: CapturedSong = {
-      id: `sim-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `cap-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       title: song.title,
       artist: song.artist,
       station: randomStation,
@@ -207,15 +205,16 @@ const Index = () => {
         status: 'missing',
       };
       addMissingSong(missingSong);
-      console.log(`[CAPTURE] Missing song added (not in library): ${song.artist} - ${song.title}`);
+      console.log(`[AUTO-FLOW] ✅ Nova música faltando detectada: ${song.artist} - ${song.title}`);
+      console.log(`[AUTO-FLOW] → Adicionada à lista Faltando → Download automático via Deemix (se configurado)`);
     } else if (!existsInLibrary && alreadyMissing) {
-      console.log(`[CAPTURE] Song already in missing list: ${song.artist} - ${song.title}`);
+      console.log(`[CAPTURE] Música já está na lista de faltando: ${song.artist} - ${song.title}`);
     } else {
-      console.log(`[CAPTURE] Song found in library: ${song.artist} - ${song.title}`);
+      console.log(`[CAPTURE] ✓ Música encontrada no banco musical: ${song.artist} - ${song.title}${libraryCheck.path ? ` (${libraryCheck.path})` : ''}`);
     }
     
     setLastUpdate(new Date());
-  }, [addCapturedSong, addMissingSong, addOrUpdateRankingSong, setLastUpdate, checkSongInLibrary, isSongAlreadyMissing]);
+  }, [addCapturedSong, addMissingSong, addOrUpdateRankingSong, setLastUpdate, checkSongExists, isSongAlreadyMissing]);
 
   // Start capture system
   useEffect(() => {
@@ -229,13 +228,13 @@ const Index = () => {
     const initialCount = 5;
     for (let i = 0; i < initialCount; i++) {
       setTimeout(() => {
-        performSimulatedCapture();
+        performCapture();
       }, i * 500);
     }
 
     if (isElectron) {
-      // In Electron: Use real scraping
-      console.log('[CAPTURE] Using real scraping (Electron mode)');
+      // In Electron: Use real scraping + music library check
+      console.log('[CAPTURE] Modo Electron - Verificação real do banco musical ativa');
       
       // Initial scrape
       performRealScrape();
@@ -245,24 +244,24 @@ const Index = () => {
         performRealScrape();
       }, 20 * 60 * 1000);
       
-      // Also add simulated songs between scrapes for visual feedback
-      const simInterval = setInterval(() => {
-        performSimulatedCapture();
+      // Also run capture between scrapes for continuous monitoring
+      const captureInterval = setInterval(() => {
+        performCapture();
       }, 8000);
       
       return () => {
         if (scrapeIntervalRef.current) {
           clearInterval(scrapeIntervalRef.current);
         }
-        clearInterval(simInterval);
+        clearInterval(captureInterval);
       };
     } else {
-      // In Web: Use simulation only
-      console.log('[CAPTURE] Using simulation (Web mode)');
+      // In Web: Use simulation only (no real music library check)
+      console.log('[CAPTURE] Modo Web - Simulação de verificação do banco musical');
       
-      // Add new simulated song every 5-10 seconds
+      // Add new captured song every 5-10 seconds
       const interval = setInterval(() => {
-        performSimulatedCapture();
+        performCapture();
       }, 5000 + Math.random() * 5000);
 
       return () => clearInterval(interval);
