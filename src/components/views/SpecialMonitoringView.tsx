@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore } from '@/store/radioStore';
 import { useToast } from '@/hooks/use-toast';
-import { MonitoringSchedule, RadioStation } from '@/types/radio';
+import { MonitoringSchedule, RadioStation, WeekDay } from '@/types/radio';
 import { supabase } from '@/integrations/supabase/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -62,7 +62,20 @@ export function SpecialMonitoringView() {
     customStationName: '',
     customStationUrl: '',
     useCustomStation: false,
+    weekDays: ['seg', 'ter', 'qua', 'qui', 'sex'] as WeekDay[], // Default: weekdays
   });
+
+  const weekDayLabels: Record<WeekDay, string> = {
+    dom: 'Dom',
+    seg: 'Seg',
+    ter: 'Ter',
+    qua: 'Qua',
+    qui: 'Qui',
+    sex: 'Sex',
+    sab: 'Sáb',
+  };
+
+  const allWeekDays: WeekDay[] = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
 
   // All stations (including disabled ones) for quick selection
   const allStations = stations;
@@ -118,12 +131,29 @@ export function SpecialMonitoringView() {
 
       if (error) throw error;
 
-      // Filter songs by scheduled hours
+      // Filter songs by scheduled time ranges AND weekdays
       const filteredSongs = (songs || []).filter(song => {
-        const songHour = new Date(song.scraped_at).getHours();
-        const matchingSchedule = allSchedules.find(
-          s => s.enabled && s.hour === songHour && s.stationName === song.station_name
-        );
+        const songDate = new Date(song.scraped_at);
+        const songHour = songDate.getHours();
+        const songMinute = songDate.getMinutes();
+        const songTimeInMinutes = songHour * 60 + songMinute;
+        const songDayIndex = songDate.getDay();
+        const dayMap: WeekDay[] = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+        const songWeekDay = dayMap[songDayIndex];
+
+        const matchingSchedule = allSchedules.find(s => {
+          if (!s.enabled || s.stationName !== song.station_name) return false;
+          
+          const startTime = s.hour * 60 + s.minute;
+          const endTime = (s.endHour ?? s.hour + 1) * 60 + (s.endMinute ?? 0);
+          const isInTimeRange = songTimeInMinutes >= startTime && songTimeInMinutes <= endTime;
+          
+          // Check weekday if specified
+          const weekDays = s.weekDays || [];
+          const isCorrectDay = weekDays.length === 0 || weekDays.includes(songWeekDay);
+          
+          return isInTimeRange && isCorrectDay;
+        });
         return !!matchingSchedule;
       });
 
@@ -196,6 +226,7 @@ export function SpecialMonitoringView() {
       enabled: true,
       label: newSchedule.label || `${newSchedule.hour.toString().padStart(2, '0')}:${newSchedule.minute.toString().padStart(2, '0')} - ${newSchedule.endHour.toString().padStart(2, '0')}:${newSchedule.endMinute.toString().padStart(2, '0')}`,
       customUrl: newSchedule.useCustomStation ? newSchedule.customStationUrl : undefined,
+      weekDays: newSchedule.weekDays.length > 0 ? newSchedule.weekDays : undefined,
     };
 
     const currentSchedules = station.monitoringSchedules || [];
@@ -209,7 +240,7 @@ export function SpecialMonitoringView() {
       description: `${displayName} será monitorada às ${newSchedule.hour}:${newSchedule.minute.toString().padStart(2, '0')}`,
     });
 
-    setNewSchedule({ hour: 18, minute: 0, endHour: 19, endMinute: 0, label: '', stationId: '', customStationName: '', customStationUrl: '', useCustomStation: false });
+    setNewSchedule({ hour: 18, minute: 0, endHour: 19, endMinute: 0, label: '', stationId: '', customStationName: '', customStationUrl: '', useCustomStation: false, weekDays: ['seg', 'ter', 'qua', 'qui', 'sex'] });
     setSelectedStation(null);
     setIsDialogOpen(false);
   };
@@ -546,6 +577,40 @@ ${exportLines.join('\n')}`;
                       </div>
                     </div>
 
+                    {/* Week Days Selector */}
+                    <div>
+                      <label className="text-sm text-muted-foreground font-medium">Dias da Semana</label>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {allWeekDays.map(day => (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => {
+                              setNewSchedule(prev => {
+                                const current = prev.weekDays;
+                                const updated = current.includes(day)
+                                  ? current.filter(d => d !== day)
+                                  : [...current, day];
+                                return { ...prev, weekDays: updated };
+                              });
+                            }}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                              newSchedule.weekDays.includes(day)
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-secondary text-muted-foreground hover:bg-secondary/80'
+                            }`}
+                          >
+                            {weekDayLabels[day]}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {newSchedule.weekDays.length === 0 ? 'Todos os dias' : 
+                         newSchedule.weekDays.length === 7 ? 'Todos os dias' :
+                         `${newSchedule.weekDays.length} dia${newSchedule.weekDays.length > 1 ? 's' : ''} selecionado${newSchedule.weekDays.length > 1 ? 's' : ''}`}
+                      </p>
+                    </div>
+
                     <div>
                       <label className="text-sm text-muted-foreground">Descrição (opcional)</label>
                       <Input
@@ -618,6 +683,22 @@ ${exportLines.join('\n')}`;
                             <p className="text-xs text-muted-foreground">
                               {schedule.label || 'Música diferenciada'}
                             </p>
+                            {schedule.weekDays && schedule.weekDays.length > 0 && schedule.weekDays.length < 7 && (
+                              <div className="flex gap-0.5 mt-1">
+                                {allWeekDays.map(day => (
+                                  <span
+                                    key={day}
+                                    className={`text-[9px] px-1 rounded ${
+                                      schedule.weekDays?.includes(day)
+                                        ? 'bg-primary/20 text-primary'
+                                        : 'bg-secondary/50 text-muted-foreground/50'
+                                    }`}
+                                  >
+                                    {day.charAt(0).toUpperCase()}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
