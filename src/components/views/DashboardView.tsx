@@ -329,7 +329,7 @@ export function DashboardView() {
         </CardContent>
       </Card>
 
-      {/* Radio Stations Windows - Real Data from Supabase */}
+      {/* Radio Stations Windows - All Registered Stations */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -337,49 +337,60 @@ export function DashboardView() {
             Captura em Tempo Real
             <Badge variant="secondary" className="ml-2 text-xs">
               <Database className="w-3 h-3 mr-1" />
-              Supabase
+              {realtimeStats.allStations.length} emissoras
             </Badge>
           </h3>
         </div>
         
-        {Object.keys(realtimeStats.recentSongsByStation).length > 0 ? (
+        {realtimeStats.allStations.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Object.entries(realtimeStats.recentSongsByStation).slice(0, 6).map(([stationName, songs], stationIndex) => {
+            {realtimeStats.allStations.map((station, stationIndex) => {
               const colors = colorPalette[stationIndex % colorPalette.length];
+              const songs = realtimeStats.recentSongsByStation[station.name] || [];
+              const count24h = realtimeStats.stationCounts[station.name] || 0;
               
               return (
-                <Card key={stationName} className={`glass-card ${colors.border}`}>
+                <Card key={station.name} className={`glass-card ${colors.border}`}>
                   <CardHeader className={`py-3 px-4 border-b border-border ${colors.bg}`}>
                     <CardTitle className="flex items-center justify-between text-base">
                       <div className="flex items-center gap-2">
                         <Radio className={`w-4 h-4 ${colors.text}`} />
-                        <span className={colors.text}>{stationName}</span>
+                        <span className={colors.text}>{station.name}</span>
                       </div>
                       <Badge variant="outline" className={`${colors.border} ${colors.text} text-xs`}>
-                        {realtimeStats.stationCounts[stationName] || 0} (24h)
+                        {count24h} (24h)
                       </Badge>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
                     <ScrollArea className="h-[150px]">
-                      <div className="divide-y divide-border">
-                        {songs.map((song, index) => (
-                          <div key={`${song.timestamp}-${index}`} className="p-3 hover:bg-secondary/30 transition-colors">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <Music className={`w-4 h-4 ${colors.text}`} />
-                                <div className="min-w-0 flex-1">
-                                  <p className="font-medium text-foreground text-sm truncate">{song.title}</p>
-                                  <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                      {songs.length > 0 ? (
+                        <div className="divide-y divide-border">
+                          {songs.map((song, index) => (
+                            <div key={`${song.timestamp}-${index}`} className="p-3 hover:bg-secondary/30 transition-colors">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <Music className={`w-4 h-4 ${colors.text}`} />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-medium text-foreground text-sm truncate">{song.title}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                                  </div>
                                 </div>
+                                <span className="text-xs text-muted-foreground ml-2 shrink-0">
+                                  {formatDistanceToNow(new Date(song.timestamp), { addSuffix: true, locale: ptBR })}
+                                </span>
                               </div>
-                              <span className="text-xs text-muted-foreground ml-2 shrink-0">
-                                {formatDistanceToNow(new Date(song.timestamp), { addSuffix: true, locale: ptBR })}
-                              </span>
                             </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-muted-foreground p-4">
+                          <div className="text-center">
+                            <Music className="w-6 h-6 mx-auto mb-2 opacity-30" />
+                            <p className="text-xs">Aguardando capturas...</p>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      )}
                     </ScrollArea>
                   </CardContent>
                 </Card>
@@ -390,11 +401,8 @@ export function DashboardView() {
           <Card className="glass-card border-dashed">
             <CardContent className="p-8 text-center text-muted-foreground">
               <Radio className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">Nenhuma captura ainda</p>
-              <p className="text-sm mt-2">As músicas capturadas das emissoras aparecerão aqui em tempo real.</p>
-              <p className="text-xs mt-4 text-primary">
-                O sistema captura automaticamente a cada 5 minutos via Edge Function
-              </p>
+              <p className="text-lg font-medium">Nenhuma emissora cadastrada</p>
+              <p className="text-sm mt-2">Adicione emissoras na seção "Emissoras" para começar o monitoramento.</p>
             </CardContent>
           </Card>
         )}
