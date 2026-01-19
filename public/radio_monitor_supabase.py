@@ -2,15 +2,14 @@
 """
 ╔═══════════════════════════════════════════════════════════════════════════════╗
 ║                     MONITOR DE RÁDIOS - TEMPO REAL                            ║
+║                          INTEGRADO COM SUPABASE                               ║
 ║                                                                               ║
 ║  Monitora "Tocando Agora" e "Últimas Tocadas" de múltiplas rádios            ║
-║  com atualização automática a cada 5 minutos e resiliência a quedas          ║
+║  com atualização automática e envio para banco de dados Supabase             ║
 ║                                                                               ║
-║  ENVIA DADOS AUTOMATICAMENTE PARA O SUPABASE                                  ║
+║  CONFIGURAÇÃO: As emissoras são carregadas automaticamente do Supabase!      ║
 ║                                                                               ║
-║  CONFIGURAÇÃO: Edite o arquivo radios_config.json para adicionar rádios      ║
-║                                                                               ║
-║  Autor: Manus AI / Ricardo Amaral | Data: Janeiro 2026                        ║
+║  Autor: Audio Solutions | Data: Janeiro 2026                                  ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 """
 
@@ -110,8 +109,7 @@ import json
 import socket
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional
-import re
+from typing import Dict, List, Any
 
 try:
     from playwright.async_api import async_playwright, Page
@@ -129,26 +127,25 @@ except ImportError:
 # CONFIGURAÇÃO DO SUPABASE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# !!! CONFIGURE AQUI COM SUAS CREDENCIAIS !!!
+# Credenciais do Supabase - Configure aqui!
 SUPABASE_URL = "https://liuyuvxbdmowtidjhfnc.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpdXl1dnhiZG1vd3RpZGpoZm5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg3NTMzOTIsImV4cCI6MjA4NDMyOTM5Mn0.S-dt-yzcHn9g3u3K6fTGJbNNPPX-K0wMQFEwh3s7eTc"
 
-# Criar cliente Supabase
-supabase: Optional[Client] = None
+# Inicializar cliente Supabase
+supabase: Client = None
 if SUPABASE_OK and SUPABASE_URL and SUPABASE_ANON_KEY:
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
         print("  ✅ Supabase conectado!")
     except Exception as e:
-        print(f"  ⚠️ Erro ao conectar Supabase: {e}")
+        print(f"  ⚠️  Erro ao conectar Supabase: {e}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ARQUIVO DE CONFIGURAÇÃO
+# CONFIGURAÇÃO LOCAL (FALLBACK)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 ARQUIVO_CONFIG = "radios_config.json"
 
-# Configuração padrão caso o arquivo não exista
 CONFIG_PADRAO = {
     "configuracao": {
         "intervalo_minutos": 5,
@@ -156,32 +153,7 @@ CONFIG_PADRAO = {
         "arquivo_historico": "radio_historico.json",
         "arquivo_relatorio": "radio_relatorio.txt"
     },
-    "radios": [
-        {
-            "nome": "BH FM 102.1",
-            "url": "https://mytuner-radio.com/pt/radio/radio-bh-fm-402270",
-            "tipo": "mytuner",
-            "ativo": True
-        },
-        {
-            "nome": "Clube FM Brasília 105.5",
-            "url": "https://mytuner-radio.com/pt/radio/radio-clube-fm-brasilia-1055-406812/",
-            "tipo": "mytuner",
-            "ativo": True
-        },
-        {
-            "nome": "Band FM 96.1",
-            "url": "https://mytuner-radio.com/pt/radio/band-fm-413397/",
-            "tipo": "mytuner",
-            "ativo": True
-        },
-        {
-            "nome": "Rádio Globo RJ 98.1",
-            "url": "https://mytuner-radio.com/pt/radio/radio-globo-rj-402262/",
-            "tipo": "mytuner",
-            "ativo": True
-        }
-    ]
+    "radios": []
 }
 
 def carregar_configuracao():
@@ -192,14 +164,6 @@ def carregar_configuracao():
                 return json.load(f)
         except Exception as e:
             print(f"  ⚠️  Erro ao carregar {ARQUIVO_CONFIG}: {e}")
-            print(f"  📝 Usando configuração padrão...")
-    else:
-        # Criar arquivo de configuração padrão
-        print(f"  📝 Criando arquivo de configuração: {ARQUIVO_CONFIG}")
-        with open(ARQUIVO_CONFIG, 'w', encoding='utf-8') as f:
-            json.dump(CONFIG_PADRAO, f, ensure_ascii=False, indent=2)
-        print(f"  ✅ Arquivo criado! Edite-o para adicionar/remover rádios.")
-    
     return CONFIG_PADRAO
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -225,29 +189,26 @@ def cor(c: str, texto: str) -> str:
     return f"{c}{texto}{Cores.RESET}"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PARSER DE MÚSICA
+# FUNÇÕES AUXILIARES
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def parse_song_text(text: str) -> Dict[str, str]:
-    """Extrai título e artista de uma string de música"""
+    """Extrai título e artista de um texto de música"""
     if not text:
         return {"title": "", "artist": ""}
     
-    # Limpa o texto
     text = text.strip()
     
-    # Tenta diferentes formatos
-    # Formato: "Artista - Música" ou "Música - Artista"
-    if " - " in text:
-        parts = text.split(" - ", 1)
-        # Assume Artista - Título
-        return {"artist": parts[0].strip(), "title": parts[1].strip()}
-    elif " – " in text:
-        parts = text.split(" – ", 1)
-        return {"artist": parts[0].strip(), "title": parts[1].strip()}
-    else:
-        # Se não tem separador, usa todo como título
-        return {"title": text, "artist": "Desconhecido"}
+    # Formatos comuns: "Artista - Título" ou "Título - Artista"
+    separators = [" - ", " – ", " — ", " | "]
+    
+    for sep in separators:
+        if sep in text:
+            parts = text.split(sep, 1)
+            if len(parts) == 2:
+                return {"artist": parts[0].strip(), "title": parts[1].strip()}
+    
+    return {"title": text, "artist": "Desconhecido"}
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CLASSE PRINCIPAL
@@ -256,13 +217,14 @@ def parse_song_text(text: str) -> Dict[str, str]:
 class RadioMonitor:
     def __init__(self, config: Dict):
         self.config = config.get('configuracao', {})
-        self.radios = [r for r in config.get('radios', []) if r.get('ativo', True)]
+        self.radios = []  # Será carregado do Supabase
         self.intervalo = self.config.get('intervalo_minutos', 5) * 60
         self.arquivo_historico = self.config.get('arquivo_historico', 'radio_historico.json')
         self.arquivo_relatorio = self.config.get('arquivo_relatorio', 'radio_relatorio.txt')
         self.mostrar_navegador = self.config.get('mostrar_navegador', False)
         self.historico = self._carregar_historico()
         self.online = True
+        self.supabase_stations = {}  # Mapa nome -> id
         
     def _carregar_historico(self) -> Dict:
         if Path(self.arquivo_historico).exists():
@@ -304,13 +266,6 @@ class RadioMonitor:
                         for i, m in enumerate(ultimo['ultimas_tocadas'][:10], 1):
                             f.write(f"   {i}. {m}\n")
                         f.write("\n")
-                    
-                    hist = dados.get('historico_completo', [])
-                    if hist:
-                        f.write(f"📊 HISTÓRICO ({len(hist)} registros):\n")
-                        for item in reversed(hist[-20:]):
-                            f.write(f"   [{item.get('timestamp', '')[:16]}] {item.get('musica', '')}\n")
-                    f.write("\n\n")
                 
                 f.write("═" * 80 + "\nFim do relatório\n")
         except Exception as e:
@@ -329,82 +284,96 @@ class RadioMonitor:
     def _exibir_cabecalho(self):
         self._limpar_tela()
         print(cor(Cores.CYAN, "╔" + "═" * 70 + "╗"))
-        print(cor(Cores.CYAN, "║") + cor(Cores.BOLD + Cores.WHITE, "           🎵 MONITOR DE RÁDIOS - TEMPO REAL 🎵".center(70)) + cor(Cores.CYAN, "║"))
-        print(cor(Cores.CYAN, "║") + cor(Cores.GREEN, "              ✓ ENVIANDO PARA SUPABASE".center(70)) + cor(Cores.CYAN, "║"))
+        print(cor(Cores.CYAN, "║") + cor(Cores.BOLD + Cores.WHITE, "     🎵 MONITOR DE RÁDIOS - SUPABASE EDITION 🎵".center(70)) + cor(Cores.CYAN, "║"))
         print(cor(Cores.CYAN, "╚" + "═" * 70 + "╝"))
         print()
         
         status = cor(Cores.GREEN, "● ONLINE") if self.online else cor(Cores.RED, "● OFFLINE")
-        supabase_status = cor(Cores.GREEN, "● CONECTADO") if supabase else cor(Cores.YELLOW, "● LOCAL")
-        print(f"  Status: {status}  |  Supabase: {supabase_status}")
+        supabase_status = cor(Cores.GREEN, "● CONECTADO") if supabase else cor(Cores.RED, "● DESCONECTADO")
+        print(f"  Internet: {status}")
+        print(f"  Supabase: {supabase_status}")
         print(f"  Última atualização: {self.historico.get('ultima_atualizacao', 'Nunca')}")
         print(f"  Intervalo: {self.config.get('intervalo_minutos', 5)} minutos")
         print(f"  Rádios ativas: {len(self.radios)}")
         print()
         print(cor(Cores.YELLOW, "─" * 72))
     
-    async def _enviar_para_supabase(self, station_name: str, tocando_agora: str, ultimas: List[str], station_url: str):
+    def _carregar_radios_supabase(self) -> List[Dict]:
+        """Carrega as rádios ativas do Supabase"""
+        if not supabase:
+            print(cor(Cores.YELLOW, "  ⚠️  Supabase não conectado, usando config local"))
+            config = carregar_configuracao()
+            return [r for r in config.get('radios', []) if r.get('ativo', True)]
+        
+        try:
+            response = supabase.table('radio_stations').select('*').eq('enabled', True).execute()
+            
+            radios = []
+            for station in response.data:
+                # Determinar o tipo baseado na URL
+                url = station.get('scrape_url', '')
+                if 'clubefm' in url.lower():
+                    tipo = 'clubefm'
+                else:
+                    tipo = 'mytuner'
+                
+                radios.append({
+                    'nome': station.get('name'),
+                    'url': url,
+                    'tipo': tipo,
+                    'id': station.get('id')
+                })
+                
+                # Guardar mapeamento nome -> id
+                self.supabase_stations[station.get('name')] = station.get('id')
+            
+            print(cor(Cores.GREEN, f"  ✅ {len(radios)} rádios carregadas do Supabase"))
+            return radios
+            
+        except Exception as e:
+            print(cor(Cores.RED, f"  ❌ Erro ao carregar rádios: {e}"))
+            config = carregar_configuracao()
+            return [r for r in config.get('radios', []) if r.get('ativo', True)]
+    
+    async def _enviar_para_supabase(self, dados: Dict, radio: Dict):
         """Envia dados capturados para o Supabase"""
         if not supabase:
             return
         
         try:
-            # Busca ou cria a estação
-            result = supabase.table('radio_stations').select('id').eq('name', station_name).execute()
+            station_id = radio.get('id') or self.supabase_stations.get(dados['nome'])
+            station_name = dados['nome']
             
-            if result.data:
-                station_id = result.data[0]['id']
-            else:
-                # Cria a estação
-                insert_result = supabase.table('radio_stations').insert({
-                    'name': station_name,
-                    'scrape_url': station_url,
-                    'enabled': True,
-                    'styles': []
-                }).execute()
-                station_id = insert_result.data[0]['id'] if insert_result.data else None
-            
-            if not station_id:
-                return
-            
-            # Envia músicas
-            songs_to_insert = []
-            
-            # Música tocando agora
-            if tocando_agora:
-                parsed = parse_song_text(tocando_agora)
-                songs_to_insert.append({
-                    'station_id': station_id,
-                    'station_name': station_name,
-                    'title': parsed['title'],
-                    'artist': parsed['artist'],
-                    'is_now_playing': True,
-                    'source': station_url
-                })
-            
-            # Últimas tocadas
-            for song_text in ultimas[:10]:
-                parsed = parse_song_text(song_text)
-                if parsed['title']:
-                    songs_to_insert.append({
-                        'station_id': station_id,
-                        'station_name': station_name,
-                        'title': parsed['title'],
-                        'artist': parsed['artist'],
-                        'is_now_playing': False,
-                        'source': station_url
-                    })
-            
-            if songs_to_insert:
-                # Evita duplicatas verificando músicas recentes
-                for song in songs_to_insert:
-                    # Verifica se já existe nos últimos 5 minutos
-                    existing = supabase.table('scraped_songs').select('id').eq('station_id', station_id).eq('title', song['title']).eq('artist', song['artist']).gte('scraped_at', (datetime.now().isoformat()[:16])).execute()
-                    
-                    if not existing.data:
-                        supabase.table('scraped_songs').insert(song).execute()
+            # Enviar "tocando agora"
+            if dados.get('tocando_agora'):
+                song_info = parse_song_text(dados['tocando_agora'])
                 
-                print(cor(Cores.GREEN, f"     ☁️  Enviado para Supabase: {len(songs_to_insert)} músicas"))
+                song_data = {
+                    'station_name': station_name,
+                    'station_id': station_id,
+                    'title': song_info['title'] or dados['tocando_agora'],
+                    'artist': song_info['artist'] or 'Desconhecido',
+                    'is_now_playing': True,
+                    'source': 'python_monitor'
+                }
+                
+                supabase.table('scraped_songs').insert(song_data).execute()
+                print(cor(Cores.GREEN, f"     ☁️  Enviado para Supabase: {song_info['title']}"))
+            
+            # Enviar últimas tocadas
+            for song_text in dados.get('ultimas_tocadas', [])[:5]:
+                song_info = parse_song_text(song_text)
+                
+                song_data = {
+                    'station_name': station_name,
+                    'station_id': station_id,
+                    'title': song_info['title'] or song_text,
+                    'artist': song_info['artist'] or 'Desconhecido',
+                    'is_now_playing': False,
+                    'source': 'python_monitor'
+                }
+                
+                supabase.table('scraped_songs').insert(song_data).execute()
                 
         except Exception as e:
             print(cor(Cores.YELLOW, f"     ⚠️  Erro Supabase: {str(e)[:50]}"))
@@ -526,6 +495,13 @@ class RadioMonitor:
             print(cor(Cores.RED, "❌ Playwright não disponível"))
             return
         
+        # Recarregar rádios do Supabase a cada atualização
+        self.radios = self._carregar_radios_supabase()
+        
+        if not self.radios:
+            print(cor(Cores.YELLOW, "  ⚠️  Nenhuma rádio configurada!"))
+            return
+        
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=not self.mostrar_navegador)
             page = await browser.new_page()
@@ -543,6 +519,9 @@ class RadioMonitor:
                 else:
                     dados = await self._extrair_mytuner(page, radio['url'], radio['nome'])
                 
+                # Enviar para Supabase
+                await self._enviar_para_supabase(dados, radio)
+                
                 radio_id = radio['nome'].lower().replace(' ', '_')
                 if radio_id not in self.historico["radios"]:
                     self.historico["radios"][radio_id] = {
@@ -550,21 +529,13 @@ class RadioMonitor:
                     }
                 
                 if dados["tocando_agora"]:
-                    hist = self.historico["radios"][radio_id]["historico_completo"]
+                    hist = self.historico["radios"][radio_id].get("historico_completo", [])
                     if not hist or hist[-1].get("musica") != dados["tocando_agora"]:
                         hist.append({"musica": dados["tocando_agora"], "timestamp": dados["timestamp"]})
                         self.historico["radios"][radio_id]["historico_completo"] = hist[-1000:]
                 
                 self.historico["radios"][radio_id]["ultimo_dado"] = dados
                 self._exibir_radio(dados)
-                
-                # Enviar para Supabase
-                await self._enviar_para_supabase(
-                    radio['nome'],
-                    dados.get('tocando_agora'),
-                    dados.get('ultimas_tocadas', []),
-                    radio['url']
-                )
             
             await browser.close()
             
@@ -572,10 +543,10 @@ class RadioMonitor:
             self._salvar_historico()
             self._salvar_relatorio()
             
-            print(cor(Cores.GREEN, f"\n  💾 Histórico: {self.arquivo_historico}"))
+            print(cor(Cores.GREEN, f"\n  💾 Histórico local: {self.arquivo_historico}"))
             print(cor(Cores.GREEN, f"  📄 Relatório: {self.arquivo_relatorio}"))
             if supabase:
-                print(cor(Cores.GREEN, f"  ☁️  Dados sincronizados com Supabase!"))
+                print(cor(Cores.CYAN, f"  ☁️  Dados sincronizados com Supabase!"))
     
     async def _aguardar_reconexao(self):
         tentativas = 0
@@ -592,11 +563,12 @@ class RadioMonitor:
         await asyncio.sleep(2)
     
     async def iniciar(self):
-        print(cor(Cores.CYAN, "\n🚀 Iniciando Monitor de Rádios...\n"))
-        print(f"  📝 Configuração: {ARQUIVO_CONFIG}")
+        print(cor(Cores.CYAN, "\n🚀 Iniciando Monitor de Rádios com Supabase...\n"))
+        
+        # Carregar rádios iniciais
+        self.radios = self._carregar_radios_supabase()
+        
         print(f"  📻 Rádios ativas: {len(self.radios)}")
-        if supabase:
-            print(f"  ☁️  Supabase: Conectado")
         print()
         
         while True:
@@ -636,20 +608,19 @@ class RadioMonitor:
 if __name__ == "__main__":
     print()
     print(cor(Cores.CYAN, "╔" + "═" * 60 + "╗"))
-    print(cor(Cores.CYAN, "║") + cor(Cores.BOLD, " 🎵 MONITOR DE RÁDIOS - TEMPO REAL ".center(60)) + cor(Cores.CYAN, "║"))
-    print(cor(Cores.CYAN, "║") + cor(Cores.GREEN, " ☁️  COM ENVIO PARA SUPABASE ".center(60)) + cor(Cores.CYAN, "║"))
+    print(cor(Cores.CYAN, "║") + cor(Cores.BOLD, " 🎵 MONITOR DE RÁDIOS - SUPABASE EDITION ".center(60)) + cor(Cores.CYAN, "║"))
     print(cor(Cores.CYAN, "╚" + "═" * 60 + "╝"))
     print()
     
-    # Carregar configuração
+    # Carregar configuração local (para intervalo, etc)
     config = carregar_configuracao()
     
     print()
-    print(cor(Cores.GREEN, "  ✅ Configuração carregada!"))
-    print(f"  📻 Rádios configuradas: {len(config.get('radios', []))}")
-    print()
-    print(cor(Cores.YELLOW, "  💡 Para adicionar/remover rádios, edite o arquivo:"))
-    print(cor(Cores.WHITE, f"     {ARQUIVO_CONFIG}"))
+    if supabase:
+        print(cor(Cores.GREEN, "  ✅ Modo Supabase ativo!"))
+        print(cor(Cores.CYAN, "  📻 As emissoras serão carregadas automaticamente do banco de dados"))
+    else:
+        print(cor(Cores.YELLOW, "  ⚠️  Supabase não conectado - usando modo local"))
     print()
     print(cor(Cores.CYAN, "  Pressione Ctrl+C a qualquer momento para encerrar."))
     print()
