@@ -5,6 +5,7 @@ export interface MonitoringSchedule {
   minute: number;
   enabled: boolean;
   label?: string; // Ex: "Horário nobre", "Música diferenciada"
+  customUrl?: string; // URL personalizada para rádios não cadastradas
 }
 
 export interface RadioStation {
