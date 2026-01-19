@@ -481,6 +481,57 @@ export function BlockEditorView() {
     toast({ title: 'Bloco resetado', description: `${defaultSongs.length} músicas restauradas.` });
   };
 
+  // Auto-fix duplicates: replace with same DNA/source or next available song
+  const handleFixDuplicates = useCallback(() => {
+    if (validationWarnings.length === 0) return;
+    
+    const usedSongs = new Set<string>();
+    const newSongs: BlockSong[] = [];
+    
+    currentSongs.forEach((song) => {
+      const songKey = `${song.title}-${song.artist}`;
+      
+      if (song.isFixed || !usedSongs.has(songKey)) {
+        // Not a duplicate, keep it
+        usedSongs.add(songKey);
+        newSongs.push(song);
+      } else {
+        // Duplicate found - find replacement with same source/DNA
+        const sameSourceSongs = dynamicSongPool.filter(s => 
+          s.source === song.source && 
+          !usedSongs.has(`${s.title}-${s.artist}`) &&
+          !currentSongs.some(cs => cs.title === s.title && cs.artist === s.artist)
+        );
+        
+        if (sameSourceSongs.length > 0) {
+          // Replace with same DNA
+          const replacement = sameSourceSongs[0];
+          usedSongs.add(`${replacement.title}-${replacement.artist}`);
+          newSongs.push({ ...replacement, id: `${timeKey}-fix-${Date.now()}-${newSongs.length}` });
+        } else {
+          // No same DNA available, use any available song
+          const anySong = dynamicSongPool.find(s => 
+            !usedSongs.has(`${s.title}-${s.artist}`) &&
+            !currentSongs.some(cs => cs.title === s.title && cs.artist === s.artist)
+          );
+          
+          if (anySong) {
+            usedSongs.add(`${anySong.title}-${anySong.artist}`);
+            newSongs.push({ ...anySong, id: `${timeKey}-fix-${Date.now()}-${newSongs.length}` });
+          }
+          // If no replacement found, skip the duplicate
+        }
+      }
+    });
+    
+    setBlockSongs(timeKey, newSongs);
+    addToHistory(timeKey, newSongs, 'Corrigir duplicatas');
+    toast({ 
+      title: 'Duplicatas corrigidas', 
+      description: `${validationWarnings.length} músicas substituídas por mesmo DNA/fonte.` 
+    });
+  }, [currentSongs, dynamicSongPool, validationWarnings, timeKey, setBlockSongs, addToHistory, toast]);
+
   const handleSave = () => {
     toast({ title: 'Bloco salvo', description: `Bloco ${timeKey} foi atualizado.` });
   };
