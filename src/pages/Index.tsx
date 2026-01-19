@@ -21,6 +21,7 @@ import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { CapturedSong } from '@/types/radio';
 import { useAutoDownload } from '@/hooks/useAutoDownload';
 import { useCheckMusicLibrary } from '@/hooks/useCheckMusicLibrary';
+import { useInitializeFolders } from '@/hooks/useInitializeFolders';
 import logo from '@/assets/logo.png';
 
 // Style mapping for stations (for ranking integration)
@@ -105,6 +106,9 @@ const Index = () => {
   
   // Initialize auto-download hook (manages queue in global store)
   useAutoDownload();
+  
+  // Initialize required folders on startup (Electron only)
+  useInitializeFolders();
   
   // Hook for checking songs in local music library (Electron IPC)
   const { checkSongExists } = useCheckMusicLibrary();

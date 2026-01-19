@@ -131,6 +131,7 @@ interface ElectronAPI {
   openExternal: (url: string) => Promise<void>;
   openPath: (path: string) => Promise<void>;
   openFolder: (path: string) => Promise<{ success: boolean; error?: string }>;
+  ensureFolder: (path: string) => Promise<{ success: boolean; created?: boolean; error?: string }>;
   selectFolder: () => Promise<string | null>;
   
   // Deezer/deemix integration

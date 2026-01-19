@@ -426,8 +426,39 @@ function setupAutoUpdater() {
   });
 }
 
+// =============== FOLDER INITIALIZATION ===============
+
+// Default folders to ensure exist on startup
+const DEFAULT_FOLDERS = [
+  'C:\\Playlist\\pgm\\Grades',
+  'C:\\Playlist\\Downloads',
+  'C:\\Playlist\\A Voz do Brasil',
+  'C:\\Playlist\\Músicas',
+];
+
+// Ensure required folders exist
+function ensureDefaultFolders() {
+  console.log('[INIT] Checking/creating default folders...');
+  
+  for (const folder of DEFAULT_FOLDERS) {
+    try {
+      if (!fs.existsSync(folder)) {
+        fs.mkdirSync(folder, { recursive: true });
+        console.log(`[INIT] ✓ Created folder: ${folder}`);
+      } else {
+        console.log(`[INIT] ✓ Folder exists: ${folder}`);
+      }
+    } catch (error) {
+      console.error(`[INIT] ✗ Failed to create folder ${folder}:`, error.message);
+    }
+  }
+}
+
 // App ready
 app.whenReady().then(() => {
+  // Ensure default folders exist
+  ensureDefaultFolders();
+  
   createWindow();
   createTray();
   setupAutoUpdater();
@@ -730,13 +761,35 @@ ipcMain.handle('notify-batch-complete', (event, { completed, failed, total, outp
   );
 });
 
-// Open folder in explorer
+// Open folder in explorer (create if not exists)
 ipcMain.handle('open-folder', (event, folderPath) => {
-  if (fs.existsSync(folderPath)) {
+  try {
+    // Create folder if it doesn't exist
+    if (!fs.existsSync(folderPath)) {
+      fs.mkdirSync(folderPath, { recursive: true });
+      console.log(`[FOLDER] Created: ${folderPath}`);
+    }
     shell.openPath(folderPath);
     return { success: true };
+  } catch (error) {
+    console.error(`[FOLDER] Error opening ${folderPath}:`, error.message);
+    return { success: false, error: error.message };
   }
-  return { success: false, error: 'Pasta não encontrada' };
+});
+
+// Ensure folder exists (create if not)
+ipcMain.handle('ensure-folder', (event, folderPath) => {
+  try {
+    if (!fs.existsSync(folderPath)) {
+      fs.mkdirSync(folderPath, { recursive: true });
+      console.log(`[FOLDER] Created: ${folderPath}`);
+      return { success: true, created: true };
+    }
+    return { success: true, created: false };
+  } catch (error) {
+    console.error(`[FOLDER] Error creating ${folderPath}:`, error.message);
+    return { success: false, error: error.message };
+  }
 });
 
 // =============== RADIO SCRAPING ===============
