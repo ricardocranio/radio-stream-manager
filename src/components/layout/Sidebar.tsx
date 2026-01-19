@@ -1,4 +1,4 @@
-import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic } from 'lucide-react';
+import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic, Music, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import logo from '@/assets/logo.png';
@@ -14,6 +14,7 @@ interface NavItem {
 const staticNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'dashboard', label: 'Dashboard', icon: Activity },
   { id: 'stations', label: 'Emissoras', icon: Radio },
+  { id: 'captured', label: 'Músicas Capturadas', icon: Database },
   { id: 'sequence', label: 'Sequência', icon: ListMusic },
   { id: 'schedule', label: 'Programação', icon: Clock },
   { id: 'gradebuilder', label: 'Montagem %dd%', icon: FileCode },

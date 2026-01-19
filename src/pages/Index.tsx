@@ -3,6 +3,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { DashboardView } from '@/components/views/DashboardView';
 import { StationsView } from '@/components/views/StationsView';
+import { CapturedSongsView } from '@/components/views/CapturedSongsView';
 import { SequenceView } from '@/components/views/SequenceView';
 import { ScheduleView } from '@/components/views/ScheduleView';
 import { FoldersView } from '@/components/views/FoldersView';
@@ -251,6 +252,8 @@ const Index = () => {
         return <DashboardView />;
       case 'stations':
         return <StationsView />;
+      case 'captured':
+        return <CapturedSongsView />;
       case 'sequence':
         return <SequenceView />;
       case 'schedule':
