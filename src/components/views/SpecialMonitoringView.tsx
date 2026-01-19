@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Clock, Plus, Trash2, Radio, Save, Calendar, Download, Search, Filter, Eye } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Clock, Plus, Trash2, Radio, Save, Calendar, Download, Search, Filter, Eye, AlertCircle, CheckCircle, Link } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -62,14 +62,37 @@ export function SpecialMonitoringView() {
     useCustomStation: false,
   });
 
+  // All stations (including disabled ones) for quick selection
+  const allStations = stations;
   const enabledStations = stations.filter(s => s.enabled);
 
-  // Get all schedules across stations
-  const allSchedules = enabledStations.flatMap(station =>
+  // URL validation for mytuner-radio.com
+  const isValidMytunerUrl = (url: string): boolean => {
+    if (!url) return false;
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname.includes('mytuner-radio.com') || parsed.hostname.includes('mytuner');
+    } catch {
+      return false;
+    }
+  };
+
+  const urlValidation = useMemo(() => {
+    if (!newSchedule.customStationUrl) return { valid: false, message: '' };
+    const valid = isValidMytunerUrl(newSchedule.customStationUrl);
+    return {
+      valid,
+      message: valid ? 'URL válida' : 'URL deve ser do mytuner-radio.com',
+    };
+  }, [newSchedule.customStationUrl]);
+
+  // Get all schedules across ALL stations (not just enabled)
+  const allSchedules = allStations.flatMap(station =>
     (station.monitoringSchedules || []).map(schedule => ({
       ...schedule,
       stationId: station.id,
       stationName: station.name,
+      stationUrl: station.scrapeUrl,
     }))
   );
 
@@ -347,6 +370,43 @@ ${exportLines.join('\n')}`;
 
                     {newSchedule.useCustomStation ? (
                       <>
+                        {/* Quick selection from existing stations */}
+                        {allStations.length > 0 && (
+                          <div>
+                            <label className="text-sm text-muted-foreground">Preencher com emissora existente</label>
+                            <Select 
+                              value="" 
+                              onValueChange={(id) => {
+                                const station = allStations.find(s => s.id === id);
+                                if (station) {
+                                  setNewSchedule(prev => ({
+                                    ...prev,
+                                    customStationName: station.name,
+                                    customStationUrl: station.scrapeUrl || '',
+                                  }));
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="mt-1">
+                                <SelectValue placeholder="Copiar dados de emissora cadastrada..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {allStations.map(station => (
+                                  <SelectItem key={station.id} value={station.id}>
+                                    <div className="flex items-center gap-2">
+                                      <Radio className="w-4 h-4" />
+                                      {station.name}
+                                      {station.scrapeUrl && (
+                                        <Badge variant="outline" className="text-[10px]">URL</Badge>
+                                      )}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        
                         <div>
                           <label className="text-sm text-muted-foreground">Nome da Emissora</label>
                           <Input
@@ -357,13 +417,26 @@ ${exportLines.join('\n')}`;
                           />
                         </div>
                         <div>
-                          <label className="text-sm text-muted-foreground">Link da Rádio (mytuner-radio.com)</label>
+                          <label className="text-sm text-muted-foreground flex items-center gap-2">
+                            <Link className="w-3 h-3" />
+                            Link da Rádio (mytuner-radio.com)
+                          </label>
                           <Input
-                            className="mt-1"
+                            className={`mt-1 ${newSchedule.customStationUrl && !urlValidation.valid ? 'border-destructive' : ''}`}
                             placeholder="https://mytuner-radio.com/radio/..."
                             value={newSchedule.customStationUrl}
                             onChange={e => setNewSchedule(prev => ({ ...prev, customStationUrl: e.target.value }))}
                           />
+                          {newSchedule.customStationUrl && (
+                            <div className={`flex items-center gap-1 mt-1 text-xs ${urlValidation.valid ? 'text-green-500' : 'text-destructive'}`}>
+                              {urlValidation.valid ? (
+                                <CheckCircle className="w-3 h-3" />
+                              ) : (
+                                <AlertCircle className="w-3 h-3" />
+                              )}
+                              {urlValidation.message}
+                            </div>
+                          )}
                           <p className="text-xs text-muted-foreground mt-1">
                             Cole o link da página da rádio no mytuner-radio.com
                           </p>
@@ -371,7 +444,7 @@ ${exportLines.join('\n')}`;
                       </>
                     ) : (
                       <div>
-                        <label className="text-sm text-muted-foreground">Emissora</label>
+                        <label className="text-sm text-muted-foreground">Emissora (ativas no monitoramento)</label>
                         <Select value={selectedStation || ''} onValueChange={setSelectedStation}>
                           <SelectTrigger className="mt-1">
                             <SelectValue placeholder="Selecione a emissora" />
@@ -387,6 +460,11 @@ ${exportLines.join('\n')}`;
                             ))}
                           </SelectContent>
                         </Select>
+                        {enabledStations.length === 0 && (
+                          <p className="text-xs text-amber-500 mt-1">
+                            Nenhuma emissora ativa. Ative emissoras na aba "Emissoras" ou cadastre uma nova acima.
+                          </p>
+                        )}
                       </div>
                     )}
 
@@ -446,7 +524,7 @@ ${exportLines.join('\n')}`;
                       <Button 
                         onClick={handleAddSchedule} 
                         disabled={newSchedule.useCustomStation 
-                          ? (!newSchedule.customStationName || !newSchedule.customStationUrl)
+                          ? (!newSchedule.customStationName || !newSchedule.customStationUrl || !urlValidation.valid)
                           : !selectedStation
                         }
                       >
