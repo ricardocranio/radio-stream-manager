@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { GripVertical, Music, Clock, Save, RotateCcw, Plus, Trash2, Newspaper, FileText, Copy, BookmarkPlus, Bookmark, Download, Upload, AlertTriangle, CheckCircle, Eye, Undo2, Redo2, Layers, BarChart3 } from 'lucide-react';
+import { GripVertical, Music, Clock, Save, RotateCcw, Plus, Trash2, Newspaper, FileText, Copy, BookmarkPlus, Bookmark, Download, Upload, AlertTriangle, CheckCircle, Eye, Undo2, Redo2, Layers, BarChart3, Pencil } from 'lucide-react';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import {
   DndContext,
@@ -35,6 +35,7 @@ import { useToast } from '@/hooks/use-toast';
 interface SortableSongProps {
   song: BlockSong;
   onRemove: () => void;
+  onEdit: () => void;
   hasWarning?: boolean;
 }
 
@@ -60,7 +61,7 @@ interface HistoryEntry {
   action: string;
 }
 
-function SortableSong({ song, onRemove, hasWarning }: SortableSongProps) {
+function SortableSong({ song, onRemove, onEdit, hasWarning }: SortableSongProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: song.id,
   });
@@ -116,8 +117,18 @@ function SortableSong({ song, onRemove, hasWarning }: SortableSongProps) {
       <Button
         variant="ghost"
         size="icon"
+        className="h-7 w-7 text-muted-foreground hover:text-primary"
+        onClick={onEdit}
+        title="Editar"
+      >
+        <Pencil className="w-3.5 h-3.5" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
         className="h-7 w-7 text-muted-foreground hover:text-destructive"
         onClick={onRemove}
+        title="Remover"
       >
         <Trash2 className="w-3.5 h-3.5" />
       </Button>
@@ -324,6 +335,10 @@ export function BlockEditorView() {
   const [showBatchMode, setShowBatchMode] = useState(false);
   const [selectedTimeSlots, setSelectedTimeSlots] = useState<string[]>([]);
   const [selectedTemplateForBatch, setSelectedTemplateForBatch] = useState<string>('');
+  
+  // Edit song state
+  const [editingSong, setEditingSong] = useState<BlockSong | null>(null);
+  const [editForm, setEditForm] = useState({ title: '', artist: '', file: '', source: '' });
   
   // History for undo/redo
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -542,6 +557,35 @@ export function BlockEditorView() {
     const newSongs = currentSongs.filter((s) => s.id !== id);
     setBlockSongs(timeKey, newSongs);
     addToHistory(timeKey, newSongs, 'Remover música');
+  };
+
+  const handleEditSong = (song: BlockSong) => {
+    setEditingSong(song);
+    setEditForm({
+      title: song.title,
+      artist: song.artist,
+      file: song.file,
+      source: song.source,
+    });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingSong) return;
+    
+    const newSongs = currentSongs.map(s => 
+      s.id === editingSong.id 
+        ? { ...s, title: editForm.title, artist: editForm.artist, file: editForm.file, source: editForm.source }
+        : s
+    );
+    setBlockSongs(timeKey, newSongs);
+    addToHistory(timeKey, newSongs, `Editar ${editForm.title}`);
+    setEditingSong(null);
+    toast({ title: 'Item atualizado', description: editForm.title });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingSong(null);
+    setEditForm({ title: '', artist: '', file: '', source: '' });
   };
 
   const handleAddSong = (song: Omit<BlockSong, 'id'>) => {
@@ -1060,6 +1104,7 @@ export function BlockEditorView() {
                       <SortableSong
                         song={song}
                         onRemove={() => handleRemoveSong(song.id)}
+                        onEdit={() => handleEditSong(song)}
                         hasWarning={warningSongIds.has(song.id)}
                       />
                     </div>
@@ -1073,6 +1118,75 @@ export function BlockEditorView() {
                 <Music className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p>Nenhum item neste bloco</p>
                 <p className="text-sm">Adicione músicas ou conteúdos fixos</p>
+              </div>
+            )}
+
+            {/* Edit Song Modal */}
+            {editingSong && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                <Card className="w-full max-w-md mx-4">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Pencil className="w-4 h-4" />
+                      Editar Item
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-foreground">Título</label>
+                      <Input
+                        value={editForm.title}
+                        onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                        placeholder="Título da música"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-foreground">Artista</label>
+                      <Input
+                        value={editForm.artist}
+                        onChange={(e) => setEditForm({ ...editForm, artist: e.target.value })}
+                        placeholder="Nome do artista"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-foreground">Arquivo</label>
+                      <Input
+                        value={editForm.file}
+                        onChange={(e) => setEditForm({ ...editForm, file: e.target.value })}
+                        placeholder="nome_do_arquivo.mp3"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-foreground">Fonte</label>
+                      <Select value={editForm.source} onValueChange={(v) => setEditForm({ ...editForm, source: v })}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Selecione a fonte" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {stations.map(station => {
+                            const abbrev = station.name.split(' ').map(w => w[0]).join('').toUpperCase();
+                            return (
+                              <SelectItem key={station.id} value={abbrev}>{station.name} ({abbrev})</SelectItem>
+                            );
+                          })}
+                          <SelectItem value="FIXO">Conteúdo Fixo (FIXO)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button onClick={handleSaveEdit} className="flex-1">
+                        <Save className="w-4 h-4 mr-2" />
+                        Salvar
+                      </Button>
+                      <Button variant="outline" onClick={handleCancelEdit} className="flex-1">
+                        Cancelar
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             )}
           </CardContent>
