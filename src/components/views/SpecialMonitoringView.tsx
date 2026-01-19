@@ -1,0 +1,542 @@
+import { useState, useEffect } from 'react';
+import { Clock, Plus, Trash2, Radio, Save, Calendar, Download, Search, Filter, Eye } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useRadioStore } from '@/store/radioStore';
+import { useToast } from '@/hooks/use-toast';
+import { MonitoringSchedule } from '@/types/radio';
+import { supabase } from '@/integrations/supabase/client';
+import { format, formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+
+interface CapturedSongFromDB {
+  title: string;
+  artist: string;
+  station_name: string;
+  scraped_at: string;
+}
+
+export function SpecialMonitoringView() {
+  const { stations, updateStation } = useRadioStore();
+  const { toast } = useToast();
+  const [selectedStation, setSelectedStation] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [capturedSongs, setCapturedSongs] = useState<CapturedSongFromDB[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStation, setFilterStation] = useState<string>('all');
+  const [newSchedule, setNewSchedule] = useState({
+    hour: 18,
+    minute: 0,
+    label: '',
+    stationId: '',
+  });
+
+  const enabledStations = stations.filter(s => s.enabled);
+
+  // Get all schedules across stations
+  const allSchedules = enabledStations.flatMap(station =>
+    (station.monitoringSchedules || []).map(schedule => ({
+      ...schedule,
+      stationId: station.id,
+      stationName: station.name,
+    }))
+  );
+
+  // Fetch captured songs for scheduled times
+  const fetchCapturedSongs = async () => {
+    if (allSchedules.filter(s => s.enabled).length === 0) {
+      setCapturedSongs([]);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const stationNames = [...new Set(allSchedules.filter(s => s.enabled).map(s => s.stationName))];
+      
+      const { data: songs, error } = await supabase
+        .from('scraped_songs')
+        .select('title, artist, station_name, scraped_at')
+        .in('station_name', stationNames)
+        .order('scraped_at', { ascending: false })
+        .limit(500);
+
+      if (error) throw error;
+
+      // Filter songs by scheduled hours
+      const filteredSongs = (songs || []).filter(song => {
+        const songHour = new Date(song.scraped_at).getHours();
+        const matchingSchedule = allSchedules.find(
+          s => s.enabled && s.hour === songHour && s.stationName === song.station_name
+        );
+        return !!matchingSchedule;
+      });
+
+      setCapturedSongs(filteredSongs);
+    } catch (error) {
+      console.error('Error fetching songs:', error);
+      toast({
+        title: 'Erro ao carregar',
+        description: 'Não foi possível carregar as músicas capturadas.',
+        variant: 'destructive',
+      });
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchCapturedSongs();
+  }, [allSchedules.length]);
+
+  const handleAddSchedule = () => {
+    if (!selectedStation) return;
+
+    const station = stations.find(s => s.id === selectedStation);
+    if (!station) return;
+
+    const newScheduleEntry: MonitoringSchedule = {
+      id: `schedule-${Date.now()}`,
+      hour: newSchedule.hour,
+      minute: newSchedule.minute,
+      enabled: true,
+      label: newSchedule.label || `Horário ${newSchedule.hour}:${newSchedule.minute.toString().padStart(2, '0')}`,
+    };
+
+    const currentSchedules = station.monitoringSchedules || [];
+    updateStation(station.id, {
+      monitoringSchedules: [...currentSchedules, newScheduleEntry],
+    });
+
+    toast({
+      title: '⏰ Horário adicionado',
+      description: `${station.name} será monitorada às ${newSchedule.hour}:${newSchedule.minute.toString().padStart(2, '0')}`,
+    });
+
+    setNewSchedule({ hour: 18, minute: 0, label: '', stationId: '' });
+    setSelectedStation(null);
+    setIsDialogOpen(false);
+  };
+
+  const handleRemoveSchedule = (stationId: string, scheduleId: string) => {
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+
+    const updatedSchedules = (station.monitoringSchedules || []).filter(
+      s => s.id !== scheduleId
+    );
+    updateStation(stationId, { monitoringSchedules: updatedSchedules });
+
+    toast({
+      title: 'Horário removido',
+      description: 'Configuração de monitoramento atualizada.',
+    });
+  };
+
+  const handleToggleSchedule = (stationId: string, scheduleId: string, enabled: boolean) => {
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+
+    const updatedSchedules = (station.monitoringSchedules || []).map(s =>
+      s.id === scheduleId ? { ...s, enabled } : s
+    );
+    updateStation(stationId, { monitoringSchedules: updatedSchedules });
+  };
+
+  // Export songs
+  const handleExportSongs = async () => {
+    setIsExporting(true);
+    try {
+      const songsToExport = filteredSongs;
+
+      if (songsToExport.length === 0) {
+        toast({
+          title: 'Nenhuma música',
+          description: 'Não há músicas para exportar.',
+          variant: 'destructive',
+        });
+        setIsExporting(false);
+        return;
+      }
+
+      // Generate export content
+      const exportLines = songsToExport.map(song => 
+        `${song.artist} - ${song.title} | ${song.station_name} | ${format(new Date(song.scraped_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`
+      );
+      
+      const exportContent = `MONITORAMENTO ESPECIAL - BANCO DIFERENCIADO
+Exportado em: ${format(new Date(), 'dd/MM/yyyy HH:mm:ss', { locale: ptBR })}
+Total: ${songsToExport.length} músicas
+${'='.repeat(60)}
+
+${exportLines.join('\n')}`;
+
+      // Download as TXT file
+      const blob = new Blob([exportContent], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `monitoramento_especial_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: '📋 Lista exportada!',
+        description: `${songsToExport.length} músicas do monitoramento especial.`,
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: 'Erro ao exportar',
+        description: 'Não foi possível exportar a lista.',
+        variant: 'destructive',
+      });
+    }
+    setIsExporting(false);
+  };
+
+  // Filtered songs based on search and station filter
+  const filteredSongs = capturedSongs.filter(song => {
+    const matchesSearch = searchTerm === '' || 
+      song.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      song.artist.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStation = filterStation === 'all' || song.station_name === filterStation;
+    return matchesSearch && matchesStation;
+  });
+
+  // Get unique stations from captured songs
+  const uniqueStations = [...new Set(capturedSongs.map(s => s.station_name))];
+
+  return (
+    <div className="p-6 space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-3">
+            <Calendar className="w-7 h-7 text-cyan-500" />
+            Monitoramento Especial
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Configure horários específicos para criar bancos de músicas diferenciados
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="secondary"
+            onClick={fetchCapturedSongs}
+            disabled={isLoading}
+          >
+            <Eye className="w-4 h-4 mr-2" />
+            Atualizar
+          </Button>
+          <Button
+            variant="default"
+            onClick={handleExportSongs}
+            disabled={isExporting || filteredSongs.length === 0}
+            className="bg-cyan-600 hover:bg-cyan-700"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Exportar Lista
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Schedules Panel */}
+        <Card className="glass-card border-cyan-500/20 lg:col-span-1">
+          <CardHeader className="pb-3 border-b border-border">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Clock className="w-5 h-5 text-cyan-500" />
+                Horários Cadastrados
+              </CardTitle>
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="gap-2">
+                    <Plus className="w-4 h-4" />
+                    Novo
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Adicionar Horário de Monitoramento</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 pt-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground">Emissora</label>
+                      <Select value={selectedStation || ''} onValueChange={setSelectedStation}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Selecione a emissora" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {enabledStations.map(station => (
+                            <SelectItem key={station.id} value={station.id}>
+                              <div className="flex items-center gap-2">
+                                <Radio className="w-4 h-4" />
+                                {station.name}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm text-muted-foreground">Hora</label>
+                        <Select
+                          value={newSchedule.hour.toString()}
+                          onValueChange={v => setNewSchedule(prev => ({ ...prev, hour: parseInt(v) }))}
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 24 }, (_, i) => (
+                              <SelectItem key={i} value={i.toString()}>
+                                {i.toString().padStart(2, '0')}h
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm text-muted-foreground">Minuto</label>
+                        <Select
+                          value={newSchedule.minute.toString()}
+                          onValueChange={v => setNewSchedule(prev => ({ ...prev, minute: parseInt(v) }))}
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[0, 15, 30, 45].map(m => (
+                              <SelectItem key={m} value={m.toString()}>
+                                {m.toString().padStart(2, '0')}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-muted-foreground">Descrição (opcional)</label>
+                      <Input
+                        className="mt-1"
+                        placeholder="Ex: Horário nobre, Música diferenciada"
+                        value={newSchedule.label}
+                        onChange={e => setNewSchedule(prev => ({ ...prev, label: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button variant="ghost" onClick={() => setIsDialogOpen(false)}>
+                        Cancelar
+                      </Button>
+                      <Button onClick={handleAddSchedule} disabled={!selectedStation}>
+                        <Save className="w-4 h-4 mr-2" />
+                        Salvar
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4">
+            {allSchedules.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Clock className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">Nenhum horário configurado</p>
+                <p className="text-xs mt-1">Adicione horários para monitorar músicas diferenciadas</p>
+              </div>
+            ) : (
+              <ScrollArea className="h-[400px]">
+                <div className="space-y-2">
+                  {allSchedules
+                    .sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute))
+                    .map(schedule => (
+                      <div
+                        key={schedule.id}
+                        className={`p-3 rounded-lg flex items-center justify-between ${
+                          schedule.enabled ? 'bg-cyan-500/10 border border-cyan-500/20' : 'bg-secondary/50 border border-border'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-lg bg-cyan-500/20 flex flex-col items-center justify-center">
+                            <span className="text-lg font-bold text-cyan-500">
+                              {schedule.hour.toString().padStart(2, '0')}
+                            </span>
+                            <span className="text-xs text-cyan-400">
+                              :{schedule.minute.toString().padStart(2, '0')}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-foreground">{schedule.stationName}</p>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {schedule.label || 'Música diferenciada'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={schedule.enabled}
+                            onCheckedChange={checked =>
+                              handleToggleSchedule(schedule.stationId, schedule.id, checked)
+                            }
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleRemoveSchedule(schedule.stationId, schedule.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Captured Songs Panel */}
+        <Card className="glass-card border-primary/20 lg:col-span-2">
+          <CardHeader className="pb-3 border-b border-border">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Radio className="w-5 h-5 text-primary" />
+                Músicas Capturadas
+                <Badge variant="secondary" className="ml-2">
+                  {filteredSongs.length} músicas
+                </Badge>
+              </CardTitle>
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar música ou artista..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="pl-9 w-64"
+                  />
+                </div>
+                <Select value={filterStation} onValueChange={setFilterStation}>
+                  <SelectTrigger className="w-40">
+                    <Filter className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Filtrar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    {uniqueStations.map(station => (
+                      <SelectItem key={station} value={station}>
+                        {station}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-[400px] text-muted-foreground">
+                <div className="text-center">
+                  <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-3" />
+                  <p className="text-sm">Carregando músicas...</p>
+                </div>
+              </div>
+            ) : filteredSongs.length === 0 ? (
+              <div className="flex items-center justify-center h-[400px] text-muted-foreground">
+                <div className="text-center">
+                  <Radio className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">Nenhuma música capturada</p>
+                  <p className="text-xs mt-1">Configure horários para começar a capturar</p>
+                </div>
+              </div>
+            ) : (
+              <ScrollArea className="h-[400px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Título</TableHead>
+                      <TableHead>Artista</TableHead>
+                      <TableHead>Emissora</TableHead>
+                      <TableHead>Capturado em</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredSongs.map((song, index) => (
+                      <TableRow key={`${song.scraped_at}-${index}`}>
+                        <TableCell className="font-medium">{song.title}</TableCell>
+                        <TableCell className="text-muted-foreground">{song.artist}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{song.station_name}</Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {formatDistanceToNow(new Date(song.scraped_at), { addSuffix: true, locale: ptBR })}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Info Banner */}
+      <Card className="glass-card border-amber-500/20 bg-gradient-to-r from-amber-500/5 to-transparent">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+              <Calendar className="w-5 h-5 text-amber-500" />
+            </div>
+            <div>
+              <p className="font-medium text-foreground">Monitoramento Especial - Apenas Exportação</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                As músicas capturadas nos horários especiais são destinadas à criação de bancos diferenciados. 
+                Use o botão "Exportar Lista" para gerar um arquivo com as músicas capturadas. 
+                O download automático ocorre apenas para as emissoras no monitoramento regular.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
