@@ -1028,6 +1028,7 @@ export function BlockEditorView() {
         </CardContent>
       </Card>
 
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Block Editor */}
         <Card className="glass-card lg:col-span-2">
@@ -1048,26 +1049,24 @@ export function BlockEditorView() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4">
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={currentSongs.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
-                  {currentSongs.map((song, index) => (
-                    <div key={song.id} className="flex items-center gap-2">
-                      <span className="w-6 text-center text-sm font-mono text-muted-foreground">
-                        {(index + 1).toString().padStart(2, '0')}
-                      </span>
-                      <div className="flex-1">
-                        <SortableSong
-                          song={song}
-                          onRemove={() => handleRemoveSong(song.id)}
-                          hasWarning={warningSongIds.has(song.id)}
-                        />
-                      </div>
+            <SortableContext items={currentSongs.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 min-h-[200px] border-2 border-dashed border-transparent hover:border-primary/30 rounded-lg transition-colors">
+                {currentSongs.map((song, index) => (
+                  <div key={song.id} className="flex items-center gap-2">
+                    <span className="w-6 text-center text-sm font-mono text-muted-foreground">
+                      {(index + 1).toString().padStart(2, '0')}
+                    </span>
+                    <div className="flex-1">
+                      <SortableSong
+                        song={song}
+                        onRemove={() => handleRemoveSong(song.id)}
+                        hasWarning={warningSongIds.has(song.id)}
+                      />
                     </div>
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
+                  </div>
+                ))}
+              </div>
+            </SortableContext>
 
             {currentSongs.length === 0 && (
               <div className="text-center py-12 text-muted-foreground">
@@ -1285,6 +1284,7 @@ export function BlockEditorView() {
           </Card>
         </div>
       </div>
+      </DndContext>
     </div>
   );
 }
