@@ -142,9 +142,10 @@ interface DraggablePoolItemProps {
   index: number;
   type: 'fixed' | 'music';
   onAdd: () => void;
+  onEdit?: () => void;
 }
 
-function DraggablePoolItem({ item, index, type, onAdd }: DraggablePoolItemProps) {
+function DraggablePoolItem({ item, index, type, onAdd, onEdit }: DraggablePoolItemProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `pool-${type}-${index}`,
     data: { item, type },
@@ -176,6 +177,20 @@ function DraggablePoolItem({ item, index, type, onAdd }: DraggablePoolItemProps)
         <Badge variant="secondary" className="text-xs shrink-0">
           {item.source}
         </Badge>
+      )}
+      {type === 'fixed' && onEdit && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 shrink-0 text-muted-foreground hover:text-primary"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit();
+          }}
+          title="Editar horários"
+        >
+          <Pencil className="w-3 h-3" />
+        </Button>
       )}
       <Button
         variant="ghost"
@@ -220,7 +235,7 @@ const colorPalette = [
 ];
 
 export function BlockEditorView() {
-  const { blockSongs, setBlockSongs, fixedContent, programs, stations, capturedSongs } = useRadioStore();
+  const { blockSongs, setBlockSongs, fixedContent, addFixedContent, updateFixedContent, programs, stations, capturedSongs } = useRadioStore();
   
   // Generate dynamic source colors based on registered stations
   const sourceColors = useMemo(() => {
@@ -339,6 +354,10 @@ export function BlockEditorView() {
   // Edit song state
   const [editingSong, setEditingSong] = useState<BlockSong | null>(null);
   const [editForm, setEditForm] = useState({ title: '', artist: '', file: '', source: '' });
+  
+  // Edit fixed content state
+  const [editingFixedContent, setEditingFixedContent] = useState<number | null>(null);
+  const [editFixedForm, setEditFixedForm] = useState({ title: '', file: '', timeSlots: '' });
   
   // History for undo/redo
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -594,6 +613,65 @@ export function BlockEditorView() {
     setBlockSongs(timeKey, newSongs);
     addToHistory(timeKey, newSongs, `Adicionar ${song.title}`);
     toast({ title: 'Item adicionado', description: song.title });
+  };
+
+  // Fixed content edit handlers
+  const handleEditFixedContent = (index: number) => {
+    const content = fixedContentPool[index];
+    setEditingFixedContent(index);
+    setEditFixedForm({
+      title: content.title,
+      file: content.file,
+      timeSlots: '', // Will be populated from fixedContent store if exists
+    });
+    
+    // Find corresponding entry in store
+    const storeContent = fixedContent.find(fc => fc.name === content.title);
+    if (storeContent) {
+      setEditFixedForm(prev => ({
+        ...prev,
+        timeSlots: storeContent.timeSlots.map(ts => `${ts.hour.toString().padStart(2, '0')}:${ts.minute.toString().padStart(2, '0')}`).join(', ')
+      }));
+    }
+  };
+
+  const handleSaveFixedContentEdit = () => {
+    if (editingFixedContent === null) return;
+    
+    const content = fixedContentPool[editingFixedContent];
+    
+    // Parse time slots
+    const timeSlots = editFixedForm.timeSlots
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.match(/^\d{2}:\d{2}$/))
+      .map(s => {
+        const [hour, minute] = s.split(':').map(Number);
+        return { hour, minute };
+      });
+    
+    // Find or create fixed content entry in store
+    const existingIndex = fixedContent.findIndex(fc => fc.name === content.title);
+    
+    if (existingIndex >= 0) {
+      updateFixedContent(fixedContent[existingIndex].id, {
+        fileName: editFixedForm.file,
+        timeSlots,
+      });
+    } else {
+      addFixedContent({
+        id: `fixed-${Date.now()}`,
+        name: editFixedForm.title,
+        fileName: editFixedForm.file,
+        type: 'other',
+        dayPattern: 'ALL',
+        timeSlots,
+        enabled: true,
+      });
+    }
+    
+    setEditingFixedContent(null);
+    toast({ title: 'Conteúdo fixo atualizado', description: `Horários: ${timeSlots.length}` });
   };
 
   const handleReset = () => {
@@ -1327,7 +1405,7 @@ export function BlockEditorView() {
             </CardContent>
           </Card>
 
-          {/* Add Fixed Content - Draggable */}
+          {/* Add Fixed Content - Draggable with Edit */}
           <Card className="glass-card">
             <CardHeader className="border-b border-border py-3">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -1345,9 +1423,65 @@ export function BlockEditorView() {
                     index={i}
                     type="fixed"
                     onAdd={() => handleAddSong(content)}
+                    onEdit={() => handleEditFixedContent(i)}
                   />
                 ))}
               </div>
+              
+              {/* Edit Fixed Content Modal */}
+              {editingFixedContent !== null && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                  <Card className="w-full max-w-md mx-4">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Pencil className="w-4 h-4" />
+                        Editar Conteúdo Fixo - Horários
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium text-foreground">Nome</label>
+                        <Input
+                          value={editFixedForm.title}
+                          onChange={(e) => setEditFixedForm({ ...editFixedForm, title: e.target.value })}
+                          placeholder="Nome do conteúdo"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-foreground">Arquivo</label>
+                        <Input
+                          value={editFixedForm.file}
+                          onChange={(e) => setEditFixedForm({ ...editFixedForm, file: e.target.value })}
+                          placeholder="NOME_DO_ARQUIVO.mp3"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-foreground">Horários (separados por vírgula)</label>
+                        <Input
+                          value={editFixedForm.timeSlots}
+                          onChange={(e) => setEditFixedForm({ ...editFixedForm, timeSlots: e.target.value })}
+                          placeholder="06:00, 12:00, 18:00"
+                          className="mt-1"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Formato: HH:MM separados por vírgula
+                        </p>
+                      </div>
+                      <div className="flex gap-2 pt-2">
+                        <Button onClick={handleSaveFixedContentEdit} className="flex-1">
+                          <Save className="w-4 h-4 mr-2" />
+                          Salvar
+                        </Button>
+                        <Button variant="outline" onClick={() => setEditingFixedContent(null)} className="flex-1">
+                          Cancelar
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </CardContent>
           </Card>
 
