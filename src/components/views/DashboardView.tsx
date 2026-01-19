@@ -12,6 +12,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { GradePreviewCard } from '@/components/dashboard/GradePreviewCard';
+import { MonitoringScheduleCard } from '@/components/dashboard/MonitoringScheduleCard';
 
 export function DashboardView() {
   const { stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs } = useRadioStore();
@@ -205,6 +207,12 @@ export function DashboardView() {
           </CardContent>
         </Card>
       )}
+
+      {/* Preview da Próxima Grade & Horários de Monitoramento */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <GradePreviewCard recentSongsByStation={realtimeStats.recentSongsByStation} />
+        <MonitoringScheduleCard />
+      </div>
 
       {/* Ranking Integration Banner */}
       <Card className="glass-card border-primary/30 bg-gradient-to-r from-primary/5 to-transparent">
