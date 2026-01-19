@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { GripVertical, Music, Clock, Save, RotateCcw, Plus, Trash2, Newspaper, FileText, Copy, BookmarkPlus, Bookmark, Download, Upload, AlertTriangle, CheckCircle, Eye, Undo2, Redo2, Layers, BarChart3 } from 'lucide-react';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import {
@@ -257,11 +257,29 @@ export function BlockEditorView() {
 
   const timeKey = `${selectedHour.toString().padStart(2, '0')}:${selectedMinute.toString().padStart(2, '0')}`;
 
-  // Initialize songs for this block if not exists - use dynamic pool from captured songs
+  // Initialize songs for this block ONCE and save to store - blocks stay fixed after creation
   const currentSongs = useMemo(() => {
-    if (blockSongs[timeKey]) return blockSongs[timeKey];
-    return dynamicSongPool.slice(0, 10).map((s, i) => ({ ...s, id: `${timeKey}-${i}` }));
-  }, [blockSongs, timeKey, dynamicSongPool]);
+    // If block already exists in store, use it (stable)
+    if (blockSongs[timeKey] && blockSongs[timeKey].length > 0) {
+      return blockSongs[timeKey];
+    }
+    // Block doesn't exist - will be initialized on first render
+    return [];
+  }, [blockSongs, timeKey]);
+
+  // Auto-initialize empty blocks with songs from pool (only once)
+  useEffect(() => {
+    if (!blockSongs[timeKey] || blockSongs[timeKey].length === 0) {
+      if (dynamicSongPool.length > 0) {
+        const initialSongs = dynamicSongPool.slice(0, 10).map((s, i) => ({ 
+          ...s, 
+          id: `${timeKey}-init-${i}-${Date.now()}` 
+        }));
+        setBlockSongs(timeKey, initialSongs);
+        console.log(`[BLOCK-EDITOR] Bloco ${timeKey} inicializado com ${initialSongs.length} músicas`);
+      }
+    }
+  }, [timeKey, blockSongs, dynamicSongPool, setBlockSongs]);
 
   // Statistics by source
   const sourceStats = useMemo(() => {
