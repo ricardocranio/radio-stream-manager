@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Radio, Plus, Trash2, ExternalLink, Save, X, RefreshCw, Loader2, Download, Copy, CheckCircle2, AlertCircle, Power, Settings } from 'lucide-react';
+import { Radio, Plus, Trash2, ExternalLink, Save, X, RefreshCw, Loader2, Download, Copy, CheckCircle2, AlertCircle, Power, Settings, CloudUpload } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
+import { useSyncStationsToSupabase, syncStationsToSupabase } from '@/hooks/useSyncStationsToSupabase';
 
 // Types for mytuner stations
 interface RadioConfig {
@@ -41,6 +42,10 @@ export function StationsView() {
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [lastCapture, setLastCapture] = useState<string | null>(null);
   const [dbStations, setDbStations] = useState<{ id: string; name: string; scrape_url: string; enabled: boolean; styles: string[] }[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Auto-sync stations to Supabase
+  useSyncStationsToSupabase();
   
   // Load stats from Supabase
   useEffect(() => {
@@ -254,6 +259,17 @@ export function StationsView() {
     });
   };
 
+  const handleSyncToSupabase = async () => {
+    setIsSyncing(true);
+    await syncStationsToSupabase(stations.map(s => ({
+      name: s.name,
+      scrapeUrl: s.scrapeUrl || '',
+      styles: s.styles,
+      enabled: s.enabled,
+    })));
+    setIsSyncing(false);
+  };
+
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       {/* Header */}
@@ -263,6 +279,19 @@ export function StationsView() {
           <p className="text-muted-foreground">Configure as emissoras de rádio para monitoramento</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            onClick={handleSyncToSupabase} 
+            disabled={isSyncing}
+            className="gap-2"
+          >
+            {isSyncing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <CloudUpload className="w-4 h-4" />
+            )}
+            Sincronizar
+          </Button>
           <Button variant="outline" onClick={handleDownloadConfig} className="gap-2">
             <Download className="w-4 h-4" />
             Baixar Config
