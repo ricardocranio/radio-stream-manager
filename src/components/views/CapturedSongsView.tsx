@@ -63,7 +63,7 @@ export function CapturedSongsView() {
   const [stations, setStations] = useState<string[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true); // Always enabled by default
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState('list');
 
