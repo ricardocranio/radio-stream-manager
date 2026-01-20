@@ -1,7 +1,4 @@
-import { useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useRadioStore } from '@/store/radioStore';
-import { toast } from 'sonner';
 
 // Type for WeekDay (same as in radio.ts)
 type WeekDay = 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab';
@@ -33,11 +30,18 @@ export function useSyncSpecialMonitoring() {
   return { syncSpecialMonitoring: async () => {} };
 }
 
+// Edge function URL for managing special monitoring (uses service_role)
+const getEdgeFunctionUrl = () => {
+  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'liuyuvxbdmowtidjhfnc';
+  return `https://${projectId}.supabase.co/functions/v1/manage-special-monitoring`;
+};
+
 /**
  * Fetch all special monitoring schedules from Cloud
  */
 export async function fetchSpecialMonitoringFromCloud(): Promise<SpecialMonitoringRow[]> {
   try {
+    // For reading, we can use the direct client (RLS allows public read)
     const { data, error } = await supabase
       .from('special_monitoring')
       .select('*')
@@ -52,7 +56,7 @@ export async function fetchSpecialMonitoringFromCloud(): Promise<SpecialMonitori
 }
 
 /**
- * Add a new special monitoring schedule to Cloud
+ * Add a new special monitoring schedule to Cloud via Edge Function
  */
 export async function addSpecialMonitoringToCloud(schedule: {
   stationName: string;
@@ -66,24 +70,35 @@ export async function addSpecialMonitoringToCloud(schedule: {
   enabled?: boolean;
 }): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
-    const { data, error } = await supabase
-      .from('special_monitoring')
-      .insert({
-        station_name: schedule.stationName,
-        scrape_url: schedule.scrapeUrl,
-        start_hour: schedule.startHour,
-        start_minute: schedule.startMinute,
-        end_hour: schedule.endHour,
-        end_minute: schedule.endMinute,
-        week_days: schedule.weekDays,
-        label: schedule.label || null,
-        enabled: schedule.enabled ?? true,
-      })
-      .select()
-      .single();
+    const response = await fetch(getEdgeFunctionUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({
+        action: 'add',
+        data: {
+          station_name: schedule.stationName,
+          scrape_url: schedule.scrapeUrl,
+          start_hour: schedule.startHour,
+          start_minute: schedule.startMinute,
+          end_hour: schedule.endHour,
+          end_minute: schedule.endMinute,
+          week_days: schedule.weekDays,
+          label: schedule.label || null,
+          enabled: schedule.enabled ?? true,
+        },
+      }),
+    });
 
-    if (error) throw error;
-    return { success: true, id: data?.id };
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to add schedule');
+    }
+    
+    return { success: true, id: result.data?.id };
   } catch (error: any) {
     console.error('Error adding special monitoring:', error);
     return { success: false, error: error.message };
@@ -91,7 +106,7 @@ export async function addSpecialMonitoringToCloud(schedule: {
 }
 
 /**
- * Update an existing special monitoring schedule in Cloud
+ * Update an existing special monitoring schedule in Cloud via Edge Function
  */
 export async function updateSpecialMonitoringInCloud(
   id: string,
@@ -119,12 +134,25 @@ export async function updateSpecialMonitoringInCloud(
     if (updates.label !== undefined) updateData.label = updates.label;
     if (updates.enabled !== undefined) updateData.enabled = updates.enabled;
 
-    const { error } = await supabase
-      .from('special_monitoring')
-      .update(updateData)
-      .eq('id', id);
+    const response = await fetch(getEdgeFunctionUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({
+        action: 'update',
+        id,
+        data: updateData,
+      }),
+    });
 
-    if (error) throw error;
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to update schedule');
+    }
+    
     return { success: true };
   } catch (error: any) {
     console.error('Error updating special monitoring:', error);
@@ -133,16 +161,28 @@ export async function updateSpecialMonitoringInCloud(
 }
 
 /**
- * Delete a special monitoring schedule from Cloud
+ * Delete a special monitoring schedule from Cloud via Edge Function
  */
 export async function deleteSpecialMonitoringFromCloud(id: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const { error } = await supabase
-      .from('special_monitoring')
-      .delete()
-      .eq('id', id);
+    const response = await fetch(getEdgeFunctionUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({
+        action: 'delete',
+        id,
+      }),
+    });
 
-    if (error) throw error;
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to delete schedule');
+    }
+    
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting special monitoring:', error);
