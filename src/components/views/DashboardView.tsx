@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Bell, BellOff, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Bell, BellOff, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2 } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
 import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
+import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -19,6 +20,7 @@ export function DashboardView() {
   const { stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs } = useRadioStore();
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
   const { stats: realtimeStats, refresh: refreshStats } = useRealtimeStats();
+  const gradeBuilder = useAutoGradeBuilder();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
@@ -27,6 +29,13 @@ export function DashboardView() {
     enableBrowserNotifications: notificationsEnabled,
     enableToastNotifications: notificationsEnabled,
   });
+
+  // Handle open grade folder
+  const handleOpenGradeFolder = async () => {
+    if (window.electronAPI?.openFolder) {
+      await window.electronAPI.openFolder(config.gradeFolder);
+    }
+  };
 
   // Handle notification toggle
   const handleToggleNotifications = async () => {
@@ -222,6 +231,88 @@ export function DashboardView() {
                   </div>
                 ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Auto Grade Builder Status */}
+      {gradeBuilder.isElectron && (
+        <Card className="glass-card border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 to-transparent">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${gradeBuilder.isBuilding ? 'bg-amber-500/20' : 'bg-emerald-500/20'}`}>
+                  {gradeBuilder.isBuilding ? (
+                    <Loader2 className="w-5 h-5 text-amber-500 animate-spin" />
+                  ) : (
+                    <FileText className="w-5 h-5 text-emerald-500" />
+                  )}
+                </div>
+                <div>
+                  <p className="font-medium text-foreground flex items-center gap-2">
+                    Geração Automática de Grade
+                    {isRunning && (
+                      <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/30">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Ativo
+                      </Badge>
+                    )}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Bloco Atual: <span className="font-mono text-emerald-400">{gradeBuilder.currentBlock}</span>
+                    {' → '}
+                    Próximo: <span className="font-mono text-amber-400">{gradeBuilder.nextBlock}</span>
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  {gradeBuilder.lastBuildTime && (
+                    <p className="text-xs text-muted-foreground">
+                      Última: {format(gradeBuilder.lastBuildTime, 'HH:mm:ss', { locale: ptBR })}
+                    </p>
+                  )}
+                  {gradeBuilder.lastSavedFile && (
+                    <p className="text-sm font-medium text-foreground">
+                      {gradeBuilder.lastSavedFile}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {gradeBuilder.blocksGenerated} blocos gerados
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={gradeBuilder.buildGrade}
+                    disabled={gradeBuilder.isBuilding}
+                    className="gap-2"
+                  >
+                    {gradeBuilder.isBuilding ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Play className="w-4 h-4" />
+                    )}
+                    Gerar Agora
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleOpenGradeFolder}
+                    className="gap-2"
+                  >
+                    <FolderOpen className="w-4 h-4" />
+                    Abrir Pasta
+                  </Button>
+                </div>
+              </div>
+            </div>
+            {gradeBuilder.error && (
+              <div className="mt-3 p-2 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                ⚠️ {gradeBuilder.error}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
