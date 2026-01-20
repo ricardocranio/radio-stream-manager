@@ -675,7 +675,7 @@ ipcMain.handle('install-deemix', async () => {
   return result;
 });
 
-// Test deemix with a simple version check
+// Test deemix with a simple help check (--version not supported)
 ipcMain.handle('test-deemix', async () => {
   try {
     const installed = await checkDeemixInstalled();
@@ -687,9 +687,9 @@ ipcMain.handle('test-deemix', async () => {
       };
     }
 
-    // Run a simple test command
+    // Run a simple test command - use --help since --version is not supported
     return new Promise((resolve) => {
-      const testCommand = `${deemixCommand} --version`;
+      const testCommand = `${deemixCommand} --help`;
       console.log(`Testing deemix with: ${testCommand}`);
       
       exec(testCommand, { timeout: 30000 }, (error, stdout, stderr) => {
@@ -703,21 +703,30 @@ ipcMain.handle('test-deemix', async () => {
           return;
         }
 
-        const version = stdout.trim() || 'versão desconhecida';
-        console.log('deemix version:', version);
+        // Check if the help output contains expected deemix text
+        const isWorking = stdout.includes('deemix') || stdout.includes('Usage') || stdout.includes('URL');
         
-        resolve({ 
-          success: true, 
-          version,
-          command: deemixCommand,
-          message: `deemix funcionando! ${version}`
-        });
+        if (isWorking) {
+          console.log('deemix test passed');
+          resolve({ 
+            success: true, 
+            version: 'instalado',
+            command: deemixCommand,
+            message: `deemix funcionando corretamente!`
+          });
+        } else {
+          resolve({ 
+            success: false, 
+            error: 'deemix não respondeu corretamente',
+            command: deemixCommand
+          });
+        }
       });
     });
   } catch (error) {
     return { 
       success: false, 
-      error: error.message || 'Erro desconhecido ao testar deemix' 
+      error: error.message || 'Erro desconhecido ao testar deemix'
     };
   }
 });
