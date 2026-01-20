@@ -1,17 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRadioStore, RankingSong } from '@/store/radioStore';
+import { useRadioStore } from '@/store/radioStore';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-
-interface GradeBlock {
-  hour: number;
-  minute: number;
-  programName: string;
-  songs: string[];
-  isFixed: boolean;
-  fixedType?: string;
-}
 
 interface AutoGradeState {
   isBuilding: boolean;
@@ -21,6 +12,8 @@ interface AutoGradeState {
   lastSavedFile: string | null;
   error: string | null;
   blocksGenerated: number;
+  isAutoEnabled: boolean;
+  nextBuildIn: number; // seconds until next auto-build
 }
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
@@ -34,7 +27,6 @@ export function useAutoGradeBuilder() {
     config,
     fixedContent,
     rankingSongs,
-    isRunning,
     addGradeHistory,
   } = useRadioStore();
 
@@ -46,9 +38,12 @@ export function useAutoGradeBuilder() {
     lastSavedFile: null,
     error: null,
     blocksGenerated: 0,
+    isAutoEnabled: true,
+    nextBuildIn: 0,
   });
 
   const lastBuildRef = useRef<string | null>(null);
+  const buildIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get day code for filename
   const getDayCode = useCallback(() => {
@@ -337,90 +332,107 @@ export function useAutoGradeBuilder() {
     }
   }, [config.gradeFolder, fetchRecentSongs, generateBlockLine, getBlockTimes, getDayCode, getProgramForHour, addGradeHistory, sequence.length, toast]);
 
-  // Calculate time until next build (safety margin before block)
-  const getNextBuildTime = useCallback(() => {
+  // Calculate seconds until next build
+  const getSecondsUntilNextBuild = useCallback(() => {
     const now = new Date();
     const safetyMargin = Math.min(config.safetyMarginMinutes || 7, 7);
     const currentMinute = now.getMinutes();
+    const currentSecond = now.getSeconds();
 
-    let nextBuildMinute: number;
-    let nextBuildHour = now.getHours();
-
-    if (currentMinute < 30 - safetyMargin) {
-      nextBuildMinute = 30 - safetyMargin;
-    } else if (currentMinute < 30) {
-      nextBuildHour = (nextBuildHour + 1) % 24;
-      nextBuildMinute = 60 - safetyMargin;
-    } else if (currentMinute < 60 - safetyMargin) {
-      nextBuildHour = (nextBuildHour + 1) % 24;
-      nextBuildMinute = 60 - safetyMargin;
-    } else {
-      nextBuildHour = (nextBuildHour + 1) % 24;
-      nextBuildMinute = 30 - safetyMargin;
-    }
-
-    const nextBuild = new Date(now);
-    nextBuild.setHours(nextBuildHour, nextBuildMinute % 60, 0, 0);
+    let targetMinute: number;
     
-    if (nextBuild <= now) {
-      nextBuild.setHours(nextBuild.getHours() + 1);
+    // Next build times are at :23 and :53 (7 min before :30 and :00)
+    const buildAt1 = 30 - safetyMargin; // e.g., 23
+    const buildAt2 = 60 - safetyMargin; // e.g., 53
+
+    if (currentMinute < buildAt1) {
+      targetMinute = buildAt1;
+    } else if (currentMinute < buildAt2) {
+      targetMinute = buildAt2;
+    } else {
+      targetMinute = buildAt1 + 60; // Next hour's first build
     }
 
-    return nextBuild;
+    const minutesUntil = targetMinute - currentMinute;
+    const secondsUntil = (minutesUntil * 60) - currentSecond;
+    
+    return Math.max(0, secondsUntil);
   }, [config.safetyMarginMinutes]);
 
-  // Auto-build effect
+  // Toggle auto-generation
+  const toggleAutoGeneration = useCallback(() => {
+    setState(prev => ({ ...prev, isAutoEnabled: !prev.isAutoEnabled }));
+  }, []);
+
+  // Auto-build effect - runs automatically in Electron mode
   useEffect(() => {
-    if (!isRunning || !isElectron) {
+    if (!isElectron || !state.isAutoEnabled) {
       return;
     }
 
-    // Build immediately on start
-    buildGrade();
+    console.log('[AUTO-GRADE] 🚀 Starting automatic grade generation...');
 
-    // Set up interval to check every minute
-    const interval = setInterval(() => {
+    // Build immediately on start
+    const initialBuild = setTimeout(() => {
+      buildGrade();
+    }, 2000); // Small delay to let app initialize
+
+    // Set up interval to check every 30 seconds
+    buildIntervalRef.current = setInterval(() => {
       const now = new Date();
       const safetyMargin = Math.min(config.safetyMarginMinutes || 7, 7);
       const currentMinute = now.getMinutes();
+      const currentSecond = now.getSeconds();
 
-      // Build at safetyMargin minutes before :00 or :30
+      // Build times: 7 min before :30 and :00 (at :23 and :53)
+      const buildMinute1 = 30 - safetyMargin;
+      const buildMinute2 = 60 - safetyMargin;
+
+      // Check if we're within the build window (within 30 seconds of target)
       const shouldBuild = 
-        currentMinute === 30 - safetyMargin ||
-        currentMinute === 60 - safetyMargin ||
-        currentMinute === 0;
+        (currentMinute === buildMinute1 && currentSecond < 30) ||
+        (currentMinute === buildMinute2 % 60 && currentSecond < 30);
 
       if (shouldBuild) {
+        console.log(`[AUTO-GRADE] ⏰ Triggered at ${currentMinute}:${currentSecond}`);
         buildGrade();
       }
-    }, 60 * 1000); // Check every minute
+    }, 30 * 1000); // Check every 30 seconds
 
-    return () => clearInterval(interval);
-  }, [isRunning, buildGrade, config.safetyMarginMinutes]);
+    return () => {
+      clearTimeout(initialBuild);
+      if (buildIntervalRef.current) {
+        clearInterval(buildIntervalRef.current);
+      }
+    };
+  }, [state.isAutoEnabled, buildGrade, config.safetyMarginMinutes]);
 
-  // Update current/next block times periodically
+  // Update countdown and block times every second
   useEffect(() => {
-    const updateBlockTimes = () => {
+    const updateState = () => {
       const blocks = getBlockTimes();
       const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
+      const secondsUntil = getSecondsUntilNextBuild();
       
       setState(prev => ({
         ...prev,
         currentBlock: currentTimeKey,
         nextBlock: nextTimeKey,
+        nextBuildIn: secondsUntil,
       }));
     };
 
-    updateBlockTimes();
-    const interval = setInterval(updateBlockTimes, 30000);
+    updateState();
+    const interval = setInterval(updateState, 1000);
 
     return () => clearInterval(interval);
-  }, [getBlockTimes]);
+  }, [getBlockTimes, getSecondsUntilNextBuild]);
 
   return {
     ...state,
     buildGrade,
+    toggleAutoGeneration,
     isElectron,
   };
 }

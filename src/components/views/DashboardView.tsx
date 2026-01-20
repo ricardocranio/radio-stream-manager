@@ -241,20 +241,24 @@ export function DashboardView() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${gradeBuilder.isBuilding ? 'bg-amber-500/20' : 'bg-emerald-500/20'}`}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${gradeBuilder.isBuilding ? 'bg-amber-500/20' : gradeBuilder.isAutoEnabled ? 'bg-emerald-500/20' : 'bg-muted'}`}>
                   {gradeBuilder.isBuilding ? (
                     <Loader2 className="w-5 h-5 text-amber-500 animate-spin" />
                   ) : (
-                    <FileText className="w-5 h-5 text-emerald-500" />
+                    <FileText className={`w-5 h-5 ${gradeBuilder.isAutoEnabled ? 'text-emerald-500' : 'text-muted-foreground'}`} />
                   )}
                 </div>
                 <div>
                   <p className="font-medium text-foreground flex items-center gap-2">
                     Geração Automática de Grade
-                    {isRunning && (
+                    <Switch 
+                      checked={gradeBuilder.isAutoEnabled}
+                      onCheckedChange={gradeBuilder.toggleAutoGeneration}
+                    />
+                    {gradeBuilder.isAutoEnabled && (
                       <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/30">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
-                        Ativo
+                        Automático
                       </Badge>
                     )}
                   </p>
@@ -262,6 +266,11 @@ export function DashboardView() {
                     Bloco Atual: <span className="font-mono text-emerald-400">{gradeBuilder.currentBlock}</span>
                     {' → '}
                     Próximo: <span className="font-mono text-amber-400">{gradeBuilder.nextBlock}</span>
+                    {gradeBuilder.isAutoEnabled && gradeBuilder.nextBuildIn > 0 && (
+                      <span className="ml-2 text-xs">
+                        (próx. em <span className="font-mono text-primary">{Math.floor(gradeBuilder.nextBuildIn / 60)}:{(gradeBuilder.nextBuildIn % 60).toString().padStart(2, '0')}</span>)
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
