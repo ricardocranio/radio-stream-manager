@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Bell, BellOff, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2 } from 'lucide-react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Bell, BellOff, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
@@ -238,7 +238,7 @@ export function DashboardView() {
       {/* Auto Grade Builder Status */}
       {gradeBuilder.isElectron && (
         <Card className="glass-card border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 to-transparent">
-          <CardContent className="p-4">
+          <CardContent className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${gradeBuilder.isBuilding ? 'bg-amber-500/20' : gradeBuilder.isAutoEnabled ? 'bg-emerald-500/20' : 'bg-muted'}`}>
@@ -298,12 +298,26 @@ export function DashboardView() {
                     disabled={gradeBuilder.isBuilding}
                     className="gap-2"
                   >
-                    {gradeBuilder.isBuilding ? (
+                    {gradeBuilder.isBuilding && gradeBuilder.fullDayTotal === 0 ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <Play className="w-4 h-4" />
                     )}
-                    Gerar Agora
+                    Atual/Próximo
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={gradeBuilder.buildFullDayGrade}
+                    disabled={gradeBuilder.isBuilding}
+                    className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {gradeBuilder.isBuilding && gradeBuilder.fullDayTotal > 0 ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Calendar className="w-4 h-4" />
+                    )}
+                    Grade Completa
                   </Button>
                   <Button
                     variant="ghost"
@@ -312,13 +326,47 @@ export function DashboardView() {
                     className="gap-2"
                   >
                     <FolderOpen className="w-4 h-4" />
-                    Abrir Pasta
                   </Button>
                 </div>
               </div>
             </div>
+
+            {/* Progress bar for full day generation */}
+            {gradeBuilder.isBuilding && gradeBuilder.fullDayTotal > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Gerando grade completa...</span>
+                  <span className="font-mono text-primary">
+                    {gradeBuilder.fullDayProgress}/{gradeBuilder.fullDayTotal} blocos
+                  </span>
+                </div>
+                <Progress 
+                  value={(gradeBuilder.fullDayProgress / gradeBuilder.fullDayTotal) * 100} 
+                  className="h-2"
+                />
+              </div>
+            )}
+
+            {/* Stats row */}
+            {(gradeBuilder.skippedSongs > 0 || gradeBuilder.substitutedSongs > 0) && (
+              <div className="flex items-center gap-4 text-xs">
+                {gradeBuilder.skippedSongs > 0 && (
+                  <div className="flex items-center gap-1 text-amber-500">
+                    <SkipForward className="w-3 h-3" />
+                    <span>{gradeBuilder.skippedSongs} puladas (repetição)</span>
+                  </div>
+                )}
+                {gradeBuilder.substitutedSongs > 0 && (
+                  <div className="flex items-center gap-1 text-blue-500">
+                    <Replace className="w-3 h-3" />
+                    <span>{gradeBuilder.substitutedSongs} substituídas (DNA)</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {gradeBuilder.error && (
-              <div className="mt-3 p-2 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+              <div className="p-2 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
                 ⚠️ {gradeBuilder.error}
               </div>
             )}
