@@ -58,6 +58,7 @@ export function MissingView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
   const [deemixInstalled, setDeemixInstalled] = useState<boolean | null>(null);
+  const [deemixCommand, setDeemixCommand] = useState<string | null>(null);
   const [isCheckingDeemix, setIsCheckingDeemix] = useState(false);
   const [activeTab, setActiveTab] = useState('missing');
   const [simulationMode, setSimulationMode] = useState(!isElectron); // Auto-enable in web
@@ -66,6 +67,7 @@ export function MissingView() {
   const [deemixInstallMessage, setDeemixInstallMessage] = useState<string | null>(null);
   const [pythonStatus, setPythonStatus] = useState<{ available: boolean; command: string | null } | null>(null);
   const [isCheckingPython, setIsCheckingPython] = useState(false);
+  const [pythonMissingAlert, setPythonMissingAlert] = useState(false);
   const { toast } = useToast();
 
   // Listen for deemix install progress
@@ -77,19 +79,64 @@ export function MissingView() {
           setIsInstallingDeemix(false);
           if (progress.status === 'success') {
             setDeemixInstalled(true);
+            // Refresh deemix command after install
+            fetchDeemixCommand();
           }
         }
       });
     }
-  }, []);
+    
+    // Listen for Python status from startup check
+    if (isElectron && window.electronAPI?.onPythonStatus) {
+      window.electronAPI.onPythonStatus((status) => {
+        if (!status.available) {
+          setPythonMissingAlert(true);
+          setPythonStatus({ available: false, command: null });
+          toast({
+            title: '⚠️ Python não encontrado',
+            description: 'O Python é necessário para downloads do Deezer.',
+            variant: 'destructive',
+            action: (
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => window.electronAPI?.openExternal(status.downloadUrl)}
+              >
+                Baixar Python
+              </Button>
+            ),
+          });
+        }
+      });
+    }
+    
+    // Listen for Deemix status from startup check
+    if (isElectron && window.electronAPI?.onDeemixStatus) {
+      window.electronAPI.onDeemixStatus((status) => {
+        setDeemixInstalled(status.installed);
+        setDeemixCommand(status.command);
+      });
+    }
+  }, [toast]);
 
   // Check if deemix is installed on mount
   useEffect(() => {
     if (isElectron && deezerConfig.enabled) {
       checkDeemixStatus();
       checkPythonStatus();
+      fetchDeemixCommand();
     }
   }, [deezerConfig.enabled]);
+
+  const fetchDeemixCommand = async () => {
+    if (!isElectron || !window.electronAPI?.getDeemixCommand) return;
+    try {
+      const command = await window.electronAPI.getDeemixCommand();
+      setDeemixCommand(command);
+    } catch {
+      setDeemixCommand(null);
+    }
+  };
 
   const checkPythonStatus = async () => {
     if (!isElectron || !window.electronAPI?.checkPython) return;
@@ -97,6 +144,9 @@ export function MissingView() {
     try {
       const status = await window.electronAPI.checkPython();
       setPythonStatus(status);
+      if (!status.available) {
+        setPythonMissingAlert(true);
+      }
     } catch {
       setPythonStatus({ available: false, command: null });
     }
@@ -109,6 +159,9 @@ export function MissingView() {
     try {
       const installed = await window.electronAPI?.checkDeemix();
       setDeemixInstalled(installed ?? false);
+      if (installed) {
+        fetchDeemixCommand();
+      }
     } catch {
       setDeemixInstalled(false);
     }
@@ -582,8 +635,14 @@ export function MissingView() {
                 Deezer Conectado
               </Badge>
               {deemixInstalled === true && (
-                <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/30">
-                  deemix OK
+                <Badge 
+                  variant="outline" 
+                  className="bg-blue-500/10 text-blue-500 border-blue-500/30 cursor-help"
+                  title={`Usando: ${deemixCommand || 'deemix'}`}
+                >
+                  deemix OK {deemixCommand && deemixCommand !== 'deemix' && (
+                    <span className="ml-1 text-[10px] opacity-70">({deemixCommand.includes('python3') ? 'py3' : 'py'})</span>
+                  )}
                 </Badge>
               )}
             </>
@@ -724,6 +783,81 @@ export function MissingView() {
                   <p className="text-muted-foreground">Na fila</p>
                   <p className="font-mono font-semibold text-lg">{queueLength}</p>
                 </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Python/Deemix Status Alert */}
+      {isElectron && deezerConfig.enabled && (pythonMissingAlert || deemixInstalled === false) && (
+        <Card className={`glass-card border-2 ${pythonMissingAlert ? 'border-red-500/50 bg-red-500/5' : 'border-amber-500/50 bg-amber-500/5'}`}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${pythonMissingAlert ? 'bg-red-500/20' : 'bg-amber-500/20'}`}>
+                  <AlertCircle className={`w-6 h-6 ${pythonMissingAlert ? 'text-red-500' : 'text-amber-500'}`} />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    {pythonMissingAlert ? 'Python Não Encontrado' : 'deemix Não Instalado'}
+                    <Badge variant="outline" className={pythonMissingAlert ? 'bg-red-500/10 text-red-500 border-red-500/30' : 'bg-amber-500/10 text-amber-500 border-amber-500/30'}>
+                      Ação Necessária
+                    </Badge>
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {pythonMissingAlert 
+                      ? 'O Python é necessário para instalar e usar o deemix para downloads do Deezer.'
+                      : 'O deemix precisa ser instalado para baixar músicas do Deezer.'}
+                  </p>
+                  {deemixCommand && (
+                    <p className="text-xs text-muted-foreground mt-1 font-mono">
+                      Comando: <span className="text-primary">{deemixCommand}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {pythonMissingAlert ? (
+                  <Button
+                    variant="default"
+                    className="bg-red-500 hover:bg-red-600"
+                    onClick={() => window.electronAPI?.openExternal('https://www.python.org/downloads/')}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Baixar Python
+                  </Button>
+                ) : (
+                  <>
+                    {isInstallingDeemix ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-sm text-muted-foreground">{deemixInstallMessage || 'Instalando...'}</span>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="default"
+                        className="bg-amber-500 hover:bg-amber-600 text-white"
+                        onClick={handleInstallDeemix}
+                        disabled={isInstallingDeemix}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Instalar deemix
+                      </Button>
+                    )}
+                  </>
+                )}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    checkPythonStatus();
+                    checkDeemixStatus();
+                  }}
+                  disabled={isCheckingPython || isCheckingDeemix}
+                >
+                  <RefreshCw className={`w-4 h-4 ${(isCheckingPython || isCheckingDeemix) ? 'animate-spin' : ''}`} />
+                </Button>
               </div>
             </div>
           </CardContent>

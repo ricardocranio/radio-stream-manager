@@ -529,13 +529,44 @@ function ensureDefaultFolders() {
 }
 
 // App ready
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Ensure default folders exist
   ensureDefaultFolders();
   
   createWindow();
   createTray();
   setupAutoUpdater();
+  
+  // Check Python/pip availability on startup and notify if missing
+  const pythonStatus = await checkPythonAvailable();
+  if (!pythonStatus.available) {
+    console.log('[INIT] Python/pip not found - will prompt user when needed');
+    // Notify renderer about Python status when window is ready
+    setTimeout(() => {
+      if (mainWindow) {
+        mainWindow.webContents.send('python-status', { 
+          available: false, 
+          message: 'Python não encontrado. Necessário para downloads do Deezer.',
+          downloadUrl: 'https://www.python.org/downloads/'
+        });
+      }
+    }, 3000);
+  } else {
+    console.log(`[INIT] ✓ Python available: ${pythonStatus.command}`);
+    // Also check deemix on startup
+    const deemixInstalled = await checkDeemixInstalled();
+    console.log(`[INIT] ${deemixInstalled ? '✓' : '✗'} deemix: ${deemixInstalled ? deemixCommand : 'not installed'}`);
+    
+    // Notify renderer about deemix status
+    setTimeout(() => {
+      if (mainWindow) {
+        mainWindow.webContents.send('deemix-status', { 
+          installed: deemixInstalled, 
+          command: deemixInstalled ? deemixCommand : null 
+        });
+      }
+    }, 3000);
+  }
   
   // Check for updates after window is ready (only in production)
   if (autoUpdater && app.isPackaged) {
@@ -606,7 +637,14 @@ ipcMain.handle('select-folder', async () => {
 
 // Check if deemix is available
 ipcMain.handle('check-deemix', async () => {
-  return await checkDeemixInstalled();
+  const installed = await checkDeemixInstalled();
+  return installed;
+});
+
+// Get the deemix command being used
+ipcMain.handle('get-deemix-command', async () => {
+  const installed = await checkDeemixInstalled();
+  return installed ? deemixCommand : null;
 });
 
 // Check if Python is available

@@ -565,8 +565,8 @@ function extractSongFromHtml(html: string): { title: string; artist: string } | 
     const part1 = cleanText(dashMatch[1]);
     const part2 = cleanText(dashMatch[2]);
     if (isValidSongPart(part1) && isValidSongPart(part2)) {
-      // Assume format is "Title - Artist" (more common in BR radios)
-      return { title: part1, artist: part2 };
+      // Assume format is "Artist - Title" (padrão do sistema)
+      return { title: part2, artist: part1 };
     }
   }
   

@@ -175,6 +175,11 @@ interface ElectronAPI {
   onUpdateDownloaded: (callback: (info: { version: string }) => void) => void;
   onDownloadProgress: (callback: (progress: { percent: number }) => void) => void;
   
+  // Python/Deemix status notifications
+  onPythonStatus: (callback: (status: { available: boolean; message: string; downloadUrl: string }) => void) => void;
+  onDeemixStatus: (callback: (status: { installed: boolean; command: string | null }) => void) => void;
+  getDeemixCommand: () => Promise<string | null>;
+  
   // Platform detection
   platform: string;
   isElectron: boolean;
