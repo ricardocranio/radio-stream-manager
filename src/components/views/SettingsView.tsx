@@ -89,7 +89,7 @@ export function SettingsView() {
           <CardContent className="p-6 space-y-6">
             <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border">
               <div>
-                <Label>Ativar Download Automático</Label>
+                <Label>Ativar Integração Deezer</Label>
                 <p className="text-xs text-muted-foreground mt-1">
                   Permitir download de músicas faltantes via Deezer
                 </p>
@@ -101,6 +101,23 @@ export function SettingsView() {
                 }
               />
             </div>
+
+            {localDeezerConfig.enabled && (
+              <div className="flex items-center justify-between p-4 rounded-lg bg-green-500/10 border border-green-500/30">
+                <div>
+                  <Label className="text-green-400">🤖 Download Automático</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Baixar automaticamente músicas faltantes da fila (requer ARL configurado)
+                  </p>
+                </div>
+                <Switch
+                  checked={localDeezerConfig.autoDownload}
+                  onCheckedChange={(checked) =>
+                    setLocalDeezerConfig((prev) => ({ ...prev, autoDownload: checked }))
+                  }
+                />
+              </div>
+            )}
 
             {localDeezerConfig.enabled && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
