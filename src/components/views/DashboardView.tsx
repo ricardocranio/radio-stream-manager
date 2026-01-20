@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Bell, BellOff, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace } from 'lucide-react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
@@ -212,38 +212,42 @@ export function DashboardView() {
         </Card>
       </div>
 
-      {/* Station Distribution - Fixed to prevent duplicates */}
+      {/* Station Distribution - Filled grid without gaps */}
       {Object.keys(uniqueStationCounts).length > 0 && (
         <Card className="glass-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base md:text-lg flex items-center gap-2">
-              <Radio className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+          <CardHeader className="pb-2 md:pb-3">
+            <CardTitle className="text-sm md:text-base flex items-center gap-2">
+              <Radio className="w-4 h-4 text-primary" />
               Distribuição por Emissora (24h)
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 md:gap-3">
-              {Object.entries(uniqueStationCounts)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 6)
-                .map(([station, count], index) => (
-                  <div
-                    key={station}
-                    className={`p-2 md:p-3 rounded-lg ${colorPalette[index % colorPalette.length].bg} ${colorPalette[index % colorPalette.length].border} border min-w-0`}
-                  >
-                    <p className={`text-[10px] md:text-xs ${colorPalette[index % colorPalette.length].text} truncate`} title={station}>
-                      {station}
-                    </p>
-                    <p className="text-lg md:text-xl font-bold text-foreground">{count}</p>
-                    <div className="h-1 bg-background/50 rounded-full mt-1 md:mt-2 overflow-hidden">
-                      <div
-                        className={`h-full ${colorPalette[index % colorPalette.length].text.replace('text-', 'bg-')}`}
-                        style={{ width: `${(count / Math.max(...Object.values(uniqueStationCounts))) * 100}%` }}
-                      />
+          <CardContent className="pt-0">
+            {(() => {
+              const stationEntries = Object.entries(uniqueStationCounts).sort((a, b) => b[1] - a[1]);
+              const maxCount = Math.max(...Object.values(uniqueStationCounts));
+              
+              return (
+                <div className="flex flex-wrap gap-2">
+                  {stationEntries.map(([station, count], index) => (
+                    <div
+                      key={station}
+                      className={`flex-1 min-w-[100px] max-w-[180px] p-2 md:p-3 rounded-lg ${colorPalette[index % colorPalette.length].bg} ${colorPalette[index % colorPalette.length].border} border`}
+                    >
+                      <p className={`text-[10px] md:text-xs ${colorPalette[index % colorPalette.length].text} truncate font-medium`} title={station}>
+                        {station}
+                      </p>
+                      <p className="text-lg md:text-xl font-bold text-foreground">{count}</p>
+                      <div className="h-1 bg-background/50 rounded-full mt-1 overflow-hidden">
+                        <div
+                          className={`h-full transition-all ${colorPalette[index % colorPalette.length].text.replace('text-', 'bg-')}`}
+                          style={{ width: `${(count / maxCount) * 100}%` }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))}
-            </div>
+                  ))}
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       )}
@@ -429,109 +433,109 @@ export function DashboardView() {
       </Card>
 
       {/* Radio Stations Windows */}
-      <div>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
-          <h3 className="text-base md:text-lg font-semibold flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-            Captura em Tempo Real
-            <Badge variant="secondary" className="ml-2 text-xs">
-              <Radio className="w-3 h-3 mr-1" />
-              {stations.filter(s => s.enabled).length} emissoras
-            </Badge>
-          </h3>
-          <div className="flex items-center gap-2 md:gap-4 flex-wrap">
-            {/* Auto-refresh countdown */}
-            <div className="flex items-center gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-full bg-secondary/50 border border-border">
-              <div className="relative w-4 h-4 md:w-5 md:h-5">
-                <svg className="w-full h-full -rotate-90" viewBox="0 0 20 20">
-                  <circle
-                    cx="10"
-                    cy="10"
-                    r="8"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    className="text-muted-foreground/20"
-                  />
-                  <circle
-                    cx="10"
-                    cy="10"
-                    r="8"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeDasharray={2 * Math.PI * 8}
-                    strokeDashoffset={2 * Math.PI * 8 * (1 - realtimeStats.nextRefreshIn / 30)}
-                    className="text-primary transition-all duration-1000"
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-[7px] md:text-[8px] font-bold text-primary">
-                  {realtimeStats.nextRefreshIn}
-                </span>
+      <Card className="glass-card">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <CardTitle className="text-sm md:text-base flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-success animate-pulse shrink-0" />
+              Captura em Tempo Real
+              <Badge variant="secondary" className="text-[10px]">
+                {stations.filter(s => s.enabled).length} emissoras
+              </Badge>
+            </CardTitle>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Auto-refresh countdown */}
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-secondary/50 border border-border">
+                <div className="relative w-4 h-4">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 20 20">
+                    <circle
+                      cx="10"
+                      cy="10"
+                      r="8"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="text-muted-foreground/20"
+                    />
+                    <circle
+                      cx="10"
+                      cy="10"
+                      r="8"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeDasharray={2 * Math.PI * 8}
+                      strokeDashoffset={2 * Math.PI * 8 * (1 - realtimeStats.nextRefreshIn / 30)}
+                      className="text-primary transition-all duration-1000"
+                    />
+                  </svg>
+                  <span className="absolute inset-0 flex items-center justify-center text-[7px] font-bold text-primary">
+                    {realtimeStats.nextRefreshIn}
+                  </span>
+                </div>
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap">próx. atualização</span>
               </div>
-              <span className="text-[10px] md:text-xs text-muted-foreground hidden sm:inline">próx. atualização</span>
-            </div>
-            
-            {realtimeStats.lastUpdated && (
-              <span className="text-[10px] md:text-xs text-muted-foreground flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {format(realtimeStats.lastUpdated, 'HH:mm:ss', { locale: ptBR })}
-              </span>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              className="gap-1 md:gap-2 h-7 md:h-8 text-xs"
-            >
-              {isRefreshing ? (
-                <Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-3 h-3 md:w-4 md:h-4" />
+              
+              {realtimeStats.lastUpdated && (
+                <span className="text-[10px] text-muted-foreground flex items-center gap-1 whitespace-nowrap">
+                  <Clock className="w-3 h-3 shrink-0" />
+                  {format(realtimeStats.lastUpdated, 'HH:mm:ss', { locale: ptBR })}
+                </span>
               )}
-              <span className="hidden sm:inline">Atualizar</span>
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="gap-1 h-7 text-xs"
+              >
+                {isRefreshing ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3 h-3" />
+                )}
+                Atualizar
+              </Button>
+            </div>
           </div>
-        </div>
+        </CardHeader>
+        <CardContent className="pt-0">
         
         {stations.filter(s => s.enabled).length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {stations.filter(s => s.enabled).map((station, stationIndex) => {
               const colors = colorPalette[stationIndex % colorPalette.length];
               const songs = realtimeStats.recentSongsByStation[station.name] || [];
               const count24h = realtimeStats.stationCounts[station.name] || 0;
               
               return (
-                <Card key={station.id} className={`glass-card ${colors.border}`}>
-                  <CardHeader className={`py-2 md:py-3 px-3 md:px-4 border-b border-border ${colors.bg}`}>
-                    <CardTitle className="flex items-center justify-between text-sm md:text-base">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Radio className={`w-3 h-3 md:w-4 md:h-4 ${colors.text} shrink-0`} />
-                        <span className={`${colors.text} truncate`}>{station.name}</span>
+                <Card key={station.id} className={`glass-card ${colors.border} flex flex-col`}>
+                  <CardHeader className={`py-2 px-3 border-b border-border ${colors.bg} shrink-0`}>
+                    <CardTitle className="flex items-center justify-between text-sm gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Radio className={`w-4 h-4 ${colors.text} shrink-0`} />
+                        <span className={`${colors.text} truncate font-medium`}>{station.name}</span>
                       </div>
-                      <Badge variant="outline" className={`${colors.border} ${colors.text} text-[10px] md:text-xs shrink-0`}>
+                      <Badge variant="outline" className={`${colors.border} ${colors.text} text-[10px] shrink-0 whitespace-nowrap`}>
                         {count24h} (24h)
                       </Badge>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-0">
-                    <ScrollArea className="h-[120px] md:h-[150px]">
+                  <CardContent className="p-0 flex-1">
+                    <ScrollArea className="h-[140px]">
                       {songs.length > 0 ? (
                         <div className="divide-y divide-border">
                           {songs.map((song, index) => (
-                            <div key={`${song.timestamp}-${index}`} className="p-2 md:p-3 hover:bg-secondary/30 transition-colors">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 flex-1 min-w-0">
-                                  <Music className={`w-3 h-3 md:w-4 md:h-4 ${colors.text} shrink-0`} />
-                                  <div className="min-w-0 flex-1">
-                                    <p className="font-medium text-foreground text-xs md:text-sm truncate">{song.title}</p>
-                                    <p className="text-[10px] md:text-xs text-muted-foreground truncate">{song.artist}</p>
-                                  </div>
+                            <div key={`${song.timestamp}-${index}`} className="p-2 hover:bg-secondary/30 transition-colors">
+                              <div className="flex items-start gap-2">
+                                <Music className={`w-4 h-4 ${colors.text} shrink-0 mt-0.5`} />
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium text-foreground text-xs leading-tight truncate">{song.title}</p>
+                                  <p className="text-[10px] text-muted-foreground truncate">{song.artist}</p>
+                                  <p className="text-[9px] text-muted-foreground/70 mt-0.5">
+                                    {formatDistanceToNow(new Date(song.timestamp), { addSuffix: true, locale: ptBR })}
+                                  </p>
                                 </div>
-                                <span className="text-[10px] md:text-xs text-muted-foreground shrink-0">
-                                  {formatDistanceToNow(new Date(song.timestamp), { addSuffix: true, locale: ptBR })}
-                                </span>
                               </div>
                             </div>
                           ))}
@@ -539,8 +543,8 @@ export function DashboardView() {
                       ) : (
                         <div className="flex items-center justify-center h-full text-muted-foreground p-4">
                           <div className="text-center">
-                            <Music className="w-5 h-5 md:w-6 md:h-6 mx-auto mb-2 opacity-30" />
-                            <p className="text-[10px] md:text-xs">Aguardando capturas...</p>
+                            <Music className="w-6 h-6 mx-auto mb-2 opacity-30" />
+                            <p className="text-[10px]">Aguardando capturas...</p>
                           </div>
                         </div>
                       )}
@@ -559,7 +563,8 @@ export function DashboardView() {
             </CardContent>
           </Card>
         )}
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Status Panel and Grade History */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
