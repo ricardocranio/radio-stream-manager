@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Clock, Plus, Trash2, Radio, Save, Calendar, Download, Search, Filter, Eye, AlertCircle, CheckCircle, Link, Cloud, RefreshCw } from 'lucide-react';
+import { Clock, Plus, Trash2, Radio, Save, Calendar, Download, Search, Filter, Eye, AlertCircle, CheckCircle, Link, Cloud, RefreshCw, Pencil } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +54,7 @@ export function SpecialMonitoringView() {
   const [capturedSongs, setCapturedSongs] = useState<CapturedSongFromDB[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStation, setFilterStation] = useState<string>('all');
+  const [editingSchedule, setEditingSchedule] = useState<{ stationId: string; schedule: MonitoringSchedule } | null>(null);
   const [newSchedule, setNewSchedule] = useState({
     hour: 18,
     minute: 0,
@@ -265,6 +266,66 @@ export function SpecialMonitoringView() {
     });
   };
 
+  const handleEditSchedule = (stationId: string, schedule: MonitoringSchedule & { stationName: string; stationUrl?: string }) => {
+    const station = stations.find(s => s.id === stationId);
+    setEditingSchedule({ stationId, schedule });
+    setNewSchedule({
+      hour: schedule.hour,
+      minute: schedule.minute,
+      endHour: schedule.endHour ?? schedule.hour + 1,
+      endMinute: schedule.endMinute ?? 0,
+      label: schedule.label || '',
+      stationId: stationId,
+      customStationName: schedule.stationName,
+      customStationUrl: schedule.customUrl || station?.scrapeUrl || '',
+      useCustomStation: !!schedule.customUrl,
+      weekDays: schedule.weekDays || ['seg', 'ter', 'qua', 'qui', 'sex'],
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleSaveSchedule = () => {
+    if (editingSchedule) {
+      // Update existing schedule
+      const station = stations.find(s => s.id === editingSchedule.stationId);
+      if (!station) return;
+
+      const updatedSchedules = (station.monitoringSchedules || []).map(s =>
+        s.id === editingSchedule.schedule.id
+          ? {
+              ...s,
+              hour: newSchedule.hour,
+              minute: newSchedule.minute,
+              endHour: newSchedule.endHour,
+              endMinute: newSchedule.endMinute,
+              label: newSchedule.label || `${newSchedule.hour.toString().padStart(2, '0')}:${newSchedule.minute.toString().padStart(2, '0')} - ${newSchedule.endHour.toString().padStart(2, '0')}:${newSchedule.endMinute.toString().padStart(2, '0')}`,
+              customUrl: newSchedule.useCustomStation ? newSchedule.customStationUrl : undefined,
+              weekDays: newSchedule.weekDays.length > 0 ? newSchedule.weekDays : undefined,
+            }
+          : s
+      );
+
+      updateStation(editingSchedule.stationId, { monitoringSchedules: updatedSchedules });
+
+      // Also update station URL if it was changed
+      if (newSchedule.customStationUrl && newSchedule.customStationUrl !== station.scrapeUrl) {
+        updateStation(editingSchedule.stationId, { scrapeUrl: newSchedule.customStationUrl });
+      }
+
+      toast({
+        title: '✏️ Horário atualizado',
+        description: `${station.name} foi atualizado.`,
+      });
+
+      setEditingSchedule(null);
+      setNewSchedule({ hour: 18, minute: 0, endHour: 19, endMinute: 0, label: '', stationId: '', customStationName: '', customStationUrl: '', useCustomStation: false, weekDays: ['seg', 'ter', 'qua', 'qui', 'sex'] });
+      setIsDialogOpen(false);
+    } else {
+      // Add new schedule (existing logic)
+      handleAddSchedule();
+    }
+  };
+
   const handleToggleSchedule = (stationId: string, scheduleId: string, enabled: boolean) => {
     const station = stations.find(s => s.id === stationId);
     if (!station) return;
@@ -417,7 +478,13 @@ ${exportLines.join('\n')}`;
                 <Clock className="w-5 h-5 text-cyan-500" />
                 Horários Cadastrados
               </CardTitle>
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) {
+                  setEditingSchedule(null);
+                  setNewSchedule({ hour: 18, minute: 0, endHour: 19, endMinute: 0, label: '', stationId: '', customStationName: '', customStationUrl: '', useCustomStation: false, weekDays: ['seg', 'ter', 'qua', 'qui', 'sex'] });
+                }
+              }}>
                 <DialogTrigger asChild>
                   <Button size="sm" variant="outline" className="gap-2">
                     <Plus className="w-4 h-4" />
@@ -426,7 +493,7 @@ ${exportLines.join('\n')}`;
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Adicionar Horário de Monitoramento</DialogTitle>
+                    <DialogTitle>{editingSchedule ? 'Editar Horário' : 'Adicionar Horário de Monitoramento'}</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4 pt-4">
                     {/* Toggle for custom station */}
@@ -660,18 +727,23 @@ ${exportLines.join('\n')}`;
                     </div>
 
                     <div className="flex justify-end gap-2 pt-2">
-                      <Button variant="ghost" onClick={() => setIsDialogOpen(false)}>
+                      <Button variant="ghost" onClick={() => {
+                        setIsDialogOpen(false);
+                        setEditingSchedule(null);
+                      }}>
                         Cancelar
                       </Button>
                       <Button 
-                        onClick={handleAddSchedule} 
-                        disabled={newSchedule.useCustomStation 
-                          ? (!newSchedule.customStationName || !newSchedule.customStationUrl || !urlValidation.valid)
-                          : !selectedStation
+                        onClick={handleSaveSchedule} 
+                        disabled={editingSchedule 
+                          ? false 
+                          : (newSchedule.useCustomStation 
+                            ? (!newSchedule.customStationName || !newSchedule.customStationUrl || !urlValidation.valid)
+                            : !selectedStation)
                         }
                       >
                         <Save className="w-4 h-4 mr-2" />
-                        Salvar
+                        {editingSchedule ? 'Atualizar' : 'Salvar'}
                       </Button>
                     </div>
                   </div>
@@ -739,7 +811,7 @@ ${exportLines.join('\n')}`;
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                           <Switch
                             checked={schedule.enabled}
                             onCheckedChange={checked =>
@@ -749,8 +821,18 @@ ${exportLines.join('\n')}`;
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-primary"
+                            onClick={() => handleEditSchedule(schedule.stationId, schedule)}
+                            title="Editar"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-8 w-8 text-muted-foreground hover:text-destructive"
                             onClick={() => handleRemoveSchedule(schedule.stationId, schedule.id)}
+                            title="Remover"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
