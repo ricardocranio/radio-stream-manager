@@ -1,9 +1,14 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
+import { withRetry, createError, ErrorCodes } from '@/lib/errorHandler';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+
+// Constants
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 5000;
 
 // Queue for auto-download
 interface DownloadQueueItem {

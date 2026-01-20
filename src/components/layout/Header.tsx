@@ -3,6 +3,7 @@ import { useRadioStore } from '@/store/radioStore';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { StatusIndicator } from '@/components/StatusIndicator';
 
 export function Header() {
   const { isRunning, setIsRunning, lastUpdate } = useRadioStore();
@@ -33,6 +34,9 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-3">
+        {/* Status Indicator */}
+        <StatusIndicator />
+        
         {lastUpdate && (
           <span className="text-xs text-muted-foreground">
             Última atualização: {format(lastUpdate, 'HH:mm:ss')}
