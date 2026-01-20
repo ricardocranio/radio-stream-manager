@@ -19,6 +19,52 @@ interface RadioStation {
   enabled: boolean;
 }
 
+interface SpecialMonitoring {
+  id: string;
+  station_name: string;
+  scrape_url: string;
+  start_hour: number;
+  start_minute: number;
+  end_hour: number;
+  end_minute: number;
+  week_days: string[];
+  label: string | null;
+  enabled: boolean;
+}
+
+// Helper to check if current time is within a schedule
+function isWithinSchedule(schedule: SpecialMonitoring, now: Date): boolean {
+  const currentHour = now.getUTCHours() - 3; // Convert to BRT (UTC-3)
+  const adjustedHour = currentHour < 0 ? currentHour + 24 : currentHour;
+  const currentMinute = now.getMinutes();
+  const currentDay = now.getDay(); // 0 = Sunday
+
+  // Map day of week
+  const dayMap: Record<number, string> = {
+    0: 'dom',
+    1: 'seg',
+    2: 'ter',
+    3: 'qua',
+    4: 'qui',
+    5: 'sex',
+    6: 'sab',
+  };
+
+  // Check if current day is in weekDays
+  if (schedule.week_days && schedule.week_days.length > 0) {
+    if (!schedule.week_days.includes(dayMap[currentDay])) {
+      return false;
+    }
+  }
+
+  // Convert to minutes for easier comparison
+  const currentMins = adjustedHour * 60 + currentMinute;
+  const startMins = schedule.start_hour * 60 + schedule.start_minute;
+  const endMins = schedule.end_hour * 60 + schedule.end_minute;
+
+  return currentMins >= startMins && currentMins <= endMins;
+}
+
 // Retry configuration
 const RETRY_CONFIG = {
   maxRetries: 2,
@@ -414,15 +460,122 @@ Deno.serve(async (req) => {
       await new Promise(r => setTimeout(r, 500));
     }
 
+    // === SPECIAL MONITORING: Same capture logic ===
+    console.log('\n=== Processing Special Monitoring Schedules ===');
+    
+    const now = new Date();
+    
+    // Get all enabled special monitoring schedules
+    const { data: specialMonitoring, error: specialError } = await supabase
+      .from('special_monitoring')
+      .select('*')
+      .eq('enabled', true);
+
+    if (specialError) {
+      console.error('Error fetching special monitoring:', specialError);
+    } else {
+      console.log(`Found ${specialMonitoring?.length || 0} special monitoring schedules`);
+      
+      // Filter schedules that are active right now
+      const activeSchedules = (specialMonitoring || []).filter((schedule: SpecialMonitoring) => 
+        isWithinSchedule(schedule, now)
+      );
+      
+      console.log(`${activeSchedules.length} schedules are active right now`);
+      
+      // Process each active special monitoring schedule
+      for (const schedule of activeSchedules as SpecialMonitoring[]) {
+        console.log(`\n--- Special Monitoring: ${schedule.station_name} (${schedule.label || 'No label'}) ---`);
+        console.log(`Time window: ${schedule.start_hour}:${schedule.start_minute.toString().padStart(2, '0')} - ${schedule.end_hour}:${schedule.end_minute.toString().padStart(2, '0')}`);
+        
+        const scrapeResult = await scrapeWithFirecrawl(firecrawlApiKey, schedule.scrape_url);
+        
+        if (!scrapeResult.success || !scrapeResult.data) {
+          console.error(`[${schedule.station_name}] Scrape failed: ${scrapeResult.error}`);
+          results.push({ station: `[ESPECIAL] ${schedule.station_name}`, success: false, songs: 0, error: scrapeResult.error });
+          continue;
+        }
+
+        const parsed = parseRadioContent(scrapeResult.data, schedule.station_name, schedule.scrape_url);
+        let songsInserted = 0;
+
+        // Insert now playing
+        if (parsed.nowPlaying) {
+          // Check if this song was already scraped recently (within last 10 minutes)
+          const { data: existing } = await supabase
+            .from('scraped_songs')
+            .select('id')
+            .eq('station_name', schedule.station_name)
+            .eq('title', parsed.nowPlaying.title)
+            .eq('artist', parsed.nowPlaying.artist)
+            .gte('scraped_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
+            .limit(1);
+
+          if (!existing || existing.length === 0) {
+            const { error: insertError } = await supabase.from('scraped_songs').insert({
+              station_name: schedule.station_name,
+              title: parsed.nowPlaying.title,
+              artist: parsed.nowPlaying.artist,
+              is_now_playing: true,
+              source: schedule.scrape_url,
+            });
+
+            if (insertError) {
+              console.error(`[${schedule.station_name}] Insert error:`, insertError);
+            } else {
+              songsInserted++;
+              console.log(`[${schedule.station_name}] Inserted now playing: ${parsed.nowPlaying.artist} - ${parsed.nowPlaying.title}`);
+            }
+          } else {
+            console.log(`[${schedule.station_name}] Song already exists, skipping`);
+          }
+        }
+
+        // Insert recent songs
+        for (const song of parsed.recentSongs) {
+          const { data: existing } = await supabase
+            .from('scraped_songs')
+            .select('id')
+            .eq('station_name', schedule.station_name)
+            .eq('title', song.title)
+            .eq('artist', song.artist)
+            .gte('scraped_at', new Date(Date.now() - 60 * 60 * 1000).toISOString()) // 1 hour
+            .limit(1);
+
+          if (!existing || existing.length === 0) {
+            const { error: insertError } = await supabase.from('scraped_songs').insert({
+              station_name: schedule.station_name,
+              title: song.title,
+              artist: song.artist,
+              is_now_playing: false,
+              source: schedule.scrape_url,
+            });
+
+            if (!insertError) {
+              songsInserted++;
+            }
+          }
+        }
+
+        results.push({ station: `[ESPECIAL] ${schedule.station_name}`, success: true, songs: songsInserted });
+        
+        // Small delay between stations to avoid rate limits
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+
     const elapsed = Date.now() - startTime;
     console.log(`\n=== AUTO-SCRAPE COMPLETED in ${elapsed}ms ===`);
     console.log('Results:', JSON.stringify(results, null, 2));
 
+    const specialCount = results.filter(r => r.station.startsWith('[ESPECIAL]')).length;
+    
     return new Response(
       JSON.stringify({ 
         success: true, 
         results,
         totalStations: stations?.length || 0,
+        totalSpecialMonitoring: specialCount,
         totalSongs: results.reduce((sum, r) => sum + r.songs, 0),
         elapsedMs: elapsed,
       }),
