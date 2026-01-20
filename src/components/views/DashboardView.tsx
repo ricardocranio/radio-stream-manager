@@ -528,12 +528,12 @@ export function DashboardView() {
                           {songs.map((song, index) => (
                             <div key={`${song.timestamp}-${index}`} className="p-2 hover:bg-secondary/30 transition-colors">
                               <div className="flex items-start gap-2">
-                                <Music className={`w-4 h-4 ${colors.text} shrink-0 mt-0.5`} />
+                                <Music className={`w-3.5 h-3.5 ${colors.text} shrink-0 mt-0.5`} />
                                 <div className="min-w-0 flex-1">
                                   <p className="font-medium text-foreground text-xs leading-tight truncate">{song.title}</p>
                                   <p className="text-[10px] text-muted-foreground truncate">{song.artist}</p>
-                                  <p className="text-[9px] text-muted-foreground/70 mt-0.5">
-                                    {formatDistanceToNow(new Date(song.timestamp), { addSuffix: true, locale: ptBR })}
+                                  <p className="text-[9px] text-muted-foreground/70 mt-0.5 whitespace-nowrap">
+                                    há {formatDistanceToNow(new Date(song.timestamp), { locale: ptBR })}
                                   </p>
                                 </div>
                               </div>
