@@ -19,7 +19,7 @@ const staticNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'captured', label: 'Músicas Capturadas', icon: Database },
   { id: 'sequence', label: 'Sequência', icon: ListMusic },
   { id: 'schedule', label: 'Programação', icon: Clock },
-  { id: 'gradebuilder', label: 'Montagem %dd%', icon: FileCode },
+  { id: 'gradebuilder', label: 'Montagem da Grade', icon: FileCode },
   { id: 'blockeditor', label: 'Editor de Blocos', icon: Layers },
   { id: 'fixedcontent', label: 'Conteúdos Fixos', icon: Newspaper },
   { id: 'ranking', label: 'Ranking TOP50', icon: TrendingUp },

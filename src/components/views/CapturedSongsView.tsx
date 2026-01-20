@@ -354,27 +354,28 @@ export function CapturedSongsView() {
   const uniqueStations = useMemo(() => [...new Set(songs.map(s => s.station_name))], [songs]);
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
+    <div className="p-4 md:p-6 space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Músicas Capturadas</h2>
           <p className="text-muted-foreground">Histórico de músicas detectadas pelo monitoramento</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Auto-sync toggle */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/50 border border-border">
-            <Zap className={`w-4 h-4 ${autoSyncEnabled ? 'text-green-500' : 'text-muted-foreground'}`} />
-            <Label htmlFor="auto-sync" className="text-sm cursor-pointer">
+          <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-secondary/50 border border-border">
+            <Zap className={`w-3.5 h-3.5 ${autoSyncEnabled ? 'text-green-500' : 'text-muted-foreground'}`} />
+            <Label htmlFor="auto-sync" className="text-xs cursor-pointer whitespace-nowrap">
               Auto-sync
             </Label>
             <Switch
               id="auto-sync"
               checked={autoSyncEnabled}
               onCheckedChange={handleToggleAutoSync}
+              className="scale-90"
             />
             {lastAutoSync && (
-              <span className="text-xs text-muted-foreground">
+              <span className="text-[10px] text-muted-foreground">
                 {format(lastAutoSync, 'HH:mm')}
               </span>
             )}
@@ -385,32 +386,32 @@ export function CapturedSongsView() {
             size="sm"
             onClick={() => syncToRanking(false)}
             disabled={isSyncing || songs.length === 0}
-            className="gap-2"
+            className="gap-1.5"
           >
             {isSyncing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              <TrendingUp className="w-4 h-4" />
+              <TrendingUp className="w-3.5 h-3.5" />
             )}
-            Sincronizar Ranking
+            <span className="hidden sm:inline">Sync Ranking</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExport} className="gap-2">
-            <Download className="w-4 h-4" />
-            Exportar
+          <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Exportar</span>
           </Button>
           <Button
             variant="default"
             size="sm"
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="gap-2"
+            className="gap-1.5"
           >
             {isRefreshing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className="w-3.5 h-3.5" />
             )}
-            Atualizar
+            <span className="hidden sm:inline">Atualizar</span>
           </Button>
         </div>
       </div>

@@ -54,20 +54,20 @@ export function SettingsView() {
   };
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-6 space-y-6 animate-fade-in">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Configurações</h2>
           <p className="text-muted-foreground">Ajuste os parâmetros do sistema de programação</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleReset}>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={handleReset} size="sm">
             <RotateCcw className="w-4 h-4 mr-2" />
             Restaurar
           </Button>
-          <Button onClick={handleSave}>
+          <Button onClick={handleSave} size="sm">
             <Save className="w-4 h-4 mr-2" />
-            Salvar Configurações
+            Salvar
           </Button>
         </div>
       </div>

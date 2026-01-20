@@ -273,36 +273,37 @@ export function StationsView() {
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Emissoras</h2>
           <p className="text-muted-foreground">Configure as emissoras de rádio para monitoramento</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button 
             variant="outline" 
             onClick={handleSyncToSupabase} 
             disabled={isSyncing}
             className="gap-2"
+            size="sm"
           >
             {isSyncing ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <CloudUpload className="w-4 h-4" />
             )}
-            Sincronizar
+            <span className="hidden sm:inline">Sincronizar</span>
           </Button>
-          <Button variant="outline" onClick={handleDownloadConfig} className="gap-2">
+          <Button variant="outline" onClick={handleDownloadConfig} className="gap-2" size="sm">
             <Download className="w-4 h-4" />
-            Baixar Config
+            <span className="hidden sm:inline">Baixar Config</span>
           </Button>
-          <Button variant="outline" onClick={handleCopyConfig} className="gap-2">
+          <Button variant="outline" onClick={handleCopyConfig} className="gap-2" size="sm">
             <Copy className="w-4 h-4" />
-            Copiar JSON
+            <span className="hidden sm:inline">Copiar JSON</span>
           </Button>
-          <Button className="gap-2" onClick={handleAddNewStation}>
+          <Button className="gap-2" onClick={handleAddNewStation} size="sm">
             <Plus className="w-4 h-4" />
-            Nova Emissora
+            <span className="hidden sm:inline">Nova Emissora</span>
           </Button>
         </div>
       </div>
