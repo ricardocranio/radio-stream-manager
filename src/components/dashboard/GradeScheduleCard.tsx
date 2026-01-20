@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
-import { Clock, Eye, Save, X, Music, Newspaper, Edit2, FileText } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Clock, Eye, Save, X, Music, Newspaper, Edit2, FileText, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore, BlockSong, FixedContent } from '@/store/radioStore';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog,
   DialogContent,
@@ -22,14 +23,88 @@ interface BlockInfo {
   fixedContent: FixedContent[];
 }
 
+interface CapturedSong {
+  title: string;
+  artist: string;
+  station_name: string;
+  scraped_at: string;
+}
+
 export function GradeScheduleCard() {
-  const { blockSongs, programs, fixedContent, setBlockSongs } = useRadioStore();
+  const { blockSongs, programs, fixedContent, setBlockSongs, stations } = useRadioStore();
   const { toast } = useToast();
   const [selectedBlock, setSelectedBlock] = useState<BlockInfo | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedSongs, setEditedSongs] = useState<BlockSong[]>([]);
+  const [capturedSongs, setCapturedSongs] = useState<CapturedSong[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Get current time and calculate blocks
+  // Fetch captured songs from Supabase
+  useEffect(() => {
+    const fetchCapturedSongs = async () => {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('scraped_songs')
+          .select('title, artist, station_name, scraped_at')
+          .order('scraped_at', { ascending: false })
+          .limit(200);
+
+        if (error) throw error;
+        setCapturedSongs(data || []);
+      } catch (error) {
+        console.error('Error fetching songs:', error);
+      }
+      setIsLoading(false);
+    };
+
+    fetchCapturedSongs();
+
+    // Subscribe to realtime updates
+    const channel = supabase
+      .channel('grade-songs')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'scraped_songs',
+        },
+        (payload) => {
+          const newSong = payload.new as CapturedSong;
+          setCapturedSongs(prev => [newSong, ...prev].slice(0, 200));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Generate songs pool from captured songs
+  const songsPool = useMemo(() => {
+    const uniqueSongs = new Map<string, BlockSong>();
+    
+    capturedSongs.forEach((song, index) => {
+      const key = `${song.title}-${song.artist}`;
+      if (!uniqueSongs.has(key)) {
+        const stationAbbrev = song.station_name.split(' ').map(w => w[0]).join('').toUpperCase();
+        uniqueSongs.set(key, {
+          id: `captured-${index}-${Date.now()}`,
+          title: song.title,
+          artist: song.artist,
+          file: `${song.artist} - ${song.title}.mp3`,
+          source: stationAbbrev,
+          isFixed: false,
+        });
+      }
+    });
+    
+    return Array.from(uniqueSongs.values());
+  }, [capturedSongs]);
+
+  // Get current time and calculate blocks with auto-populated songs
   const blocks = useMemo(() => {
     const now = new Date();
     const currentHour = now.getHours();
@@ -74,8 +149,26 @@ export function GradeScheduleCard() {
         fc.enabled && fc.timeSlots.some(ts => ts.hour === blockHour && ts.minute === blockMinute)
       );
       
-      // Get songs for this block
-      const songs = blockSongs[timeKey] || [];
+      // Get songs for this block - use stored or auto-generate from captured songs
+      let songs = blockSongs[timeKey] || [];
+      
+      // If no songs stored, auto-populate from captured songs pool
+      if (songs.length === 0 && songsPool.length > 0) {
+        // Use different slices of the pool for different blocks to add variety
+        const startIndex = ((blockHour * 2 + (blockMinute === 30 ? 1 : 0)) * 10) % songsPool.length;
+        const selectedSongs: BlockSong[] = [];
+        
+        for (let i = 0; i < 10 && i < songsPool.length; i++) {
+          const poolIndex = (startIndex + i) % songsPool.length;
+          const song = songsPool[poolIndex];
+          selectedSongs.push({
+            ...song,
+            id: `${timeKey}-${i}-${Date.now()}`,
+          });
+        }
+        
+        songs = selectedSongs;
+      }
       
       blockList.push({
         time: timeKey,
@@ -87,7 +180,7 @@ export function GradeScheduleCard() {
     }
     
     return blockList;
-  }, [blockSongs, programs, fixedContent]);
+  }, [blockSongs, programs, fixedContent, songsPool]);
 
   // Handle opening block details
   const handleViewBlock = (block: BlockInfo) => {
@@ -144,60 +237,66 @@ export function GradeScheduleCard() {
             <FileText className="w-5 h-5 text-emerald-500 shrink-0" />
             <span className="truncate">Grades Montadas</span>
             <Badge variant="outline" className="ml-auto text-[10px]">
-              5 blocos
+              {isLoading ? '...' : `${songsPool.length} músicas`}
             </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-3 flex-1 min-h-0">
-          <div className="space-y-2">
-            {blocks.map((block) => (
-              <div
-                key={block.time}
-                className={`p-2.5 rounded-lg border transition-all cursor-pointer hover:scale-[1.01] ${getLabelStyle(block.label)}`}
-                onClick={() => handleViewBlock(block)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-4 h-4 shrink-0" />
-                      <span className="font-mono font-bold text-sm">{block.time}</span>
-                    </div>
-                    <Badge variant="secondary" className="text-[10px] shrink-0">
-                      {block.programName}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="flex items-center gap-1 text-xs">
-                      <Music className="w-3 h-3" />
-                      <span>{block.songs.length}</span>
-                    </div>
-                    {block.fixedContent.length > 0 && (
-                      <div className="flex items-center gap-1 text-xs text-purple-400">
-                        <Newspaper className="w-3 h-3" />
-                        <span>{block.fixedContent.length}</span>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {blocks.map((block) => (
+                <div
+                  key={block.time}
+                  className={`p-2.5 rounded-lg border transition-all cursor-pointer hover:scale-[1.01] ${getLabelStyle(block.label)}`}
+                  onClick={() => handleViewBlock(block)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-4 h-4 shrink-0" />
+                        <span className="font-mono font-bold text-sm">{block.time}</span>
                       </div>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleViewBlock(block);
-                      }}
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </Button>
+                      <Badge variant="secondary" className="text-[10px] shrink-0">
+                        {block.programName}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1 text-xs">
+                        <Music className="w-3 h-3" />
+                        <span>{block.songs.length}</span>
+                      </div>
+                      {block.fixedContent.length > 0 && (
+                        <div className="flex items-center gap-1 text-xs text-purple-400">
+                          <Newspaper className="w-3 h-3" />
+                          <span>{block.fixedContent.length}</span>
+                        </div>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewBlock(block);
+                        }}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   </div>
+                  {block.label === 'atual' && (
+                    <Badge className="mt-1.5 text-[9px] bg-emerald-500/30 text-emerald-400 border-0">
+                      ● BLOCO ATUAL
+                    </Badge>
+                  )}
                 </div>
-                {block.label === 'atual' && (
-                  <Badge className="mt-1.5 text-[9px] bg-emerald-500/30 text-emerald-400 border-0">
-                    ● BLOCO ATUAL
-                  </Badge>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -317,6 +416,7 @@ export function GradeScheduleCard() {
                       <div className="text-center py-8 text-muted-foreground">
                         <Music className="w-8 h-8 mx-auto mb-2 opacity-30" />
                         <p className="text-sm">Nenhuma música neste bloco</p>
+                        <p className="text-xs mt-1">Aguardando capturas...</p>
                       </div>
                     )}
                   </div>
