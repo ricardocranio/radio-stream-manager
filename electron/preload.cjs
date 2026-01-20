@@ -49,6 +49,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (_, info) => callback(info)),
   onDownloadProgress: (callback) => ipcRenderer.on('download-progress', (_, progress) => callback(progress)),
   
+  // Python/Deemix status notifications
+  onPythonStatus: (callback) => ipcRenderer.on('python-status', (_, status) => callback(status)),
+  onDeemixStatus: (callback) => ipcRenderer.on('deemix-status', (_, status) => callback(status)),
+  getDeemixCommand: () => ipcRenderer.invoke('get-deemix-command'),
+  
   // Platform detection
   platform: process.platform,
   isElectron: true,
