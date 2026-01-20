@@ -251,7 +251,7 @@ const defaultConfig: SystemConfig = {
 };
 
 const defaultDeezerConfig: DeezerConfig = {
-  arl: '04b2d26d75ab4326fd20b66bffd71ca2393a2f2d7893b44453ea5b6f560038ee327caf42b5458fc5776838427d655108d36af2a999c5a661c4c00bb3ca72dfc1c5929881ccdfec2a464bca3a2502e7c006342baed4deac609ad946ef67972f5d',
+  arl: '', // User must provide their own ARL token via Settings
   downloadFolder: 'C:\\Playlist\\Downloads',
   quality: 'MP3_320',
   enabled: true,

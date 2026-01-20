@@ -24,6 +24,75 @@ interface FallbackSource {
   urlPattern: (stationName: string) => string | null;
 }
 
+// Allowed domains for radio scraping (security: prevent SSRF)
+const ALLOWED_DOMAINS = [
+  'mytuner-radio.com',
+  'www.mytuner-radio.com',
+  'onlineradiobox.com',
+  'www.onlineradiobox.com',
+  'radio-browser.info',
+  'www.radio-browser.info',
+  'tunein.com',
+  'www.tunein.com',
+];
+
+// Validate URL to prevent SSRF attacks
+function isValidRadioUrl(urlString: string): { valid: boolean; error?: string } {
+  try {
+    const url = new URL(urlString);
+    
+    // Only allow http and https
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      return { valid: false, error: 'Invalid URL protocol' };
+    }
+    
+    // Block private/internal IPs
+    const hostname = url.hostname.toLowerCase();
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') {
+      return { valid: false, error: 'Invalid URL' };
+    }
+    
+    // Block internal IP ranges
+    if (hostname.startsWith('192.168.') || hostname.startsWith('10.') || hostname.startsWith('169.254.')) {
+      return { valid: false, error: 'Invalid URL' };
+    }
+    
+    // Block 172.16.0.0 - 172.31.255.255 range
+    if (hostname.startsWith('172.')) {
+      const parts = hostname.split('.');
+      const second = parseInt(parts[1]);
+      if (!isNaN(second) && second >= 16 && second <= 31) {
+        return { valid: false, error: 'Invalid URL' };
+      }
+    }
+    
+    // Check against allowed domains
+    const isAllowedDomain = ALLOWED_DOMAINS.some(domain => 
+      hostname === domain || hostname.endsWith('.' + domain)
+    );
+    
+    if (!isAllowedDomain) {
+      return { valid: false, error: 'Domain not supported' };
+    }
+    
+    // URL length limit
+    if (urlString.length > 500) {
+      return { valid: false, error: 'URL too long' };
+    }
+    
+    return { valid: true };
+  } catch {
+    return { valid: false, error: 'Invalid URL format' };
+  }
+}
+
+// Sanitize station name to prevent injection
+function sanitizeStationName(name: string): string {
+  if (!name || typeof name !== 'string') return 'Unknown';
+  // Remove any special characters, keep only alphanumeric, spaces, and basic punctuation
+  return name.slice(0, 100).replace(/[<>'"&\\]/g, '').trim() || 'Unknown';
+}
+
 // Multiple fallback sources for radio stations
 const fallbackSources: FallbackSource[] = [
   {
@@ -109,13 +178,13 @@ async function scrapeWithRetry(
         return { success: true, data };
       }
 
-      console.warn(`[Attempt ${attempt}] API returned error:`, data.error);
+      console.warn(`[Attempt ${attempt}] API returned error`);
       
       if (attempt < retries) {
         await new Promise(r => setTimeout(r, RETRY_CONFIG.retryDelay * attempt));
       }
     } catch (error) {
-      console.error(`[Attempt ${attempt}] Request failed:`, error);
+      console.error(`[Attempt ${attempt}] Request failed`);
       
       if (attempt < retries) {
         await new Promise(r => setTimeout(r, RETRY_CONFIG.retryDelay * attempt));
@@ -151,7 +220,11 @@ async function tryFallbackSources(
 
   for (const altUrl of mytunerVariations) {
     if (altUrl !== primaryUrl) {
-      console.log(`[Fallback] Trying MyTuner variation: ${altUrl}`);
+      // Validate fallback URLs too
+      const validation = isValidRadioUrl(altUrl);
+      if (!validation.valid) continue;
+      
+      console.log(`[Fallback] Trying MyTuner variation`);
       const result = await scrapeWithRetry(apiKey, altUrl, 1);
       if (result.success && result.data) {
         const parsed = parseRadioContent(result.data, stationName, altUrl);
@@ -171,42 +244,55 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { stationUrl, stationName, forceRefresh } = await req.json();
+    const body = await req.json();
+    const { stationUrl, stationName, forceRefresh } = body;
 
-    if (!stationUrl) {
+    if (!stationUrl || typeof stationUrl !== 'string') {
       return new Response(
         JSON.stringify({ success: false, error: 'Station URL is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const apiKey = Deno.env.get('FIRECRAWL_API_KEY');
-    if (!apiKey) {
-      console.error('FIRECRAWL_API_KEY not configured');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Firecrawl connector not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Format URL
+    // Format and validate URL
     let formattedUrl = stationUrl.trim();
     if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
       formattedUrl = `https://${formattedUrl}`;
     }
 
-    console.log('Scraping radio station:', formattedUrl, '| forceRefresh:', forceRefresh);
+    // Validate URL (SSRF prevention)
+    const urlValidation = isValidRadioUrl(formattedUrl);
+    if (!urlValidation.valid) {
+      return new Response(
+        JSON.stringify({ success: false, error: urlValidation.error || 'Invalid URL' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Sanitize station name
+    const safeName = sanitizeStationName(stationName);
+
+    const apiKey = Deno.env.get('FIRECRAWL_API_KEY');
+    if (!apiKey) {
+      console.error('FIRECRAWL_API_KEY not configured');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Service temporarily unavailable' }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Scraping radio station:', formattedUrl);
 
     // Try with fallback sources if primary fails
-    const scrapeResult = await tryFallbackSources(apiKey, stationName || 'Unknown', formattedUrl);
+    const scrapeResult = await tryFallbackSources(apiKey, safeName, formattedUrl);
 
     if (!scrapeResult.success || !scrapeResult.data) {
       console.error('All scrape attempts failed');
       return new Response(
         JSON.stringify({ 
           success: false, 
-          stationName: stationName || 'Unknown',
-          error: scrapeResult.error || 'Failed to scrape from all sources',
+          stationName: safeName,
+          error: 'Failed to retrieve station data',
           scrapedAt: new Date().toISOString(),
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -214,20 +300,19 @@ Deno.serve(async (req) => {
     }
 
     // Parse the scraped content
-    const result = parseRadioContent(scrapeResult.data, stationName || 'Unknown', formattedUrl);
+    const result = parseRadioContent(scrapeResult.data, safeName, formattedUrl);
     result.source = scrapeResult.source;
     result.scrapedAt = new Date().toISOString();
     
-    console.log('Scrape successful:', JSON.stringify(result, null, 2));
+    console.log('Scrape successful');
     return new Response(
       JSON.stringify(result),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Error scraping radio:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to scrape';
+    console.error('Error scraping radio');
     return new Response(
-      JSON.stringify({ success: false, error: errorMessage, scrapedAt: new Date().toISOString() }),
+      JSON.stringify({ success: false, error: 'An error occurred', scrapedAt: new Date().toISOString() }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -296,8 +381,6 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
   let nowPlaying: ScrapedSong | undefined;
 
   console.log('Parsing content for:', stationName);
-  console.log('Markdown length:', markdown.length);
-  console.log('HTML length:', html.length);
 
   // Try to parse mytuner-radio.com format
   if (url.includes('mytuner-radio.com')) {
@@ -305,10 +388,7 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
     
     // Method 1: Parse HTML for #now-playing / .latest-song and #song-history elements
     if (html) {
-      console.log('Parsing HTML structure...');
-      
       // Extract "Tocando agora" / now playing section
-      // Look for: <div id="now-playing">...</div> followed by <div class="latest-song">...</div>
       const nowPlayingSection = html.match(/id="now-playing"[^>]*>[\s\S]*?<\/div>\s*<div[^>]*class="[^"]*latest-song[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
       if (nowPlayingSection) {
         const songHtml = nowPlayingSection[1];
@@ -319,7 +399,6 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
             artist: extracted.artist,
             timestamp: new Date().toISOString(),
           };
-          console.log('Found now playing from HTML:', nowPlaying);
         }
       }
       
@@ -334,17 +413,14 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
               artist: extracted.artist,
               timestamp: new Date().toISOString(),
             };
-            console.log('Found latest-song from HTML:', nowPlaying);
           }
         }
       }
       
       // Extract "As últimas tocadas" / song history
-      // Look for: <div id="song-history">...</div>
       const historySection = html.match(/id="song-history"[^>]*>([\s\S]*?)<\/div>\s*(?:<\/div>|<div[^>]*class="(?!song))/i);
       if (historySection) {
         const historyHtml = historySection[1];
-        // Look for individual song entries within the history
         const songEntries = historyHtml.match(/<div[^>]*class="[^"]*song[^"]*"[^>]*>[\s\S]*?<\/div>/gi) || [];
         
         for (const entry of songEntries.slice(0, 5)) {
@@ -357,13 +433,11 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
             });
           }
         }
-        console.log('Found songs from song-history:', songs.length);
       }
       
       // Method 2: Look for any song divs with title/artist classes
       if (songs.length < 3) {
         const songDivs = html.match(/<div[^>]*class="[^"]*song[^"]*"[^>]*>[\s\S]*?<\/div>/gi) || [];
-        console.log('Found song divs:', songDivs.length);
         
         for (const div of songDivs.slice(0, 10)) {
           const extracted = extractSongFromHtml(div);
@@ -382,13 +456,10 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
     
     // Method 3: Fallback to markdown parsing
     if (!nowPlaying && songs.length === 0) {
-      console.log('Falling back to markdown parsing...');
-      
       // Look for patterns after "Tocando agora" text
       const afterNowPlaying = markdown.match(/Tocando agora:?\s*\n+([\s\S]*?)(?:\n\s*\n|As últimas|Playlist)/i);
       if (afterNowPlaying) {
         const section = afterNowPlaying[1];
-        // Look for **Title**\nArtist pattern
         const songMatch = section.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/);
         if (songMatch) {
           const title = cleanText(songMatch[1]);
@@ -422,7 +493,6 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
 
   // Generic parsing for other radio sites
   if (!nowPlaying && songs.length === 0) {
-    console.log('Using generic parser...');
     // Look for common patterns like "Artist - Title" or "Title by Artist"
     const dashPatterns = markdown.match(/([^\n\-–]+)\s*[-–]\s*([^\n]+)/g);
     if (dashPatterns) {
@@ -459,12 +529,6 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
 
   // Get last 5 songs (excluding now playing)
   const recentSongs = uniqueSongs.slice(0, 5);
-
-  console.log('Parsed result:', {
-    nowPlaying: nowPlaying ? `${nowPlaying.artist} - ${nowPlaying.title}` : 'none',
-    recentSongsCount: recentSongs.length,
-    recentSongs: recentSongs.map(s => `${s.artist} - ${s.title}`),
-  });
 
   return {
     success: true,
