@@ -55,21 +55,22 @@ export function SequenceView() {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold text-foreground">Sequência de Montagem</h2>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             Configure a ordem das rádios para montar o arquivo %dd%.txt
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleReset}>
-            <RotateCcw className="w-4 h-4 mr-2" />
-            Resetar
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={handleReset}>
+            <RotateCcw className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Resetar</span>
           </Button>
-          <Button onClick={handleSave}>
-            <Save className="w-4 h-4 mr-2" />
-            Salvar Sequência
+          <Button size="sm" onClick={handleSave}>
+            <Save className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Salvar Sequência</span>
+            <span className="sm:hidden">Salvar</span>
           </Button>
         </div>
       </div>

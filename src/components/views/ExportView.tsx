@@ -230,29 +230,30 @@ export function ExportView() {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold text-foreground">Exportar Configuração</h2>
-          <p className="text-muted-foreground">
-            {isElectron ? 'Salve diretamente na pasta de grades ou exporte' : 'Modo Híbrido: Exporte o config.json para o script Python'}
+          <p className="text-muted-foreground text-sm">
+            {isElectron ? 'Salve diretamente na pasta de grades ou exporte' : 'Modo Híbrido: Exporte para o script Python'}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0 flex-wrap">
           {isElectron && (
             <>
-              <Button variant="outline" onClick={handleOpenFolder} className="gap-2">
+              <Button variant="outline" size="sm" onClick={handleOpenFolder} className="gap-2">
                 <FolderOpen className="w-4 h-4" />
-                Abrir Pasta
+                <span className="hidden sm:inline">Abrir Pasta</span>
               </Button>
-              <Button onClick={handleSaveConfigToFolder} className="gap-2" disabled={isSavingConfig}>
+              <Button size="sm" onClick={handleSaveConfigToFolder} className="gap-2" disabled={isSavingConfig}>
                 <Save className="w-4 h-4" />
-                {isSavingConfig ? 'Salvando...' : 'Salvar Config'}
+                <span className="hidden sm:inline">{isSavingConfig ? 'Salvando...' : 'Salvar Config'}</span>
               </Button>
             </>
           )}
-          <Button variant={isElectron ? 'outline' : 'default'} onClick={handleDownloadConfig} className="gap-2">
+          <Button variant={isElectron ? 'outline' : 'default'} size="sm" onClick={handleDownloadConfig} className="gap-2">
             <Download className="w-4 h-4" />
-            Baixar config.json
+            <span className="hidden sm:inline">Baixar config.json</span>
+            <span className="sm:hidden">Baixar</span>
           </Button>
         </div>
       </div>

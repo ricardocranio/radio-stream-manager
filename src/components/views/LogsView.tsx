@@ -176,23 +176,23 @@ export function LogsView() {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold text-foreground">Logs do Sistema</h2>
-          <p className="text-muted-foreground">Monitoramento detalhado de blocos e erros</p>
+          <p className="text-muted-foreground text-sm">Monitoramento detalhado de blocos e erros</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
           <Button variant="outline" size="sm" onClick={() => setIsPaused(!isPaused)}>
-            {isPaused ? <Play className="w-4 h-4 mr-2" /> : <Pause className="w-4 h-4 mr-2" />}
-            {isPaused ? 'Retomar' : 'Pausar'}
+            {isPaused ? <Play className="w-4 h-4 sm:mr-2" /> : <Pause className="w-4 h-4 sm:mr-2" />}
+            <span className="hidden sm:inline">{isPaused ? 'Retomar' : 'Pausar'}</span>
           </Button>
           <Button variant="outline" size="sm" onClick={handleExportLogs}>
-            <Download className="w-4 h-4 mr-2" />
-            Exportar
+            <Download className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Exportar</span>
           </Button>
           <Button variant="destructive" size="sm" onClick={handleClear}>
-            <Trash2 className="w-4 h-4 mr-2" />
-            Limpar
+            <Trash2 className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Limpar</span>
           </Button>
         </div>
       </div>

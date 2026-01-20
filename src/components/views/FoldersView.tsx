@@ -43,14 +43,15 @@ export function FoldersView() {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold text-foreground">Pastas e Arquivos</h2>
-          <p className="text-muted-foreground">Configure os caminhos das pastas do sistema</p>
+          <p className="text-muted-foreground text-sm">Configure os caminhos das pastas do sistema</p>
         </div>
-        <Button onClick={handleSave}>
-          <Save className="w-4 h-4 mr-2" />
-          Salvar Caminhos
+        <Button size="sm" onClick={handleSave} className="shrink-0">
+          <Save className="w-4 h-4 sm:mr-2" />
+          <span className="hidden sm:inline">Salvar Caminhos</span>
+          <span className="sm:hidden">Salvar</span>
         </Button>
       </div>
 
