@@ -852,11 +852,13 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
       // Build the full command string
       const fullCommand = `${deemixCommand} "${deezerUrl}" -p "${outputFolder}" -b ${deemixQuality}`;
 
-      console.log(`Running: ${fullCommand}`);
+      console.log(`[DEEMIX] Running: ${fullCommand}`);
+      console.log(`[DEEMIX] Output folder: ${outputFolder}`);
       
       exec(fullCommand, { timeout: 120000, maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
         if (error) {
-          console.error('deemix error:', error);
+          console.error('[DEEMIX] Error:', error);
+          console.error('[DEEMIX] Stderr:', stderr);
           resolve({ 
             success: false, 
             error: stderr || error.message,
@@ -865,7 +867,15 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
           return;
         }
 
-        console.log('deemix output:', stdout);
+        console.log('[DEEMIX] Success output:', stdout);
+        
+        // Verify the file was created
+        try {
+          const files = fs.readdirSync(outputFolder);
+          console.log(`[DEEMIX] Files in output folder: ${files.join(', ')}`);
+        } catch (e) {
+          console.log('[DEEMIX] Could not list output folder:', e.message);
+        }
         
         // Show Windows notification
         showNotification(
@@ -886,12 +896,14 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
             duration: track.duration,
           },
           output: stdout,
+          outputFolder: outputFolder,
           message: `Download concluído: ${track.artist.name} - ${track.title}`
         });
+      });
     });
     
   } catch (error) {
-    console.error('Deezer download error:', error);
+    console.error('[DEEMIX] Download error:', error);
     return { success: false, error: error.message || 'Erro ao baixar do Deezer' };
   }
 });
