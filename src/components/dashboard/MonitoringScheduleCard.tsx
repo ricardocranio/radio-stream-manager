@@ -187,30 +187,33 @@ export function MonitoringScheduleCard() {
   );
 
   return (
-    <Card className="glass-card border-cyan-500/20">
-      <CardHeader className="pb-3 border-b border-border">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-cyan-500" />
-            Horários de Monitoramento
+    <Card className="glass-card border-cyan-500/20 flex flex-col">
+      <CardHeader className="pb-3 border-b border-border shrink-0">
+        <div className="flex flex-col gap-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-cyan-500 shrink-0" />
+            <span className="truncate">Horários de Monitoramento</span>
           </CardTitle>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
               size="sm"
               variant="secondary"
-              className="gap-2"
+              className="gap-1.5 text-xs h-8"
               onClick={handleExportScheduledSongs}
               disabled={isExporting || allSchedules.filter(s => s.enabled).length === 0}
             >
-              <Download className="w-4 h-4" />
-              Exportar Lista
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Exportar</span>
+              <span className="sm:hidden">Export</span>
             </Button>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline" className="gap-2">
-                <Plus className="w-4 h-4" />
-                Novo Horário
-              </Button>
-            </DialogTrigger>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
+                  <Plus className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Novo Horário</span>
+                  <span className="sm:hidden">Novo</span>
+                </Button>
+              </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Adicionar Horário de Monitoramento</DialogTitle>
@@ -331,56 +334,58 @@ export function MonitoringScheduleCard() {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
       </CardHeader>
-      <CardContent className="p-4">
+      <CardContent className="p-3 flex-1 min-h-0">
         {allSchedules.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <Clock className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">Nenhum horário específico configurado</p>
-            <p className="text-xs mt-1">Adicione horários para monitorar músicas diferenciadas</p>
+          <div className="text-center py-6 text-muted-foreground">
+            <Clock className="w-10 h-10 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">Nenhum horário configurado</p>
+            <p className="text-xs mt-1">Adicione horários para monitorar</p>
           </div>
         ) : (
-          <ScrollArea className="h-[200px]">
-            <div className="space-y-2">
+          <ScrollArea className="h-[180px]">
+            <div className="space-y-2 pr-2">
               {allSchedules
                 .sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute))
                 .map(schedule => (
                   <div
                     key={schedule.id}
-                    className={`p-3 rounded-lg flex items-center justify-between ${
+                    className={`p-2 rounded-lg flex items-center justify-between gap-2 ${
                       schedule.enabled ? 'bg-cyan-500/10 border border-cyan-500/20' : 'bg-secondary/50'
                     }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="px-2 py-1 rounded bg-cyan-500/20 text-cyan-500 text-xs font-bold">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      <div className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-500 text-[10px] font-bold shrink-0">
                         {schedule.hour.toString().padStart(2, '0')}:{schedule.minute.toString().padStart(2, '0')}
                       </div>
-                      <span className="text-muted-foreground text-xs">→</span>
-                      <div className="px-2 py-1 rounded bg-orange-500/20 text-orange-500 text-xs font-bold">
+                      <span className="text-muted-foreground text-[10px]">→</span>
+                      <div className="px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-500 text-[10px] font-bold shrink-0">
                         {(schedule.endHour ?? schedule.hour + 1).toString().padStart(2, '0')}:{(schedule.endMinute ?? 0).toString().padStart(2, '0')}
                       </div>
-                      <div className="ml-2">
-                        <p className="text-sm font-medium text-foreground">{schedule.stationName}</p>
-                        <p className="text-xs text-muted-foreground">
+                      <div className="min-w-0 ml-1">
+                        <p className="text-xs font-medium text-foreground truncate">{schedule.stationName}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">
                           {schedule.label || 'Música diferenciada'}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 shrink-0">
                       <Switch
                         checked={schedule.enabled}
                         onCheckedChange={checked =>
                           handleToggleSchedule(schedule.stationId, schedule.id, checked)
                         }
+                        className="scale-90"
                       />
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
                         onClick={() => handleRemoveSchedule(schedule.stationId, schedule.id)}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
                   </div>
