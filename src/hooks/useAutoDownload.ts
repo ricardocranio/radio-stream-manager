@@ -19,12 +19,25 @@ export function useAutoDownload() {
     addDownloadHistory,
   } = useRadioStore();
   
-  const { setQueueLength, setIsProcessing } = useAutoDownloadStore();
+  const { setQueueLength, setIsProcessing, resetCounter } = useAutoDownloadStore();
   
   const downloadQueueRef = useRef<DownloadQueueItem[]>([]);
   const isProcessingRef = useRef(false);
   const processedSongsRef = useRef<Set<string>>(new Set());
   const lastCheckRef = useRef<string[]>([]);
+  const lastResetCounterRef = useRef(0);
+
+  // Watch for reset signal and clear internal refs
+  useEffect(() => {
+    if (resetCounter > lastResetCounterRef.current) {
+      console.log('[AUTO-DL] Reset signal received, clearing queue and refs');
+      downloadQueueRef.current = [];
+      processedSongsRef.current.clear();
+      lastCheckRef.current = [];
+      isProcessingRef.current = false;
+      lastResetCounterRef.current = resetCounter;
+    }
+  }, [resetCounter]);
 
   // Download a single song
   const downloadSong = useCallback(async (song: MissingSong): Promise<boolean> => {
