@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkDeemix: () => ipcRenderer.invoke('check-deemix'),
   checkPython: () => ipcRenderer.invoke('check-python'),
   installDeemix: () => ipcRenderer.invoke('install-deemix'),
+  testDeemix: () => ipcRenderer.invoke('test-deemix'),
+  testDeemixSearch: (params) => ipcRenderer.invoke('test-deemix-search', params),
   onDeemixInstallProgress: (callback) => ipcRenderer.on('deemix-install-progress', (_, progress) => callback(progress)),
   
   // Notifications

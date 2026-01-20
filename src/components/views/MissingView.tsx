@@ -59,6 +59,8 @@ export function MissingView() {
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
   const [deemixInstalled, setDeemixInstalled] = useState<boolean | null>(null);
   const [deemixCommand, setDeemixCommand] = useState<string | null>(null);
+  const [deemixVersion, setDeemixVersion] = useState<string | null>(null);
+  const [isTestingDeemix, setIsTestingDeemix] = useState(false);
   const [isCheckingDeemix, setIsCheckingDeemix] = useState(false);
   const [activeTab, setActiveTab] = useState('missing');
   const [simulationMode, setSimulationMode] = useState(!isElectron); // Auto-enable in web
@@ -161,11 +163,80 @@ export function MissingView() {
       setDeemixInstalled(installed ?? false);
       if (installed) {
         fetchDeemixCommand();
+        // Auto-run test to get version
+        await testDeemix();
       }
     } catch {
       setDeemixInstalled(false);
     }
     setIsCheckingDeemix(false);
+  };
+
+  const testDeemix = async () => {
+    if (!isElectron || !window.electronAPI?.testDeemix) return;
+    setIsTestingDeemix(true);
+    try {
+      const result = await window.electronAPI.testDeemix();
+      if (result.success) {
+        setDeemixVersion(result.version || null);
+        setDeemixCommand(result.command || null);
+        toast({
+          title: '✅ deemix Testado!',
+          description: result.message || `Versão: ${result.version}`,
+        });
+      } else {
+        toast({
+          title: '⚠️ Teste do deemix falhou',
+          description: result.error || 'Erro desconhecido',
+          variant: 'destructive',
+        });
+      }
+      return result;
+    } catch (err) {
+      toast({
+        title: 'Erro no teste',
+        description: err instanceof Error ? err.message : 'Erro desconhecido',
+        variant: 'destructive',
+      });
+      return { success: false };
+    } finally {
+      setIsTestingDeemix(false);
+    }
+  };
+
+  const testDeemixSearch = async () => {
+    if (!isElectron || !window.electronAPI?.testDeemixSearch) return;
+    setIsTestingDeemix(true);
+    try {
+      // Test with a popular song
+      const result = await window.electronAPI.testDeemixSearch({
+        artist: 'Queen',
+        title: 'Bohemian Rhapsody'
+      });
+      
+      if (result.success && result.track) {
+        toast({
+          title: '✅ Busca Deezer OK!',
+          description: `Encontrado: ${result.track.artist} - ${result.track.title}`,
+        });
+      } else {
+        toast({
+          title: '⚠️ Busca falhou',
+          description: result.error || 'Música não encontrada',
+          variant: 'destructive',
+        });
+      }
+      return result;
+    } catch (err) {
+      toast({
+        title: 'Erro na busca',
+        description: err instanceof Error ? err.message : 'Erro desconhecido',
+        variant: 'destructive',
+      });
+      return { success: false };
+    } finally {
+      setIsTestingDeemix(false);
+    }
   };
 
   const handleInstallDeemix = async () => {
@@ -178,11 +249,23 @@ export function MissingView() {
       const result = await window.electronAPI.installDeemix();
       
       if (result.success) {
-        toast({
-          title: '✅ deemix Instalado!',
-          description: result.message || 'Instalação concluída com sucesso.',
-        });
         setDeemixInstalled(true);
+        
+        // Run test after installation to verify and get version
+        setDeemixInstallMessage('Testando instalação...');
+        const testResult = await testDeemix();
+        
+        if (testResult.success) {
+          toast({
+            title: '✅ deemix Instalado e Testado!',
+            description: `${result.message || 'Instalação concluída.'} Versão: ${testResult.version || 'detectada'}`,
+          });
+        } else {
+          toast({
+            title: '⚠️ deemix Instalado',
+            description: 'Instalação concluída, mas o teste falhou. Pode ser necessário reiniciar.',
+          });
+        }
       } else {
         toast({
           title: '❌ Erro na instalação',
@@ -637,11 +720,20 @@ export function MissingView() {
               {deemixInstalled === true && (
                 <Badge 
                   variant="outline" 
-                  className="bg-blue-500/10 text-blue-500 border-blue-500/30 cursor-help"
-                  title={`Usando: ${deemixCommand || 'deemix'}`}
+                  className="bg-blue-500/10 text-blue-500 border-blue-500/30 cursor-pointer hover:bg-blue-500/20"
+                  title={`Comando: ${deemixCommand || 'deemix'}${deemixVersion ? `\nVersão: ${deemixVersion}` : ''}\nClique para testar`}
+                  onClick={testDeemix}
                 >
+                  {isTestingDeemix ? (
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  ) : (
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                  )}
                   deemix OK {deemixCommand && deemixCommand !== 'deemix' && (
                     <span className="ml-1 text-[10px] opacity-70">({deemixCommand.includes('python3') ? 'py3' : 'py'})</span>
+                  )}
+                  {deemixVersion && (
+                    <span className="ml-1 text-[10px] opacity-70">{deemixVersion.split(' ')[0]}</span>
                   )}
                 </Badge>
               )}
@@ -857,6 +949,69 @@ export function MissingView() {
                   disabled={isCheckingPython || isCheckingDeemix}
                 >
                   <RefreshCw className={`w-4 h-4 ${(isCheckingPython || isCheckingDeemix) ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Deemix Status Card - When installed */}
+      {isElectron && deezerConfig.enabled && deemixInstalled === true && !pythonMissingAlert && (
+        <Card className="glass-card border-green-500/30 bg-green-500/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-green-500/20">
+                  <CheckCircle className="w-6 h-6 text-green-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    deemix Pronto
+                    <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
+                      Funcionando
+                    </Badge>
+                  </h3>
+                  <div className="text-sm text-muted-foreground space-y-0.5">
+                    <p className="font-mono">
+                      Comando: <span className="text-green-500">{deemixCommand || 'deemix'}</span>
+                    </p>
+                    {deemixVersion && (
+                      <p className="font-mono">
+                        Versão: <span className="text-green-500">{deemixVersion}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={testDeemixSearch}
+                  disabled={isTestingDeemix}
+                  title="Testar busca no Deezer"
+                >
+                  {isTestingDeemix ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Search className="w-4 h-4 mr-2" />
+                  )}
+                  Testar Busca
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={testDeemix}
+                  disabled={isTestingDeemix}
+                  title="Testar comando deemix"
+                >
+                  {isTestingDeemix ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <PlayCircle className="w-4 h-4 mr-2" />
+                  )}
+                  Testar deemix
                 </Button>
               </div>
             </div>

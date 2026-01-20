@@ -675,6 +675,79 @@ ipcMain.handle('install-deemix', async () => {
   return result;
 });
 
+// Test deemix with a simple version check
+ipcMain.handle('test-deemix', async () => {
+  try {
+    const installed = await checkDeemixInstalled();
+    
+    if (!installed) {
+      return { 
+        success: false, 
+        error: 'deemix não está instalado' 
+      };
+    }
+
+    // Run a simple test command
+    return new Promise((resolve) => {
+      const testCommand = `${deemixCommand} --version`;
+      console.log(`Testing deemix with: ${testCommand}`);
+      
+      exec(testCommand, { timeout: 30000 }, (error, stdout, stderr) => {
+        if (error) {
+          console.error('deemix test error:', error);
+          resolve({ 
+            success: false, 
+            error: `Erro ao testar deemix: ${stderr || error.message}`,
+            command: deemixCommand
+          });
+          return;
+        }
+
+        const version = stdout.trim() || 'versão desconhecida';
+        console.log('deemix version:', version);
+        
+        resolve({ 
+          success: true, 
+          version,
+          command: deemixCommand,
+          message: `deemix funcionando! ${version}`
+        });
+      });
+    });
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error.message || 'Erro desconhecido ao testar deemix' 
+    };
+  }
+});
+
+// Test deemix with a real search (no download)
+ipcMain.handle('test-deemix-search', async (event, { artist, title }) => {
+  try {
+    // Just test the Deezer API search
+    const track = await searchDeezerTrack(artist, title);
+    
+    return {
+      success: true,
+      track: {
+        id: track.id,
+        title: track.title,
+        artist: track.artist.name,
+        album: track.album.title,
+        preview: track.preview,
+        link: track.link,
+      },
+      message: `Encontrado: ${track.artist.name} - ${track.title}`
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || 'Música não encontrada'
+    };
+  }
+});
+
 // Show notification from renderer
 ipcMain.handle('show-notification', (event, { title, body }) => {
   showNotification(title, body, () => {
