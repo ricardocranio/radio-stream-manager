@@ -194,18 +194,18 @@ export function CapturedSongsView() {
     }
   }, [songs, addOrUpdateRankingSong, toast]);
 
-  // Auto-sync every 5 minutes
+  // Auto-sync every 30 minutes
   useEffect(() => {
     if (!autoSyncEnabled) return;
 
     // Sync immediately when enabled
     syncToRanking(true);
 
-    // Then sync every 5 minutes
+    // Then sync every 30 minutes
     const interval = setInterval(() => {
       console.log('[AUTO-SYNC] Executando sincronização automática...');
       loadSongs().then(() => syncToRanking(true));
-    }, 5 * 60 * 1000); // 5 minutes
+    }, 30 * 60 * 1000); // 30 minutes
 
     return () => clearInterval(interval);
   }, [autoSyncEnabled, syncToRanking, loadSongs]);
@@ -421,7 +421,7 @@ export function CapturedSongsView() {
         <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
           <span className="text-sm text-foreground">
-            Sincronização automática ativa - Músicas são enviadas ao ranking TOP50 a cada 5 minutos
+            Sincronização automática ativa - Músicas são enviadas ao ranking TOP50 a cada 30 minutos
           </span>
           {lastAutoSync && (
             <Badge variant="secondary" className="ml-auto">
