@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRadioStore } from '@/store/radioStore';
+import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,6 +11,7 @@ interface SongEntry {
   station: string;
   style: string;
   filename: string;
+  existsInLibrary?: boolean;
 }
 
 interface UsedSong {
@@ -34,10 +36,11 @@ interface AutoGradeState {
   fullDayTotal: number;
   skippedSongs: number;
   substitutedSongs: number;
+  missingSongs: number;
 }
 
-const isElectron = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
-const ARTIST_REPETITION_MINUTES = 60; // Don't repeat artist within 60 minutes
+const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
+const ARTIST_REPETITION_MINUTES = 60;
 
 export function useAutoGradeBuilder() {
   const { toast } = useToast();
@@ -49,7 +52,11 @@ export function useAutoGradeBuilder() {
     fixedContent,
     rankingSongs,
     addGradeHistory,
+    addMissingSong,
+    missingSongs: existingMissingSongs,
   } = useRadioStore();
+  
+  const { addBlockLogs } = useGradeLogStore();
 
   const [state, setState] = useState<AutoGradeState>({
     isBuilding: false,
@@ -65,6 +72,7 @@ export function useAutoGradeBuilder() {
     fullDayTotal: 0,
     skippedSongs: 0,
     substitutedSongs: 0,
+    missingSongs: 0,
   });
 
   const lastBuildRef = useRef<string | null>(null);
@@ -73,7 +81,7 @@ export function useAutoGradeBuilder() {
 
   // Get day code for filename
   const getDayCode = useCallback(() => {
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'sáb'];
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
     return days[new Date().getDay()];
   }, []);
 
@@ -120,7 +128,6 @@ export function useAutoGradeBuilder() {
     const normalizedTitle = title.toLowerCase().trim();
     const normalizedArtist = artist.toLowerCase().trim();
 
-    // Parse current block time to compare
     const [currentHour, currentMinute] = currentBlockTime.split(':').map(Number);
     const currentTotalMinutes = currentHour * 60 + currentMinute;
 
@@ -128,19 +135,14 @@ export function useAutoGradeBuilder() {
       const [usedHour, usedMinute] = used.blockTime.split(':').map(Number);
       const usedTotalMinutes = usedHour * 60 + usedMinute;
 
-      // Handle day wrap (e.g., 23:30 to 00:30)
       let diffMinutes = currentTotalMinutes - usedTotalMinutes;
       if (diffMinutes < 0) diffMinutes += 24 * 60;
 
       if (diffMinutes < artistRepetitionMinutes) {
-        // Check if same song
         if (used.title.toLowerCase().trim() === normalizedTitle) {
-          console.log(`[GRADE] ⚠️ Song "${title}" already used at ${used.blockTime}`);
           return true;
         }
-        // Check if same artist
         if (used.artist.toLowerCase().trim() === normalizedArtist) {
-          console.log(`[GRADE] ⚠️ Artist "${artist}" already used at ${used.blockTime}`);
           return true;
         }
       }
@@ -156,7 +158,6 @@ export function useAutoGradeBuilder() {
       usedAt: new Date(),
       blockTime,
     });
-    // Keep only last 100 entries to prevent memory issues
     if (usedSongsRef.current.length > 100) {
       usedSongsRef.current = usedSongsRef.current.slice(-100);
     }
@@ -166,6 +167,32 @@ export function useAutoGradeBuilder() {
   const clearUsedSongs = useCallback(() => {
     usedSongsRef.current = [];
   }, []);
+
+  // Check if song exists in music library
+  const checkSongInLibrary = useCallback(async (artist: string, title: string): Promise<boolean> => {
+    if (!isElectronEnv || !window.electronAPI?.checkSongExists) {
+      return true; // Web mode: assume exists
+    }
+    try {
+      const result = await window.electronAPI.checkSongExists({
+        artist,
+        title,
+        musicFolders: config.musicFolders,
+      });
+      return result.exists;
+    } catch (error) {
+      console.error('[GRADE] Error checking library:', error);
+      return true; // On error, assume exists to avoid blocking
+    }
+  }, [config.musicFolders]);
+
+  // Check if song is already in missing list
+  const isSongAlreadyMissing = useCallback((artist: string, title: string): boolean => {
+    return existingMissingSongs.some(
+      s => s.artist.toLowerCase() === artist.toLowerCase() && 
+           s.title.toLowerCase() === title.toLowerCase()
+    );
+  }, [existingMissingSongs]);
 
   // Fetch recent songs from Supabase with styles
   const fetchRecentSongs = useCallback(async (): Promise<Record<string, SongEntry[]>> => {
@@ -178,13 +205,10 @@ export function useAutoGradeBuilder() {
 
       if (error) throw error;
 
-      // Group by station with style info
       const songsByStation: Record<string, SongEntry[]> = {};
-      const stationIdToName: Record<string, string> = {};
       const stationNameToStyle: Record<string, string> = {};
 
       stations.forEach(s => {
-        stationIdToName[s.id] = s.name;
         stationNameToStyle[s.name] = s.styles?.[0] || 'POP/VARIADO';
       });
 
@@ -207,6 +231,7 @@ export function useAutoGradeBuilder() {
       return songsByStation;
     } catch (error) {
       console.error('[AUTO-GRADE] Error fetching songs:', error);
+      logSystemError('SUPABASE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
       return {};
     }
   }, [stations]);
@@ -263,7 +288,6 @@ export function useAutoGradeBuilder() {
   const getTop50Songs = useCallback((count: number, blockTime: string): string[] => {
     const sorted = [...rankingSongs].sort((a, b) => b.plays - a.plays);
     const result: string[] = [];
-    const usedTitles = new Set<string>();
 
     for (const song of sorted) {
       if (result.length >= count) break;
@@ -271,27 +295,38 @@ export function useAutoGradeBuilder() {
       if (!isRecentlyUsed(song.title, song.artist, blockTime)) {
         result.push(sanitizeFilename(`POSICAO${result.length + 1}.MP3`));
         markSongAsUsed(song.title, song.artist, blockTime);
-        usedTitles.add(`${song.title.toLowerCase()}-${song.artist.toLowerCase()}`);
       }
     }
 
     return result;
   }, [rankingSongs, isRecentlyUsed, markSongAsUsed]);
 
-  // Generate a single block with all validation rules
-  const generateBlockWithValidation = useCallback((
+  // Generate a single block with all validation rules and logging
+  const generateBlockWithValidation = useCallback(async (
     hour: number,
     minute: number,
     songsByStation: Record<string, SongEntry[]>,
-    stats: { skipped: number; substituted: number }
-  ): string => {
+    stats: { skipped: number; substituted: number; missing: number }
+  ): Promise<{ line: string; logs: Parameters<typeof addBlockLogs>[0] }> => {
     const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     const programName = getProgramForHour(hour);
     const fixedItems = getFixedContentForTime(hour, minute);
+    const blockLogs: Parameters<typeof addBlockLogs>[0] = [];
 
     // Voz do Brasil (21:00 weekdays)
     if (hour === 21 && minute === 0 && isWeekday()) {
-      return `${timeStr} 19:01 (FIXO ID=VOZ DO BRASIL)`;
+      blockLogs.push({
+        blockTime: timeStr,
+        type: 'fixed',
+        title: 'A Voz do Brasil',
+        artist: 'Governo Federal',
+        station: 'EBC',
+        reason: 'Conteúdo fixo obrigatório',
+      });
+      return { 
+        line: `${timeStr} 19:01 (FIXO ID=VOZ DO BRASIL)`,
+        logs: blockLogs,
+      };
     }
 
     // TOP50 blocks
@@ -300,14 +335,36 @@ export function useAutoGradeBuilder() {
       const top50Count = top50Item.top50Count || 10;
       const top50Songs = getTop50Songs(top50Count, timeStr);
       if (top50Songs.length > 0) {
-        return `${timeStr} (ID=${programName}) ${top50Songs.map(s => `"${s}"`).join(',vht,')}`;
+        blockLogs.push({
+          blockTime: timeStr,
+          type: 'fixed',
+          title: `TOP50 - ${top50Count} músicas`,
+          artist: 'Ranking',
+          station: 'TOP50',
+          reason: 'Bloco TOP50',
+        });
+        return { 
+          line: `${timeStr} (ID=${programName}) ${top50Songs.map(s => `"${s}"`).join(',vht,')}`,
+          logs: blockLogs,
+        };
       }
     }
 
     // Fixed content
     const fixedItem = fixedItems.find(fc => fc.type !== 'top50');
     if (fixedItem) {
-      return `${timeStr} (Fixo ID=${programName})`;
+      blockLogs.push({
+        blockTime: timeStr,
+        type: 'fixed',
+        title: fixedItem.name,
+        artist: fixedItem.fileName,
+        station: 'FIXO',
+        reason: 'Conteúdo fixo',
+      });
+      return { 
+        line: `${timeStr} (Fixo ID=${programName})`,
+        logs: blockLogs,
+      };
     }
 
     // Normal block with validation
@@ -326,6 +383,7 @@ export function useAutoGradeBuilder() {
 
       let selectedSong: SongEntry | null = null;
       let songIndex = 0;
+      let skipCount = 0;
 
       // Try to find a valid song from the station
       while (songIndex < (stationSongs?.length || 0)) {
@@ -334,20 +392,89 @@ export function useAutoGradeBuilder() {
 
         // Check if not used in this block and not recently used
         if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr)) {
-          selectedSong = candidate;
-          break;
+          // Check if exists in library (Electron only)
+          const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
+          
+          if (existsInLibrary) {
+            selectedSong = { ...candidate, existsInLibrary: true };
+            break;
+          } else {
+            // Song is missing from library
+            stats.missing++;
+            blockLogs.push({
+              blockTime: timeStr,
+              type: 'missing',
+              title: candidate.title,
+              artist: candidate.artist,
+              station: stationName || 'UNKNOWN',
+              style: stationStyle,
+              reason: 'Não encontrada no acervo local',
+            });
+            
+            // Add to missing songs list if not already there
+            if (!isSongAlreadyMissing(candidate.artist, candidate.title)) {
+              addMissingSong({
+                id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                title: candidate.title,
+                artist: candidate.artist,
+                station: stationName || 'UNKNOWN',
+                timestamp: new Date(),
+                status: 'missing',
+                dna: stationStyle,
+              });
+            }
+          }
+        } else if (usedInBlock.has(key) || isRecentlyUsed(candidate.title, candidate.artist, timeStr)) {
+          skipCount++;
+          blockLogs.push({
+            blockTime: timeStr,
+            type: 'skipped',
+            title: candidate.title,
+            artist: candidate.artist,
+            station: stationName || 'UNKNOWN',
+            style: stationStyle,
+            reason: usedInBlock.has(key) ? 'Já usada neste bloco' : 'Repetição dentro de 60 min',
+          });
         }
 
         songIndex++;
-        stats.skipped++;
       }
+
+      stats.skipped += skipCount;
 
       // If no valid song found, find substitute with same DNA
       if (!selectedSong) {
-        selectedSong = findSubstitute(stationStyle, songsByStation, timeStr, usedInBlock);
-        if (selectedSong) {
-          stats.substituted++;
-          console.log(`[GRADE] 🔄 Substituted with ${selectedSong.title} - ${selectedSong.artist} (${selectedSong.style})`);
+        const substitute = findSubstitute(stationStyle, songsByStation, timeStr, usedInBlock);
+        if (substitute) {
+          // Verify substitute exists in library
+          const substituteExists = await checkSongInLibrary(substitute.artist, substitute.title);
+          
+          if (substituteExists) {
+            selectedSong = { ...substitute, existsInLibrary: true };
+            stats.substituted++;
+            blockLogs.push({
+              blockTime: timeStr,
+              type: 'substituted',
+              title: substitute.title,
+              artist: substitute.artist,
+              station: substitute.station,
+              style: substitute.style,
+              reason: `Substituição DNA: ${stationStyle}`,
+              substituteFor: stationName || 'UNKNOWN',
+            });
+          } else {
+            // Even substitute is missing
+            stats.missing++;
+            blockLogs.push({
+              blockTime: timeStr,
+              type: 'missing',
+              title: substitute.title,
+              artist: substitute.artist,
+              station: substitute.station,
+              style: substitute.style,
+              reason: 'Substituto também não encontrado no acervo',
+            });
+          }
         }
       }
 
@@ -355,17 +482,38 @@ export function useAutoGradeBuilder() {
         songs.push(`"${selectedSong.filename}"`);
         usedInBlock.add(`${selectedSong.title.toLowerCase()}-${selectedSong.artist.toLowerCase()}`);
         markSongAsUsed(selectedSong.title, selectedSong.artist, timeStr);
+        
+        blockLogs.push({
+          blockTime: timeStr,
+          type: 'used',
+          title: selectedSong.title,
+          artist: selectedSong.artist,
+          station: selectedSong.station,
+          style: selectedSong.style,
+        });
       } else {
         // Ultimate fallback: coringa
         songs.push(`"${config.coringaCode || 'mus'}"`);
+        blockLogs.push({
+          blockTime: timeStr,
+          type: 'substituted',
+          title: config.coringaCode || 'mus',
+          artist: 'CORINGA',
+          station: 'FALLBACK',
+          reason: 'Nenhuma música válida encontrada, usando coringa',
+        });
       }
     }
 
-    return `${timeStr} (ID=${programName}) ${songs.join(',vht,')}`;
+    return {
+      line: `${timeStr} (ID=${programName}) ${songs.join(',vht,')}`,
+      logs: blockLogs,
+    };
   }, [
     getProgramForHour, getFixedContentForTime, isWeekday, getTop50Songs,
     stations, sequence, getStationStyle, isRecentlyUsed, findSubstitute,
-    markSongAsUsed, config.coringaCode
+    markSongAsUsed, config.coringaCode, checkSongInLibrary, isSongAlreadyMissing,
+    addMissingSong
   ]);
 
   // Calculate current and next block times
@@ -388,7 +536,7 @@ export function useAutoGradeBuilder() {
 
   // Generate complete day's grade
   const buildFullDayGrade = useCallback(async () => {
-    if (!isElectron || !window.electronAPI?.saveGradeFile) {
+    if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
       toast({
         title: '⚠️ Modo Web',
         description: 'Geração de grade disponível apenas no aplicativo desktop.',
@@ -401,37 +549,43 @@ export function useAutoGradeBuilder() {
       isBuilding: true, 
       error: null,
       fullDayProgress: 0,
-      fullDayTotal: 48, // 24 hours * 2 blocks
+      fullDayTotal: 48,
       skippedSongs: 0,
       substitutedSongs: 0,
+      missingSongs: 0,
     }));
 
     try {
       console.log('[AUTO-GRADE] 🚀 Building full day grade...');
+      logSystemError('GRADE', 'info', 'Iniciando geração da grade completa do dia');
       
-      // Clear used songs for fresh start
       clearUsedSongs();
 
-      // Fetch all songs
       const songsByStation = await fetchRecentSongs();
       
-      const stats = { skipped: 0, substituted: 0 };
+      const stats = { skipped: 0, substituted: 0, missing: 0 };
       const lines: string[] = [];
+      const allLogs: Parameters<typeof addBlockLogs>[0] = [];
 
       // Generate all 48 blocks (00:00 to 23:30)
       for (let hour = 0; hour < 24; hour++) {
         for (const minute of [0, 30]) {
-          const line = generateBlockWithValidation(hour, minute, songsByStation, stats);
-          lines.push(line);
+          const result = await generateBlockWithValidation(hour, minute, songsByStation, stats);
+          lines.push(result.line);
+          allLogs.push(...result.logs);
           
           setState(prev => ({
             ...prev,
             fullDayProgress: prev.fullDayProgress + 1,
             skippedSongs: stats.skipped,
             substitutedSongs: stats.substituted,
+            missingSongs: stats.missing,
           }));
         }
       }
+
+      // Add all logs to store
+      addBlockLogs(allLogs);
 
       // Save to file
       const dayCode = getDayCode();
@@ -446,6 +600,7 @@ export function useAutoGradeBuilder() {
 
       if (result.success) {
         console.log(`[AUTO-GRADE] ✅ Full day grade saved: ${result.filePath}`);
+        logSystemError('GRADE', 'info', `Grade completa salva: ${filename}`, `${lines.length} blocos, ${stats.skipped} puladas, ${stats.substituted} substituídas, ${stats.missing} faltando`);
         
         addGradeHistory({
           id: `grade-fullday-${Date.now()}`,
@@ -453,7 +608,7 @@ export function useAutoGradeBuilder() {
           blockTime: 'COMPLETA',
           songsProcessed: 48 * sequence.length,
           songsFound: lines.length,
-          songsMissing: stats.substituted,
+          songsMissing: stats.missing,
           programName: 'Grade Completa',
         });
 
@@ -465,11 +620,12 @@ export function useAutoGradeBuilder() {
           blocksGenerated: prev.blocksGenerated + 48,
           skippedSongs: stats.skipped,
           substitutedSongs: stats.substituted,
+          missingSongs: stats.missing,
         }));
 
         toast({
           title: '✅ Grade Completa Gerada!',
-          description: `${filename} salvo com 48 blocos. ${stats.skipped} pulados, ${stats.substituted} substituídos.`,
+          description: `${filename} salvo com 48 blocos. ${stats.skipped} puladas, ${stats.substituted} substituídas, ${stats.missing} faltando.`,
         });
       } else {
         throw new Error(result.error || 'Erro ao salvar grade');
@@ -477,6 +633,7 @@ export function useAutoGradeBuilder() {
     } catch (error) {
       console.error('[AUTO-GRADE] Error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      logSystemError('GRADE', 'error', 'Erro na geração da grade completa', errorMessage);
       
       setState(prev => ({ ...prev, isBuilding: false, error: errorMessage }));
       toast({
@@ -487,12 +644,12 @@ export function useAutoGradeBuilder() {
     }
   }, [
     clearUsedSongs, fetchRecentSongs, generateBlockWithValidation,
-    getDayCode, config.gradeFolder, addGradeHistory, sequence.length, toast
+    getDayCode, config.gradeFolder, addGradeHistory, sequence.length, toast, addBlockLogs
   ]);
 
   // Build current and next blocks (incremental update)
   const buildGrade = useCallback(async () => {
-    if (!isElectron || !window.electronAPI?.saveGradeFile) {
+    if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
       console.log('[AUTO-GRADE] Not in Electron mode, skipping');
       return;
     }
@@ -512,14 +669,18 @@ export function useAutoGradeBuilder() {
       console.log(`[AUTO-GRADE] Building blocks: ${currentTimeKey}, ${nextTimeKey}`);
 
       const songsByStation = await fetchRecentSongs();
-      const stats = { skipped: 0, substituted: 0 };
+      const stats = { skipped: 0, substituted: 0, missing: 0 };
+      const allLogs: Parameters<typeof addBlockLogs>[0] = [];
 
-      const currentLine = generateBlockWithValidation(
+      const currentResult = await generateBlockWithValidation(
         blocks.current.hour, blocks.current.minute, songsByStation, stats
       );
-      const nextLine = generateBlockWithValidation(
+      const nextResult = await generateBlockWithValidation(
         blocks.next.hour, blocks.next.minute, songsByStation, stats
       );
+      
+      allLogs.push(...currentResult.logs, ...nextResult.logs);
+      addBlockLogs(allLogs);
 
       // Read existing and update
       const dayCode = getDayCode();
@@ -544,8 +705,8 @@ export function useAutoGradeBuilder() {
         if (match) lineMap.set(match[1], line);
       });
 
-      lineMap.set(currentTimeKey, currentLine);
-      lineMap.set(nextTimeKey, nextLine);
+      lineMap.set(currentTimeKey, currentResult.line);
+      lineMap.set(nextTimeKey, nextResult.line);
 
       const sortedContent = Array.from(lineMap.keys()).sort().map(t => lineMap.get(t)).join('\n');
 
@@ -563,8 +724,8 @@ export function useAutoGradeBuilder() {
           timestamp: new Date(),
           blockTime: currentTimeKey,
           songsProcessed: sequence.length * 2,
-          songsFound: sequence.length * 2 - stats.substituted,
-          songsMissing: stats.substituted,
+          songsFound: sequence.length * 2 - stats.missing,
+          songsMissing: stats.missing,
           programName: getProgramForHour(blocks.current.hour),
         });
 
@@ -578,6 +739,7 @@ export function useAutoGradeBuilder() {
           blocksGenerated: prev.blocksGenerated + 2,
           skippedSongs: stats.skipped,
           substitutedSongs: stats.substituted,
+          missingSongs: stats.missing,
         }));
 
         toast({
@@ -589,6 +751,7 @@ export function useAutoGradeBuilder() {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      logSystemError('GRADE', 'error', 'Erro ao atualizar grade', errorMessage);
       setState(prev => ({ ...prev, isBuilding: false, error: errorMessage }));
       toast({
         title: '❌ Erro',
@@ -599,7 +762,7 @@ export function useAutoGradeBuilder() {
   }, [
     getBlockTimes, fetchRecentSongs, generateBlockWithValidation,
     getDayCode, config.gradeFolder, addGradeHistory, sequence.length,
-    getProgramForHour, toast
+    getProgramForHour, toast, addBlockLogs
   ]);
 
   // Calculate seconds until next build
@@ -632,7 +795,7 @@ export function useAutoGradeBuilder() {
 
   // Auto-build effect
   useEffect(() => {
-    if (!isElectron || !state.isAutoEnabled) return;
+    if (!isElectronEnv || !state.isAutoEnabled) return;
 
     console.log('[AUTO-GRADE] 🚀 Starting automatic generation...');
 
@@ -688,6 +851,6 @@ export function useAutoGradeBuilder() {
     buildFullDayGrade,
     toggleAutoGeneration,
     clearUsedSongs,
-    isElectron,
+    isElectron: isElectronEnv,
   };
 }

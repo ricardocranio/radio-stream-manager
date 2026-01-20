@@ -79,153 +79,166 @@ export function DashboardView() {
     { bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', text: 'text-cyan-400' },
   ];
 
+  // Get unique stations from stationCounts (deduplicated)
+  const uniqueStationCounts = Object.entries(realtimeStats.stationCounts)
+    .reduce((acc, [station, count]) => {
+      // Normalize station name to prevent duplicates
+      const normalizedName = station.trim();
+      if (!acc[normalizedName]) {
+        acc[normalizedName] = 0;
+      }
+      acc[normalizedName] += count;
+      return acc;
+    }, {} as Record<string, number>);
+
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6 animate-fade-in">
       {/* Realtime Stats from Supabase */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <Card className="glass-card border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">Total Capturadas</p>
-                <p className="text-2xl font-bold text-foreground">
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Total Capturadas</p>
+                <p className="text-lg md:text-2xl font-bold text-foreground">
                   {realtimeStats.isLoading ? '...' : realtimeStats.totalSongs.toLocaleString()}
                 </p>
-                <p className="text-xs text-primary">
-                  <Database className="w-3 h-3 inline mr-1" />
-                  Supabase
+                <p className="text-[10px] md:text-xs text-primary flex items-center gap-1">
+                  <Database className="w-3 h-3" />
+                  <span className="hidden sm:inline">Supabase</span>
                 </p>
               </div>
-              <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-                <Music className="w-5 h-5 text-primary" />
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
+                <Music className="w-4 h-4 md:w-5 md:h-5 text-primary" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="glass-card border-green-500/20 bg-gradient-to-br from-green-500/10 to-green-500/5">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">Últimas 24h</p>
-                <p className="text-2xl font-bold text-foreground">
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Últimas 24h</p>
+                <p className="text-lg md:text-2xl font-bold text-foreground">
                   {realtimeStats.isLoading ? '...' : realtimeStats.songsLast24h.toLocaleString()}
                 </p>
-                <p className="text-xs text-green-500">
-                  <Clock className="w-3 h-3 inline mr-1" />
-                  Tempo real
+                <p className="text-[10px] md:text-xs text-green-500 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  <span className="hidden sm:inline">Tempo real</span>
                 </p>
               </div>
-              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-green-500" />
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-green-500/20 flex items-center justify-center shrink-0">
+                <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-green-500" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="glass-card border-orange-500/20 bg-gradient-to-br from-orange-500/10 to-orange-500/5">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">Última Hora</p>
-                <p className="text-2xl font-bold text-foreground">
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Última Hora</p>
+                <p className="text-lg md:text-2xl font-bold text-foreground">
                   {realtimeStats.isLoading ? '...' : realtimeStats.songsLastHour.toLocaleString()}
                 </p>
-                <p className="text-xs text-orange-500">
-                  <Zap className="w-3 h-3 inline mr-1" />
-                  Ativo
+                <p className="text-[10px] md:text-xs text-orange-500 flex items-center gap-1">
+                  <Zap className="w-3 h-3" />
+                  <span className="hidden sm:inline">Ativo</span>
                 </p>
               </div>
-              <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                <Radio className="w-5 h-5 text-orange-500" />
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-orange-500/20 flex items-center justify-center shrink-0">
+                <Radio className="w-4 h-4 md:w-5 md:h-5 text-orange-500" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="glass-card border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-purple-500/5">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">No Ranking</p>
-                <p className="text-2xl font-bold text-foreground">{localStats.rankingTotal}</p>
-                <p className="text-xs text-purple-500">
-                  <TrendingUp className="w-3 h-3 inline mr-1" />
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">No Ranking</p>
+                <p className="text-lg md:text-2xl font-bold text-foreground">{localStats.rankingTotal}</p>
+                <p className="text-[10px] md:text-xs text-purple-500 flex items-center gap-1">
+                  <TrendingUp className="w-3 h-3" />
                   TOP50
                 </p>
               </div>
-              <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-purple-500" />
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
+                <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-purple-500" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="glass-card border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-cyan-500/5">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">Emissoras</p>
-                <p className="text-2xl font-bold text-foreground">
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Emissoras</p>
+                <p className="text-lg md:text-2xl font-bold text-foreground">
                   {realtimeStats.isLoading ? '...' : realtimeStats.activeStations}
                 </p>
-                <p className="text-xs text-cyan-500">
-                  <Radio className="w-3 h-3 inline mr-1" />
-                  Monitorando
+                <p className="text-[10px] md:text-xs text-cyan-500 flex items-center gap-1">
+                  <Radio className="w-3 h-3" />
+                  <span className="hidden sm:inline">Monitorando</span>
                 </p>
               </div>
-              <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                <Radio className="w-5 h-5 text-cyan-500" />
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center shrink-0">
+                <Radio className="w-4 h-4 md:w-5 md:h-5 text-cyan-500" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="glass-card border-red-500/20 bg-gradient-to-br from-red-500/10 to-red-500/5">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">Faltando</p>
-                <p className="text-2xl font-bold text-foreground">{missingSongs.length}</p>
-                <p className="text-xs text-red-500">
-                  <AlertTriangle className="w-3 h-3 inline mr-1" />
-                  No Banco Musical
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Faltando</p>
+                <p className="text-lg md:text-2xl font-bold text-foreground">{missingSongs.length}</p>
+                <p className="text-[10px] md:text-xs text-red-500 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  <span className="hidden sm:inline">No Banco</span>
                 </p>
               </div>
-              <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-red-500" />
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-red-500/20 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-4 h-4 md:w-5 md:h-5 text-red-500" />
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-
-      {/* Station Distribution */}
-      {Object.keys(realtimeStats.stationCounts).length > 0 && (
+      {/* Station Distribution - Fixed to prevent duplicates */}
+      {Object.keys(uniqueStationCounts).length > 0 && (
         <Card className="glass-card">
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Radio className="w-5 h-5 text-primary" />
+            <CardTitle className="text-base md:text-lg flex items-center gap-2">
+              <Radio className="w-4 h-4 md:w-5 md:h-5 text-primary" />
               Distribuição por Emissora (24h)
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {Object.entries(realtimeStats.stationCounts)
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 md:gap-3">
+              {Object.entries(uniqueStationCounts)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 6)
                 .map(([station, count], index) => (
                   <div
                     key={station}
-                    className={`p-3 rounded-lg ${colorPalette[index % colorPalette.length].bg} ${colorPalette[index % colorPalette.length].border} border`}
+                    className={`p-2 md:p-3 rounded-lg ${colorPalette[index % colorPalette.length].bg} ${colorPalette[index % colorPalette.length].border} border min-w-0`}
                   >
-                    <p className={`text-xs ${colorPalette[index % colorPalette.length].text} truncate`}>{station}</p>
-                    <p className="text-xl font-bold text-foreground">{count}</p>
-                    <div className="h-1 bg-background/50 rounded-full mt-2 overflow-hidden">
+                    <p className={`text-[10px] md:text-xs ${colorPalette[index % colorPalette.length].text} truncate`} title={station}>
+                      {station}
+                    </p>
+                    <p className="text-lg md:text-xl font-bold text-foreground">{count}</p>
+                    <div className="h-1 bg-background/50 rounded-full mt-1 md:mt-2 overflow-hidden">
                       <div
                         className={`h-full ${colorPalette[index % colorPalette.length].text.replace('text-', 'bg-')}`}
-                        style={{ width: `${(count / Math.max(...Object.values(realtimeStats.stationCounts))) * 100}%` }}
+                        style={{ width: `${(count / Math.max(...Object.values(uniqueStationCounts))) * 100}%` }}
                       />
                     </div>
                   </div>
@@ -239,18 +252,18 @@ export function DashboardView() {
       {gradeBuilder.isElectron && (
         <Card className="glass-card border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 to-transparent">
           <CardContent className="p-4 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${gradeBuilder.isBuilding ? 'bg-amber-500/20' : gradeBuilder.isAutoEnabled ? 'bg-emerald-500/20' : 'bg-muted'}`}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${gradeBuilder.isBuilding ? 'bg-amber-500/20' : gradeBuilder.isAutoEnabled ? 'bg-emerald-500/20' : 'bg-muted'}`}>
                   {gradeBuilder.isBuilding ? (
                     <Loader2 className="w-5 h-5 text-amber-500 animate-spin" />
                   ) : (
                     <FileText className={`w-5 h-5 ${gradeBuilder.isAutoEnabled ? 'text-emerald-500' : 'text-muted-foreground'}`} />
                   )}
                 </div>
-                <div>
-                  <p className="font-medium text-foreground flex items-center gap-2">
-                    Geração Automática de Grade
+                <div className="min-w-0">
+                  <p className="font-medium text-foreground flex items-center gap-2 flex-wrap">
+                    <span className="truncate">Geração Automática de Grade</span>
                     <Switch 
                       checked={gradeBuilder.isAutoEnabled}
                       onCheckedChange={gradeBuilder.toggleAutoGeneration}
@@ -274,8 +287,8 @@ export function DashboardView() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="text-left sm:text-right">
                   {gradeBuilder.lastBuildTime && (
                     <p className="text-xs text-muted-foreground">
                       Última: {format(gradeBuilder.lastBuildTime, 'HH:mm:ss', { locale: ptBR })}
@@ -290,7 +303,7 @@ export function DashboardView() {
                     {gradeBuilder.blocksGenerated} blocos gerados
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <Button
                     variant="outline"
                     size="sm"
@@ -348,18 +361,24 @@ export function DashboardView() {
             )}
 
             {/* Stats row */}
-            {(gradeBuilder.skippedSongs > 0 || gradeBuilder.substitutedSongs > 0) && (
-              <div className="flex items-center gap-4 text-xs">
+            {(gradeBuilder.skippedSongs > 0 || gradeBuilder.substitutedSongs > 0 || gradeBuilder.missingSongs > 0) && (
+              <div className="flex items-center gap-4 text-xs flex-wrap">
                 {gradeBuilder.skippedSongs > 0 && (
                   <div className="flex items-center gap-1 text-amber-500">
                     <SkipForward className="w-3 h-3" />
-                    <span>{gradeBuilder.skippedSongs} puladas (repetição)</span>
+                    <span>{gradeBuilder.skippedSongs} puladas</span>
                   </div>
                 )}
                 {gradeBuilder.substitutedSongs > 0 && (
                   <div className="flex items-center gap-1 text-blue-500">
                     <Replace className="w-3 h-3" />
-                    <span>{gradeBuilder.substitutedSongs} substituídas (DNA)</span>
+                    <span>{gradeBuilder.substitutedSongs} substituídas</span>
+                  </div>
+                )}
+                {gradeBuilder.missingSongs > 0 && (
+                  <div className="flex items-center gap-1 text-destructive">
+                    <AlertTriangle className="w-3 h-3" />
+                    <span>{gradeBuilder.missingSongs} faltando</span>
                   </div>
                 )}
               </div>
@@ -375,7 +394,7 @@ export function DashboardView() {
       )}
 
       {/* Preview da Próxima Grade & Horários de Monitoramento */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         <GradePreviewCard recentSongsByStation={realtimeStats.recentSongsByStation} />
         <MonitoringScheduleCard />
       </div>
@@ -383,15 +402,15 @@ export function DashboardView() {
       {/* Ranking Integration Banner */}
       <Card className="glass-card border-primary/30 bg-gradient-to-r from-primary/5 to-transparent">
         <CardContent className="p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                 <TrendingUp className="w-5 h-5 text-primary" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="font-medium text-foreground">Ranking TOP50 Integrado</p>
-                <p className="text-sm text-muted-foreground">
-                  Músicas capturadas são automaticamente adicionadas ao ranking em tempo real
+                <p className="text-sm text-muted-foreground truncate">
+                  Músicas capturadas são automaticamente adicionadas ao ranking
                 </p>
               </div>
             </div>
@@ -400,7 +419,7 @@ export function DashboardView() {
                 <p className="text-2xl font-bold text-primary">{localStats.rankingTotal}</p>
                 <p className="text-xs text-muted-foreground">músicas no ranking</p>
               </div>
-              <Badge variant="outline" className="border-green-500/50 text-green-500">
+              <Badge variant="outline" className="border-green-500/50 text-green-500 shrink-0">
                 <Zap className="w-3 h-3 mr-1" />
                 Sincronizado
               </Badge>
@@ -409,10 +428,10 @@ export function DashboardView() {
         </CardContent>
       </Card>
 
-      {/* Radio Stations Windows - Using local store stations (for grade building) */}
+      {/* Radio Stations Windows */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
+          <h3 className="text-base md:text-lg font-semibold flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
             Captura em Tempo Real
             <Badge variant="secondary" className="ml-2 text-xs">
@@ -420,11 +439,11 @@ export function DashboardView() {
               {stations.filter(s => s.enabled).length} emissoras
             </Badge>
           </h3>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4 flex-wrap">
             {/* Auto-refresh countdown */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50 border border-border">
-              <div className="relative w-5 h-5">
-                <svg className="w-5 h-5 -rotate-90" viewBox="0 0 20 20">
+            <div className="flex items-center gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-full bg-secondary/50 border border-border">
+              <div className="relative w-4 h-4 md:w-5 md:h-5">
+                <svg className="w-full h-full -rotate-90" viewBox="0 0 20 20">
                   <circle
                     cx="10"
                     cy="10"
@@ -446,15 +465,15 @@ export function DashboardView() {
                     className="text-primary transition-all duration-1000"
                   />
                 </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-primary">
+                <span className="absolute inset-0 flex items-center justify-center text-[7px] md:text-[8px] font-bold text-primary">
                   {realtimeStats.nextRefreshIn}
                 </span>
               </div>
-              <span className="text-xs text-muted-foreground">próx. atualização</span>
+              <span className="text-[10px] md:text-xs text-muted-foreground hidden sm:inline">próx. atualização</span>
             </div>
             
             {realtimeStats.lastUpdated && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <span className="text-[10px] md:text-xs text-muted-foreground flex items-center gap-1">
                 <Clock className="w-3 h-3" />
                 {format(realtimeStats.lastUpdated, 'HH:mm:ss', { locale: ptBR })}
               </span>
@@ -464,20 +483,20 @@ export function DashboardView() {
               size="sm"
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="gap-2"
+              className="gap-1 md:gap-2 h-7 md:h-8 text-xs"
             >
               {isRefreshing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin" />
               ) : (
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="w-3 h-3 md:w-4 md:h-4" />
               )}
-              Atualizar
+              <span className="hidden sm:inline">Atualizar</span>
             </Button>
           </div>
         </div>
         
         {stations.filter(s => s.enabled).length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {stations.filter(s => s.enabled).map((station, stationIndex) => {
               const colors = colorPalette[stationIndex % colorPalette.length];
               const songs = realtimeStats.recentSongsByStation[station.name] || [];
@@ -485,32 +504,32 @@ export function DashboardView() {
               
               return (
                 <Card key={station.id} className={`glass-card ${colors.border}`}>
-                  <CardHeader className={`py-3 px-4 border-b border-border ${colors.bg}`}>
-                    <CardTitle className="flex items-center justify-between text-base">
-                      <div className="flex items-center gap-2">
-                        <Radio className={`w-4 h-4 ${colors.text}`} />
-                        <span className={colors.text}>{station.name}</span>
+                  <CardHeader className={`py-2 md:py-3 px-3 md:px-4 border-b border-border ${colors.bg}`}>
+                    <CardTitle className="flex items-center justify-between text-sm md:text-base">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Radio className={`w-3 h-3 md:w-4 md:h-4 ${colors.text} shrink-0`} />
+                        <span className={`${colors.text} truncate`}>{station.name}</span>
                       </div>
-                      <Badge variant="outline" className={`${colors.border} ${colors.text} text-xs`}>
+                      <Badge variant="outline" className={`${colors.border} ${colors.text} text-[10px] md:text-xs shrink-0`}>
                         {count24h} (24h)
                       </Badge>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
-                    <ScrollArea className="h-[150px]">
+                    <ScrollArea className="h-[120px] md:h-[150px]">
                       {songs.length > 0 ? (
                         <div className="divide-y divide-border">
                           {songs.map((song, index) => (
-                            <div key={`${song.timestamp}-${index}`} className="p-3 hover:bg-secondary/30 transition-colors">
-                              <div className="flex items-center justify-between">
+                            <div key={`${song.timestamp}-${index}`} className="p-2 md:p-3 hover:bg-secondary/30 transition-colors">
+                              <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                                  <Music className={`w-4 h-4 ${colors.text}`} />
+                                  <Music className={`w-3 h-3 md:w-4 md:h-4 ${colors.text} shrink-0`} />
                                   <div className="min-w-0 flex-1">
-                                    <p className="font-medium text-foreground text-sm truncate">{song.title}</p>
-                                    <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                                    <p className="font-medium text-foreground text-xs md:text-sm truncate">{song.title}</p>
+                                    <p className="text-[10px] md:text-xs text-muted-foreground truncate">{song.artist}</p>
                                   </div>
                                 </div>
-                                <span className="text-xs text-muted-foreground ml-2 shrink-0">
+                                <span className="text-[10px] md:text-xs text-muted-foreground shrink-0">
                                   {formatDistanceToNow(new Date(song.timestamp), { addSuffix: true, locale: ptBR })}
                                 </span>
                               </div>
@@ -520,8 +539,8 @@ export function DashboardView() {
                       ) : (
                         <div className="flex items-center justify-center h-full text-muted-foreground p-4">
                           <div className="text-center">
-                            <Music className="w-6 h-6 mx-auto mb-2 opacity-30" />
-                            <p className="text-xs">Aguardando capturas...</p>
+                            <Music className="w-5 h-5 md:w-6 md:h-6 mx-auto mb-2 opacity-30" />
+                            <p className="text-[10px] md:text-xs">Aguardando capturas...</p>
                           </div>
                         </div>
                       )}
@@ -533,51 +552,51 @@ export function DashboardView() {
           </div>
         ) : (
           <Card className="glass-card border-dashed">
-            <CardContent className="p-8 text-center text-muted-foreground">
-              <Radio className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">Nenhuma emissora ativa</p>
-              <p className="text-sm mt-2">Ative emissoras na seção "Emissoras" para começar o monitoramento.</p>
+            <CardContent className="p-6 md:p-8 text-center text-muted-foreground">
+              <Radio className="w-10 h-10 md:w-12 md:h-12 mx-auto mb-4 opacity-50" />
+              <p className="text-base md:text-lg font-medium">Nenhuma emissora ativa</p>
+              <p className="text-xs md:text-sm mt-2">Ative emissoras na seção "Emissoras" para começar o monitoramento.</p>
             </CardContent>
           </Card>
         )}
       </div>
 
       {/* Status Panel and Grade History */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Status Panel */}
         <Card className="glass-card">
-          <CardHeader className="border-b border-border">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <TrendingUp className="w-5 h-5 text-primary" />
+          <CardHeader className="border-b border-border py-3">
+            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+              <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-primary" />
               Status do Sistema
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4 space-y-4">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                <span className="text-sm text-muted-foreground">Status</span>
+          <CardContent className="p-3 md:p-4 space-y-3 md:space-y-4">
+            <div className="space-y-2 md:space-y-3">
+              <div className="flex items-center justify-between p-2 md:p-3 rounded-lg bg-secondary/50">
+                <span className="text-xs md:text-sm text-muted-foreground">Status</span>
                 <Badge className={isRunning ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'}>
                   {isRunning ? 'Ativo' : 'Parado'}
                 </Badge>
               </div>
               
-              <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                <span className="text-sm text-muted-foreground">Intervalo</span>
-                <span className="text-sm font-mono text-foreground">{config.updateIntervalMinutes} min</span>
+              <div className="flex items-center justify-between p-2 md:p-3 rounded-lg bg-secondary/50">
+                <span className="text-xs md:text-sm text-muted-foreground">Intervalo</span>
+                <span className="text-xs md:text-sm font-mono text-foreground">{config.updateIntervalMinutes} min</span>
               </div>
 
-              <div className="p-3 rounded-lg bg-secondary/50 space-y-2">
+              <div className="p-2 md:p-3 rounded-lg bg-secondary/50 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground flex items-center gap-2">
-                    <Timer className="w-4 h-4" />
+                  <span className="text-xs md:text-sm text-muted-foreground flex items-center gap-1 md:gap-2">
+                    <Timer className="w-3 h-3 md:w-4 md:h-4" />
                     Próxima Grade
                   </span>
                   <div className="text-right">
-                    <span className={`text-sm font-mono ${nextGradeSeconds <= 60 ? 'text-amber-500 animate-pulse' : 'text-primary'}`}>
+                    <span className={`text-xs md:text-sm font-mono ${nextGradeSeconds <= 60 ? 'text-amber-500 animate-pulse' : 'text-primary'}`}>
                       {nextGradeCountdown}
                     </span>
                     {isRunning && (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[10px] md:text-xs text-muted-foreground">
                         Bloco {nextBlockTime} (monta às {buildTime})
                       </p>
                     )}
@@ -591,10 +610,10 @@ export function DashboardView() {
                 )}
               </div>
 
-              <div className="p-3 rounded-lg bg-secondary/50 space-y-2">
+              <div className="p-2 md:p-3 rounded-lg bg-secondary/50 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">🧹 Auto-Clean</span>
-                  <span className={`text-sm font-mono ${autoCleanSeconds <= 60 ? 'text-amber-500 animate-pulse' : 'text-foreground'}`}>
+                  <span className="text-xs md:text-sm text-muted-foreground">🧹 Auto-Clean</span>
+                  <span className={`text-xs md:text-sm font-mono ${autoCleanSeconds <= 60 ? 'text-amber-500 animate-pulse' : 'text-foreground'}`}>
                     {autoCleanCountdown}
                   </span>
                 </div>
@@ -608,13 +627,13 @@ export function DashboardView() {
             </div>
 
             {/* Audio Visualizer */}
-            <div className="pt-4 border-t border-border">
-              <p className="text-xs text-muted-foreground mb-3">Atividade</p>
-              <div className="flex items-end justify-center gap-1 h-12">
+            <div className="pt-3 md:pt-4 border-t border-border">
+              <p className="text-[10px] md:text-xs text-muted-foreground mb-2 md:mb-3">Atividade</p>
+              <div className="flex items-end justify-center gap-1 h-10 md:h-12">
                 {[...Array(16)].map((_, i) => (
                   <div
                     key={i}
-                    className="w-2 bg-primary rounded-full animate-wave"
+                    className="w-1.5 md:w-2 bg-primary rounded-full animate-wave"
                     style={{
                       height: `${Math.random() * 100}%`,
                       animationDelay: `${i * 0.1}s`,
@@ -629,10 +648,10 @@ export function DashboardView() {
 
         {/* Grade History */}
         <Card className="glass-card">
-          <CardHeader className="border-b border-border">
+          <CardHeader className="border-b border-border py-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <History className="w-5 h-5 text-primary" />
+              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                <History className="w-4 h-4 md:w-5 md:h-5 text-primary" />
                 Histórico de Grades
               </CardTitle>
               {gradeHistory.length > 0 && (
@@ -640,49 +659,49 @@ export function DashboardView() {
                   variant="ghost"
                   size="sm"
                   onClick={clearGradeHistory}
-                  className="text-muted-foreground hover:text-destructive"
+                  className="text-muted-foreground hover:text-destructive h-7 md:h-8 text-xs"
                 >
-                  <Trash2 className="w-4 h-4 mr-1" />
+                  <Trash2 className="w-3 h-3 md:w-4 md:h-4 mr-1" />
                   Limpar
                 </Button>
               )}
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <ScrollArea className="h-[280px]">
+            <ScrollArea className="h-[240px] md:h-[280px]">
               {displayGradeHistory.length === 0 ? (
                 <div className="p-6 text-center text-muted-foreground">
-                  <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p>Nenhuma grade gerada ainda</p>
+                  <History className="w-6 h-6 md:w-8 md:h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Nenhuma grade gerada ainda</p>
                 </div>
               ) : (
                 <div className="divide-y divide-border">
-                  {displayGradeHistory.slice(0, 10).map((entry, index) => (
+                  {displayGradeHistory.slice(0, 10).map((entry) => (
                     <div
                       key={entry.id}
-                      className="p-3 flex items-center justify-between hover:bg-secondary/30 transition-colors"
+                      className="p-2 md:p-3 flex items-center justify-between hover:bg-secondary/30 transition-colors"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <span className="text-sm font-bold text-primary">{entry.blockTime}</span>
+                      <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                        <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                          <span className="text-xs md:text-sm font-bold text-primary">{entry.blockTime}</span>
                         </div>
-                        <div>
-                          <p className="font-medium text-foreground text-sm">{entry.programName}</p>
-                          <p className="text-xs text-muted-foreground">
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground text-xs md:text-sm truncate">{entry.programName}</p>
+                          <p className="text-[10px] md:text-xs text-muted-foreground">
                             {format(new Date(entry.timestamp), "HH:mm:ss", { locale: ptBR })}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="font-mono text-xs border-success/40 text-success bg-success/10">
+                      <div className="flex items-center gap-1 md:gap-2 shrink-0">
+                        <Badge variant="outline" className="font-mono text-[10px] md:text-xs border-success/40 text-success bg-success/10">
                           ✓ {entry.songsFound}
                         </Badge>
                         {entry.songsMissing > 0 && (
-                          <Badge variant="outline" className="font-mono text-xs border-destructive/40 text-destructive bg-destructive/10">
+                          <Badge variant="outline" className="font-mono text-[10px] md:text-xs border-destructive/40 text-destructive bg-destructive/10">
                             ✗ {entry.songsMissing}
                           </Badge>
                         )}
-                        <span className="text-xs text-muted-foreground ml-1">
+                        <span className="text-[10px] md:text-xs text-muted-foreground ml-1">
                           / {entry.songsProcessed}
                         </span>
                       </div>
