@@ -68,6 +68,7 @@ export function SpecialMonitoringView() {
   const [cloudSchedules, setCloudSchedules] = useState<CloudSchedule[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStation, setFilterStation] = useState<string>('all');
+  const [filterDay, setFilterDay] = useState<string>('all');
   const [editingSchedule, setEditingSchedule] = useState<CloudSchedule | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [autoRefreshCountdown, setAutoRefreshCountdown] = useState(30);
@@ -522,17 +523,46 @@ ${exportLines.join('\n')}`;
     setIsExporting(false);
   };
 
-  // Filtered songs based on search and station filter
+  // Filtered songs based on search, station filter, and day filter
   const filteredSongs = capturedSongs.filter(song => {
     const matchesSearch = searchTerm === '' || 
       song.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       song.artist.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStation = filterStation === 'all' || song.station_name === filterStation;
-    return matchesSearch && matchesStation;
+    
+    // Day filter
+    let matchesDay = true;
+    if (filterDay !== 'all') {
+      const songDate = new Date(song.scraped_at);
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      if (filterDay === 'today') {
+        matchesDay = songDate.toDateString() === today.toDateString();
+      } else if (filterDay === 'yesterday') {
+        matchesDay = songDate.toDateString() === yesterday.toDateString();
+      } else {
+        // Specific date format: YYYY-MM-DD
+        matchesDay = songDate.toISOString().split('T')[0] === filterDay;
+      }
+    }
+    
+    return matchesSearch && matchesStation && matchesDay;
   });
 
   // Get unique stations from captured songs
   const uniqueStations = [...new Set(capturedSongs.map(s => s.station_name))];
+  
+  // Get unique days from captured songs for filter
+  const uniqueDays = useMemo(() => {
+    const days = new Set<string>();
+    capturedSongs.forEach(song => {
+      const date = new Date(song.scraped_at).toISOString().split('T')[0];
+      days.add(date);
+    });
+    return Array.from(days).sort().reverse();
+  }, [capturedSongs]);
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">
@@ -1013,15 +1043,31 @@ ${exportLines.join('\n')}`;
                   />
                 </div>
                 <Select value={filterStation} onValueChange={setFilterStation}>
-                  <SelectTrigger className="w-32 h-8">
+                  <SelectTrigger className="w-28 h-8">
                     <Filter className="w-3.5 h-3.5 mr-1" />
-                    <SelectValue placeholder="Filtrar" />
+                    <SelectValue placeholder="Emissora" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todas</SelectItem>
                     {uniqueStations.map(station => (
                       <SelectItem key={station} value={station}>
                         {station}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={filterDay} onValueChange={setFilterDay}>
+                  <SelectTrigger className="w-32 h-8">
+                    <Calendar className="w-3.5 h-3.5 mr-1" />
+                    <SelectValue placeholder="Dia" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os dias</SelectItem>
+                    <SelectItem value="today">Hoje</SelectItem>
+                    <SelectItem value="yesterday">Ontem</SelectItem>
+                    {uniqueDays.slice(0, 7).map(day => (
+                      <SelectItem key={day} value={day}>
+                        {format(new Date(day + 'T12:00:00'), 'dd/MM (EEE)', { locale: ptBR })}
                       </SelectItem>
                     ))}
                   </SelectContent>

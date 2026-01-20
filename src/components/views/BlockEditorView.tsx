@@ -399,6 +399,13 @@ export function BlockEditorView() {
     return stats;
   }, [currentSongs]);
 
+  // Get fixed content for current time slot
+  const currentFixedContent = useMemo(() => {
+    return fixedContent.filter(fc => 
+      fc.enabled && fc.timeSlots.some(ts => ts.hour === selectedHour && ts.minute === selectedMinute)
+    );
+  }, [fixedContent, selectedHour, selectedMinute]);
+
   const totalSongs = currentSongs.length;
 
   // Get program name for current hour
@@ -1085,6 +1092,42 @@ export function BlockEditorView() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Fixed Content for this block */}
+      {currentFixedContent.length > 0 && (
+        <Card className="glass-card border-purple-500/30">
+          <CardHeader className="py-3 border-b border-border">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Newspaper className="w-4 h-4 text-purple-400" />
+              Conteúdos Fixos neste Bloco
+              <Badge variant="secondary" className="ml-2 bg-purple-500/20 text-purple-400">
+                {currentFixedContent.length}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {currentFixedContent.map((fc) => (
+                <div
+                  key={fc.id}
+                  className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center gap-3"
+                >
+                  <div className="w-8 h-8 rounded bg-purple-500/20 flex items-center justify-center shrink-0">
+                    <Newspaper className="w-4 h-4 text-purple-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground truncate">{fc.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{fc.fileName}</p>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] border-purple-500/30 text-purple-400 shrink-0">
+                    {fc.type}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Validation Warnings */}
       {validationWarnings.length > 0 && (
