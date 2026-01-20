@@ -146,6 +146,26 @@ interface ElectronAPI {
     needsPython?: boolean;
     needsRestart?: boolean;
   }>;
+  testDeemix: () => Promise<{
+    success: boolean;
+    version?: string;
+    command?: string;
+    message?: string;
+    error?: string;
+  }>;
+  testDeemixSearch: (params: { artist: string; title: string }) => Promise<{
+    success: boolean;
+    track?: {
+      id: number;
+      title: string;
+      artist: string;
+      album: string;
+      preview: string;
+      link: string;
+    };
+    message?: string;
+    error?: string;
+  }>;
   onDeemixInstallProgress: (callback: (progress: { status: string; message: string }) => void) => void;
   
   // Notifications
