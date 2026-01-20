@@ -401,15 +401,15 @@ export function VozBrasilView() {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
-            <Radio className="w-7 h-7 text-green-500" />
-            A Voz do Brasil
+            <Radio className="w-7 h-7 text-green-500 shrink-0" />
+            <span className="truncate">A Voz do Brasil</span>
           </h2>
-          <p className="text-muted-foreground">Download automático do programa obrigatório (Seg-Sex 20:35)</p>
+          <p className="text-muted-foreground text-sm">Download automático do programa obrigatório (Seg-Sex 20:35)</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0">
           <Badge variant={config.enabled ? 'default' : 'secondary'} className={config.enabled ? 'bg-green-500/20 text-green-400 border-green-500/30' : ''}>
             {config.enabled ? '● Ativo' : '○ Inativo'}
           </Badge>

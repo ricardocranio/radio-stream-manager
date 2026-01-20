@@ -104,17 +104,18 @@ export function ScheduleView() {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold text-foreground">Programação</h2>
-          <p className="text-muted-foreground">Configure os horários e nomes dos programas</p>
+          <p className="text-muted-foreground text-sm">Configure os horários e nomes dos programas</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0 flex-wrap">
           <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
             <DialogTrigger asChild>
-              <Button variant="outline" className="gap-2">
+              <Button variant="outline" size="sm" className="gap-2">
                 <Plus className="w-4 h-4" />
-                Novo Programa
+                <span className="hidden sm:inline">Novo Programa</span>
+                <span className="sm:hidden">Novo</span>
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -176,9 +177,10 @@ export function ScheduleView() {
               </div>
             </DialogContent>
           </Dialog>
-          <Button onClick={handleSave}>
-            <Save className="w-4 h-4 mr-2" />
-            Salvar Programação
+          <Button size="sm" onClick={handleSave}>
+            <Save className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Salvar Programação</span>
+            <span className="sm:hidden">Salvar</span>
           </Button>
         </div>
       </div>

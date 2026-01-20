@@ -144,16 +144,17 @@ export function FixedContentView() {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold text-foreground">Conteúdos Fixos</h2>
-          <p className="text-muted-foreground">Gerencie notícias, horóscopo, esportes e outros conteúdos programados</p>
+          <p className="text-muted-foreground text-sm">Gerencie notícias, horóscopo, esportes e outros conteúdos</p>
         </div>
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button size="sm" className="gap-2 shrink-0">
               <Plus className="w-4 h-4" />
-              Novo Conteúdo
+              <span className="hidden sm:inline">Novo Conteúdo</span>
+              <span className="sm:hidden">Novo</span>
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg">
