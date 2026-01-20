@@ -55,6 +55,8 @@ export function SpecialMonitoringView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStation, setFilterStation] = useState<string>('all');
   const [editingSchedule, setEditingSchedule] = useState<{ stationId: string; schedule: MonitoringSchedule } | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [autoRefreshCountdown, setAutoRefreshCountdown] = useState(30);
   const [newSchedule, setNewSchedule] = useState({
     hour: 18,
     minute: 0,
@@ -117,53 +119,31 @@ export function SpecialMonitoringView() {
     }))
   );
 
-  // Fetch captured songs for scheduled times
+  // Fetch captured songs for scheduled times - now fetches ALL songs from special monitoring stations
   const fetchCapturedSongs = async () => {
-    if (allSchedules.filter(s => s.enabled).length === 0) {
-      setCapturedSongs([]);
-      return;
-    }
-
     setIsLoading(true);
     try {
-      const stationNames = [...new Set(allSchedules.filter(s => s.enabled).map(s => s.stationName))];
+      // Get all station names from special monitoring schedules
+      const stationNames = [...new Set(allSchedules.map(s => s.stationName))];
+      
+      if (stationNames.length === 0) {
+        setCapturedSongs([]);
+        setIsLoading(false);
+        setLastRefresh(new Date());
+        return;
+      }
       
       const { data: songs, error } = await supabase
         .from('scraped_songs')
         .select('title, artist, station_name, scraped_at')
         .in('station_name', stationNames)
         .order('scraped_at', { ascending: false })
-        .limit(500);
+        .limit(100);
 
       if (error) throw error;
 
-      // Filter songs by scheduled time ranges AND weekdays
-      const filteredSongs = (songs || []).filter(song => {
-        const songDate = new Date(song.scraped_at);
-        const songHour = songDate.getHours();
-        const songMinute = songDate.getMinutes();
-        const songTimeInMinutes = songHour * 60 + songMinute;
-        const songDayIndex = songDate.getDay();
-        const dayMap: WeekDay[] = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
-        const songWeekDay = dayMap[songDayIndex];
-
-        const matchingSchedule = allSchedules.find(s => {
-          if (!s.enabled || s.stationName !== song.station_name) return false;
-          
-          const startTime = s.hour * 60 + s.minute;
-          const endTime = (s.endHour ?? s.hour + 1) * 60 + (s.endMinute ?? 0);
-          const isInTimeRange = songTimeInMinutes >= startTime && songTimeInMinutes <= endTime;
-          
-          // Check weekday if specified
-          const weekDays = s.weekDays || [];
-          const isCorrectDay = weekDays.length === 0 || weekDays.includes(songWeekDay);
-          
-          return isInTimeRange && isCorrectDay;
-        });
-        return !!matchingSchedule;
-      });
-
-      setCapturedSongs(filteredSongs);
+      setCapturedSongs(songs || []);
+      setLastRefresh(new Date());
     } catch (error) {
       console.error('Error fetching songs:', error);
       toast({
@@ -175,8 +155,52 @@ export function SpecialMonitoringView() {
     setIsLoading(false);
   };
 
+  // Auto-refresh every 30 seconds
   useEffect(() => {
     fetchCapturedSongs();
+    
+    const refreshInterval = setInterval(() => {
+      fetchCapturedSongs();
+      setAutoRefreshCountdown(30);
+    }, 30000);
+
+    const countdownInterval = setInterval(() => {
+      setAutoRefreshCountdown(prev => (prev > 0 ? prev - 1 : 30));
+    }, 1000);
+
+    return () => {
+      clearInterval(refreshInterval);
+      clearInterval(countdownInterval);
+    };
+  }, [allSchedules.length]);
+
+  // Realtime subscription for new songs
+  useEffect(() => {
+    const stationNames = [...new Set(allSchedules.map(s => s.stationName))];
+    if (stationNames.length === 0) return;
+
+    const channel = supabase
+      .channel('special-monitoring-songs')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'scraped_songs',
+        },
+        (payload) => {
+          const newSong = payload.new as CapturedSongFromDB;
+          if (stationNames.includes(newSong.station_name)) {
+            setCapturedSongs(prev => [newSong, ...prev].slice(0, 100));
+            setLastRefresh(new Date());
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [allSchedules.length]);
 
   const handleAddSchedule = () => {
@@ -760,82 +784,83 @@ ${exportLines.join('\n')}`;
               </div>
             ) : (
               <ScrollArea className="h-[400px]">
-                <div className="space-y-2">
+                <div className="space-y-2 pr-2">
                   {allSchedules
                     .sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute))
                     .map(schedule => (
                       <div
                         key={schedule.id}
-                        className={`p-3 rounded-lg flex items-center justify-between ${
-                          schedule.enabled ? 'bg-cyan-500/10 border border-cyan-500/20' : 'bg-secondary/50 border border-border'
+                        className={`p-3 rounded-lg border ${
+                          schedule.enabled ? 'bg-cyan-500/10 border-cyan-500/20' : 'bg-secondary/50 border-border'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-1">
-                            <div className="w-14 h-14 rounded-lg bg-cyan-500/20 flex flex-col items-center justify-center">
-                              <span className="text-sm font-bold text-cyan-500">
-                                {schedule.hour.toString().padStart(2, '0')}:{schedule.minute.toString().padStart(2, '0')}
-                              </span>
-                              <span className="text-[10px] text-cyan-400">início</span>
-                            </div>
-                            <span className="text-muted-foreground">→</span>
-                            <div className="w-14 h-14 rounded-lg bg-orange-500/20 flex flex-col items-center justify-center">
-                              <span className="text-sm font-bold text-orange-500">
-                                {(schedule.endHour ?? schedule.hour + 1).toString().padStart(2, '0')}:{(schedule.endMinute ?? 0).toString().padStart(2, '0')}
-                              </span>
-                              <span className="text-[10px] text-orange-400">fim</span>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-medium text-foreground">{schedule.stationName}</p>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              {schedule.label || 'Música diferenciada'}
-                            </p>
-                            {schedule.weekDays && schedule.weekDays.length > 0 && schedule.weekDays.length < 7 && (
-                              <div className="flex gap-0.5 mt-1">
-                                {allWeekDays.map(day => (
-                                  <span
-                                    key={day}
-                                    className={`text-[9px] px-1 rounded ${
-                                      schedule.weekDays?.includes(day)
-                                        ? 'bg-primary/20 text-primary'
-                                        : 'bg-secondary/50 text-muted-foreground/50'
-                                    }`}
-                                  >
-                                    {day.charAt(0).toUpperCase()}
-                                  </span>
-                                ))}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            {/* Time badges - compact */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <div className="px-2 py-1 rounded bg-cyan-500/20 text-center">
+                                <span className="text-xs font-bold text-cyan-500">
+                                  {schedule.hour.toString().padStart(2, '0')}:{schedule.minute.toString().padStart(2, '0')}
+                                </span>
                               </div>
-                            )}
+                              <span className="text-muted-foreground text-xs">→</span>
+                              <div className="px-2 py-1 rounded bg-orange-500/20 text-center">
+                                <span className="text-xs font-bold text-orange-500">
+                                  {(schedule.endHour ?? schedule.hour + 1).toString().padStart(2, '0')}:{(schedule.endMinute ?? 0).toString().padStart(2, '0')}
+                                </span>
+                              </div>
+                            </div>
+                            {/* Station info */}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-foreground truncate">{schedule.stationName}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {schedule.label || 'Música diferenciada'}
+                              </p>
+                              {schedule.weekDays && schedule.weekDays.length > 0 && schedule.weekDays.length < 7 && (
+                                <div className="flex gap-0.5 mt-1">
+                                  {allWeekDays.map(day => (
+                                    <span
+                                      key={day}
+                                      className={`text-[9px] px-1 rounded ${
+                                        schedule.weekDays?.includes(day)
+                                          ? 'bg-primary/20 text-primary'
+                                          : 'bg-secondary/50 text-muted-foreground/50'
+                                      }`}
+                                    >
+                                      {day.charAt(0).toUpperCase()}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Switch
-                            checked={schedule.enabled}
-                            onCheckedChange={checked =>
-                              handleToggleSchedule(schedule.stationId, schedule.id, checked)
-                            }
-                          />
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-primary"
-                            onClick={() => handleEditSchedule(schedule.stationId, schedule)}
-                            title="Editar"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => handleRemoveSchedule(schedule.stationId, schedule.id)}
-                            title="Remover"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {/* Actions */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Switch
+                              checked={schedule.enabled}
+                              onCheckedChange={checked =>
+                                handleToggleSchedule(schedule.stationId, schedule.id, checked)
+                              }
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-primary"
+                              onClick={() => handleEditSchedule(schedule.stationId, schedule)}
+                              title="Editar"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              onClick={() => handleRemoveSchedule(schedule.stationId, schedule.id)}
+                              title="Remover"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -845,30 +870,51 @@ ${exportLines.join('\n')}`;
           </CardContent>
         </Card>
 
-        {/* Captured Songs Panel */}
+        {/* Captured Songs Panel - Real-time */}
         <Card className="glass-card border-primary/20 lg:col-span-2">
           <CardHeader className="pb-3 border-b border-border">
             <div className="flex items-center justify-between flex-wrap gap-4">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Radio className="w-5 h-5 text-primary" />
-                Músicas Capturadas
-                <Badge variant="secondary" className="ml-2">
-                  {filteredSongs.length} músicas
-                </Badge>
-              </CardTitle>
               <div className="flex items-center gap-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Radio className="w-5 h-5 text-primary" />
+                  Músicas Capturadas
+                  <Badge variant="secondary" className="ml-2">
+                    {filteredSongs.length}
+                  </Badge>
+                </CardTitle>
+                {/* Real-time indicator */}
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    <span>Tempo real</span>
+                  </div>
+                  <span>•</span>
+                  <span>Próx. atualização: {autoRefreshCountdown}s</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchCapturedSongs}
+                  disabled={isLoading}
+                  className="gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                  Atualizar
+                </Button>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar música ou artista..."
+                    placeholder="Buscar..."
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
-                    className="pl-9 w-64"
+                    className="pl-8 w-40 h-8 text-sm"
                   />
                 </div>
                 <Select value={filterStation} onValueChange={setFilterStation}>
-                  <SelectTrigger className="w-40">
-                    <Filter className="w-4 h-4 mr-2" />
+                  <SelectTrigger className="w-32 h-8">
+                    <Filter className="w-3.5 h-3.5 mr-1" />
                     <SelectValue placeholder="Filtrar" />
                   </SelectTrigger>
                   <SelectContent>
