@@ -43,6 +43,19 @@ interface CapturedSongFromDB {
   scraped_at: string;
 }
 
+interface CloudSchedule {
+  id: string;
+  station_name: string;
+  scrape_url: string;
+  start_hour: number;
+  start_minute: number;
+  end_hour: number;
+  end_minute: number;
+  week_days: string[];
+  label: string | null;
+  enabled: boolean;
+}
+
 export function SpecialMonitoringView() {
   const { stations, updateStation, setStations } = useRadioStore();
   const { toast } = useToast();
@@ -52,9 +65,10 @@ export function SpecialMonitoringView() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [capturedSongs, setCapturedSongs] = useState<CapturedSongFromDB[]>([]);
+  const [cloudSchedules, setCloudSchedules] = useState<CloudSchedule[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStation, setFilterStation] = useState<string>('all');
-  const [editingSchedule, setEditingSchedule] = useState<{ stationId: string; schedule: MonitoringSchedule } | null>(null);
+  const [editingSchedule, setEditingSchedule] = useState<CloudSchedule | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [autoRefreshCountdown, setAutoRefreshCountdown] = useState(30);
   const [newSchedule, setNewSchedule] = useState({
@@ -89,6 +103,25 @@ export function SpecialMonitoringView() {
   const allStations = stations;
   const enabledStations = stations.filter(s => s.enabled);
 
+  // Fetch schedules from Cloud
+  const fetchCloudSchedules = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('special_monitoring')
+        .select('*')
+        .order('start_hour', { ascending: true });
+
+      if (error) throw error;
+      setCloudSchedules(data || []);
+    } catch (error) {
+      console.error('Error fetching cloud schedules:', error);
+    }
+  };
+
+  // Fetch on mount
+  useEffect(() => {
+    fetchCloudSchedules();
+  }, []);
   // URL validation for mytuner-radio.com
   const isValidMytunerUrl = (url: string): boolean => {
     if (!url) return false;
@@ -109,22 +142,12 @@ export function SpecialMonitoringView() {
     };
   }, [newSchedule.customStationUrl]);
 
-  // Get all schedules across ALL stations (not just enabled)
-  const allSchedules = allStations.flatMap(station =>
-    (station.monitoringSchedules || []).map(schedule => ({
-      ...schedule,
-      stationId: station.id,
-      stationName: station.name,
-      stationUrl: station.scrapeUrl,
-    }))
-  );
-
   // Fetch captured songs for scheduled times - now fetches ALL songs from special monitoring stations
   const fetchCapturedSongs = async () => {
     setIsLoading(true);
     try {
-      // Get all station names from special monitoring schedules
-      const stationNames = [...new Set(allSchedules.map(s => s.stationName))];
+      // Get all station names from cloud schedules
+      const stationNames = [...new Set(cloudSchedules.map(s => s.station_name))];
       
       if (stationNames.length === 0) {
         setCapturedSongs([]);
@@ -172,11 +195,11 @@ export function SpecialMonitoringView() {
       clearInterval(refreshInterval);
       clearInterval(countdownInterval);
     };
-  }, [allSchedules.length]);
+  }, [cloudSchedules.length]);
 
   // Realtime subscription for new songs
   useEffect(() => {
-    const stationNames = [...new Set(allSchedules.map(s => s.stationName))];
+    const stationNames = [...new Set(cloudSchedules.map(s => s.station_name))];
     if (stationNames.length === 0) return;
 
     const channel = supabase
@@ -201,7 +224,7 @@ export function SpecialMonitoringView() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [allSchedules.length]);
+  }, [cloudSchedules.length]);
 
   const handleAddSchedule = () => {
     if (!newSchedule.useCustomStation && !selectedStation) return;
@@ -290,63 +313,148 @@ export function SpecialMonitoringView() {
     });
   };
 
-  const handleEditSchedule = (stationId: string, schedule: MonitoringSchedule & { stationName: string; stationUrl?: string }) => {
-    const station = stations.find(s => s.id === stationId);
-    setEditingSchedule({ stationId, schedule });
+  // Remove schedule directly from Cloud
+  const handleRemoveCloudSchedule = async (scheduleId: string) => {
+    try {
+      const { error } = await supabase
+        .from('special_monitoring')
+        .delete()
+        .eq('id', scheduleId);
+
+      if (error) throw error;
+
+      setCloudSchedules(prev => prev.filter(s => s.id !== scheduleId));
+      toast({
+        title: 'Horário removido',
+        description: 'Configuração de monitoramento atualizada.',
+      });
+    } catch (error) {
+      console.error('Error removing schedule:', error);
+      toast({
+        title: 'Erro ao remover',
+        description: 'Não foi possível remover o horário.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Edit cloud schedule
+  const handleEditCloudSchedule = (schedule: CloudSchedule) => {
+    setEditingSchedule(schedule);
     setNewSchedule({
-      hour: schedule.hour,
-      minute: schedule.minute,
-      endHour: schedule.endHour ?? schedule.hour + 1,
-      endMinute: schedule.endMinute ?? 0,
+      hour: schedule.start_hour,
+      minute: schedule.start_minute,
+      endHour: schedule.end_hour,
+      endMinute: schedule.end_minute,
       label: schedule.label || '',
-      stationId: stationId,
-      customStationName: schedule.stationName,
-      customStationUrl: schedule.customUrl || station?.scrapeUrl || '',
-      useCustomStation: !!schedule.customUrl,
-      weekDays: schedule.weekDays || ['seg', 'ter', 'qua', 'qui', 'sex'],
+      stationId: schedule.id,
+      customStationName: schedule.station_name,
+      customStationUrl: schedule.scrape_url,
+      useCustomStation: true,
+      weekDays: (schedule.week_days || ['seg', 'ter', 'qua', 'qui', 'sex']) as WeekDay[],
     });
     setIsDialogOpen(true);
   };
 
-  const handleSaveSchedule = () => {
+  // Save/update cloud schedule
+  const handleSaveCloudSchedule = async () => {
     if (editingSchedule) {
-      // Update existing schedule
-      const station = stations.find(s => s.id === editingSchedule.stationId);
-      if (!station) return;
+      // Update existing schedule in Cloud
+      try {
+        const { error } = await supabase
+          .from('special_monitoring')
+          .update({
+            station_name: newSchedule.customStationName,
+            scrape_url: newSchedule.customStationUrl,
+            start_hour: newSchedule.hour,
+            start_minute: newSchedule.minute,
+            end_hour: newSchedule.endHour,
+            end_minute: newSchedule.endMinute,
+            week_days: newSchedule.weekDays,
+            label: newSchedule.label || null,
+          })
+          .eq('id', editingSchedule.id);
 
-      const updatedSchedules = (station.monitoringSchedules || []).map(s =>
-        s.id === editingSchedule.schedule.id
-          ? {
-              ...s,
-              hour: newSchedule.hour,
-              minute: newSchedule.minute,
-              endHour: newSchedule.endHour,
-              endMinute: newSchedule.endMinute,
-              label: newSchedule.label || `${newSchedule.hour.toString().padStart(2, '0')}:${newSchedule.minute.toString().padStart(2, '0')} - ${newSchedule.endHour.toString().padStart(2, '0')}:${newSchedule.endMinute.toString().padStart(2, '0')}`,
-              customUrl: newSchedule.useCustomStation ? newSchedule.customStationUrl : undefined,
-              weekDays: newSchedule.weekDays.length > 0 ? newSchedule.weekDays : undefined,
-            }
-          : s
-      );
+        if (error) throw error;
 
-      updateStation(editingSchedule.stationId, { monitoringSchedules: updatedSchedules });
-
-      // Also update station URL if it was changed
-      if (newSchedule.customStationUrl && newSchedule.customStationUrl !== station.scrapeUrl) {
-        updateStation(editingSchedule.stationId, { scrapeUrl: newSchedule.customStationUrl });
+        await fetchCloudSchedules();
+        toast({
+          title: '✏️ Horário atualizado',
+          description: `${newSchedule.customStationName} foi atualizado.`,
+        });
+      } catch (error) {
+        console.error('Error updating schedule:', error);
+        toast({
+          title: 'Erro ao atualizar',
+          description: 'Não foi possível atualizar o horário.',
+          variant: 'destructive',
+        });
       }
-
-      toast({
-        title: '✏️ Horário atualizado',
-        description: `${station.name} foi atualizado.`,
-      });
 
       setEditingSchedule(null);
       setNewSchedule({ hour: 18, minute: 0, endHour: 19, endMinute: 0, label: '', stationId: '', customStationName: '', customStationUrl: '', useCustomStation: false, weekDays: ['seg', 'ter', 'qua', 'qui', 'sex'] });
       setIsDialogOpen(false);
     } else {
-      // Add new schedule (existing logic)
-      handleAddSchedule();
+      // Add new schedule to Cloud
+      if (!newSchedule.customStationName || !newSchedule.customStationUrl) {
+        toast({
+          title: 'Campos obrigatórios',
+          description: 'Preencha o nome e URL da emissora.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      try {
+        const { error } = await supabase
+          .from('special_monitoring')
+          .insert({
+            station_name: newSchedule.customStationName,
+            scrape_url: newSchedule.customStationUrl,
+            start_hour: newSchedule.hour,
+            start_minute: newSchedule.minute,
+            end_hour: newSchedule.endHour,
+            end_minute: newSchedule.endMinute,
+            week_days: newSchedule.weekDays,
+            label: newSchedule.label || null,
+            enabled: true,
+          });
+
+        if (error) throw error;
+
+        await fetchCloudSchedules();
+        toast({
+          title: '⏰ Horário adicionado',
+          description: `${newSchedule.customStationName} será monitorada às ${newSchedule.hour}:${newSchedule.minute.toString().padStart(2, '0')}`,
+        });
+      } catch (error) {
+        console.error('Error adding schedule:', error);
+        toast({
+          title: 'Erro ao adicionar',
+          description: 'Não foi possível adicionar o horário.',
+          variant: 'destructive',
+        });
+      }
+
+      setNewSchedule({ hour: 18, minute: 0, endHour: 19, endMinute: 0, label: '', stationId: '', customStationName: '', customStationUrl: '', useCustomStation: false, weekDays: ['seg', 'ter', 'qua', 'qui', 'sex'] });
+      setSelectedStation(null);
+      setIsDialogOpen(false);
+    }
+  };
+
+  // Toggle cloud schedule enabled state
+  const handleToggleCloudSchedule = async (scheduleId: string, enabled: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('special_monitoring')
+        .update({ enabled })
+        .eq('id', scheduleId);
+
+      if (error) throw error;
+
+      setCloudSchedules(prev => prev.map(s => s.id === scheduleId ? { ...s, enabled } : s));
+    } catch (error) {
+      console.error('Error toggling schedule:', error);
     }
   };
 
@@ -445,22 +553,14 @@ ${exportLines.join('\n')}`;
             size="sm"
             onClick={async () => {
               setIsSyncing(true);
-              const allSchedulesForSync = allSchedules.map(s => ({
-                id: s.id,
-                stationName: s.stationName,
-                scrapeUrl: s.customUrl || s.stationUrl || '',
-                hour: s.hour,
-                minute: s.minute,
-                endHour: s.endHour ?? s.hour + 1,
-                endMinute: s.endMinute ?? 0,
-                weekDays: (s.weekDays || ['seg', 'ter', 'qua', 'qui', 'sex']) as WeekDay[],
-                label: s.label,
-                enabled: s.enabled,
-              }));
-              await syncSpecialMonitoringToSupabase(allSchedulesForSync);
+              await fetchCloudSchedules();
               setIsSyncing(false);
+              toast({
+                title: '✅ Sincronizado',
+                description: 'Horários carregados do Cloud.',
+              });
             }}
-            disabled={isSyncing || allSchedules.length === 0}
+            disabled={isSyncing}
             className="border-cyan-500/30 text-cyan-500 hover:bg-cyan-500/10 gap-1.5"
           >
             {isSyncing ? (
@@ -758,7 +858,7 @@ ${exportLines.join('\n')}`;
                         Cancelar
                       </Button>
                       <Button 
-                        onClick={handleSaveSchedule} 
+                        onClick={handleSaveCloudSchedule} 
                         disabled={editingSchedule 
                           ? false 
                           : (newSchedule.useCustomStation 
@@ -776,7 +876,7 @@ ${exportLines.join('\n')}`;
             </div>
           </CardHeader>
           <CardContent className="p-4">
-            {allSchedules.length === 0 ? (
+            {cloudSchedules.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Clock className="w-12 h-12 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">Nenhum horário configurado</p>
@@ -785,8 +885,8 @@ ${exportLines.join('\n')}`;
             ) : (
               <ScrollArea className="h-[400px]">
                 <div className="space-y-2 pr-2">
-                  {allSchedules
-                    .sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute))
+                  {cloudSchedules
+                    .sort((a, b) => a.start_hour * 60 + a.start_minute - (b.start_hour * 60 + b.start_minute))
                     .map(schedule => (
                       <div
                         key={schedule.id}
@@ -800,29 +900,29 @@ ${exportLines.join('\n')}`;
                             <div className="flex items-center gap-1 shrink-0">
                               <div className="px-2 py-1 rounded bg-cyan-500/20 text-center">
                                 <span className="text-xs font-bold text-cyan-500">
-                                  {schedule.hour.toString().padStart(2, '0')}:{schedule.minute.toString().padStart(2, '0')}
+                                  {schedule.start_hour.toString().padStart(2, '0')}:{schedule.start_minute.toString().padStart(2, '0')}
                                 </span>
                               </div>
                               <span className="text-muted-foreground text-xs">→</span>
                               <div className="px-2 py-1 rounded bg-orange-500/20 text-center">
                                 <span className="text-xs font-bold text-orange-500">
-                                  {(schedule.endHour ?? schedule.hour + 1).toString().padStart(2, '0')}:{(schedule.endMinute ?? 0).toString().padStart(2, '0')}
+                                  {schedule.end_hour.toString().padStart(2, '0')}:{schedule.end_minute.toString().padStart(2, '0')}
                                 </span>
                               </div>
                             </div>
                             {/* Station info */}
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-foreground truncate">{schedule.stationName}</p>
+                              <p className="text-sm font-medium text-foreground truncate">{schedule.station_name}</p>
                               <p className="text-xs text-muted-foreground truncate">
                                 {schedule.label || 'Música diferenciada'}
                               </p>
-                              {schedule.weekDays && schedule.weekDays.length > 0 && schedule.weekDays.length < 7 && (
+                              {schedule.week_days && schedule.week_days.length > 0 && schedule.week_days.length < 7 && (
                                 <div className="flex gap-0.5 mt-1">
                                   {allWeekDays.map(day => (
                                     <span
                                       key={day}
                                       className={`text-[9px] px-1 rounded ${
-                                        schedule.weekDays?.includes(day)
+                                        schedule.week_days?.includes(day)
                                           ? 'bg-primary/20 text-primary'
                                           : 'bg-secondary/50 text-muted-foreground/50'
                                       }`}
@@ -839,14 +939,14 @@ ${exportLines.join('\n')}`;
                             <Switch
                               checked={schedule.enabled}
                               onCheckedChange={checked =>
-                                handleToggleSchedule(schedule.stationId, schedule.id, checked)
+                                handleToggleCloudSchedule(schedule.id, checked)
                               }
                             />
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 text-muted-foreground hover:text-primary"
-                              onClick={() => handleEditSchedule(schedule.stationId, schedule)}
+                              onClick={() => handleEditCloudSchedule(schedule)}
                               title="Editar"
                             >
                               <Pencil className="w-3.5 h-3.5" />
@@ -855,7 +955,7 @@ ${exportLines.join('\n')}`;
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                              onClick={() => handleRemoveSchedule(schedule.stationId, schedule.id)}
+                              onClick={() => handleRemoveCloudSchedule(schedule.id)}
                               title="Remover"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
