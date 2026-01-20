@@ -226,7 +226,7 @@ export function useAutoGradeBuilder() {
             artist: song.artist,
             station: song.station_name,
             style,
-            filename: sanitizeFilename(`${song.title} - ${song.artist}.mp3`),
+            filename: sanitizeFilename(`${song.artist} - ${song.title}.mp3`),
           });
         }
       });
@@ -259,7 +259,7 @@ export function useAutoGradeBuilder() {
           artist: rs.artist,
           station: 'RANKING',
           style: rs.style,
-          filename: sanitizeFilename(`${rs.title} - ${rs.artist}.mp3`),
+          filename: sanitizeFilename(`${rs.artist} - ${rs.title}.mp3`),
         };
       }
     }

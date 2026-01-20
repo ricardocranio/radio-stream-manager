@@ -27,11 +27,35 @@ if (!gotTheLock) {
   app.quit();
 }
 
-// Check if deemix is installed
+// Check if deemix is installed and return the command to use
+let deemixCommand = 'deemix';
+
 function checkDeemixInstalled() {
   return new Promise((resolve) => {
+    // Try direct deemix command first
     exec('deemix --help', (error) => {
-      resolve(!error);
+      if (!error) {
+        deemixCommand = 'deemix';
+        resolve(true);
+        return;
+      }
+      // Try python -m deemix
+      exec('python -m deemix --help', (error2) => {
+        if (!error2) {
+          deemixCommand = 'python -m deemix';
+          resolve(true);
+          return;
+        }
+        // Try python3 -m deemix
+        exec('python3 -m deemix --help', (error3) => {
+          if (!error3) {
+            deemixCommand = 'python3 -m deemix';
+            resolve(true);
+            return;
+          }
+          resolve(false);
+        });
+      });
     });
   });
 }
@@ -85,40 +109,90 @@ function installDeemix() {
       return;
     }
 
-    const installCommand = `${pythonStatus.command} install deemix`;
+    // Send progress update
+    if (mainWindow) {
+      mainWindow.webContents.send('deemix-install-progress', { 
+        status: 'installing', 
+        message: `Instalando deemix usando ${pythonStatus.command}...` 
+      });
+    }
+
+    const installCommand = `${pythonStatus.command} install deemix --user`;
     console.log(`Installing deemix with: ${installCommand}`);
 
-    exec(installCommand, { timeout: 120000 }, (error, stdout, stderr) => {
+    exec(installCommand, { timeout: 300000 }, (error, stdout, stderr) => {
       if (error) {
         console.error('deemix installation error:', error);
-        resolve({ 
-          success: false, 
-          error: stderr || error.message,
-          output: stdout 
+        console.error('stderr:', stderr);
+        console.error('stdout:', stdout);
+        
+        // Try without --user flag
+        const fallbackCommand = `${pythonStatus.command} install deemix`;
+        console.log(`Trying fallback: ${fallbackCommand}`);
+        
+        exec(fallbackCommand, { timeout: 300000 }, (error2, stdout2, stderr2) => {
+          if (error2) {
+            resolve({ 
+              success: false, 
+              error: `Erro na instalação: ${stderr2 || stderr || error2.message}`,
+              output: stdout2 || stdout 
+            });
+            return;
+          }
+          
+          verifyAndResolve(stdout2, resolve);
         });
         return;
       }
 
+      verifyAndResolve(stdout, resolve);
+    });
+
+    function verifyAndResolve(stdout, resolveFunc) {
       console.log('deemix installation output:', stdout);
       
-      // Verify installation
-      exec('deemix --help', (verifyError) => {
-        if (verifyError) {
-          resolve({ 
-            success: false, 
-            error: 'Instalação concluída mas deemix não está no PATH. Reinicie o aplicativo.',
-            output: stdout,
-            needsRestart: true
-          });
-        } else {
-          resolve({ 
-            success: true, 
-            output: stdout,
-            message: 'deemix instalado com sucesso!'
-          });
-        }
-      });
-    });
+      // Give the system a moment to register the command
+      setTimeout(() => {
+        // Verify installation - try multiple methods
+        exec('deemix --help', (verifyError) => {
+          if (verifyError) {
+            // Try python -m deemix
+            exec('python -m deemix --help', (verifyError2) => {
+              if (verifyError2) {
+                exec('python3 -m deemix --help', (verifyError3) => {
+                  if (verifyError3) {
+                    resolveFunc({ 
+                      success: false, 
+                      error: 'Instalação concluída mas deemix não está no PATH. Reinicie o aplicativo ou adicione Python Scripts ao PATH.',
+                      output: stdout,
+                      needsRestart: true
+                    });
+                  } else {
+                    resolveFunc({ 
+                      success: true, 
+                      output: stdout,
+                      message: 'deemix instalado com sucesso! Use python3 -m deemix.'
+                    });
+                  }
+                });
+              } else {
+                resolveFunc({ 
+                  success: true, 
+                  output: stdout,
+                  message: 'deemix instalado com sucesso! Use python -m deemix.'
+                });
+              }
+            });
+          } else {
+            resolveFunc({ 
+              success: true, 
+              output: stdout,
+              message: 'deemix instalado com sucesso!'
+            });
+          }
+        });
+      }, 2000); // Wait 2 seconds for system to register
+    }
   });
 }
 
@@ -662,81 +736,47 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
     };
     const deemixQuality = qualityMap[quality] || '320';
 
-    // Run deemix CLI
+    // Run deemix CLI using the detected command
     return new Promise((resolve) => {
-      const args = [
-        deezerUrl,
-        '-p', outputFolder,
-        '-b', deemixQuality,
-      ];
+      // Build the full command string
+      const fullCommand = `${deemixCommand} "${deezerUrl}" -p "${outputFolder}" -b ${deemixQuality}`;
 
-      console.log(`Running: deemix ${args.join(' ')}`);
+      console.log(`Running: ${fullCommand}`);
       
-      const deemixProcess = spawn('deemix', args, {
-        shell: true,
-        env: { ...process.env }
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      deemixProcess.stdout.on('data', (data) => {
-        stdout += data.toString();
-        console.log('deemix stdout:', data.toString());
-      });
-
-      deemixProcess.stderr.on('data', (data) => {
-        stderr += data.toString();
-        console.log('deemix stderr:', data.toString());
-      });
-
-      deemixProcess.on('close', (code) => {
-        if (code === 0) {
-          // Show Windows notification
-          showNotification(
-            '✅ Download Concluído',
-            `${track.artist.name} - ${track.title}`,
-            () => {
-              shell.openPath(outputFolder);
-            }
-          );
-
-          resolve({ 
-            success: true, 
-            track: {
-              id: track.id,
-              title: track.title,
-              artist: track.artist.name,
-              album: track.album.title,
-              duration: track.duration,
-            },
-            output: stdout,
-            message: `Download concluído: ${track.artist.name} - ${track.title}`
-          });
-        } else {
+      exec(fullCommand, { timeout: 120000, maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+        if (error) {
+          console.error('deemix error:', error);
           resolve({ 
             success: false, 
-            error: stderr || `deemix saiu com código ${code}`,
+            error: stderr || error.message,
             output: stdout + stderr
           });
+          return;
         }
-      });
 
-      deemixProcess.on('error', (error) => {
-        resolve({ 
-          success: false, 
-          error: `Erro ao executar deemix: ${error.message}`
-        });
-      });
+        console.log('deemix output:', stdout);
+        
+        // Show Windows notification
+        showNotification(
+          '✅ Download Concluído',
+          `${track.artist.name} - ${track.title}`,
+          () => {
+            shell.openPath(outputFolder);
+          }
+        );
 
-      // Timeout after 2 minutes
-      setTimeout(() => {
-        deemixProcess.kill();
         resolve({ 
-          success: false, 
-          error: 'Timeout: download demorou mais de 2 minutos'
+          success: true, 
+          track: {
+            id: track.id,
+            title: track.title,
+            artist: track.artist.name,
+            album: track.album.title,
+            duration: track.duration,
+          },
+          output: stdout,
+          message: `Download concluído: ${track.artist.name} - ${track.title}`
         });
-      }, 120000);
     });
     
   } catch (error) {
