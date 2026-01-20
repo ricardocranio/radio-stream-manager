@@ -31,6 +31,7 @@ interface AutoGradeState {
   blocksGenerated: number;
   isAutoEnabled: boolean;
   nextBuildIn: number;
+  minutesBeforeBlock: number;
   // Full day generation stats
   fullDayProgress: number;
   fullDayTotal: number;
@@ -41,6 +42,7 @@ interface AutoGradeState {
 
 const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
 const ARTIST_REPETITION_MINUTES = 60;
+const DEFAULT_MINUTES_BEFORE_BLOCK = 5;
 
 export function useAutoGradeBuilder() {
   const { toast } = useToast();
@@ -68,6 +70,7 @@ export function useAutoGradeBuilder() {
     blocksGenerated: 0,
     isAutoEnabled: true,
     nextBuildIn: 0,
+    minutesBeforeBlock: DEFAULT_MINUTES_BEFORE_BLOCK,
     fullDayProgress: 0,
     fullDayTotal: 0,
     skippedSongs: 0,
@@ -231,7 +234,7 @@ export function useAutoGradeBuilder() {
       return songsByStation;
     } catch (error) {
       console.error('[AUTO-GRADE] Error fetching songs:', error);
-      logSystemError('SUPABASE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
+      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
       return {};
     }
   }, [stations]);
@@ -301,8 +304,8 @@ export function useAutoGradeBuilder() {
     return result;
   }, [rankingSongs, isRecentlyUsed, markSongAsUsed]);
 
-  // Generate a single block with all validation rules and logging
-  const generateBlockWithValidation = useCallback(async (
+  // Generate a single block line with format: "musica1.mp3",vht,"musica2.mp3",vht,...
+  const generateBlockLine = useCallback(async (
     hour: number,
     minute: number,
     songsByStation: Record<string, SongEntry[]>,
@@ -350,7 +353,7 @@ export function useAutoGradeBuilder() {
       }
     }
 
-    // Fixed content
+    // Fixed content block (not TOP50)
     const fixedItem = fixedItems.find(fc => fc.type !== 'top50');
     if (fixedItem) {
       blockLogs.push({
@@ -361,13 +364,11 @@ export function useAutoGradeBuilder() {
         station: 'FIXO',
         reason: 'Conteúdo fixo',
       });
-      return { 
-        line: `${timeStr} (Fixo ID=${programName})`,
-        logs: blockLogs,
-      };
+      // Fixed content still needs music around it
+      // Continue to generate songs
     }
 
-    // Normal block with validation
+    // Normal block with 10 songs + 11 VHTs
     const songs: string[] = [];
     const usedInBlock = new Set<string>();
     const stationIdToName: Record<string, string> = {};
@@ -377,6 +378,8 @@ export function useAutoGradeBuilder() {
     });
 
     for (const seq of sequence) {
+      if (songs.length >= 10) break; // Max 10 songs per block
+      
       const stationName = stationIdToName[seq.radioSource];
       const stationStyle = getStationStyle(seq.radioSource);
       const stationSongs = stationName ? songsByStation[stationName] : [];
@@ -505,8 +508,10 @@ export function useAutoGradeBuilder() {
       }
     }
 
+    // Build line with format: HH:MM (ID=PROGRAMA) "musica1.mp3",vht,"musica2.mp3",vht,...
+    const lineContent = songs.join(',vht,');
     return {
-      line: `${timeStr} (ID=${programName}) ${songs.join(',vht,')}`,
+      line: `${timeStr} (ID=${programName}) ${lineContent}`,
       logs: blockLogs,
     };
   }, [
@@ -534,7 +539,7 @@ export function useAutoGradeBuilder() {
     };
   }, []);
 
-  // Generate complete day's grade
+  // Generate complete day's grade (48 blocks from 00:00 to 23:30)
   const buildFullDayGrade = useCallback(async () => {
     if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
       toast({
@@ -570,7 +575,7 @@ export function useAutoGradeBuilder() {
       // Generate all 48 blocks (00:00 to 23:30)
       for (let hour = 0; hour < 24; hour++) {
         for (const minute of [0, 30]) {
-          const result = await generateBlockWithValidation(hour, minute, songsByStation, stats);
+          const result = await generateBlockLine(hour, minute, songsByStation, stats);
           lines.push(result.line);
           allLogs.push(...result.logs);
           
@@ -618,6 +623,8 @@ export function useAutoGradeBuilder() {
           lastBuildTime: new Date(),
           lastSavedFile: filename,
           blocksGenerated: prev.blocksGenerated + 48,
+          fullDayProgress: 48,
+          fullDayTotal: 0,
           skippedSongs: stats.skipped,
           substitutedSongs: stats.substituted,
           missingSongs: stats.missing,
@@ -635,7 +642,7 @@ export function useAutoGradeBuilder() {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       logSystemError('GRADE', 'error', 'Erro na geração da grade completa', errorMessage);
       
-      setState(prev => ({ ...prev, isBuilding: false, error: errorMessage }));
+      setState(prev => ({ ...prev, isBuilding: false, error: errorMessage, fullDayTotal: 0 }));
       toast({
         title: '❌ Erro na Grade',
         description: errorMessage,
@@ -643,11 +650,11 @@ export function useAutoGradeBuilder() {
       });
     }
   }, [
-    clearUsedSongs, fetchRecentSongs, generateBlockWithValidation,
+    clearUsedSongs, fetchRecentSongs, generateBlockLine,
     getDayCode, config.gradeFolder, addGradeHistory, sequence.length, toast, addBlockLogs
   ]);
 
-  // Build current and next blocks (incremental update)
+  // Build current and next blocks (incremental update to existing file)
   const buildGrade = useCallback(async () => {
     if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
       console.log('[AUTO-GRADE] Not in Electron mode, skipping');
@@ -661,28 +668,30 @@ export function useAutoGradeBuilder() {
       const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
 
+      // Skip if we already built this block recently
       if (lastBuildRef.current === currentTimeKey) {
         setState(prev => ({ ...prev, isBuilding: false }));
         return;
       }
 
-      console.log(`[AUTO-GRADE] Building blocks: ${currentTimeKey}, ${nextTimeKey}`);
+      console.log(`[AUTO-GRADE] 🔄 Updating blocks: ${currentTimeKey}, ${nextTimeKey}`);
 
       const songsByStation = await fetchRecentSongs();
       const stats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: Parameters<typeof addBlockLogs>[0] = [];
 
-      const currentResult = await generateBlockWithValidation(
+      // Generate current and next blocks
+      const currentResult = await generateBlockLine(
         blocks.current.hour, blocks.current.minute, songsByStation, stats
       );
-      const nextResult = await generateBlockWithValidation(
+      const nextResult = await generateBlockLine(
         blocks.next.hour, blocks.next.minute, songsByStation, stats
       );
       
       allLogs.push(...currentResult.logs, ...nextResult.logs);
       addBlockLogs(allLogs);
 
-      // Read existing and update
+      // Read existing file and update only the relevant lines
       const dayCode = getDayCode();
       const filename = `${dayCode}.txt`;
       let existingContent = '';
@@ -699,16 +708,22 @@ export function useAutoGradeBuilder() {
         console.log('[AUTO-GRADE] No existing file, creating new');
       }
 
+      // Parse existing lines into a map by time
       const lineMap = new Map<string, string>();
       existingContent.split('\n').filter(l => l.trim()).forEach(line => {
         const match = line.match(/^(\d{2}:\d{2})/);
         if (match) lineMap.set(match[1], line);
       });
 
+      // Update the lines for current and next blocks
       lineMap.set(currentTimeKey, currentResult.line);
       lineMap.set(nextTimeKey, nextResult.line);
 
-      const sortedContent = Array.from(lineMap.keys()).sort().map(t => lineMap.get(t)).join('\n');
+      // Sort all lines by time and join
+      const sortedContent = Array.from(lineMap.keys())
+        .sort()
+        .map(t => lineMap.get(t))
+        .join('\n');
 
       const result = await window.electronAPI.saveGradeFile({
         folder: config.gradeFolder,
@@ -744,7 +759,7 @@ export function useAutoGradeBuilder() {
 
         toast({
           title: '✅ Grade Atualizada',
-          description: `Blocos ${currentTimeKey} e ${nextTimeKey} salvos`,
+          description: `Blocos ${currentTimeKey} e ${nextTimeKey} atualizados em ${filename}`,
         });
       } else {
         throw new Error(result.error || 'Erro ao salvar');
@@ -760,61 +775,78 @@ export function useAutoGradeBuilder() {
       });
     }
   }, [
-    getBlockTimes, fetchRecentSongs, generateBlockWithValidation,
+    getBlockTimes, fetchRecentSongs, generateBlockLine,
     getDayCode, config.gradeFolder, addGradeHistory, sequence.length,
     getProgramForHour, toast, addBlockLogs
   ]);
 
-  // Calculate seconds until next build
+  // Calculate seconds until next build based on minutesBeforeBlock setting
   const getSecondsUntilNextBuild = useCallback(() => {
     const now = new Date();
-    const safetyMargin = Math.min(config.safetyMarginMinutes || 7, 7);
+    const minutesBefore = state.minutesBeforeBlock;
     const currentMinute = now.getMinutes();
     const currentSecond = now.getSeconds();
 
-    const buildAt1 = 30 - safetyMargin;
-    const buildAt2 = 60 - safetyMargin;
+    // Blocks are at :00 and :30
+    // Build at :00 - minutesBefore and :30 - minutesBefore
+    const buildAt1 = 30 - minutesBefore; // e.g., 25 for 5 min before :30
+    const buildAt2 = 60 - minutesBefore; // e.g., 55 for 5 min before :00
 
     let targetMinute: number;
     if (currentMinute < buildAt1) {
       targetMinute = buildAt1;
+    } else if (currentMinute < 30) {
+      // Between buildAt1 and :30, next is buildAt2
+      targetMinute = buildAt2;
     } else if (currentMinute < buildAt2) {
       targetMinute = buildAt2;
     } else {
+      // After buildAt2, next cycle
       targetMinute = buildAt1 + 60;
     }
 
     const minutesUntil = targetMinute - currentMinute;
     return Math.max(0, (minutesUntil * 60) - currentSecond);
-  }, [config.safetyMarginMinutes]);
+  }, [state.minutesBeforeBlock]);
 
   // Toggle auto-generation
   const toggleAutoGeneration = useCallback(() => {
     setState(prev => ({ ...prev, isAutoEnabled: !prev.isAutoEnabled }));
   }, []);
 
-  // Auto-build effect
+  // Set minutes before block
+  const setMinutesBeforeBlock = useCallback((minutes: number) => {
+    const validMinutes = Math.max(1, Math.min(10, minutes));
+    setState(prev => ({ ...prev, minutesBeforeBlock: validMinutes }));
+  }, []);
+
+  // Auto-build effect - triggers based on minutesBeforeBlock setting
   useEffect(() => {
     if (!isElectronEnv || !state.isAutoEnabled) return;
 
     console.log('[AUTO-GRADE] 🚀 Starting automatic generation...');
+    console.log(`[AUTO-GRADE] Will build ${state.minutesBeforeBlock} minutes before each block`);
 
+    // Initial build after 2 seconds
     const initialBuild = setTimeout(() => buildGrade(), 2000);
 
+    // Check every 30 seconds if we should build
     buildIntervalRef.current = setInterval(() => {
       const now = new Date();
-      const safetyMargin = Math.min(config.safetyMarginMinutes || 7, 7);
+      const minutesBefore = state.minutesBeforeBlock;
       const currentMinute = now.getMinutes();
       const currentSecond = now.getSeconds();
 
-      const buildMinute1 = 30 - safetyMargin;
-      const buildMinute2 = 60 - safetyMargin;
+      // Build times: (30 - minutesBefore) and (60 - minutesBefore)
+      const buildMinute1 = 30 - minutesBefore; // e.g., 25 for 5 min before :30
+      const buildMinute2 = 60 - minutesBefore; // e.g., 55 for 5 min before :00
 
       const shouldBuild = 
         (currentMinute === buildMinute1 && currentSecond < 30) ||
-        (currentMinute === buildMinute2 % 60 && currentSecond < 30);
+        (currentMinute === (buildMinute2 % 60) && currentSecond < 30);
 
       if (shouldBuild) {
+        console.log(`[AUTO-GRADE] ⏰ Trigger build at ${currentMinute}:${currentSecond}`);
         buildGrade();
       }
     }, 30 * 1000);
@@ -823,9 +855,9 @@ export function useAutoGradeBuilder() {
       clearTimeout(initialBuild);
       if (buildIntervalRef.current) clearInterval(buildIntervalRef.current);
     };
-  }, [state.isAutoEnabled, buildGrade, config.safetyMarginMinutes]);
+  }, [state.isAutoEnabled, state.minutesBeforeBlock, buildGrade]);
 
-  // Update countdown every second
+  // Update countdown and block times every second
   useEffect(() => {
     const update = () => {
       const blocks = getBlockTimes();
@@ -850,6 +882,7 @@ export function useAutoGradeBuilder() {
     buildGrade,
     buildFullDayGrade,
     toggleAutoGeneration,
+    setMinutesBeforeBlock,
     clearUsedSongs,
     isElectron: isElectronEnv,
   };

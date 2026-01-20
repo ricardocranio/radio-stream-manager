@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace } from 'lucide-react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
@@ -265,9 +265,9 @@ export function DashboardView() {
                     <FileText className={`w-5 h-5 ${gradeBuilder.isAutoEnabled ? 'text-emerald-500' : 'text-muted-foreground'}`} />
                   )}
                 </div>
-                <div className="min-w-0">
-                  <p className="font-medium text-foreground flex items-center gap-2 flex-wrap">
-                    <span className="truncate">Geração Automática de Grade</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-foreground">Geração Automática de Grade</span>
                     <Switch 
                       checked={gradeBuilder.isAutoEnabled}
                       onCheckedChange={gradeBuilder.toggleAutoGeneration}
@@ -278,17 +278,47 @@ export function DashboardView() {
                         Automático
                       </Badge>
                     )}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Bloco Atual: <span className="font-mono text-emerald-400">{gradeBuilder.currentBlock}</span>
-                    {' → '}
-                    Próximo: <span className="font-mono text-amber-400">{gradeBuilder.nextBlock}</span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2">
+                    <p className="text-sm text-muted-foreground">
+                      Bloco Atual: <span className="font-mono text-emerald-400">{gradeBuilder.currentBlock}</span>
+                      {' → '}
+                      Próximo: <span className="font-mono text-amber-400">{gradeBuilder.nextBlock}</span>
+                    </p>
                     {gradeBuilder.isAutoEnabled && gradeBuilder.nextBuildIn > 0 && (
-                      <span className="ml-2 text-xs">
-                        (próx. em <span className="font-mono text-primary">{Math.floor(gradeBuilder.nextBuildIn / 60)}:{(gradeBuilder.nextBuildIn % 60).toString().padStart(2, '0')}</span>)
-                      </span>
+                      <Badge variant="outline" className="text-xs w-fit">
+                        <Clock className="w-3 h-3 mr-1" />
+                        Próxima em <span className="font-mono ml-1">{Math.floor(gradeBuilder.nextBuildIn / 60)}:{(gradeBuilder.nextBuildIn % 60).toString().padStart(2, '0')}</span>
+                      </Badge>
                     )}
-                  </p>
+                  </div>
+                </div>
+                {/* Minutes Before Block Config */}
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 border border-border">
+                  <Settings2 className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">Atualizar</span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => gradeBuilder.setMinutesBeforeBlock(gradeBuilder.minutesBeforeBlock - 1)}
+                      disabled={gradeBuilder.minutesBeforeBlock <= 1}
+                    >
+                      <Minus className="w-3 h-3" />
+                    </Button>
+                    <span className="font-mono text-sm w-5 text-center text-primary font-bold">{gradeBuilder.minutesBeforeBlock}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => gradeBuilder.setMinutesBeforeBlock(gradeBuilder.minutesBeforeBlock + 1)}
+                      disabled={gradeBuilder.minutesBeforeBlock >= 10}
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  </div>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">min antes</span>
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
