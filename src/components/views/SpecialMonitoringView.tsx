@@ -342,9 +342,9 @@ ${exportLines.join('\n')}`;
   const uniqueStations = [...new Set(capturedSongs.map(s => s.station_name))];
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
+    <div className="p-4 md:p-6 space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-3">
             <Calendar className="w-7 h-7 text-cyan-500" />
@@ -354,12 +354,12 @@ ${exportLines.join('\n')}`;
             Configure horários específicos para criar bancos de músicas diferenciados
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"
+            size="sm"
             onClick={async () => {
               setIsSyncing(true);
-              // Collect all schedules for sync
               const allSchedulesForSync = allSchedules.map(s => ({
                 id: s.id,
                 stationName: s.stationName,
@@ -376,31 +376,34 @@ ${exportLines.join('\n')}`;
               setIsSyncing(false);
             }}
             disabled={isSyncing || allSchedules.length === 0}
-            className="border-cyan-500/30 text-cyan-500 hover:bg-cyan-500/10"
+            className="border-cyan-500/30 text-cyan-500 hover:bg-cyan-500/10 gap-1.5"
           >
             {isSyncing ? (
-              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              <Cloud className="w-4 h-4 mr-2" />
+              <Cloud className="w-3.5 h-3.5" />
             )}
-            Sincronizar Cloud
+            <span className="hidden sm:inline">Sincronizar</span>
           </Button>
           <Button
             variant="secondary"
+            size="sm"
             onClick={fetchCapturedSongs}
             disabled={isLoading}
+            className="gap-1.5"
           >
-            <Eye className="w-4 h-4 mr-2" />
-            Atualizar
+            <Eye className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Atualizar</span>
           </Button>
           <Button
             variant="default"
+            size="sm"
             onClick={handleExportSongs}
             disabled={isExporting || filteredSongs.length === 0}
-            className="bg-cyan-600 hover:bg-cyan-700"
+            className="bg-cyan-600 hover:bg-cyan-700 gap-1.5"
           >
-            <Download className="w-4 h-4 mr-2" />
-            Exportar Lista
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Exportar</span>
           </Button>
         </div>
       </div>

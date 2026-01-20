@@ -255,34 +255,34 @@ export function RankingView() {
   const allStyles = ['SERTANEJO', 'PAGODE', 'POP/VARIADO', 'DANCE', 'AGRONEJO'];
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+    <div className="p-4 md:p-6 space-y-6 animate-fade-in">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Ranking TOP50</h2>
           <p className="text-muted-foreground">Curadoria através do monitoramento das rádios</p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Show badge indicating data source */}
           {rankingSongs.length === 0 ? (
-            <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">
-              Exibindo dados demo
+            <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground text-xs">
+              Dados demo
             </Badge>
           ) : (
-            <Badge variant="outline" className="border-success/50 text-success">
-              {rankingSongs.length} músicas reais
+            <Badge variant="outline" className="border-success/50 text-success text-xs">
+              {rankingSongs.length} músicas
             </Badge>
           )}
           
-          <Button variant="outline" className="gap-2 border-primary/50 text-primary hover:bg-primary/10" onClick={handleExportJSON}>
-            <FileJson className="w-4 h-4" />
-            Exportar JSON
+          <Button variant="outline" size="sm" className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10" onClick={handleExportJSON}>
+            <FileJson className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Exportar</span>
           </Button>
           
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" className="gap-2 border-amber-500/50 text-amber-500 hover:bg-amber-500/10">
-                <RotateCcw className="w-4 h-4" />
-                Zerar Contagem
+              <Button variant="outline" size="sm" className="gap-1.5 border-amber-500/50 text-amber-500 hover:bg-amber-500/10">
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Zerar</span>
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -314,16 +314,17 @@ export function RankingView() {
           {rankingSongs.length === 0 && (
             <Button 
               variant="outline" 
-              className="gap-2 border-primary/50 text-primary hover:bg-primary/10"
+              size="sm"
+              className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10"
               onClick={handleLoadDemoData}
             >
-              <Music className="w-4 h-4" />
-              Carregar Demo
+              <Music className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Demo</span>
             </Button>
           )}
           
-          <Badge className="bg-primary/20 text-primary border border-primary/30 px-4 py-2">
-            <TrendingUp className="w-4 h-4 mr-2" />
+          <Badge className="bg-primary/20 text-primary border border-primary/30 px-3 py-1.5 text-xs">
+            <TrendingUp className="w-3.5 h-3.5 mr-1.5" />
             {rankingSongs.length > 0 ? `${rankingSongs.length} músicas` : 'Sem dados'}
           </Badge>
         </div>
