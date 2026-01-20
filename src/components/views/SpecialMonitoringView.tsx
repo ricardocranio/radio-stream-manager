@@ -12,7 +12,7 @@ import { MonitoringSchedule, RadioStation, WeekDay } from '@/types/radio';
 import { supabase } from '@/integrations/supabase/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { syncSpecialMonitoringToSupabase, useSyncSpecialMonitoring } from '@/hooks/useSyncSpecialMonitoring';
+import { useSyncSpecialMonitoring, addSpecialMonitoringToCloud, deleteSpecialMonitoringFromCloud } from '@/hooks/useSyncSpecialMonitoring';
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import {
   Select,
   SelectContent,
@@ -315,25 +326,24 @@ export function SpecialMonitoringView() {
   };
 
   // Remove schedule directly from Cloud
-  const handleRemoveCloudSchedule = async (scheduleId: string) => {
+  const handleRemoveCloudSchedule = async (scheduleId: string, stationName?: string) => {
     try {
-      const { error } = await supabase
-        .from('special_monitoring')
-        .delete()
-        .eq('id', scheduleId);
+      const result = await deleteSpecialMonitoringFromCloud(scheduleId);
 
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error || 'Erro desconhecido');
+      }
 
       setCloudSchedules(prev => prev.filter(s => s.id !== scheduleId));
       toast({
-        title: 'Horário removido',
-        description: 'Configuração de monitoramento atualizada.',
+        title: '🗑️ Horário removido',
+        description: stationName ? `Monitoramento de "${stationName}" foi removido.` : 'Configuração de monitoramento atualizada.',
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error removing schedule:', error);
       toast({
         title: 'Erro ao remover',
-        description: 'Não foi possível remover o horário.',
+        description: error.message || 'Não foi possível remover o horário.',
         variant: 'destructive',
       });
     }
@@ -407,32 +417,32 @@ export function SpecialMonitoringView() {
       }
 
       try {
-        const { error } = await supabase
-          .from('special_monitoring')
-          .insert({
-            station_name: newSchedule.customStationName,
-            scrape_url: newSchedule.customStationUrl,
-            start_hour: newSchedule.hour,
-            start_minute: newSchedule.minute,
-            end_hour: newSchedule.endHour,
-            end_minute: newSchedule.endMinute,
-            week_days: newSchedule.weekDays,
-            label: newSchedule.label || null,
-            enabled: true,
-          });
+        const result = await addSpecialMonitoringToCloud({
+          stationName: newSchedule.customStationName,
+          scrapeUrl: newSchedule.customStationUrl,
+          startHour: newSchedule.hour,
+          startMinute: newSchedule.minute,
+          endHour: newSchedule.endHour,
+          endMinute: newSchedule.endMinute,
+          weekDays: newSchedule.weekDays,
+          label: newSchedule.label || undefined,
+          enabled: true,
+        });
 
-        if (error) throw error;
+        if (!result.success) {
+          throw new Error(result.error || 'Erro desconhecido');
+        }
 
         await fetchCloudSchedules();
         toast({
           title: '⏰ Horário adicionado',
           description: `${newSchedule.customStationName} será monitorada às ${newSchedule.hour}:${newSchedule.minute.toString().padStart(2, '0')}`,
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error adding schedule:', error);
         toast({
           title: 'Erro ao adicionar',
-          description: 'Não foi possível adicionar o horário.',
+          description: error.message || 'Não foi possível adicionar o horário.',
           variant: 'destructive',
         });
       }
@@ -981,15 +991,37 @@ ${exportLines.join('\n')}`;
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                              onClick={() => handleRemoveCloudSchedule(schedule.id)}
-                              title="Remover"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                  title="Remover"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Remover monitoramento?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Deseja remover o monitoramento de <strong>{schedule.station_name}</strong> ({schedule.start_hour.toString().padStart(2, '0')}:{schedule.start_minute.toString().padStart(2, '0')} - {schedule.end_hour.toString().padStart(2, '0')}:{schedule.end_minute.toString().padStart(2, '0')})?
+                                    <br /><br />
+                                    Esta ação não pode ser desfeita.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleRemoveCloudSchedule(schedule.id, schedule.station_name)}
+                                    className="bg-destructive hover:bg-destructive/90"
+                                  >
+                                    Remover
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </div>
                       </div>

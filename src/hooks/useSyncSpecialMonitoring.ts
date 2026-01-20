@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 // Type for WeekDay (same as in radio.ts)
 type WeekDay = 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab';
 
-// Type for special_monitoring table (not yet in generated types)
+// Type for special_monitoring table
 interface SpecialMonitoringRow {
   id: string;
   station_name: string;
@@ -23,157 +23,130 @@ interface SpecialMonitoringRow {
 }
 
 /**
- * Hook that syncs local special monitoring schedules to Supabase
+ * Hook that loads special monitoring schedules from Supabase
+ * NOTE: This hook NO LONGER syncs local data TO Supabase
+ * All saves/updates/deletes are now done directly in SpecialMonitoringView
  */
 export function useSyncSpecialMonitoring() {
-  const stations = useRadioStore((state) => state.stations);
-
-  const syncSpecialMonitoring = useCallback(async () => {
-    try {
-      // Get all stations with monitoring schedules
-      const stationsWithSchedules = stations.filter(
-        s => s.monitoringSchedules && s.monitoringSchedules.length > 0
-      );
-
-      // Get current schedules from Supabase (using any to bypass type check for new table)
-      const { data: supabaseSchedules, error: fetchError } = await (supabase as any)
-        .from('special_monitoring')
-        .select('*') as { data: SpecialMonitoringRow[] | null; error: any };
-
-      if (fetchError) {
-        console.error('Error fetching special monitoring:', fetchError);
-        return;
-      }
-
-      const existingIds = new Set((supabaseSchedules || []).map(s => s.id));
-
-      // Collect all local schedules
-      const allLocalSchedules: Array<{
-        stationName: string;
-        scrapeUrl: string;
-        schedule: {
-          id: string;
-          hour: number;
-          minute: number;
-          endHour: number;
-          endMinute: number;
-          enabled: boolean;
-          label?: string;
-          customUrl?: string;
-          weekDays?: WeekDay[];
-        };
-      }> = [];
-
-      for (const station of stationsWithSchedules) {
-        for (const schedule of station.monitoringSchedules || []) {
-          allLocalSchedules.push({
-            stationName: station.name,
-            scrapeUrl: schedule.customUrl || station.scrapeUrl || '',
-            schedule,
-          });
-        }
-      }
-
-      // Upsert each schedule
-      for (const item of allLocalSchedules) {
-        const scheduleData = {
-          id: item.schedule.id,
-          station_name: item.stationName,
-          scrape_url: item.scrapeUrl,
-          start_hour: item.schedule.hour,
-          start_minute: item.schedule.minute,
-          end_hour: item.schedule.endHour,
-          end_minute: item.schedule.endMinute,
-          week_days: item.schedule.weekDays || ['seg', 'ter', 'qua', 'qui', 'sex'],
-          label: item.schedule.label || null,
-          enabled: item.schedule.enabled,
-        };
-
-        const { error } = await (supabase as any)
-          .from('special_monitoring')
-          .upsert(scheduleData, { onConflict: 'id' });
-
-        if (error) {
-          console.error('Error upserting special monitoring:', error);
-        }
-      }
-
-      // Remove schedules that no longer exist locally
-      const localIds = new Set(allLocalSchedules.map(s => s.schedule.id));
-      for (const existingId of existingIds) {
-        if (!localIds.has(existingId)) {
-          await (supabase as any)
-            .from('special_monitoring')
-            .delete()
-            .eq('id', existingId);
-        }
-      }
-
-      console.log('✅ Special monitoring synced to Supabase');
-    } catch (error) {
-      console.error('Error syncing special monitoring:', error);
-    }
-  }, [stations]);
-
-  // Sync on mount and when stations change
-  useEffect(() => {
-    syncSpecialMonitoring();
-  }, [syncSpecialMonitoring]);
-
-  return { syncSpecialMonitoring };
+  // This hook is now a no-op to prevent conflicts with direct Cloud saves
+  // The SpecialMonitoringView handles all CRUD operations directly with Supabase
+  return { syncSpecialMonitoring: async () => {} };
 }
 
 /**
- * Manual sync function for special monitoring
+ * Fetch all special monitoring schedules from Cloud
  */
-export async function syncSpecialMonitoringToSupabase(
-  schedules: Array<{
-    id: string;
-    stationName: string;
-    scrapeUrl: string;
-    hour: number;
-    minute: number;
-    endHour: number;
-    endMinute: number;
-    weekDays: WeekDay[];
-    label?: string;
-    enabled: boolean;
-  }>
-) {
+export async function fetchSpecialMonitoringFromCloud(): Promise<SpecialMonitoringRow[]> {
   try {
-    // Clear existing and insert new
-    await (supabase as any)
+    const { data, error } = await supabase
+      .from('special_monitoring')
+      .select('*')
+      .order('start_hour', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching special monitoring:', error);
+    return [];
+  }
+}
+
+/**
+ * Add a new special monitoring schedule to Cloud
+ */
+export async function addSpecialMonitoringToCloud(schedule: {
+  stationName: string;
+  scrapeUrl: string;
+  startHour: number;
+  startMinute: number;
+  endHour: number;
+  endMinute: number;
+  weekDays: string[];
+  label?: string;
+  enabled?: boolean;
+}): Promise<{ success: boolean; id?: string; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('special_monitoring')
+      .insert({
+        station_name: schedule.stationName,
+        scrape_url: schedule.scrapeUrl,
+        start_hour: schedule.startHour,
+        start_minute: schedule.startMinute,
+        end_hour: schedule.endHour,
+        end_minute: schedule.endMinute,
+        week_days: schedule.weekDays,
+        label: schedule.label || null,
+        enabled: schedule.enabled ?? true,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, id: data?.id };
+  } catch (error: any) {
+    console.error('Error adding special monitoring:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Update an existing special monitoring schedule in Cloud
+ */
+export async function updateSpecialMonitoringInCloud(
+  id: string,
+  updates: {
+    stationName?: string;
+    scrapeUrl?: string;
+    startHour?: number;
+    startMinute?: number;
+    endHour?: number;
+    endMinute?: number;
+    weekDays?: string[];
+    label?: string | null;
+    enabled?: boolean;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const updateData: Record<string, any> = {};
+    if (updates.stationName !== undefined) updateData.station_name = updates.stationName;
+    if (updates.scrapeUrl !== undefined) updateData.scrape_url = updates.scrapeUrl;
+    if (updates.startHour !== undefined) updateData.start_hour = updates.startHour;
+    if (updates.startMinute !== undefined) updateData.start_minute = updates.startMinute;
+    if (updates.endHour !== undefined) updateData.end_hour = updates.endHour;
+    if (updates.endMinute !== undefined) updateData.end_minute = updates.endMinute;
+    if (updates.weekDays !== undefined) updateData.week_days = updates.weekDays;
+    if (updates.label !== undefined) updateData.label = updates.label;
+    if (updates.enabled !== undefined) updateData.enabled = updates.enabled;
+
+    const { error } = await supabase
+      .from('special_monitoring')
+      .update(updateData)
+      .eq('id', id);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error updating special monitoring:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Delete a special monitoring schedule from Cloud
+ */
+export async function deleteSpecialMonitoringFromCloud(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
       .from('special_monitoring')
       .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
+      .eq('id', id);
 
-    for (const schedule of schedules) {
-      const { error } = await (supabase as any)
-        .from('special_monitoring')
-        .insert({
-          id: schedule.id,
-          station_name: schedule.stationName,
-          scrape_url: schedule.scrapeUrl,
-          start_hour: schedule.hour,
-          start_minute: schedule.minute,
-          end_hour: schedule.endHour,
-          end_minute: schedule.endMinute,
-          week_days: schedule.weekDays,
-          label: schedule.label || null,
-          enabled: schedule.enabled,
-        });
-
-      if (error) {
-        console.error('Error inserting special monitoring:', error);
-      }
-    }
-
-    toast.success('Monitoramento especial sincronizado!');
-    return true;
-  } catch (error) {
-    console.error('Error syncing special monitoring:', error);
-    toast.error('Erro ao sincronizar monitoramento especial');
-    return false;
+    if (error) throw error;
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error deleting special monitoring:', error);
+    return { success: false, error: error.message };
   }
 }
 
