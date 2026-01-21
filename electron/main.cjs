@@ -850,19 +850,35 @@ async function searchDeezerTrack(artist, title) {
   });
 }
 
-// Save ARL to deemix config
+// Save ARL to deemix config (works on Windows and Linux/Mac)
 function saveArlToDeemixConfig(arl) {
-  const deemixConfigDir = path.join(app.getPath('home'), '.config', 'deemix');
+  // On Windows, deemix config is in AppData/Roaming/deemix
+  // On Linux/Mac, it's in ~/.config/deemix
+  const isWindows = process.platform === 'win32';
+  let deemixConfigDir;
+  
+  if (isWindows) {
+    // Primary: AppData/Roaming/deemix (where deemix actually looks)
+    deemixConfigDir = path.join(app.getPath('appData'), 'deemix');
+  } else {
+    // Linux/Mac: ~/.config/deemix
+    deemixConfigDir = path.join(app.getPath('home'), '.config', 'deemix');
+  }
+  
   const arlFile = path.join(deemixConfigDir, '.arl');
+  
+  console.log(`[DEEMIX] Saving ARL to: ${arlFile}`);
   
   try {
     if (!fs.existsSync(deemixConfigDir)) {
       fs.mkdirSync(deemixConfigDir, { recursive: true });
+      console.log(`[DEEMIX] Created config dir: ${deemixConfigDir}`);
     }
     fs.writeFileSync(arlFile, arl, 'utf8');
+    console.log(`[DEEMIX] ARL saved successfully`);
     return true;
   } catch (error) {
-    console.error('Failed to save ARL:', error);
+    console.error('[DEEMIX] Failed to save ARL:', error);
     return false;
   }
 }
@@ -871,28 +887,74 @@ function saveArlToDeemixConfig(arl) {
 ipcMain.handle('download-from-deezer', async (event, params) => {
   const { artist, title, arl, outputFolder, quality } = params;
   
+  console.log(`[DEEMIX] === Starting download ===`);
+  console.log(`[DEEMIX] Track: ${artist} - ${title}`);
+  console.log(`[DEEMIX] Output: ${outputFolder}`);
+  console.log(`[DEEMIX] Quality: ${quality}`);
+  
   try {
     // First check if deemix is installed
     const deemixInstalled = await checkDeemixInstalled();
     
     if (!deemixInstalled) {
+      console.log(`[DEEMIX] ERROR: deemix not installed`);
       return { 
         success: false, 
         error: 'deemix não está instalado. Instale com: pip install deemix',
         needsInstall: true
       };
     }
+    
+    console.log(`[DEEMIX] Using command: ${deemixCommand}`);
 
     // Ensure output folder exists
     if (!fs.existsSync(outputFolder)) {
-      fs.mkdirSync(outputFolder, { recursive: true });
+      console.log(`[DEEMIX] Creating output folder: ${outputFolder}`);
+      try {
+        fs.mkdirSync(outputFolder, { recursive: true });
+      } catch (mkdirError) {
+        console.error(`[DEEMIX] Failed to create folder: ${mkdirError.message}`);
+        return {
+          success: false,
+          error: `Não foi possível criar a pasta: ${outputFolder}. Verifique as permissões.`
+        };
+      }
+    }
+
+    // Verify folder is writable
+    try {
+      const testFile = path.join(outputFolder, '.deemix_test');
+      fs.writeFileSync(testFile, 'test', 'utf8');
+      fs.unlinkSync(testFile);
+      console.log(`[DEEMIX] Output folder is writable`);
+    } catch (writeError) {
+      console.error(`[DEEMIX] Folder not writable: ${writeError.message}`);
+      return {
+        success: false,
+        error: `Pasta não tem permissão de escrita: ${outputFolder}`
+      };
     }
 
     // Save ARL to deemix config
-    saveArlToDeemixConfig(arl);
+    const arlSaved = saveArlToDeemixConfig(arl);
+    if (!arlSaved) {
+      console.log(`[DEEMIX] Warning: Failed to save ARL to config`);
+    }
 
     // Search for track on Deezer API to get the URL
-    const track = await searchDeezerTrack(artist, title);
+    console.log(`[DEEMIX] Searching Deezer API...`);
+    let track;
+    try {
+      track = await searchDeezerTrack(artist, title);
+      console.log(`[DEEMIX] Found: ${track.artist.name} - ${track.title} (ID: ${track.id})`);
+    } catch (searchError) {
+      console.error(`[DEEMIX] Search failed: ${searchError.message}`);
+      return {
+        success: false,
+        error: `Música não encontrada no Deezer: ${artist} - ${title}`
+      };
+    }
+    
     const deezerUrl = track.link || `https://www.deezer.com/track/${track.id}`;
     
     // Map quality setting to deemix format
@@ -908,16 +970,29 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
       // Build the full command string
       const fullCommand = `${deemixCommand} "${deezerUrl}" -p "${outputFolder}" -b ${deemixQuality}`;
 
-      console.log(`[DEEMIX] Running: ${fullCommand}`);
-      console.log(`[DEEMIX] Output folder: ${outputFolder}`);
+      console.log(`[DEEMIX] Executing: ${fullCommand}`);
       
       exec(fullCommand, { timeout: 120000, maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+        console.log(`[DEEMIX] STDOUT: ${stdout}`);
+        console.log(`[DEEMIX] STDERR: ${stderr}`);
+        
         if (error) {
-          console.error('[DEEMIX] Error:', error);
-          console.error('[DEEMIX] Stderr:', stderr);
+          console.error('[DEEMIX] Exec error:', error.message);
+          
+          // Check for common error patterns
+          let errorMessage = stderr || error.message;
+          
+          if (errorMessage.includes('arl') || errorMessage.includes('ARL') || errorMessage.includes('login')) {
+            errorMessage = 'ARL inválida ou expirada. Obtenha uma nova ARL nos cookies do Deezer.';
+          } else if (errorMessage.includes('premium') || errorMessage.includes('Premium')) {
+            errorMessage = 'Esta música requer conta Premium do Deezer.';
+          } else if (errorMessage.includes('not found') || errorMessage.includes('não encontr')) {
+            errorMessage = 'Música não encontrada no Deezer.';
+          }
+          
           resolve({ 
             success: false, 
-            error: stderr || error.message,
+            error: errorMessage,
             output: stdout + stderr
           });
           return;
