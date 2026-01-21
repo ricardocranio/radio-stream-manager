@@ -61,9 +61,9 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
   const showToastNotification = useCallback((title: string, description: string, variant?: 'default' | 'destructive') => {
     if (!enableToastNotifications) return;
     
-    // Rate limit toasts to max 1 per 3 seconds
+    // Rate limit toasts to max 1 per 10 seconds (increased from 3s)
     const now = Date.now();
-    if (now - lastToastRef.current < 3000) return;
+    if (now - lastToastRef.current < 10000) return;
     lastToastRef.current = now;
     
     toast({ title, description, variant });
