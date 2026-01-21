@@ -124,9 +124,16 @@ export function SequenceView() {
 
   const saveEditFileName = () => {
     if (editingPosition !== null) {
-      setLocalSequence((prev) =>
-        prev.map((item) => (item.position === editingPosition ? { ...item, customFileName: editingFileName } : item))
+      const newSequence = localSequence.map((item) => 
+        item.position === editingPosition ? { ...item, customFileName: editingFileName } : item
       );
+      setLocalSequence(newSequence);
+      // Auto-save to store
+      setSequence(newSequence);
+      toast({
+        title: 'Nome do arquivo salvo',
+        description: `Posição ${editingPosition}: ${editingFileName}`,
+      });
       setEditingPosition(null);
       setEditingFileName('');
     }
