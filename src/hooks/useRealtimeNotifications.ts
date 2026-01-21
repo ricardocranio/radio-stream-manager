@@ -10,11 +10,15 @@ interface NotificationOptions {
   onRankingUpdate?: (count: number) => void;
 }
 
+// Singleton to prevent duplicate subscriptions across component mounts
+let notificationChannelActive = false;
+
 export function useRealtimeNotifications(options: NotificationOptions = {}) {
   const { toast } = useToast();
   const { addOrUpdateRankingSong } = useRadioStore();
   const lastSongIdRef = useRef<string | null>(null);
   const notificationPermissionRef = useRef<NotificationPermission>('default');
+  const mountedRef = useRef(true);
 
   const {
     enableBrowserNotifications = true,
@@ -51,22 +55,36 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
         silent: false,
       });
     } catch (e) {
-      console.log('Browser notification failed:', e);
+      // Silent fail for notifications
     }
   }, [enableBrowserNotifications]);
 
-  // Show toast notification
+  // Show toast notification - debounced to prevent spam
+  const lastToastRef = useRef<number>(0);
   const showToastNotification = useCallback((title: string, description: string, variant?: 'default' | 'destructive') => {
     if (!enableToastNotifications) return;
+    
+    // Rate limit toasts to max 1 per 3 seconds
+    const now = Date.now();
+    if (now - lastToastRef.current < 3000) return;
+    lastToastRef.current = now;
+    
     toast({ title, description, variant });
   }, [enableToastNotifications, toast]);
 
-  // Subscribe to realtime changes
+  // Subscribe to realtime changes - with singleton pattern
   useEffect(() => {
-    console.log('[REALTIME] Setting up Supabase realtime subscription...');
+    mountedRef.current = true;
+    
+    // Skip if channel already active from another instance
+    if (notificationChannelActive) {
+      return;
+    }
+    
+    notificationChannelActive = true;
 
     const channel = supabase
-      .channel('scraped_songs_realtime')
+      .channel('scraped_songs_notifications')
       .on(
         'postgres_changes',
         {
@@ -75,6 +93,8 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
           table: 'scraped_songs',
         },
         (payload) => {
+          if (!mountedRef.current) return;
+          
           const newSong = payload.new as {
             id: string;
             title: string;
@@ -87,16 +107,14 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
           if (lastSongIdRef.current === newSong.id) return;
           lastSongIdRef.current = newSong.id;
 
-          console.log('[REALTIME] New song captured:', newSong);
-
           // Callback
           onNewSong?.(newSong);
 
-          // Show notifications
+          // Show notifications only for now_playing songs
           if (newSong.is_now_playing) {
             showToastNotification(
-              '🎵 Nova música capturada!',
-              `${newSong.artist} - ${newSong.title} (${newSong.station_name})`
+              '🎵 Nova música!',
+              `${newSong.artist} - ${newSong.title}`
             );
 
             showBrowserNotification(
@@ -118,12 +136,11 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
           onRankingUpdate?.(1);
         }
       )
-      .subscribe((status) => {
-        console.log('[REALTIME] Subscription status:', status);
-      });
+      .subscribe();
 
     return () => {
-      console.log('[REALTIME] Cleaning up subscription...');
+      mountedRef.current = false;
+      notificationChannelActive = false;
       supabase.removeChannel(channel);
     };
   }, [showToastNotification, showBrowserNotification, addOrUpdateRankingSong, onNewSong, onRankingUpdate]);
