@@ -21,6 +21,8 @@ export interface FixedContent {
   enabled: boolean;
   // TOP50 specific config
   top50Count?: number; // How many songs from TOP50 to include
+  // Position in block: 'start' | 'middle' | 'end' | number (1-10 for specific position)
+  position?: 'start' | 'middle' | 'end' | number;
 }
 
 export interface BlockSong {
