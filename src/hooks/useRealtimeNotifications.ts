@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useId } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRadioStore } from '@/store/radioStore';
 import { realtimeManager } from '@/lib/realtimeManager';
+import { rankingBatcher } from '@/lib/rankingBatcher';
 
 interface NotificationOptions {
   enableBrowserNotifications?: boolean;
@@ -12,10 +13,11 @@ interface NotificationOptions {
 
 export function useRealtimeNotifications(options: NotificationOptions = {}) {
   const { toast } = useToast();
-  const { addOrUpdateRankingSong } = useRadioStore();
+  const { applyRankingBatch } = useRadioStore();
   const lastSongIdRef = useRef<string | null>(null);
   const notificationPermissionRef = useRef<NotificationPermission>('default');
   const subscriberId = useId();
+  const batcherInitializedRef = useRef(false);
 
   const {
     enableBrowserNotifications = true,
@@ -23,6 +25,23 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
     onNewSong,
     onRankingUpdate,
   } = options;
+
+  // Initialize ranking batcher once
+  useEffect(() => {
+    if (batcherInitializedRef.current) return;
+    batcherInitializedRef.current = true;
+    
+    rankingBatcher.init((updates) => {
+      if (updates.length > 0) {
+        applyRankingBatch(updates);
+      }
+    });
+
+    return () => {
+      // Flush on unmount
+      rankingBatcher.forceFlush();
+    };
+  }, [applyRankingBatch]);
 
   // Request browser notification permission
   useEffect(() => {
@@ -56,7 +75,7 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
     }
   }, [enableBrowserNotifications]);
 
-  // Show toast notification - debounced to prevent spam
+  // Show toast notification - heavily debounced to prevent spam
   const lastToastRef = useRef<number>(0);
   const showToastNotification = useCallback((title: string, description: string, variant?: 'default' | 'destructive') => {
     if (!enableToastNotifications) return;
@@ -90,20 +109,20 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
         // Callback
         onNewSong?.(newSong);
 
-        // Show notifications only for now_playing songs
+        // Show notifications only for now_playing songs (reduced frequency)
         if (newSong.is_now_playing) {
-          showToastNotification(
-            '🎵 Nova música!',
-            `${newSong.artist} - ${newSong.title}`
-          );
-
           showBrowserNotification(
             '🎵 Nova música!',
             `${newSong.artist} - ${newSong.title}\n📻 ${newSong.station_name}`
           );
+          // Toast only for now_playing, already rate-limited
+          showToastNotification(
+            '🎵 Nova música!',
+            `${newSong.artist} - ${newSong.title}`
+          );
         }
 
-        // Auto-add to ranking
+        // Queue ranking update (batched, not immediate)
         let style = 'POP/VARIADO';
         const stationLower = newSong.station_name.toLowerCase();
         if (stationLower.includes('bh') || stationLower.includes('sertanejo') || stationLower.includes('clube')) {
@@ -112,13 +131,14 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
           style = 'PAGODE';
         }
 
-        addOrUpdateRankingSong(newSong.title, newSong.artist, style);
+        // Use batcher instead of direct update
+        rankingBatcher.queueUpdate(newSong.title, newSong.artist, style);
         onRankingUpdate?.(1);
       }
     );
 
     return unsubscribe;
-  }, [subscriberId, showToastNotification, showBrowserNotification, addOrUpdateRankingSong, onNewSong, onRankingUpdate]);
+  }, [subscriberId, showToastNotification, showBrowserNotification, onNewSong, onRankingUpdate]);
 
   // Request notification permission manually
   const requestPermission = useCallback(async () => {
