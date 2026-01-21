@@ -76,6 +76,7 @@ export function FixedContentView() {
     timeSlots: [],
     enabled: true,
     top50Count: 5,
+    position: 'start',
   });
   const [newTimeSlot, setNewTimeSlot] = useState({ hour: 12, minute: 0 });
 
@@ -117,6 +118,7 @@ export function FixedContentView() {
         timeSlots: newContent.timeSlots || [],
         enabled: true,
         top50Count: newContent.type === 'top50' ? (newContent.top50Count || 5) : undefined,
+        position: newContent.position || 'start',
       };
       addFixedContent(content);
       setShowAddDialog(false);
@@ -128,6 +130,7 @@ export function FixedContentView() {
         timeSlots: [],
         enabled: true,
         top50Count: 5,
+        position: 'start',
       });
       toast({ title: 'Conteúdo adicionado', description: `${content.name} foi criado.` });
     }
@@ -265,6 +268,42 @@ export function FixedContentView() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              {/* Position selector */}
+              <div>
+                <Label>Posição no Bloco</Label>
+                <Select
+                  value={typeof newContent.position === 'number' ? newContent.position.toString() : (newContent.position || 'start')}
+                  onValueChange={(value) => {
+                    const numValue = parseInt(value);
+                    setNewContent({ 
+                      ...newContent, 
+                      position: isNaN(numValue) ? value as 'start' | 'middle' | 'end' : numValue 
+                    });
+                  }}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background border border-border z-50">
+                    <SelectItem value="start">🔼 Início do bloco</SelectItem>
+                    <SelectItem value="middle">⏺️ Meio do bloco (posição 5)</SelectItem>
+                    <SelectItem value="end">🔽 Final do bloco</SelectItem>
+                    <SelectItem value="1">Posição 1</SelectItem>
+                    <SelectItem value="2">Posição 2</SelectItem>
+                    <SelectItem value="3">Posição 3</SelectItem>
+                    <SelectItem value="4">Posição 4</SelectItem>
+                    <SelectItem value="5">Posição 5</SelectItem>
+                    <SelectItem value="6">Posição 6</SelectItem>
+                    <SelectItem value="7">Posição 7</SelectItem>
+                    <SelectItem value="8">Posição 8</SelectItem>
+                    <SelectItem value="9">Posição 9</SelectItem>
+                    <SelectItem value="10">Posição 10</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Onde o conteúdo fixo aparece entre as músicas
+                </p>
               </div>
               <div>
                 <Label>Horários</Label>

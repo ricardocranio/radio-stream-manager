@@ -370,12 +370,14 @@ export function useAutoGradeBuilder() {
 
     // Fixed content block (not TOP50) - ALWAYS include even if file doesn't exist
     const fixedItem = fixedItems.find(fc => fc.type !== 'top50');
-    const fixedContentFiles: string[] = [];
+    let fixedContentFile: string | null = null;
+    let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
     
     if (fixedItem) {
       // Add fixed content file with quotes (always include regardless of existence)
       const fixedFileName = sanitizeFilename(fixedItem.fileName);
-      fixedContentFiles.push(`"${fixedFileName}"`);
+      fixedContentFile = `"${fixedFileName}"`;
+      fixedPosition = fixedItem.position || 'start';
       
       blockLogs.push({
         blockTime: timeStr,
@@ -383,7 +385,7 @@ export function useAutoGradeBuilder() {
         title: fixedItem.name,
         artist: fixedItem.fileName,
         station: 'FIXO',
-        reason: 'Conteúdo fixo (sempre incluído)',
+        reason: `Conteúdo fixo (posição: ${typeof fixedPosition === 'number' ? fixedPosition : fixedPosition})`,
       });
     }
 
@@ -584,9 +586,25 @@ export function useAutoGradeBuilder() {
       }
     }
 
-    // Build line with format: HH:MM (ID=PROGRAMA) "fixo.mp3",vht,"musica1.mp3",vht,"musica2.mp3",vht,...
-    // Fixed content comes FIRST, then music
-    const allContent = [...fixedContentFiles, ...songs];
+    // Build line with format based on fixed content position
+    // Insert fixed content at the configured position
+    let allContent: string[] = [...songs];
+    
+    if (fixedContentFile) {
+      if (fixedPosition === 'start') {
+        allContent = [fixedContentFile, ...songs];
+      } else if (fixedPosition === 'end') {
+        allContent = [...songs, fixedContentFile];
+      } else if (fixedPosition === 'middle') {
+        const midIndex = Math.floor(songs.length / 2);
+        allContent = [...songs.slice(0, midIndex), fixedContentFile, ...songs.slice(midIndex)];
+      } else if (typeof fixedPosition === 'number') {
+        // Insert at specific position (1-indexed, so position 1 = index 0)
+        const insertIndex = Math.max(0, Math.min(fixedPosition - 1, songs.length));
+        allContent = [...songs.slice(0, insertIndex), fixedContentFile, ...songs.slice(insertIndex)];
+      }
+    }
+    
     const lineContent = allContent.join(',vht,');
     return {
       line: `${timeStr} (ID=${programName}) ${lineContent}`,
