@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle, History, RotateCcw, TrendingUp, Clock, FlaskConical, Wrench, RotateCw, Zap, Pause } from 'lucide-react';
+import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle, History, RotateCcw, TrendingUp, Clock, FlaskConical, Wrench, RotateCw, Zap, Pause, FileDown } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry, getDownloadStats } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
@@ -361,6 +361,60 @@ export function MissingView() {
         description: `Abriria: ${deezerConfig.downloadFolder}`,
       });
     }
+  };
+
+  // Export missing songs list
+  const handleExportMissing = (format: 'txt' | 'csv') => {
+    if (filteredSongs.length === 0) {
+      toast({
+        title: 'Lista vazia',
+        description: 'Não há músicas faltando para exportar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    let content = '';
+    const filename = `musicas_faltando_${new Date().toISOString().split('T')[0]}`;
+
+    if (format === 'txt') {
+      content = `MÚSICAS FALTANDO - Exportado em ${new Date().toLocaleString('pt-BR')}\n`;
+      content += `Total: ${filteredSongs.length} músicas\n`;
+      content += '='.repeat(60) + '\n\n';
+      
+      // Group by station
+      Object.entries(groupedByStation).forEach(([station, songs]) => {
+        content += `\n[${station}] - ${songs.length} músicas\n`;
+        content += '-'.repeat(40) + '\n';
+        songs.forEach(song => {
+          content += `${song.artist} - ${song.title}\n`;
+        });
+      });
+    } else if (format === 'csv') {
+      content = 'Artista,Música,Emissora,Data,DNA\n';
+      filteredSongs.forEach(song => {
+        const artist = song.artist.replace(/,/g, ' ');
+        const title = song.title.replace(/,/g, ' ');
+        const date = new Date(song.timestamp).toLocaleString('pt-BR');
+        content += `"${artist}","${title}","${song.station}","${date}","${song.dna || ''}"\n`;
+      });
+    }
+
+    // Create blob and download
+    const blob = new Blob([content], { type: format === 'csv' ? 'text/csv;charset=utf-8' : 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: '📥 Lista exportada!',
+      description: `${filteredSongs.length} músicas exportadas para ${filename}.${format}`,
+    });
   };
 
   // Simulated download function for testing UI
@@ -739,6 +793,24 @@ export function MissingView() {
               )}
             </>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <FileDown className="w-4 h-4 mr-2" />
+                Exportar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleExportMissing('txt')}>
+                <FileDown className="w-4 h-4 mr-2" />
+                Exportar como TXT
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExportMissing('csv')}>
+                <FileDown className="w-4 h-4 mr-2" />
+                Exportar como CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" onClick={openDownloadFolder} disabled={!isElectron && !simulationMode}>
             <FolderOpen className="w-4 h-4 mr-2" />
             Abrir Pasta
