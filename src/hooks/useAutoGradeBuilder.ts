@@ -368,19 +368,23 @@ export function useAutoGradeBuilder() {
       }
     }
 
-    // Fixed content block (not TOP50)
+    // Fixed content block (not TOP50) - ALWAYS include even if file doesn't exist
     const fixedItem = fixedItems.find(fc => fc.type !== 'top50');
+    const fixedContentFiles: string[] = [];
+    
     if (fixedItem) {
+      // Add fixed content file with quotes (always include regardless of existence)
+      const fixedFileName = sanitizeFilename(fixedItem.fileName);
+      fixedContentFiles.push(`"${fixedFileName}"`);
+      
       blockLogs.push({
         blockTime: timeStr,
         type: 'fixed',
         title: fixedItem.name,
         artist: fixedItem.fileName,
         station: 'FIXO',
-        reason: 'Conteúdo fixo',
+        reason: 'Conteúdo fixo (sempre incluído)',
       });
-      // Fixed content still needs music around it
-      // Continue to generate songs
     }
 
     // Normal block with 10 songs following the configured SEQUENCE
@@ -580,8 +584,10 @@ export function useAutoGradeBuilder() {
       }
     }
 
-    // Build line with format: HH:MM (ID=PROGRAMA) "musica1.mp3",vht,"musica2.mp3",vht,...
-    const lineContent = songs.join(',vht,');
+    // Build line with format: HH:MM (ID=PROGRAMA) "fixo.mp3",vht,"musica1.mp3",vht,"musica2.mp3",vht,...
+    // Fixed content comes FIRST, then music
+    const allContent = [...fixedContentFiles, ...songs];
+    const lineContent = allContent.join(',vht,');
     return {
       line: `${timeStr} (ID=${programName}) ${lineContent}`,
       logs: blockLogs,
