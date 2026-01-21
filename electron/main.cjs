@@ -1230,6 +1230,141 @@ function normalizeText(text) {
     .trim();
 }
 
+// Calculate similarity between two strings (Levenshtein-based)
+function calculateSimilarity(str1, str2) {
+  const s1 = normalizeText(str1);
+  const s2 = normalizeText(str2);
+  
+  if (s1 === s2) return 1.0;
+  if (s1.length === 0 || s2.length === 0) return 0;
+  
+  // Use Levenshtein distance
+  const matrix = [];
+  for (let i = 0; i <= s1.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= s2.length; j++) {
+    matrix[0][j] = j;
+  }
+  for (let i = 1; i <= s1.length; i++) {
+    for (let j = 1; j <= s2.length; j++) {
+      if (s1[i - 1] === s2[j - 1]) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  
+  const maxLen = Math.max(s1.length, s2.length);
+  return 1 - matrix[s1.length][s2.length] / maxLen;
+}
+
+// Cache for music library files (reset every 5 minutes)
+let musicLibraryCache = { files: [], timestamp: 0 };
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Scan music library and return all files
+function scanMusicLibrary(musicFolders) {
+  const now = Date.now();
+  
+  // Return cached if still valid
+  if (musicLibraryCache.files.length > 0 && (now - musicLibraryCache.timestamp) < CACHE_DURATION) {
+    return musicLibraryCache.files;
+  }
+  
+  const files = [];
+  
+  const scanDir = (dir) => {
+    try {
+      if (!fs.existsSync(dir)) return;
+      
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        
+        if (entry.isDirectory()) {
+          scanDir(fullPath);
+        } else if (entry.isFile()) {
+          const ext = path.extname(entry.name).toLowerCase();
+          if (['.mp3', '.flac', '.wav', '.m4a', '.aac', '.ogg', '.wma'].includes(ext)) {
+            const baseName = path.basename(entry.name, ext);
+            files.push({
+              name: entry.name,
+              baseName: baseName,
+              normalized: normalizeText(baseName),
+              path: fullPath,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Error scanning ${dir}:`, error.message);
+    }
+  };
+  
+  for (const folder of musicFolders) {
+    scanDir(folder);
+  }
+  
+  musicLibraryCache = { files, timestamp: now };
+  console.log(`[LIBRARY] Scanned ${files.length} music files from ${musicFolders.length} folders`);
+  
+  return files;
+}
+
+// Find best matching file in library using similarity
+function findBestMatch(artist, title, musicFolders) {
+  const files = scanMusicLibrary(musicFolders);
+  const searchQuery = normalizeText(`${artist} ${title}`);
+  
+  let bestMatch = null;
+  let bestScore = 0;
+  const THRESHOLD = 0.75; // 75% similarity required
+  
+  for (const file of files) {
+    // Check similarity with full search query
+    const score = calculateSimilarity(searchQuery, file.normalized);
+    
+    if (score > bestScore && score >= THRESHOLD) {
+      bestScore = score;
+      bestMatch = file;
+    }
+    
+    // Also try individual checks for artist and title
+    const normalizedArtist = normalizeText(artist);
+    const normalizedTitle = normalizeText(title);
+    
+    if (file.normalized.includes(normalizedArtist) && file.normalized.includes(normalizedTitle)) {
+      // Direct match - highest priority
+      return { 
+        exists: true, 
+        path: file.path, 
+        filename: file.name,
+        baseName: file.baseName,
+        similarity: 1.0 
+      };
+    }
+  }
+  
+  if (bestMatch) {
+    return { 
+      exists: true, 
+      path: bestMatch.path, 
+      filename: bestMatch.name,
+      baseName: bestMatch.baseName,
+      similarity: bestScore 
+    };
+  }
+  
+  return { exists: false };
+}
+
 // Check if a song exists in the music library folders
 async function checkSongInLibrary(artist, title, musicFolders) {
   const normalizedArtist = normalizeText(artist);
@@ -1256,14 +1391,14 @@ async function checkSongInLibrary(artist, title, musicFolders) {
               
               // Check if filename contains both artist and title
               if (fileName.includes(normalizedArtist) && fileName.includes(normalizedTitle)) {
-                return { exists: true, path: fullPath };
+                return { exists: true, path: fullPath, filename: entry.name };
               }
               
               // Alternative: check for "artist - title" pattern
               const pattern1 = `${normalizedArtist} ${normalizedTitle}`;
               const pattern2 = `${normalizedTitle} ${normalizedArtist}`;
               if (fileName.includes(pattern1) || fileName.includes(pattern2)) {
-                return { exists: true, path: fullPath };
+                return { exists: true, path: fullPath, filename: entry.name };
               }
             }
           }
@@ -1297,6 +1432,37 @@ ipcMain.handle('check-song-exists', async (event, params) => {
   }
 });
 
+// IPC handler to find best matching song using similarity
+ipcMain.handle('find-song-match', async (event, params) => {
+  const { artist, title, musicFolders } = params;
+  
+  try {
+    console.log(`[LIBRARY] Finding best match for: ${artist} - ${title}`);
+    const result = findBestMatch(artist, title, musicFolders);
+    console.log(`[LIBRARY] Best match: ${result.exists ? result.filename + ' (' + (result.similarity * 100).toFixed(0) + '%)' : 'NOT FOUND'}`);
+    return result;
+  } catch (error) {
+    console.error('Error finding match:', error);
+    return { exists: false };
+  }
+});
+
+// IPC handler to get music library stats
+ipcMain.handle('get-music-library-stats', async (event, params) => {
+  const { musicFolders } = params;
+  
+  try {
+    const files = scanMusicLibrary(musicFolders);
+    return { 
+      success: true, 
+      count: files.length,
+      folders: musicFolders.length 
+    };
+  } catch (error) {
+    console.error('Error getting library stats:', error);
+    return { success: false, count: 0, folders: 0 };
+  }
+});
 // =============== VOZ DO BRASIL DOWNLOAD ===============
 
 // Download file from URL to specified folder

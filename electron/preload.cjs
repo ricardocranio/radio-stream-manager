@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Music library check
   checkSongExists: (params) => ipcRenderer.invoke('check-song-exists', params),
+  findSongMatch: (params) => ipcRenderer.invoke('find-song-match', params),
+  getMusicLibraryStats: (params) => ipcRenderer.invoke('get-music-library-stats', params),
   
   // Voz do Brasil download
   downloadVozBrasil: (params) => ipcRenderer.invoke('download-voz-brasil', params),

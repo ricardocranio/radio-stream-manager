@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus } from 'lucide-react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
 import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
 import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
+import { useMusicLibraryStats } from '@/hooks/useMusicLibraryStats';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -21,6 +22,7 @@ export function DashboardView() {
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
   const { stats: realtimeStats, refresh: refreshStats } = useRealtimeStats();
   const gradeBuilder = useAutoGradeBuilder();
+  const { stats: libraryStats } = useMusicLibraryStats();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
@@ -94,7 +96,7 @@ export function DashboardView() {
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6 animate-fade-in">
       {/* Realtime Stats from Supabase */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
         <Card className="glass-card border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
@@ -188,6 +190,26 @@ export function DashboardView() {
               </div>
               <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center shrink-0">
                 <Radio className="w-4 h-4 md:w-5 md:h-5 text-cyan-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5">
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Banco Musical</p>
+                <p className="text-lg md:text-2xl font-bold text-foreground">
+                  {libraryStats.isLoading ? '...' : libraryStats.count.toLocaleString()}
+                </p>
+                <p className="text-[10px] md:text-xs text-amber-500 flex items-center gap-1">
+                  <HardDrive className="w-3 h-3" />
+                  <span className="hidden sm:inline">Local</span>
+                </p>
+              </div>
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+                <HardDrive className="w-4 h-4 md:w-5 md:h-5 text-amber-500" />
               </div>
             </div>
           </CardContent>
