@@ -566,9 +566,9 @@ export function useAutoGradeBuilder() {
           style: selectedSong.style,
         });
       } else {
-        // Ultimate fallback: coringa code (NO quotes, just the code with .mp3)
-        const coringaCode = config.coringaCode || 'mus';
-        songs.push(coringaCode.endsWith('.mp3') ? coringaCode : `${coringaCode}.mp3`);
+        // Ultimate fallback: coringa code (NO quotes, NO .mp3)
+        const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
+        songs.push(coringaCode);
         blockLogs.push({
           blockTime: timeStr,
           type: 'substituted',
