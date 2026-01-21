@@ -590,7 +590,7 @@ export function SequenceView() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                            className="h-6 w-6 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
                             onClick={() => startEditFileName(item.position, item.customFileName || '', item.radioSource)}
                             title="Editar nome do arquivo"
                           >
@@ -636,10 +636,16 @@ export function SequenceView() {
                         </div>
                       )}
                       
-                      {/* Show custom filename if set */}
-                      {isFixoItem && item.customFileName && !isEditing && (
-                        <div className="mt-1 pl-8">
-                          <span className="text-[10px] text-emerald-400 font-mono">{item.customFileName}</span>
+                      {/* Show filename for FIXO items - always visible, clickable to edit */}
+                      {isFixoItem && !isEditing && (
+                        <div 
+                          className="mt-1 pl-8 flex items-center gap-2 cursor-pointer hover:bg-emerald-500/10 rounded px-2 py-1 -mx-2"
+                          onClick={() => startEditFileName(item.position, item.customFileName || '', item.radioSource)}
+                        >
+                          <span className="text-[10px] text-emerald-400 font-mono flex-1">
+                            {item.customFileName || getDefaultFileName(item.radioSource)}
+                          </span>
+                          <Pencil className="w-3 h-3 text-emerald-400/60" />
                         </div>
                       )}
                     </div>
@@ -1044,10 +1050,16 @@ export function SequenceView() {
                         </div>
                       )}
                       
-                      {/* Show custom filename if set */}
-                      {isFixoItem && item.customFileName && !isEditing && (
-                        <div className="mt-1 pl-6">
-                          <span className="text-[9px] text-emerald-400 font-mono">{item.customFileName}</span>
+                      {/* Show filename for FIXO items - always visible, clickable to edit */}
+                      {isFixoItem && !isEditing && (
+                        <div 
+                          className="mt-1 pl-6 flex items-center gap-1 cursor-pointer hover:bg-emerald-500/10 rounded px-1 py-0.5 -mx-1"
+                          onClick={() => startEditFormFileName(item.position, item.customFileName || '', item.radioSource)}
+                        >
+                          <span className="text-[9px] text-emerald-400 font-mono flex-1 truncate">
+                            {item.customFileName || getDefaultFileName(item.radioSource)}
+                          </span>
+                          <Pencil className="w-2.5 h-2.5 text-emerald-400/60 shrink-0" />
                         </div>
                       )}
                     </div>
