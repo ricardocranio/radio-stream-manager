@@ -487,14 +487,18 @@ export function useAutoGradeBuilder() {
         const specificContent = fixedContent.find(fc => fc.id === contentId && fc.enabled);
         
         if (specificContent) {
-          const fixedFileName = sanitizeFilename(specificContent.fileName);
+          // Use customFileName if set, otherwise use the default from the content
+          const fileNameToUse = seq.customFileName || specificContent.fileName;
+          const fixedFileName = sanitizeFilename(fileNameToUse);
           blockLogs.push({
             blockTime: timeStr,
             type: 'fixed',
             title: specificContent.name,
-            artist: specificContent.fileName,
+            artist: fileNameToUse,
             station: 'FIXO',
-            reason: `Conteúdo fixo específico da sequência`,
+            reason: seq.customFileName 
+              ? `Conteúdo fixo com nome personalizado` 
+              : `Conteúdo fixo específico da sequência`,
           });
           songs.push(`"${fixedFileName}"`);
         } else {

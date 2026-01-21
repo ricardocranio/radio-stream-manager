@@ -64,6 +64,7 @@ export interface SystemConfig {
 export interface SequenceConfig {
   position: number;
   radioSource: string;
+  customFileName?: string; // Custom filename for fixed content (e.g., NOTICIA_DA_HORA_18HORAS)
 }
 
 // Scheduled sequence - allows different sequences for different time periods

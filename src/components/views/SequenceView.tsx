@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power, PlusCircle, MinusCircle } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power, PlusCircle, MinusCircle, Pencil, X, Check } from 'lucide-react';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -56,6 +56,12 @@ export function SequenceView() {
   const [localSequence, setLocalSequence] = useState(sequence);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<ScheduledSequence | null>(null);
+  
+  // State for editing custom filename
+  const [editingPosition, setEditingPosition] = useState<number | null>(null);
+  const [editingFileName, setEditingFileName] = useState('');
+  const [editingFormPosition, setEditingFormPosition] = useState<number | null>(null);
+  const [editingFormFileName, setEditingFormFileName] = useState('');
 
   // Form state for new/edit scheduled sequence
   const [formName, setFormName] = useState('');
@@ -90,14 +96,66 @@ export function SequenceView() {
 
   const handleChange = (position: number, value: string) => {
     setLocalSequence((prev) =>
-      prev.map((item) => (item.position === position ? { ...item, radioSource: value } : item))
+      prev.map((item) => (item.position === position ? { ...item, radioSource: value, customFileName: undefined } : item))
     );
   };
 
   const handleFormSequenceChange = (position: number, value: string) => {
     setFormSequence((prev) =>
-      prev.map((item) => (item.position === position ? { ...item, radioSource: value } : item))
+      prev.map((item) => (item.position === position ? { ...item, radioSource: value, customFileName: undefined } : item))
     );
+  };
+
+  // Get default filename for a fixed content
+  const getDefaultFileName = (source: string): string => {
+    if (source.startsWith('fixo_')) {
+      const contentId = source.replace('fixo_', '');
+      const content = fixedContent.find(c => c.id === contentId);
+      return content?.fileName || '';
+    }
+    return '';
+  };
+
+  // Start editing custom filename for default sequence
+  const startEditFileName = (position: number, currentFileName: string, source: string) => {
+    setEditingPosition(position);
+    setEditingFileName(currentFileName || getDefaultFileName(source));
+  };
+
+  const saveEditFileName = () => {
+    if (editingPosition !== null) {
+      setLocalSequence((prev) =>
+        prev.map((item) => (item.position === editingPosition ? { ...item, customFileName: editingFileName } : item))
+      );
+      setEditingPosition(null);
+      setEditingFileName('');
+    }
+  };
+
+  const cancelEditFileName = () => {
+    setEditingPosition(null);
+    setEditingFileName('');
+  };
+
+  // Start editing custom filename for form sequence (scheduled)
+  const startEditFormFileName = (position: number, currentFileName: string, source: string) => {
+    setEditingFormPosition(position);
+    setEditingFormFileName(currentFileName || getDefaultFileName(source));
+  };
+
+  const saveEditFormFileName = () => {
+    if (editingFormPosition !== null) {
+      setFormSequence((prev) =>
+        prev.map((item) => (item.position === editingFormPosition ? { ...item, customFileName: editingFormFileName } : item))
+      );
+      setEditingFormPosition(null);
+      setEditingFormFileName('');
+    }
+  };
+
+  const cancelEditFormFileName = () => {
+    setEditingFormPosition(null);
+    setEditingFormFileName('');
   };
 
   const handleSave = () => {
@@ -492,46 +550,101 @@ export function SequenceView() {
           <CardContent className="p-4">
             <ScrollArea className="h-[400px] pr-4">
               <div className="space-y-2">
-                {localSequence.map((item) => (
-                  <div
-                    key={item.position}
-                    className="flex items-center gap-2 p-2 rounded-lg bg-secondary/30 border border-border hover:border-primary/30 transition-colors group"
-                  >
-                    <div className="flex items-center gap-1 text-muted-foreground">
-                      <GripVertical className="w-3 h-3" />
-                      <span className="font-mono font-bold text-foreground w-5 text-xs">
-                        {item.position.toString().padStart(2, '0')}
-                      </span>
+                {localSequence.map((item) => {
+                  const isFixoItem = item.radioSource.startsWith('fixo_');
+                  const isEditing = editingPosition === item.position;
+                  
+                  return (
+                    <div
+                      key={item.position}
+                      className={`p-2 rounded-lg bg-secondary/30 border transition-colors group ${
+                        isFixoItem ? 'border-emerald-500/30 hover:border-emerald-500/50' : 'border-border hover:border-primary/30'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 text-muted-foreground">
+                          <GripVertical className="w-3 h-3" />
+                          <span className="font-mono font-bold text-foreground w-5 text-xs">
+                            {item.position.toString().padStart(2, '0')}
+                          </span>
+                        </div>
+                        <Select
+                          value={item.radioSource}
+                          onValueChange={(value) => handleChange(item.position, value)}
+                        >
+                          <SelectTrigger className="flex-1 h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {radioOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Badge variant="outline" className={`${getStationColor(item.radioSource)} text-[9px] px-1`}>
+                          {getSourceBadgeLabel(item.radioSource)}
+                        </Badge>
+                        {isFixoItem && !isEditing && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                            onClick={() => startEditFileName(item.position, item.customFileName || '', item.radioSource)}
+                            title="Editar nome do arquivo"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleRemovePosition(item.position)}
+                          disabled={localSequence.length <= 5}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                      
+                      {/* Editing mode for custom filename */}
+                      {isEditing && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <Input
+                            value={editingFileName}
+                            onChange={(e) => setEditingFileName(e.target.value)}
+                            placeholder="NOTICIA_DA_HORA_18HORAS"
+                            className="h-7 text-xs flex-1 font-mono"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-green-500 hover:text-green-400 hover:bg-green-500/10"
+                            onClick={saveEditFileName}
+                          >
+                            <Check className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                            onClick={cancelEditFileName}
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      )}
+                      
+                      {/* Show custom filename if set */}
+                      {isFixoItem && item.customFileName && !isEditing && (
+                        <div className="mt-1 pl-8">
+                          <span className="text-[10px] text-emerald-400 font-mono">{item.customFileName}</span>
+                        </div>
+                      )}
                     </div>
-                    <Select
-                      value={item.radioSource}
-                      onValueChange={(value) => handleChange(item.position, value)}
-                    >
-                      <SelectTrigger className="flex-1 h-8 text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {radioOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Badge variant="outline" className={`${getStationColor(item.radioSource)} text-[9px] px-1`}>
-                      {getSourceBadgeLabel(item.radioSource)}
-                    </Badge>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => handleRemovePosition(item.position)}
-                      disabled={localSequence.length <= 5}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </ScrollArea>
             <div className="flex gap-2 mt-4 pt-4 border-t border-border">
@@ -846,42 +959,100 @@ export function SequenceView() {
                   </Button>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto p-1">
-                {formSequence.map((item) => (
-                  <div
-                    key={item.position}
-                    className="flex items-center gap-1 p-2 rounded-lg bg-secondary/30 border border-border group"
-                  >
-                    <span className="font-mono font-bold text-foreground w-5 text-xs">
-                      {item.position.toString().padStart(2, '0')}
-                    </span>
-                    <Select
-                      value={item.radioSource}
-                      onValueChange={(value) => handleFormSequenceChange(item.position, value)}
+              <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto p-1">
+                {formSequence.map((item) => {
+                  const isFixoItem = item.radioSource.startsWith('fixo_');
+                  const isEditing = editingFormPosition === item.position;
+                  
+                  return (
+                    <div
+                      key={item.position}
+                      className={`p-2 rounded-lg bg-secondary/30 border group ${
+                        isFixoItem ? 'border-emerald-500/30' : 'border-border'
+                      }`}
                     >
-                      <SelectTrigger className="flex-1 h-7 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {radioOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => handleRemoveFormPosition(item.position)}
-                      disabled={formSequence.length <= 5}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
-                ))}
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono font-bold text-foreground w-5 text-xs">
+                          {item.position.toString().padStart(2, '0')}
+                        </span>
+                        <Select
+                          value={item.radioSource}
+                          onValueChange={(value) => handleFormSequenceChange(item.position, value)}
+                        >
+                          <SelectTrigger className="flex-1 h-7 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {radioOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {isFixoItem && !isEditing && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                            onClick={() => startEditFormFileName(item.position, item.customFileName || '', item.radioSource)}
+                            title="Editar nome do arquivo"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleRemoveFormPosition(item.position)}
+                          disabled={formSequence.length <= 5}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                      
+                      {/* Editing mode for custom filename */}
+                      {isEditing && (
+                        <div className="mt-1 flex items-center gap-1">
+                          <Input
+                            value={editingFormFileName}
+                            onChange={(e) => setEditingFormFileName(e.target.value)}
+                            placeholder="NOTICIA_DA_HORA_18HORAS"
+                            className="h-6 text-[10px] flex-1 font-mono"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 text-green-500 hover:text-green-400 hover:bg-green-500/10"
+                            onClick={saveEditFormFileName}
+                          >
+                            <Check className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                            onClick={cancelEditFormFileName}
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      )}
+                      
+                      {/* Show custom filename if set */}
+                      {isFixoItem && item.customFileName && !isEditing && (
+                        <div className="mt-1 pl-6">
+                          <span className="text-[9px] text-emerald-400 font-mono">{item.customFileName}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <p className="text-xs text-muted-foreground text-center">
                 {formSequence.length} posições configuradas
