@@ -202,19 +202,29 @@ export function useRealtimeStats() {
   useEffect(() => {
     let refreshIntervalId: NodeJS.Timeout;
     let countdownIntervalId: NodeJS.Timeout;
+    let currentInterval = REFRESH_INTERVAL;
+
+    const runRefresh = () => {
+      // Always refresh, but less frequently if in background with power saving
+      loadStats();
+      currentInterval = getEffectiveInterval();
+      countdownRef.current = currentInterval;
+      countdownDisplayRef.current = currentInterval;
+    };
 
     const setupIntervals = () => {
-      const effectiveInterval = getEffectiveInterval();
+      currentInterval = getEffectiveInterval();
+      countdownRef.current = currentInterval;
       
-      refreshIntervalId = setInterval(() => {
-        // Skip refresh if in background with power saving
-        if (powerSavingMode && isInBackgroundRef.current) {
-          return;
-        }
-        loadStats();
-        countdownRef.current = effectiveInterval;
-        countdownDisplayRef.current = effectiveInterval;
-      }, effectiveInterval * 1000);
+      // Use dynamic interval that checks conditions on each tick
+      const scheduleNextRefresh = () => {
+        refreshIntervalId = setTimeout(() => {
+          runRefresh();
+          scheduleNextRefresh(); // Re-schedule with potentially new interval
+        }, getEffectiveInterval() * 1000);
+      };
+      
+      scheduleNextRefresh();
 
       // Update countdown display every 5 seconds
       countdownIntervalId = setInterval(() => {
@@ -230,7 +240,7 @@ export function useRealtimeStats() {
     setupIntervals();
 
     return () => {
-      clearInterval(refreshIntervalId);
+      clearTimeout(refreshIntervalId);
       clearInterval(countdownIntervalId);
     };
   }, [loadStats, getEffectiveInterval, powerSavingMode]);
@@ -239,16 +249,32 @@ export function useRealtimeStats() {
   useEffect(() => {
     let retryCount = 0;
     const maxRetries = 3;
+    let isCleanedUp = false;
+    let currentChannel: ReturnType<typeof supabase.channel> | null = null;
+    let retryTimeoutId: NodeJS.Timeout | null = null;
     
     const setupChannel = () => {
+      if (isCleanedUp) return;
+      
+      // Remove any existing channel first
+      if (currentChannel) {
+        try {
+          supabase.removeChannel(currentChannel);
+        } catch (e) {
+          // Ignore removal errors
+        }
+        currentChannel = null;
+      }
+      
       console.log('[REALTIME] Setting up channel...');
       
-      const channel = supabase
-        .channel('stats_realtime')
+      currentChannel = supabase
+        .channel(`stats_realtime_${Date.now()}`) // Unique channel name
         .on(
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'scraped_songs' },
           (payload) => {
+            if (isCleanedUp) return;
             console.log('[REALTIME] New song received:', payload.new);
             const newSong = payload.new as { title: string; artist: string; station_name: string; scraped_at: string };
             
@@ -291,19 +317,22 @@ export function useRealtimeStats() {
           }
         )
         .subscribe((status) => {
+          if (isCleanedUp) return;
           console.log('[REALTIME] Subscription status:', status);
           
           if (status === 'CHANNEL_ERROR') {
-            console.error('[REALTIME] Channel error, retrying...');
-            if (retryCount < maxRetries) {
+            console.error('[REALTIME] Channel error, scheduling retry...');
+            if (retryCount < maxRetries && !isCleanedUp) {
               retryCount++;
-              setTimeout(() => {
-                supabase.removeChannel(channel);
-                setupChannel();
+              // Clear any existing retry timeout
+              if (retryTimeoutId) clearTimeout(retryTimeoutId);
+              retryTimeoutId = setTimeout(() => {
+                if (!isCleanedUp) {
+                  setupChannel();
+                }
               }, 2000 * retryCount);
             } else {
               console.error('[REALTIME] Max retries reached, falling back to polling');
-              // Fallback: refresh more frequently when realtime fails
               loadStats();
             }
           } else if (status === 'SUBSCRIBED') {
@@ -311,14 +340,20 @@ export function useRealtimeStats() {
             retryCount = 0;
           }
         });
-
-      return channel;
     };
 
-    const channel = setupChannel();
+    setupChannel();
 
     return () => {
-      supabase.removeChannel(channel);
+      isCleanedUp = true;
+      if (retryTimeoutId) clearTimeout(retryTimeoutId);
+      if (currentChannel) {
+        try {
+          supabase.removeChannel(currentChannel);
+        } catch (e) {
+          // Ignore removal errors on cleanup
+        }
+      }
     };
   }, [loadStats]);
 
