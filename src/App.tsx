@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { useCleanStart } from "./hooks/useCleanStart";
 import { useSyncStationsFromDb } from "./hooks/useSyncStationsFromDb";
+import { useDailyReset } from "./hooks/useDailyReset";
 
 const queryClient = new QueryClient();
 
@@ -15,6 +16,7 @@ const queryClient = new QueryClient();
 function AppInitializer({ children }: { children: React.ReactNode }) {
   useCleanStart();
   useSyncStationsFromDb();
+  useDailyReset(); // Reset automático às 20:00
   return <>{children}</>;
 }
 
