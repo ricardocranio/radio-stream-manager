@@ -208,18 +208,21 @@ export function useAutoScraping() {
       failedStations,
     }));
 
-    console.log(`[AutoScraping] Complete: ${successCount} success, ${errorCount} errors, ${newSongsCount} songs captured`);
+    // Reduced logging - only summary
+    if (successCount > 0 || errorCount > 0) {
+      console.log(`[AutoScraping] Complete: ${successCount}✓ ${errorCount}✗ ${newSongsCount} songs`);
+    }
 
-    // Show notification
-    if (newSongsCount > 0) {
+    // Show notification only for significant updates
+    if (newSongsCount >= 3) {
       toast({
         title: '🎵 Músicas Atualizadas',
-        description: `${newSongsCount} músicas de ${successCount} emissoras.${errorCount > 0 ? ` (${errorCount} falhas)` : ''}`,
+        description: `${newSongsCount} músicas de ${successCount} emissoras.`,
       });
     } else if (errorCount > 0 && successCount === 0) {
       toast({
         title: '⚠️ Falha no Scraping',
-        description: `Não foi possível atualizar as emissoras. Tente novamente.`,
+        description: `Não foi possível atualizar as emissoras.`,
         variant: 'destructive',
       });
     }

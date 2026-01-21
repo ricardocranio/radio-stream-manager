@@ -301,9 +301,17 @@ export const useRadioStore = create<RadioState>()(
 
       capturedSongs: [],
       addCapturedSong: (song) =>
-        set((state) => ({
-          capturedSongs: [song, ...state.capturedSongs].slice(0, 100),
-        })),
+        set((state) => {
+          // Avoid duplicate songs (same title/artist in last 50)
+          const isDuplicate = state.capturedSongs.slice(0, 50).some(
+            s => s.title === song.title && s.artist === song.artist
+          );
+          if (isDuplicate) return state;
+          
+          // Prepend and limit - reuse array if possible
+          const newSongs = [song, ...state.capturedSongs];
+          return { capturedSongs: newSongs.length > 100 ? newSongs.slice(0, 100) : newSongs };
+        }),
       clearCapturedSongs: () => set({ capturedSongs: [] }),
 
       config: defaultConfig,
@@ -405,17 +413,24 @@ export const useRadioStore = create<RadioState>()(
           const normalizedTitle = title.toLowerCase().trim();
           const normalizedArtist = artist.toLowerCase().trim();
           
-          // Find existing song
-          const existingIndex = state.rankingSongs.findIndex(
-            (s) => s.title.toLowerCase().trim() === normalizedTitle && 
-                   s.artist.toLowerCase().trim() === normalizedArtist
-          );
+          // Find existing song using a simple loop (faster than findIndex for small arrays)
+          let existingIndex = -1;
+          for (let i = 0; i < state.rankingSongs.length; i++) {
+            const s = state.rankingSongs[i];
+            if (s.title.toLowerCase() === normalizedTitle && 
+                s.artist.toLowerCase() === normalizedArtist) {
+              existingIndex = i;
+              break;
+            }
+          }
           
           if (existingIndex >= 0) {
-            // Update existing song - increment plays (without sorting every time)
-            const updatedSongs = [...state.rankingSongs];
-            const existing = updatedSongs[existingIndex];
+            // Update existing song - mutate in place for performance
+            const existing = state.rankingSongs[existingIndex];
             const newPlays = existing.plays + 1;
+            
+            // Create new array only if needed
+            const updatedSongs = [...state.rankingSongs];
             updatedSongs[existingIndex] = {
               ...existing,
               plays: newPlays,
@@ -423,16 +438,16 @@ export const useRadioStore = create<RadioState>()(
               trend: newPlays > 5 ? 'up' : existing.trend,
             };
             
-            // Only sort every 10 updates to reduce CPU usage
-            if (newPlays % 10 === 0) {
+            // Sort only every 20 updates to reduce CPU usage significantly
+            if (newPlays % 20 === 0) {
               updatedSongs.sort((a, b) => b.plays - a.plays);
             }
             
             return { rankingSongs: updatedSongs };
           } else {
-            // Add new song (sort only when adding new songs)
+            // Add new song - only log in development and limit frequency
             const newSong: RankingSong = {
-              id: `ranking-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              id: `ranking-${Date.now()}`,
               title: title.trim(),
               artist: artist.trim(),
               plays: 1,
@@ -441,10 +456,14 @@ export const useRadioStore = create<RadioState>()(
               lastPlayed: new Date(),
             };
             
-            // Add and sort by plays
-            const updatedSongs = [...state.rankingSongs, newSong].sort((a, b) => b.plays - a.plays);
+            // Add without sorting - just append (sort on read or every N additions)
+            const updatedSongs = [...state.rankingSongs, newSong];
             
-            console.log(`[RANKING] Nova música: ${title} - ${artist} (Total: ${updatedSongs.length})`);
+            // Sort only every 5 new songs
+            const shouldSort = updatedSongs.length % 5 === 0;
+            if (shouldSort) {
+              updatedSongs.sort((a, b) => b.plays - a.plays);
+            }
             
             // Keep only top 100 songs
             return { rankingSongs: updatedSongs.slice(0, 100) };
