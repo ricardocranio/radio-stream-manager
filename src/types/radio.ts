@@ -66,6 +66,20 @@ export interface SequenceConfig {
   radioSource: string;
 }
 
+// Scheduled sequence - allows different sequences for different time periods
+export interface ScheduledSequence {
+  id: string;
+  name: string;
+  startHour: number;
+  startMinute: number;
+  endHour: number;
+  endMinute: number;
+  weekDays: WeekDay[]; // Empty = all days
+  sequence: SequenceConfig[];
+  enabled: boolean;
+  priority: number; // Higher priority overrides lower
+}
+
 export interface BlockSchedule {
   time: string;
   songs: CapturedSong[];
