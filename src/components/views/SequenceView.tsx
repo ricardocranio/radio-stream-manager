@@ -49,6 +49,7 @@ export function SequenceView() {
     addScheduledSequence,
     updateScheduledSequence,
     removeScheduledSequence,
+    fixedContent,
   } = useRadioStore();
   const { toast } = useToast();
   const [localSequence, setLocalSequence] = useState(sequence);
@@ -67,6 +68,7 @@ export function SequenceView() {
 
   const radioOptions = [
     ...stations.map((s) => ({ value: s.id, label: s.name })),
+    { value: 'fixo', label: '📌 FIXO (Conteúdo Fixo)' },
     { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)' },
     { value: 'top50', label: '🏆 TOP50 (Curadoria)' },
   ];
@@ -185,10 +187,26 @@ export function SequenceView() {
       positiva: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
       liberdade: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
       mix: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+      fixo: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
       random_pop: 'bg-muted text-muted-foreground border-muted-foreground/30',
       top50: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
     };
     return colors[source] || 'bg-secondary text-secondary-foreground';
+  };
+
+  const getTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      news: '📰 Notícia',
+      horoscope: '🔮 Horóscopo',
+      sports: '⚽ Esporte',
+      weather: '🌤️ Clima',
+      romance: '💕 Romance',
+      curiosity: '💡 Curiosidade',
+      top50: '🏆 TOP50',
+      vozbrasil: '🇧🇷 Voz do Brasil',
+      other: '📁 Outro',
+    };
+    return labels[type] || type;
   };
 
   const formatTime = (hour: number, minute: number) => {
@@ -434,6 +452,10 @@ export function SequenceView() {
                     </div>
                   ))}
                   <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded bg-emerald-500/30" />
+                    <span className="text-muted-foreground">FIXO</span>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded bg-muted" />
                     <span className="text-muted-foreground">Aleatório</span>
                   </div>
@@ -450,9 +472,63 @@ export function SequenceView() {
                   Sequências programadas substituem a sequência padrão nos horários configurados.
                   <br />
                   <span className="text-yellow-400">Prioridade:</span> Se houver conflito de horários, a sequência com maior prioridade (P) será usada.
+                  <br />
+                  <span className="text-emerald-400">FIXO:</span> Insere conteúdo fixo configurado na posição selecionada.
                 </p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Fixed Content Panel */}
+        <Card className="glass-card lg:col-span-2">
+          <CardHeader className="border-b border-border pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <span className="text-lg">📌</span>
+              Conteúdos Fixos Cadastrados
+              <Badge variant="secondary" className="ml-auto">
+                {fixedContent.filter(c => c.enabled).length} ativos
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            {fixedContent.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Nenhum conteúdo fixo cadastrado. Configure na aba "Conteúdos Fixos".
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {fixedContent.map((content) => (
+                  <div
+                    key={content.id}
+                    className={`p-3 rounded-lg border transition-all ${
+                      content.enabled
+                        ? 'bg-emerald-500/10 border-emerald-500/30'
+                        : 'bg-muted/20 border-muted opacity-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm truncate">{content.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{content.fileName}</p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] shrink-0">
+                        {content.enabled ? 'ON' : 'OFF'}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      <Badge variant="secondary" className="text-[10px]">
+                        {getTypeLabel(content.type)}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground">
+                        {content.timeSlots.map((t) => `${t.hour.toString().padStart(2, '0')}:${t.minute.toString().padStart(2, '0')}`).slice(0, 3).join(', ')}
+                        {content.timeSlots.length > 3 && ` +${content.timeSlots.length - 3}`}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
