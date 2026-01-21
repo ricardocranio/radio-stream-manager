@@ -12,7 +12,7 @@ import { MonitoringSchedule, RadioStation, WeekDay } from '@/types/radio';
 import { supabase } from '@/integrations/supabase/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useSyncSpecialMonitoring, addSpecialMonitoringToCloud, deleteSpecialMonitoringFromCloud } from '@/hooks/useSyncSpecialMonitoring';
+import { useSyncSpecialMonitoring, addSpecialMonitoringToCloud, deleteSpecialMonitoringFromCloud, updateSpecialMonitoringInCloud } from '@/hooks/useSyncSpecialMonitoring';
 import {
   Dialog,
   DialogContent,
@@ -370,34 +370,33 @@ export function SpecialMonitoringView() {
   // Save/update cloud schedule
   const handleSaveCloudSchedule = async () => {
     if (editingSchedule) {
-      // Update existing schedule in Cloud
+      // Update existing schedule in Cloud via Edge Function
       try {
-        const { error } = await supabase
-          .from('special_monitoring')
-          .update({
-            station_name: newSchedule.customStationName,
-            scrape_url: newSchedule.customStationUrl,
-            start_hour: newSchedule.hour,
-            start_minute: newSchedule.minute,
-            end_hour: newSchedule.endHour,
-            end_minute: newSchedule.endMinute,
-            week_days: newSchedule.weekDays,
-            label: newSchedule.label || null,
-          })
-          .eq('id', editingSchedule.id);
+        const result = await updateSpecialMonitoringInCloud(editingSchedule.id, {
+          stationName: newSchedule.customStationName,
+          scrapeUrl: newSchedule.customStationUrl,
+          startHour: newSchedule.hour,
+          startMinute: newSchedule.minute,
+          endHour: newSchedule.endHour,
+          endMinute: newSchedule.endMinute,
+          weekDays: newSchedule.weekDays,
+          label: newSchedule.label || null,
+        });
 
-        if (error) throw error;
+        if (!result.success) {
+          throw new Error(result.error || 'Erro ao atualizar');
+        }
 
         await fetchCloudSchedules();
         toast({
           title: '✏️ Horário atualizado',
           description: `${newSchedule.customStationName} foi atualizado.`,
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error updating schedule:', error);
         toast({
           title: 'Erro ao atualizar',
-          description: 'Não foi possível atualizar o horário.',
+          description: error.message || 'Não foi possível atualizar o horário.',
           variant: 'destructive',
         });
       }
@@ -453,19 +452,23 @@ export function SpecialMonitoringView() {
     }
   };
 
-  // Toggle cloud schedule enabled state
+  // Toggle cloud schedule enabled state via Edge Function
   const handleToggleCloudSchedule = async (scheduleId: string, enabled: boolean) => {
     try {
-      const { error } = await supabase
-        .from('special_monitoring')
-        .update({ enabled })
-        .eq('id', scheduleId);
-
-      if (error) throw error;
+      const result = await updateSpecialMonitoringInCloud(scheduleId, { enabled });
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Erro ao atualizar');
+      }
 
       setCloudSchedules(prev => prev.map(s => s.id === scheduleId ? { ...s, enabled } : s));
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error toggling schedule:', error);
+      toast({
+        title: 'Erro ao alterar status',
+        description: error.message || 'Não foi possível alterar o status.',
+        variant: 'destructive',
+      });
     }
   };
 
