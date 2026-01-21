@@ -410,7 +410,7 @@ export const useRadioStore = create<RadioState>()(
           );
           
           if (existingIndex >= 0) {
-            // Update existing song - increment plays
+            // Update existing song - increment plays (without sorting every time)
             const updatedSongs = [...state.rankingSongs];
             const existing = updatedSongs[existingIndex];
             const newPlays = existing.plays + 1;
@@ -418,18 +418,17 @@ export const useRadioStore = create<RadioState>()(
               ...existing,
               plays: newPlays,
               lastPlayed: new Date(),
-              // Update trend based on play increase
               trend: newPlays > 5 ? 'up' : existing.trend,
             };
             
-            // Re-sort by plays (descending)
-            updatedSongs.sort((a, b) => b.plays - a.plays);
-            
-            console.log(`[STORE-RANKING] ✅ Música atualizada: ${title} - ${artist} (${newPlays} plays)`);
+            // Only sort every 10 updates to reduce CPU usage
+            if (newPlays % 10 === 0) {
+              updatedSongs.sort((a, b) => b.plays - a.plays);
+            }
             
             return { rankingSongs: updatedSongs };
           } else {
-            // Add new song
+            // Add new song (sort only when adding new songs)
             const newSong: RankingSong = {
               id: `ranking-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               title: title.trim(),
@@ -443,7 +442,7 @@ export const useRadioStore = create<RadioState>()(
             // Add and sort by plays
             const updatedSongs = [...state.rankingSongs, newSong].sort((a, b) => b.plays - a.plays);
             
-            console.log(`[STORE-RANKING] 🆕 Nova música adicionada: ${title} - ${artist} (Total: ${updatedSongs.length})`);
+            console.log(`[RANKING] Nova música: ${title} - ${artist} (Total: ${updatedSongs.length})`);
             
             // Keep only top 100 songs
             return { rankingSongs: updatedSongs.slice(0, 100) };

@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { withRetry, ErrorCodes, createError } from '@/lib/errorHandler';
+import { debounce } from '@/lib/errorHandler';
 
 interface LastSongByStation {
   title: string;
@@ -36,6 +37,10 @@ interface RealtimeStats {
 
 const REFRESH_INTERVAL = 30; // seconds
 
+// Singleton channel to avoid duplicate subscriptions
+let globalChannel: ReturnType<typeof supabase.channel> | null = null;
+let subscriberCount = 0;
+
 export function useRealtimeStats() {
   const [stats, setStats] = useState<RealtimeStats>({
     totalSongs: 0,
@@ -52,7 +57,9 @@ export function useRealtimeStats() {
     nextRefreshIn: REFRESH_INTERVAL,
   });
   
+  // Use refs for countdown to avoid re-renders
   const countdownRef = useRef<number>(REFRESH_INTERVAL);
+  const countdownDisplayRef = useRef<number>(REFRESH_INTERVAL);
 
   const loadStats = useCallback(async () => {
     const context = { component: 'useRealtimeStats', action: 'loadStats' };
@@ -168,17 +175,24 @@ export function useRealtimeStats() {
     loadStats();
   }, [loadStats]);
 
-  // Auto-refresh every 30 seconds with countdown
+  // Auto-refresh every 30 seconds - OPTIMIZED: removed per-second countdown re-renders
   useEffect(() => {
     const refreshInterval = setInterval(() => {
       loadStats();
       countdownRef.current = REFRESH_INTERVAL;
+      countdownDisplayRef.current = REFRESH_INTERVAL;
     }, REFRESH_INTERVAL * 1000);
 
+    // Update countdown display every 5 seconds instead of every 1 second
     const countdownInterval = setInterval(() => {
-      countdownRef.current = Math.max(0, countdownRef.current - 1);
-      setStats(prev => ({ ...prev, nextRefreshIn: countdownRef.current }));
-    }, 1000);
+      countdownRef.current = Math.max(0, countdownRef.current - 5);
+      countdownDisplayRef.current = countdownRef.current;
+      // Only update state every 5 seconds to reduce re-renders
+      setStats(prev => {
+        if (prev.nextRefreshIn === countdownRef.current) return prev;
+        return { ...prev, nextRefreshIn: countdownRef.current };
+      });
+    }, 5000);
 
     return () => {
       clearInterval(refreshInterval);
