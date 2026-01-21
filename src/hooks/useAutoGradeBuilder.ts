@@ -418,7 +418,7 @@ export function useAutoGradeBuilder() {
       }
 
       let selectedSong: SongEntry | null = null;
-      let startIndex = stationSongIndex[stationName];
+      let startIndex = stationSongIndex[stationName] || 0;
       let checkedCount = 0;
 
       // Try to find a valid song from the configured station
@@ -432,12 +432,12 @@ export function useAutoGradeBuilder() {
           // Check if exists in library (Electron only)
           const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
           
-          if (existsInLibrary) {
-            selectedSong = { ...candidate, existsInLibrary: true };
-            stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
-            break;
-          } else {
-            // Song is missing from library
+          // USE THE SONG REGARDLESS - just mark as missing for download
+          selectedSong = { ...candidate, existsInLibrary };
+          stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
+          
+          if (!existsInLibrary) {
+            // Song is missing from library - mark for download but still use it
             stats.missing++;
             blockLogs.push({
               blockTime: timeStr,
@@ -446,7 +446,7 @@ export function useAutoGradeBuilder() {
               artist: candidate.artist,
               station: stationName || 'UNKNOWN',
               style: stationStyle,
-              reason: 'Não encontrada no acervo local',
+              reason: 'Não encontrada no acervo local (será baixada)',
             });
             
             // Add to missing songs list if not already there
@@ -462,6 +462,7 @@ export function useAutoGradeBuilder() {
               });
             }
           }
+          break;
         }
 
         checkedCount++;
@@ -473,18 +474,29 @@ export function useAutoGradeBuilder() {
         if (substitute) {
           const substituteExists = await checkSongInLibrary(substitute.artist, substitute.title);
           
-          if (substituteExists) {
-            selectedSong = { ...substitute, existsInLibrary: true };
-            stats.substituted++;
-            blockLogs.push({
-              blockTime: timeStr,
-              type: 'substituted',
+          // USE THE SUBSTITUTE REGARDLESS
+          selectedSong = { ...substitute, existsInLibrary: substituteExists };
+          stats.substituted++;
+          blockLogs.push({
+            blockTime: timeStr,
+            type: 'substituted',
+            title: substitute.title,
+            artist: substitute.artist,
+            station: substitute.station,
+            style: substitute.style,
+            reason: `Substituição DNA: ${stationStyle} (de ${stationName})`,
+            substituteFor: stationName || 'UNKNOWN',
+          });
+          
+          if (!substituteExists && !isSongAlreadyMissing(substitute.artist, substitute.title)) {
+            addMissingSong({
+              id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               title: substitute.title,
               artist: substitute.artist,
               station: substitute.station,
-              style: substitute.style,
-              reason: `Substituição DNA: ${stationStyle} (de ${stationName})`,
-              substituteFor: stationName || 'UNKNOWN',
+              timestamp: new Date(),
+              status: 'missing',
+              dna: substitute.style,
             });
           }
         }
@@ -497,20 +509,19 @@ export function useAutoGradeBuilder() {
           
           if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
             const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
-            if (existsInLibrary) {
-              selectedSong = { ...candidate, existsInLibrary: true };
-              stats.substituted++;
-              blockLogs.push({
-                blockTime: timeStr,
-                type: 'substituted',
-                title: candidate.title,
-                artist: candidate.artist,
-                station: candidate.station,
-                style: candidate.style,
-                reason: 'Pool geral (estação original sem músicas)',
-              });
-              break;
-            }
+            // USE IT REGARDLESS
+            selectedSong = { ...candidate, existsInLibrary };
+            stats.substituted++;
+            blockLogs.push({
+              blockTime: timeStr,
+              type: 'substituted',
+              title: candidate.title,
+              artist: candidate.artist,
+              station: candidate.station,
+              style: candidate.style,
+              reason: 'Pool geral (estação original sem músicas)',
+            });
+            break;
           }
         }
       }
