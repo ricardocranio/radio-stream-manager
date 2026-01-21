@@ -173,23 +173,33 @@ export function useAutoGradeBuilder() {
     usedSongsRef.current = [];
   }, []);
 
-  // Check if song exists in music library
-  const checkSongInLibrary = useCallback(async (artist: string, title: string): Promise<boolean> => {
-    if (!isElectronEnv || !window.electronAPI?.checkSongExists) {
-      return true; // Web mode: assume exists
+  // Check if song exists in music library and get the correct filename
+  const findSongInLibrary = useCallback(async (artist: string, title: string): Promise<{ exists: boolean; filename?: string }> => {
+    if (!isElectronEnv || !window.electronAPI?.findSongMatch) {
+      return { exists: true }; // Web mode: assume exists
     }
     try {
-      const result = await window.electronAPI.checkSongExists({
+      const result = await window.electronAPI.findSongMatch({
         artist,
         title,
         musicFolders: config.musicFolders,
       });
-      return result.exists;
+      if (result.exists && result.baseName) {
+        // Return the actual filename from the library (without extension, we add .mp3)
+        return { exists: true, filename: `${result.baseName}.mp3` };
+      }
+      return { exists: result.exists };
     } catch (error) {
-      console.error('[GRADE] Error checking library:', error);
-      return true; // On error, assume exists to avoid blocking
+      console.error('[GRADE] Error finding song match:', error);
+      return { exists: true }; // On error, assume exists to avoid blocking
     }
   }, [config.musicFolders]);
+
+  // Fallback check if song exists (for backwards compatibility)
+  const checkSongInLibrary = useCallback(async (artist: string, title: string): Promise<boolean> => {
+    const result = await findSongInLibrary(artist, title);
+    return result.exists;
+  }, [findSongInLibrary]);
 
   // Check if song is already in missing list
   const isSongAlreadyMissing = useCallback((artist: string, title: string): boolean => {
@@ -435,11 +445,12 @@ export function useAutoGradeBuilder() {
 
         // Check if not used in this block and not recently used
         if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-          const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
+          const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
           
-          if (existsInLibrary) {
-            // Found a song that EXISTS - use it!
-            selectedSong = { ...candidate, existsInLibrary: true };
+          if (libraryResult.exists) {
+            // Found a song that EXISTS - use the filename from library for correct spelling
+            const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+            selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
             stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
             break;
           } else {
@@ -468,15 +479,16 @@ export function useAutoGradeBuilder() {
           const key = `${rankSong.title.toLowerCase()}-${rankSong.artist.toLowerCase()}`;
           
           if (!usedInBlock.has(key) && !isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
-            const existsInLibrary = await checkSongInLibrary(rankSong.artist, rankSong.title);
+            const libraryResult = await findSongInLibrary(rankSong.artist, rankSong.title);
             
-            if (existsInLibrary) {
+            if (libraryResult.exists) {
+              const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
               selectedSong = {
                 title: rankSong.title,
                 artist: rankSong.artist,
                 station: 'TOP50',
                 style: rankSong.style,
-                filename: sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`),
+                filename: correctFilename,
                 existsInLibrary: true,
               };
               stats.substituted++;
@@ -508,10 +520,11 @@ export function useAutoGradeBuilder() {
             const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
             
             if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-              const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
+              const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
               
-              if (existsInLibrary) {
-                selectedSong = { ...candidate, existsInLibrary: true };
+              if (libraryResult.exists) {
+                const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+                selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
                 stats.substituted++;
                 blockLogs.push({
                   blockTime: timeStr,
@@ -537,10 +550,11 @@ export function useAutoGradeBuilder() {
           const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
           
           if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-            const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
+            const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
             
-            if (existsInLibrary) {
-              selectedSong = { ...candidate, existsInLibrary: true };
+            if (libraryResult.exists) {
+              const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
               stats.substituted++;
               blockLogs.push({
                 blockTime: timeStr,

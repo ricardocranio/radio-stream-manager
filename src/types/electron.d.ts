@@ -52,6 +52,19 @@ interface CheckSongParams {
 interface CheckSongResult {
   exists: boolean;
   path?: string;
+  filename?: string;
+  baseName?: string;
+  similarity?: number;
+}
+
+interface MusicLibraryStatsParams {
+  musicFolders: string[];
+}
+
+interface MusicLibraryStatsResult {
+  success: boolean;
+  count: number;
+  folders: number;
 }
 
 interface VozDownloadParams {
@@ -178,6 +191,8 @@ interface ElectronAPI {
   
   // Music library check - verify if song exists in local folders
   checkSongExists: (params: CheckSongParams) => Promise<CheckSongResult>;
+  findSongMatch: (params: CheckSongParams) => Promise<CheckSongResult>;
+  getMusicLibraryStats: (params: MusicLibraryStatsParams) => Promise<MusicLibraryStatsResult>;
   
   // Voz do Brasil download
   downloadVozBrasil: (params: VozDownloadParams) => Promise<VozDownloadResult>;
