@@ -36,7 +36,7 @@ interface RealtimeStats {
   nextRefreshIn: number;
 }
 
-const REFRESH_INTERVAL = 60; // Increased from 30s to 60s to reduce load
+const REFRESH_INTERVAL = 120; // Stats refresh every 2 minutes
 const BACKGROUND_REFRESH_MULTIPLIER = 3;
 
 export function useRealtimeStats() {
@@ -204,14 +204,14 @@ export function useRealtimeStats() {
 
     scheduleNextRefresh();
 
-    // Update countdown display every 10 seconds (reduced from 5s)
+    // Update countdown display every 40 seconds
     countdownIntervalId = setInterval(() => {
-      countdownRef.current = Math.max(0, countdownRef.current - 10);
+      countdownRef.current = Math.max(0, countdownRef.current - 40);
       setStats(prev => {
         if (prev.nextRefreshIn === countdownRef.current) return prev;
         return { ...prev, nextRefreshIn: countdownRef.current };
       });
-    }, 10000);
+    }, 40000);
 
     return () => {
       clearTimeout(refreshTimeoutId);
