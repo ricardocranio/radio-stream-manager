@@ -156,6 +156,7 @@ interface RadioState {
   setRankingSongs: (songs: RankingSong[]) => void;
   addRankingPlay: (songId: string) => void;
   addOrUpdateRankingSong: (title: string, artist: string, style: string) => void;
+  applyRankingBatch: (updates: Array<{ title: string; artist: string; style: string; count: number }>) => void;
   clearRanking: () => void;
 
   // Auto Scrape Setting (persisted)
@@ -407,13 +408,13 @@ export const useRadioStore = create<RadioState>()(
             s.id === songId ? { ...s, plays: s.plays + 1, lastPlayed: new Date() } : s
           ),
         })),
+      // Optimized: processes batch updates from rankingBatcher
       addOrUpdateRankingSong: (title, artist, style) =>
         set((state) => {
-          // Normalize for comparison (lowercase, trim)
           const normalizedTitle = title.toLowerCase().trim();
           const normalizedArtist = artist.toLowerCase().trim();
           
-          // Find existing song using a simple loop (faster than findIndex for small arrays)
+          // Find existing song
           let existingIndex = -1;
           for (let i = 0; i < state.rankingSongs.length; i++) {
             const s = state.rankingSongs[i];
@@ -425,11 +426,8 @@ export const useRadioStore = create<RadioState>()(
           }
           
           if (existingIndex >= 0) {
-            // Update existing song - mutate in place for performance
             const existing = state.rankingSongs[existingIndex];
             const newPlays = existing.plays + 1;
-            
-            // Create new array only if needed
             const updatedSongs = [...state.rankingSongs];
             updatedSongs[existingIndex] = {
               ...existing,
@@ -438,16 +436,15 @@ export const useRadioStore = create<RadioState>()(
               trend: newPlays > 5 ? 'up' : existing.trend,
             };
             
-            // Sort only every 20 updates to reduce CPU usage significantly
-            if (newPlays % 20 === 0) {
+            // Sort only every 50 updates (increased from 20)
+            if (newPlays % 50 === 0) {
               updatedSongs.sort((a, b) => b.plays - a.plays);
             }
             
             return { rankingSongs: updatedSongs };
           } else {
-            // Add new song - only log in development and limit frequency
             const newSong: RankingSong = {
-              id: `ranking-${Date.now()}`,
+              id: `r-${Date.now()}`,
               title: title.trim(),
               artist: artist.trim(),
               plays: 1,
@@ -456,18 +453,60 @@ export const useRadioStore = create<RadioState>()(
               lastPlayed: new Date(),
             };
             
-            // Add without sorting - just append (sort on read or every N additions)
             const updatedSongs = [...state.rankingSongs, newSong];
             
-            // Sort only every 5 new songs
-            const shouldSort = updatedSongs.length % 5 === 0;
-            if (shouldSort) {
+            // Sort only every 10 new songs (increased from 5)
+            if (updatedSongs.length % 10 === 0) {
               updatedSongs.sort((a, b) => b.plays - a.plays);
             }
             
-            // Keep only top 100 songs
             return { rankingSongs: updatedSongs.slice(0, 100) };
           }
+        }),
+      // Batch update: applies multiple ranking updates at once (from batcher)
+      applyRankingBatch: (updates: Array<{ title: string; artist: string; style: string; count: number }>) =>
+        set((state) => {
+          let updatedSongs = [...state.rankingSongs];
+          
+          for (const update of updates) {
+            const normalizedTitle = update.title.toLowerCase().trim();
+            const normalizedArtist = update.artist.toLowerCase().trim();
+            
+            let existingIndex = -1;
+            for (let i = 0; i < updatedSongs.length; i++) {
+              const s = updatedSongs[i];
+              if (s.title.toLowerCase() === normalizedTitle && 
+                  s.artist.toLowerCase() === normalizedArtist) {
+                existingIndex = i;
+                break;
+              }
+            }
+            
+            if (existingIndex >= 0) {
+              const existing = updatedSongs[existingIndex];
+              updatedSongs[existingIndex] = {
+                ...existing,
+                plays: existing.plays + update.count,
+                lastPlayed: new Date(),
+                trend: existing.plays + update.count > 5 ? 'up' : existing.trend,
+              };
+            } else {
+              updatedSongs.push({
+                id: `r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                title: update.title,
+                artist: update.artist,
+                plays: update.count,
+                style: update.style,
+                trend: 'stable',
+                lastPlayed: new Date(),
+              });
+            }
+          }
+          
+          // Sort once after all updates
+          updatedSongs.sort((a, b) => b.plays - a.plays);
+          
+          return { rankingSongs: updatedSongs.slice(0, 100) };
         }),
       clearRanking: () => set({ rankingSongs: [] }),
 
