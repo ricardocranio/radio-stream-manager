@@ -518,13 +518,13 @@ export function SequenceView() {
         </Card>
 
         {/* Fixed Content Panel - Sidebar */}
-        <Card className="glass-card">
-          <CardHeader className="border-b border-border pb-3">
+        <Card className="glass-card border-emerald-500/30">
+          <CardHeader className="border-b border-emerald-500/20 pb-3 bg-emerald-500/5">
             <CardTitle className="flex items-center gap-2 text-base">
               <span className="text-lg">📌</span>
-              Conteúdos Fixos
-              <Badge variant="secondary" className="ml-auto text-xs">
-                {fixedContent.filter(c => c.enabled).length}
+              Conteúdos Fixos Cadastrados
+              <Badge variant="secondary" className="ml-auto text-xs bg-emerald-500/20 text-emerald-400">
+                {fixedContent.filter(c => c.enabled).length} ativos
               </Badge>
             </CardTitle>
           </CardHeader>
