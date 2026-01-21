@@ -1,7 +1,7 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useId } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 import { useRadioStore } from '@/store/radioStore';
+import { realtimeManager } from '@/lib/realtimeManager';
 
 interface NotificationOptions {
   enableBrowserNotifications?: boolean;
@@ -10,15 +10,12 @@ interface NotificationOptions {
   onRankingUpdate?: (count: number) => void;
 }
 
-// Singleton to prevent duplicate subscriptions across component mounts
-let notificationChannelActive = false;
-
 export function useRealtimeNotifications(options: NotificationOptions = {}) {
   const { toast } = useToast();
   const { addOrUpdateRankingSong } = useRadioStore();
   const lastSongIdRef = useRef<string | null>(null);
   const notificationPermissionRef = useRef<NotificationPermission>('default');
-  const mountedRef = useRef(true);
+  const subscriberId = useId();
 
   const {
     enableBrowserNotifications = true,
@@ -72,78 +69,56 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
     toast({ title, description, variant });
   }, [enableToastNotifications, toast]);
 
-  // Subscribe to realtime changes - with singleton pattern
+  // Subscribe to realtime changes via centralized manager
   useEffect(() => {
-    mountedRef.current = true;
-    
-    // Skip if channel already active from another instance
-    if (notificationChannelActive) {
-      return;
-    }
-    
-    notificationChannelActive = true;
+    const unsubscribe = realtimeManager.subscribe(
+      'scraped_songs',
+      `notifications_${subscriberId}`,
+      (payload) => {
+        const newSong = payload.new as {
+          id: string;
+          title: string;
+          artist: string;
+          station_name: string;
+          is_now_playing: boolean;
+        };
 
-    const channel = supabase
-      .channel('scraped_songs_notifications')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'scraped_songs',
-        },
-        (payload) => {
-          if (!mountedRef.current) return;
-          
-          const newSong = payload.new as {
-            id: string;
-            title: string;
-            artist: string;
-            station_name: string;
-            is_now_playing: boolean;
-          };
+        // Avoid duplicate notifications
+        if (lastSongIdRef.current === newSong.id) return;
+        lastSongIdRef.current = newSong.id;
 
-          // Avoid duplicate notifications
-          if (lastSongIdRef.current === newSong.id) return;
-          lastSongIdRef.current = newSong.id;
+        // Callback
+        onNewSong?.(newSong);
 
-          // Callback
-          onNewSong?.(newSong);
+        // Show notifications only for now_playing songs
+        if (newSong.is_now_playing) {
+          showToastNotification(
+            '🎵 Nova música!',
+            `${newSong.artist} - ${newSong.title}`
+          );
 
-          // Show notifications only for now_playing songs
-          if (newSong.is_now_playing) {
-            showToastNotification(
-              '🎵 Nova música!',
-              `${newSong.artist} - ${newSong.title}`
-            );
-
-            showBrowserNotification(
-              '🎵 Nova música!',
-              `${newSong.artist} - ${newSong.title}\n📻 ${newSong.station_name}`
-            );
-          }
-
-          // Auto-add to ranking
-          let style = 'POP/VARIADO';
-          const stationLower = newSong.station_name.toLowerCase();
-          if (stationLower.includes('bh') || stationLower.includes('sertanejo') || stationLower.includes('clube')) {
-            style = 'SERTANEJO';
-          } else if (stationLower.includes('band') || stationLower.includes('pagode')) {
-            style = 'PAGODE';
-          }
-
-          addOrUpdateRankingSong(newSong.title, newSong.artist, style);
-          onRankingUpdate?.(1);
+          showBrowserNotification(
+            '🎵 Nova música!',
+            `${newSong.artist} - ${newSong.title}\n📻 ${newSong.station_name}`
+          );
         }
-      )
-      .subscribe();
 
-    return () => {
-      mountedRef.current = false;
-      notificationChannelActive = false;
-      supabase.removeChannel(channel);
-    };
-  }, [showToastNotification, showBrowserNotification, addOrUpdateRankingSong, onNewSong, onRankingUpdate]);
+        // Auto-add to ranking
+        let style = 'POP/VARIADO';
+        const stationLower = newSong.station_name.toLowerCase();
+        if (stationLower.includes('bh') || stationLower.includes('sertanejo') || stationLower.includes('clube')) {
+          style = 'SERTANEJO';
+        } else if (stationLower.includes('band') || stationLower.includes('pagode')) {
+          style = 'PAGODE';
+        }
+
+        addOrUpdateRankingSong(newSong.title, newSong.artist, style);
+        onRankingUpdate?.(1);
+      }
+    );
+
+    return unsubscribe;
+  }, [subscriberId, showToastNotification, showBrowserNotification, addOrUpdateRankingSong, onNewSong, onRankingUpdate]);
 
   // Request notification permission manually
   const requestPermission = useCallback(async () => {

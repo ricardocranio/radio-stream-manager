@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { withRetry, ErrorCodes, createError } from '@/lib/errorHandler';
-import { debounce } from '@/lib/errorHandler';
 import { useRadioStore } from '@/store/radioStore';
+import { realtimeManager } from '@/lib/realtimeManager';
 
 interface LastSongByStation {
   title: string;
@@ -33,20 +33,16 @@ interface RealtimeStats {
   stationCounts: Record<string, number>;
   isLoading: boolean;
   lastUpdated: Date | null;
-  nextRefreshIn: number; // seconds until next auto-refresh
+  nextRefreshIn: number;
 }
 
-const REFRESH_INTERVAL = 30; // seconds
-const BACKGROUND_REFRESH_MULTIPLIER = 3; // 3x slower when in background
-
-// Singleton channel to avoid duplicate subscriptions
-let globalChannel: ReturnType<typeof supabase.channel> | null = null;
-let subscriberCount = 0;
+const REFRESH_INTERVAL = 30;
+const BACKGROUND_REFRESH_MULTIPLIER = 3;
 
 export function useRealtimeStats() {
-  // Get power saving mode from store
   const powerSavingMode = useRadioStore((s) => s.config.powerSavingMode ?? false);
   const isInBackgroundRef = useRef(false);
+  const subscriberId = useId();
   
   const [stats, setStats] = useState<RealtimeStats>({
     totalSongs: 0,
@@ -63,9 +59,7 @@ export function useRealtimeStats() {
     nextRefreshIn: REFRESH_INTERVAL,
   });
   
-  // Use refs for countdown to avoid re-renders
   const countdownRef = useRef<number>(REFRESH_INTERVAL);
-  const countdownDisplayRef = useRef<number>(REFRESH_INTERVAL);
 
   // Track background state
   useEffect(() => {
@@ -76,7 +70,6 @@ export function useRealtimeStats() {
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
-  // Get effective refresh interval based on power saving mode
   const getEffectiveInterval = useCallback(() => {
     if (powerSavingMode && isInBackgroundRef.current) {
       return REFRESH_INTERVAL * BACKGROUND_REFRESH_MULTIPLIER;
@@ -94,7 +87,6 @@ export function useRealtimeStats() {
           const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
           const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
 
-          // Parallel queries for performance
           const [totalResult, last24hResult, lastHourResult, stationsResult, lastSongResult, recentSongsResult] = await Promise.all([
             supabase.from('scraped_songs').select('*', { count: 'exact', head: true }),
             supabase.from('scraped_songs').select('*', { count: 'exact', head: true }).gte('scraped_at', last24h.toISOString()),
@@ -104,12 +96,10 @@ export function useRealtimeStats() {
             supabase.from('scraped_songs').select('title, artist, station_name, scraped_at').order('scraped_at', { ascending: false }).limit(100),
           ]);
 
-          // Check for critical errors
           if (totalResult.error && totalResult.error.code !== 'PGRST116') {
             throw new Error(`Query failed: ${totalResult.error.message}`);
           }
 
-          // Get station counts
           const { data: stationSongs } = await supabase
             .from('scraped_songs')
             .select('station_name')
@@ -120,7 +110,6 @@ export function useRealtimeStats() {
             stationCounts[song.station_name] = (stationCounts[song.station_name] || 0) + 1;
           });
 
-          // Process recent songs to get last song per station and recent songs by station
           const lastSongsByStation: LastSongByStation[] = [];
           const recentSongsByStation: Record<string, LastSongByStation[]> = {};
           const seenStations = new Set<string>();
@@ -200,162 +189,83 @@ export function useRealtimeStats() {
 
   // Auto-refresh with power saving support
   useEffect(() => {
-    let refreshIntervalId: NodeJS.Timeout;
+    let refreshTimeoutId: NodeJS.Timeout;
     let countdownIntervalId: NodeJS.Timeout;
-    let currentInterval = REFRESH_INTERVAL;
 
-    const runRefresh = () => {
-      // Always refresh, but less frequently if in background with power saving
-      loadStats();
-      currentInterval = getEffectiveInterval();
-      countdownRef.current = currentInterval;
-      countdownDisplayRef.current = currentInterval;
+    const scheduleNextRefresh = () => {
+      const interval = getEffectiveInterval();
+      countdownRef.current = interval;
+      
+      refreshTimeoutId = setTimeout(() => {
+        loadStats();
+        scheduleNextRefresh();
+      }, interval * 1000);
     };
 
-    const setupIntervals = () => {
-      currentInterval = getEffectiveInterval();
-      countdownRef.current = currentInterval;
-      
-      // Use dynamic interval that checks conditions on each tick
-      const scheduleNextRefresh = () => {
-        refreshIntervalId = setTimeout(() => {
-          runRefresh();
-          scheduleNextRefresh(); // Re-schedule with potentially new interval
-        }, getEffectiveInterval() * 1000);
-      };
-      
-      scheduleNextRefresh();
+    scheduleNextRefresh();
 
-      // Update countdown display every 5 seconds
-      countdownIntervalId = setInterval(() => {
-        countdownRef.current = Math.max(0, countdownRef.current - 5);
-        countdownDisplayRef.current = countdownRef.current;
-        setStats(prev => {
-          if (prev.nextRefreshIn === countdownRef.current) return prev;
-          return { ...prev, nextRefreshIn: countdownRef.current };
-        });
-      }, 5000);
-    };
-
-    setupIntervals();
+    // Update countdown display every 5 seconds
+    countdownIntervalId = setInterval(() => {
+      countdownRef.current = Math.max(0, countdownRef.current - 5);
+      setStats(prev => {
+        if (prev.nextRefreshIn === countdownRef.current) return prev;
+        return { ...prev, nextRefreshIn: countdownRef.current };
+      });
+    }, 5000);
 
     return () => {
-      clearTimeout(refreshIntervalId);
+      clearTimeout(refreshTimeoutId);
       clearInterval(countdownIntervalId);
     };
   }, [loadStats, getEffectiveInterval, powerSavingMode]);
 
-  // Subscribe to realtime updates with error handling
+  // Subscribe to realtime updates via centralized manager
   useEffect(() => {
-    let retryCount = 0;
-    const maxRetries = 3;
-    let isCleanedUp = false;
-    let currentChannel: ReturnType<typeof supabase.channel> | null = null;
-    let retryTimeoutId: NodeJS.Timeout | null = null;
-    
-    const setupChannel = () => {
-      if (isCleanedUp) return;
-      
-      // Remove any existing channel first
-      if (currentChannel) {
-        try {
-          supabase.removeChannel(currentChannel);
-        } catch (e) {
-          // Ignore removal errors
-        }
-        currentChannel = null;
-      }
-      
-      console.log('[REALTIME] Setting up channel...');
-      
-      currentChannel = supabase
-        .channel(`stats_realtime_${Date.now()}`) // Unique channel name
-        .on(
-          'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'scraped_songs' },
-          (payload) => {
-            if (isCleanedUp) return;
-            console.log('[REALTIME] New song received:', payload.new);
-            const newSong = payload.new as { title: string; artist: string; station_name: string; scraped_at: string };
-            
-            setStats(prev => {
-              const newSongData = {
-                title: newSong.title,
-                artist: newSong.artist,
-                station: newSong.station_name,
-                timestamp: newSong.scraped_at,
-              };
+    const unsubscribe = realtimeManager.subscribe(
+      'scraped_songs',
+      `stats_${subscriberId}`,
+      (payload) => {
+        const newSong = payload.new as { title: string; artist: string; station_name: string; scraped_at: string };
+        
+        setStats(prev => {
+          const newSongData = {
+            title: newSong.title,
+            artist: newSong.artist,
+            station: newSong.station_name,
+            timestamp: newSong.scraped_at,
+          };
 
-              // Update lastSongsByStation
-              const updatedLastSongsByStation = [...prev.lastSongsByStation];
-              const existingIndex = updatedLastSongsByStation.findIndex(s => s.station === newSong.station_name);
-              if (existingIndex >= 0) {
-                updatedLastSongsByStation[existingIndex] = newSongData;
-              } else {
-                updatedLastSongsByStation.unshift(newSongData);
-              }
-
-              // Update recentSongsByStation
-              const updatedRecentSongsByStation = { ...prev.recentSongsByStation };
-              const stationSongs = updatedRecentSongsByStation[newSong.station_name] || [];
-              updatedRecentSongsByStation[newSong.station_name] = [newSongData, ...stationSongs].slice(0, 5);
-
-              return {
-                ...prev,
-                totalSongs: prev.totalSongs + 1,
-                songsLast24h: prev.songsLast24h + 1,
-                songsLastHour: prev.songsLastHour + 1,
-                lastSong: newSongData,
-                lastSongsByStation: updatedLastSongsByStation,
-                recentSongsByStation: updatedRecentSongsByStation,
-                stationCounts: {
-                  ...prev.stationCounts,
-                  [newSong.station_name]: (prev.stationCounts[newSong.station_name] || 0) + 1,
-                },
-              };
-            });
+          const updatedLastSongsByStation = [...prev.lastSongsByStation];
+          const existingIndex = updatedLastSongsByStation.findIndex(s => s.station === newSong.station_name);
+          if (existingIndex >= 0) {
+            updatedLastSongsByStation[existingIndex] = newSongData;
+          } else {
+            updatedLastSongsByStation.unshift(newSongData);
           }
-        )
-        .subscribe((status) => {
-          if (isCleanedUp) return;
-          console.log('[REALTIME] Subscription status:', status);
-          
-          if (status === 'CHANNEL_ERROR') {
-            console.error('[REALTIME] Channel error, scheduling retry...');
-            if (retryCount < maxRetries && !isCleanedUp) {
-              retryCount++;
-              // Clear any existing retry timeout
-              if (retryTimeoutId) clearTimeout(retryTimeoutId);
-              retryTimeoutId = setTimeout(() => {
-                if (!isCleanedUp) {
-                  setupChannel();
-                }
-              }, 2000 * retryCount);
-            } else {
-              console.error('[REALTIME] Max retries reached, falling back to polling');
-              loadStats();
-            }
-          } else if (status === 'SUBSCRIBED') {
-            console.log('[REALTIME] ✓ Successfully subscribed to updates');
-            retryCount = 0;
-          }
+
+          const updatedRecentSongsByStation = { ...prev.recentSongsByStation };
+          const stationSongs = updatedRecentSongsByStation[newSong.station_name] || [];
+          updatedRecentSongsByStation[newSong.station_name] = [newSongData, ...stationSongs].slice(0, 5);
+
+          return {
+            ...prev,
+            totalSongs: prev.totalSongs + 1,
+            songsLast24h: prev.songsLast24h + 1,
+            songsLastHour: prev.songsLastHour + 1,
+            lastSong: newSongData,
+            lastSongsByStation: updatedLastSongsByStation,
+            recentSongsByStation: updatedRecentSongsByStation,
+            stationCounts: {
+              ...prev.stationCounts,
+              [newSong.station_name]: (prev.stationCounts[newSong.station_name] || 0) + 1,
+            },
+          };
         });
-    };
-
-    setupChannel();
-
-    return () => {
-      isCleanedUp = true;
-      if (retryTimeoutId) clearTimeout(retryTimeoutId);
-      if (currentChannel) {
-        try {
-          supabase.removeChannel(currentChannel);
-        } catch (e) {
-          // Ignore removal errors on cleanup
-        }
       }
-    };
-  }, [loadStats]);
+    );
+
+    return unsubscribe;
+  }, [subscriberId]);
 
   return { stats, refresh: loadStats };
 }

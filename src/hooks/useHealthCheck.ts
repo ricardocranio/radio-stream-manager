@@ -55,17 +55,31 @@ export function useHealthCheck() {
   }, []);
 
   const checkRealtime = useCallback(async (): Promise<'ok' | 'degraded' | 'offline'> => {
+    // Use the centralized manager status instead of creating new channels
+    const { realtimeManager } = await import('@/lib/realtimeManager');
+    const status = realtimeManager.getStatus('scraped_songs');
+    
+    if (status === 'connected') {
+      realtimeCheckRef.current = true;
+      return 'ok';
+    } else if (status === 'error') {
+      return 'offline';
+    } else if (status === 'connecting') {
+      return 'degraded';
+    }
+    
+    // Fallback: quick ping test
     return new Promise((resolve) => {
       const testChannel = supabase.channel('health_check_' + Date.now());
       const timeout = setTimeout(() => {
-        supabase.removeChannel(testChannel);
+        try { supabase.removeChannel(testChannel); } catch (e) {}
         resolve('degraded');
-      }, 5000);
+      }, 3000);
 
       testChannel
         .subscribe((status) => {
           clearTimeout(timeout);
-          supabase.removeChannel(testChannel);
+          try { supabase.removeChannel(testChannel); } catch (e) {}
           
           if (status === 'SUBSCRIBED') {
             realtimeCheckRef.current = true;
