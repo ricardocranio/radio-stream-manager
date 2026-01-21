@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Settings, Save, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Settings, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,19 +37,48 @@ export function SettingsView() {
   const [funkWords, setFunkWords] = useState(
     'funk, mc , sequencia, proibidão, baile, kondzilla, gr6'
   );
+  
+  // Track if initial load is complete to avoid auto-save on mount
+  const isInitialMount = useRef(true);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Helper to update Deezer config - saves immediately to store
   const updateDeezerConfig = (updates: Partial<typeof deezerConfig>) => {
     setDeezerConfig(updates);
   };
 
-  const handleSave = () => {
-    setConfig(localConfig);
-    toast({
-      title: 'Configurações salvas',
-      description: 'As configurações do sistema foram atualizadas.',
-    });
-  };
+  // Auto-save localConfig when it changes (with debounce)
+  const autoSaveConfig = useCallback(() => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    saveTimeoutRef.current = setTimeout(() => {
+      setConfig(localConfig);
+      console.log('[SETTINGS] ✓ Auto-saved config:', localConfig.musicFolders);
+    }, 500); // 500ms debounce
+  }, [localConfig, setConfig]);
+
+  useEffect(() => {
+    // Skip auto-save on initial mount
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
+    autoSaveConfig();
+    
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [localConfig, autoSaveConfig]);
+
+  // Sync localConfig when store config changes externally
+  useEffect(() => {
+    setLocalConfig(config);
+  }, [config]);
 
   const handleReset = () => {
     setLocalConfig(config);
@@ -128,14 +157,14 @@ export function SettingsView() {
           <h2 className="text-2xl font-bold text-foreground">Configurações</h2>
           <p className="text-muted-foreground">Ajuste os parâmetros do sistema de programação</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
+          <span className="text-xs text-green-500 bg-green-500/10 px-2 py-1 rounded-full flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" />
+            Auto-save ativo
+          </span>
           <Button variant="outline" onClick={handleReset} size="sm">
             <RotateCcw className="w-4 h-4 mr-2" />
             Restaurar
-          </Button>
-          <Button onClick={handleSave} size="sm">
-            <Save className="w-4 h-4 mr-2" />
-            Salvar
           </Button>
         </div>
       </div>
