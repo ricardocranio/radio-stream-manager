@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, Save, RotateCcw, Clock, Users, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music } from 'lucide-react';
+import { Settings, Save, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,6 @@ export function SettingsView() {
   const { config, setConfig, deezerConfig, setDeezerConfig } = useRadioStore();
   const { toast } = useToast();
   const [localConfig, setLocalConfig] = useState(config);
-  const [localDeezerConfig, setLocalDeezerConfig] = useState(deezerConfig);
   const [showArl, setShowArl] = useState(false);
   const [forbiddenWords, setForbiddenWords] = useState(
     '1.FM, Love Classics, Solitaire, Mahjong, Dayspedia, Games, Online, METROPOLITANA - SP, BAND FM'
@@ -30,9 +29,13 @@ export function SettingsView() {
     'funk, mc , sequencia, proibidão, baile, kondzilla, gr6'
   );
 
+  // Helper to update Deezer config - saves immediately to store
+  const updateDeezerConfig = (updates: Partial<typeof deezerConfig>) => {
+    setDeezerConfig(updates);
+  };
+
   const handleSave = () => {
     setConfig(localConfig);
-    setDeezerConfig(localDeezerConfig);
     toast({
       title: 'Configurações salvas',
       description: 'As configurações do sistema foram atualizadas.',
@@ -41,7 +44,6 @@ export function SettingsView() {
 
   const handleReset = () => {
     setLocalConfig(config);
-    setLocalDeezerConfig(deezerConfig);
     toast({
       title: 'Configurações restauradas',
       description: 'As alterações foram descartadas.',
@@ -79,7 +81,7 @@ export function SettingsView() {
             <CardTitle className="flex items-center gap-2">
               <Music2 className="w-5 h-5 text-primary" />
               Integração Deezer
-              {localDeezerConfig.enabled && localDeezerConfig.arl && (
+              {deezerConfig.enabled && deezerConfig.arl && (
                 <span className="ml-2 px-2 py-0.5 text-xs bg-green-500/10 text-green-500 rounded-full">
                   Conectado
                 </span>
@@ -95,14 +97,14 @@ export function SettingsView() {
                 </p>
               </div>
               <Switch
-                checked={localDeezerConfig.enabled}
+                checked={deezerConfig.enabled}
                 onCheckedChange={(checked) =>
-                  setLocalDeezerConfig((prev) => ({ ...prev, enabled: checked }))
+                  updateDeezerConfig({ enabled: checked })
                 }
               />
             </div>
 
-            {localDeezerConfig.enabled && (
+            {deezerConfig.enabled && (
               <div className="flex items-center justify-between p-4 rounded-lg bg-green-500/10 border border-green-500/30">
                 <div>
                   <Label className="text-green-400">🤖 Download Automático</Label>
@@ -111,15 +113,15 @@ export function SettingsView() {
                   </p>
                 </div>
                 <Switch
-                  checked={localDeezerConfig.autoDownload}
+                  checked={deezerConfig.autoDownload}
                   onCheckedChange={(checked) =>
-                    setLocalDeezerConfig((prev) => ({ ...prev, autoDownload: checked }))
+                    updateDeezerConfig({ autoDownload: checked })
                   }
                 />
               </div>
             )}
 
-            {localDeezerConfig.enabled && (
+            {deezerConfig.enabled && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="arl">ARL (Token de Autenticação)</Label>
@@ -127,9 +129,9 @@ export function SettingsView() {
                     <Input
                       id="arl"
                       type={showArl ? 'text' : 'password'}
-                      value={localDeezerConfig.arl}
+                      value={deezerConfig.arl}
                       onChange={(e) =>
-                        setLocalDeezerConfig((prev) => ({ ...prev, arl: e.target.value }))
+                        updateDeezerConfig({ arl: e.target.value })
                       }
                       placeholder="Cole seu ARL do Deezer aqui..."
                       className="pr-10 font-mono text-xs"
@@ -145,8 +147,8 @@ export function SettingsView() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {localDeezerConfig.arl ? (
-                      validateArl(localDeezerConfig.arl) ? (
+                    {deezerConfig.arl ? (
+                      validateArl(deezerConfig.arl) ? (
                         <span className="text-green-500">✓ ARL válido</span>
                       ) : (
                         <span className="text-yellow-500">⚠ ARL parece inválido (verifique)</span>
@@ -169,9 +171,9 @@ export function SettingsView() {
                   <div className="flex gap-2">
                     <Input
                       id="downloadFolder"
-                      value={localDeezerConfig.downloadFolder}
+                      value={deezerConfig.downloadFolder}
                       onChange={(e) =>
-                        setLocalDeezerConfig((prev) => ({ ...prev, downloadFolder: e.target.value }))
+                        updateDeezerConfig({ downloadFolder: e.target.value })
                       }
                       placeholder="C:\Playlist\Downloads"
                       className="flex-1"
@@ -187,7 +189,7 @@ export function SettingsView() {
                             // Use Electron's native folder picker
                             const folder = await window.electronAPI.selectFolder();
                             if (folder) {
-                              setLocalDeezerConfig((prev) => ({ ...prev, downloadFolder: folder }));
+                              updateDeezerConfig({ downloadFolder: folder });
                               toast({
                                 title: 'Pasta selecionada',
                                 description: `Pasta "${folder}" selecionada com sucesso.`,
@@ -222,9 +224,9 @@ export function SettingsView() {
                 <div className="space-y-2">
                   <Label htmlFor="quality">Qualidade do Download</Label>
                   <Select
-                    value={localDeezerConfig.quality}
+                    value={deezerConfig.quality}
                     onValueChange={(value: 'MP3_128' | 'MP3_320' | 'FLAC') =>
-                      setLocalDeezerConfig((prev) => ({ ...prev, quality: value }))
+                      updateDeezerConfig({ quality: value })
                     }
                   >
                     <SelectTrigger>
@@ -245,13 +247,13 @@ export function SettingsView() {
                   <div className="flex items-center justify-between mb-2">
                     <Label>Intervalo de Download Automático</Label>
                     <span className="text-sm font-mono text-primary">
-                      {localDeezerConfig.autoDownloadIntervalMinutes || 20} min
+                      {deezerConfig.autoDownloadIntervalMinutes || 20} min
                     </span>
                   </div>
                   <Slider
-                    value={[localDeezerConfig.autoDownloadIntervalMinutes || 20]}
+                    value={[deezerConfig.autoDownloadIntervalMinutes || 20]}
                     onValueChange={([value]) =>
-                      setLocalDeezerConfig((prev) => ({ ...prev, autoDownloadIntervalMinutes: value }))
+                      updateDeezerConfig({ autoDownloadIntervalMinutes: value })
                     }
                     min={5}
                     max={60}
