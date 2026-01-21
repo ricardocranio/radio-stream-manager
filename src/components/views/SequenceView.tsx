@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power } from 'lucide-react';
+import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power, PlusCircle, MinusCircle } from 'lucide-react';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const WEEK_DAYS: { value: WeekDay; label: string }[] = [
   { value: 'dom', label: 'Dom' },
@@ -66,16 +67,16 @@ export function SequenceView() {
   const [formPriority, setFormPriority] = useState(1);
   const [formSequence, setFormSequence] = useState<SequenceConfig[]>(sequence);
 
-  // Build radio options with FIXO at the bottom of the list
+  // Build radio options with stations first, then special options, FIXO at the end
   const stationOptions = stations
     .filter(s => s.enabled !== false)
     .map((s) => ({ value: s.id, label: s.name }));
   
   const radioOptions = [
     ...stationOptions,
-    { value: 'fixo', label: '📌 FIXO (Conteúdo Fixo)' },
     { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)' },
     { value: 'top50', label: '🏆 TOP50 (Curadoria)' },
+    { value: 'fixo', label: '📌 FIXO (Conteúdo Fixo)' },
   ];
 
   const handleChange = (position: number, value: string) => {
@@ -104,6 +105,41 @@ export function SequenceView() {
       title: 'Alterações descartadas',
       description: 'A sequência foi restaurada.',
     });
+  };
+
+  const handleAddPosition = () => {
+    const newPosition = localSequence.length + 1;
+    setLocalSequence([...localSequence, { position: newPosition, radioSource: 'bh' }]);
+    toast({
+      title: 'Posição adicionada',
+      description: `Posição ${newPosition} foi criada.`,
+    });
+  };
+
+  const handleRemoveLastPosition = () => {
+    if (localSequence.length <= 5) {
+      toast({
+        title: 'Mínimo atingido',
+        description: 'A sequência precisa ter pelo menos 5 posições.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setLocalSequence(localSequence.slice(0, -1));
+    toast({
+      title: 'Posição removida',
+      description: `Última posição foi removida.`,
+    });
+  };
+
+  const handleAddFormPosition = () => {
+    const newPosition = formSequence.length + 1;
+    setFormSequence([...formSequence, { position: newPosition, radioSource: 'bh' }]);
+  };
+
+  const handleRemoveFormLastPosition = () => {
+    if (formSequence.length <= 5) return;
+    setFormSequence(formSequence.slice(0, -1));
   };
 
   const openNewScheduleDialog = () => {
@@ -368,7 +404,7 @@ export function SequenceView() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Default Sequence Configuration */}
         <Card className="glass-card">
           <CardHeader className="border-b border-border">
@@ -383,39 +419,122 @@ export function SequenceView() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4">
-            <div className="space-y-3">
-              {localSequence.map((item) => (
-                <div
-                  key={item.position}
-                  className="flex items-center gap-4 p-3 rounded-lg bg-secondary/30 border border-border hover:border-primary/30 transition-colors"
-                >
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <GripVertical className="w-4 h-4" />
-                    <span className="font-mono font-bold text-foreground w-6">
-                      {item.position.toString().padStart(2, '0')}
-                    </span>
-                  </div>
-                  <Select
-                    value={item.radioSource}
-                    onValueChange={(value) => handleChange(item.position, value)}
+            <ScrollArea className="h-[400px] pr-4">
+              <div className="space-y-2">
+                {localSequence.map((item) => (
+                  <div
+                    key={item.position}
+                    className="flex items-center gap-3 p-2 rounded-lg bg-secondary/30 border border-border hover:border-primary/30 transition-colors"
                   >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {radioOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Badge variant="outline" className={getStationColor(item.radioSource)}>
-                    {item.radioSource.toUpperCase()}
-                  </Badge>
-                </div>
-              ))}
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <GripVertical className="w-4 h-4" />
+                      <span className="font-mono font-bold text-foreground w-6 text-sm">
+                        {item.position.toString().padStart(2, '0')}
+                      </span>
+                    </div>
+                    <Select
+                      value={item.radioSource}
+                      onValueChange={(value) => handleChange(item.position, value)}
+                    >
+                      <SelectTrigger className="flex-1 h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {radioOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Badge variant="outline" className={`${getStationColor(item.radioSource)} text-[10px]`}>
+                      {item.radioSource.toUpperCase()}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+            <div className="flex gap-2 mt-4 pt-4 border-t border-border">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={handleAddPosition}
+              >
+                <PlusCircle className="w-4 h-4 mr-2" />
+                Adicionar Posição
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRemoveLastPosition}
+                disabled={localSequence.length <= 5}
+              >
+                <MinusCircle className="w-4 h-4" />
+              </Button>
             </div>
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              {localSequence.length} posições configuradas
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Fixed Content Panel - Sidebar */}
+        <Card className="glass-card">
+          <CardHeader className="border-b border-border pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <span className="text-lg">📌</span>
+              Conteúdos Fixos
+              <Badge variant="secondary" className="ml-auto text-xs">
+                {fixedContent.filter(c => c.enabled).length}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3">
+            {fixedContent.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Nenhum conteúdo fixo cadastrado.
+              </p>
+            ) : (
+              <ScrollArea className="h-[400px] pr-2">
+                <div className="space-y-2">
+                  {fixedContent.map((content) => (
+                    <div
+                      key={content.id}
+                      className={`p-2 rounded-lg border transition-all ${
+                        content.enabled
+                          ? 'bg-emerald-500/10 border-emerald-500/30'
+                          : 'bg-muted/20 border-muted opacity-50'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-1">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-xs truncate">{content.name}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{content.fileName}</p>
+                        </div>
+                        <Badge variant="outline" className="text-[8px] shrink-0 px-1">
+                          {content.enabled ? 'ON' : 'OFF'}
+                        </Badge>
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                        <Badge variant="secondary" className="text-[8px] px-1 py-0">
+                          {getTypeLabel(content.type)}
+                        </Badge>
+                        {content.position && (
+                          <Badge variant="outline" className="text-[8px] px-1 py-0 bg-primary/10">
+                            Pos: {content.position === 'start' ? 'Início' : content.position === 'middle' ? 'Meio' : content.position === 'end' ? 'Fim' : content.position}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-[9px] text-muted-foreground mt-1 truncate">
+                        {content.timeSlots.map((t) => `${t.hour.toString().padStart(2, '0')}:${t.minute.toString().padStart(2, '0')}`).slice(0, 4).join(', ')}
+                        {content.timeSlots.length > 4 && ` +${content.timeSlots.length - 4}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
           </CardContent>
         </Card>
 
@@ -485,57 +604,6 @@ export function SequenceView() {
           </CardContent>
         </Card>
 
-        {/* Fixed Content Panel */}
-        <Card className="glass-card lg:col-span-2">
-          <CardHeader className="border-b border-border pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <span className="text-lg">📌</span>
-              Conteúdos Fixos Cadastrados
-              <Badge variant="secondary" className="ml-auto">
-                {fixedContent.filter(c => c.enabled).length} ativos
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
-            {fixedContent.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                Nenhum conteúdo fixo cadastrado. Configure na aba "Conteúdos Fixos".
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {fixedContent.map((content) => (
-                  <div
-                    key={content.id}
-                    className={`p-3 rounded-lg border transition-all ${
-                      content.enabled
-                        ? 'bg-emerald-500/10 border-emerald-500/30'
-                        : 'bg-muted/20 border-muted opacity-50'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm truncate">{content.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{content.fileName}</p>
-                      </div>
-                      <Badge variant="outline" className="text-[10px] shrink-0">
-                        {content.enabled ? 'ON' : 'OFF'}
-                      </Badge>
-                    </div>
-                    <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      <Badge variant="secondary" className="text-[10px]">
-                        {getTypeLabel(content.type)}
-                      </Badge>
-                      <span className="text-[10px] text-muted-foreground">
-                        {content.timeSlots.map((t) => `${t.hour.toString().padStart(2, '0')}:${t.minute.toString().padStart(2, '0')}`).slice(0, 3).join(', ')}
-                        {content.timeSlots.length > 3 && ` +${content.timeSlots.length - 3}`}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       {/* Dialog for New/Edit Scheduled Sequence */}
@@ -676,7 +744,29 @@ export function SequenceView() {
 
             {/* Sequence Config */}
             <div className="space-y-2">
-              <Label>Sequência de Emissoras</Label>
+              <div className="flex items-center justify-between">
+                <Label>Sequência de Emissoras</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddFormPosition}
+                  >
+                    <PlusCircle className="w-3 h-3 mr-1" />
+                    Posição
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRemoveFormLastPosition}
+                    disabled={formSequence.length <= 5}
+                  >
+                    <MinusCircle className="w-3 h-3" />
+                  </Button>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto p-1">
                 {formSequence.map((item) => (
                   <div
@@ -704,6 +794,9 @@ export function SequenceView() {
                   </div>
                 ))}
               </div>
+              <p className="text-xs text-muted-foreground text-center">
+                {formSequence.length} posições configuradas
+              </p>
             </div>
           </div>
 
