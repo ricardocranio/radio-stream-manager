@@ -45,14 +45,25 @@ export function sanitizeFilename(filename: string): string {
   // Replace & with "e"
   result = result.replace(/&/g, 'e');
   
-  // Remove parentheses but keep content: (ao vivo) → ao vivo
+  // Replace "feat." and "ft." variations
+  result = result.replace(/\s*feat\.?\s*/gi, ' feat ');
+  result = result.replace(/\s*ft\.?\s*/gi, ' feat ');
+  
+  // Remove parentheses but keep content: (Ao Vivo) → Ao Vivo
   result = result.replace(/\(([^)]+)\)/g, '$1');
+  
+  // Remove brackets but keep content: [Ao Vivo] → Ao Vivo
+  result = result.replace(/\[([^\]]+)\]/g, '$1');
   
   // Remove accents
   result = removeAccents(result);
   
-  // Remove remaining special characters except: letters, numbers, spaces, dash, underscore, dot
-  result = result.replace(/[^a-zA-Z0-9\s\-_.]/g, '');
+  // Remove remaining special characters except: letters, numbers, spaces, dash, dot
+  // Specifically remove: ´ ` ~ ' " , ; : ! ? @ # $ % ^ * + = | \ / < >
+  result = result.replace(/[^a-zA-Z0-9\s\-.]/g, '');
+  
+  // Ensure proper "Artist - Title" format (single dash with spaces)
+  result = result.replace(/\s*-\s*/g, ' - ');
   
   // Normalize multiple spaces to single space
   result = result.replace(/\s+/g, ' ').trim();

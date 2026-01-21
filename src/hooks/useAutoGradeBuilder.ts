@@ -383,7 +383,7 @@ export function useAutoGradeBuilder() {
       // Continue to generate songs
     }
 
-    // Normal block with 10 songs from different stations
+    // Normal block with 10 songs following the configured SEQUENCE
     const songs: string[] = [];
     const usedInBlock = new Set<string>();
     const stationIdToName: Record<string, string> = {};
@@ -392,82 +392,105 @@ export function useAutoGradeBuilder() {
       stationIdToName[s.id] = s.name;
     });
 
-    // Get all available station names with songs
-    const availableStations = Object.keys(songsByStation).filter(
-      name => songsByStation[name]?.length > 0
-    );
-
-    // Create a flattened pool of all songs with station info
+    // Create a flattened pool of all songs for fallback
     const allSongsPool: SongEntry[] = [];
-    for (const stationName of availableStations) {
+    for (const stationName of Object.keys(songsByStation)) {
       const stationSongs = songsByStation[stationName];
       for (const song of stationSongs) {
         allSongsPool.push(song);
       }
     }
 
-    // Track which station index to use for round-robin distribution
-    let stationIndex = 0;
+    // Track song index per station to avoid repeating from start
+    const stationSongIndex: Record<string, number> = {};
 
-    // Generate 10 songs, rotating through stations for variety
-    while (songs.length < 10) {
+    // Follow the user-configured SEQUENCE (position 1 = Band FM, position 2 = Clube FM, etc.)
+    for (const seq of sequence) {
+      if (songs.length >= 10) break; // Max 10 songs per block
+
+      const stationName = stationIdToName[seq.radioSource];
+      const stationStyle = getStationStyle(seq.radioSource);
+      const stationSongs = stationName ? songsByStation[stationName] : [];
+      
+      // Initialize index for this station
+      if (stationSongIndex[stationName] === undefined) {
+        stationSongIndex[stationName] = 0;
+      }
+
       let selectedSong: SongEntry | null = null;
-      let triedStations = 0;
+      let startIndex = stationSongIndex[stationName];
+      let checkedCount = 0;
 
-      // Try each station in round-robin until we find a valid song
-      while (triedStations < availableStations.length && !selectedSong) {
-        const currentStation = availableStations[(stationIndex + triedStations) % availableStations.length];
-        const stationSongs = songsByStation[currentStation] || [];
-        const stationStyle = stations.find(s => s.name === currentStation)?.styles?.[0] || 'POP/VARIADO';
+      // Try to find a valid song from the configured station
+      while (checkedCount < (stationSongs?.length || 0) && !selectedSong) {
+        const songIdx = (startIndex + checkedCount) % stationSongs.length;
+        const candidate = stationSongs[songIdx];
+        const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
 
-        // Try to find a valid song from this station
-        for (const candidate of stationSongs) {
-          const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
-
-          // Check if not used in this block and not recently used
-          if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-            // Check if exists in library (Electron only)
-            const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
+        // Check if not used in this block and not recently used
+        if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
+          // Check if exists in library (Electron only)
+          const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
+          
+          if (existsInLibrary) {
+            selectedSong = { ...candidate, existsInLibrary: true };
+            stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
+            break;
+          } else {
+            // Song is missing from library
+            stats.missing++;
+            blockLogs.push({
+              blockTime: timeStr,
+              type: 'missing',
+              title: candidate.title,
+              artist: candidate.artist,
+              station: stationName || 'UNKNOWN',
+              style: stationStyle,
+              reason: 'Não encontrada no acervo local',
+            });
             
-            if (existsInLibrary) {
-              selectedSong = { ...candidate, existsInLibrary: true };
-              break;
-            } else {
-              // Song is missing from library
-              stats.missing++;
-              blockLogs.push({
-                blockTime: timeStr,
-                type: 'missing',
+            // Add to missing songs list if not already there
+            if (!isSongAlreadyMissing(candidate.artist, candidate.title)) {
+              addMissingSong({
+                id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                 title: candidate.title,
                 artist: candidate.artist,
-                station: currentStation,
-                style: stationStyle,
-                reason: 'Não encontrada no acervo local',
+                station: stationName || 'UNKNOWN',
+                timestamp: new Date(),
+                status: 'missing',
+                dna: stationStyle,
               });
-              
-              // Add to missing songs list if not already there
-              if (!isSongAlreadyMissing(candidate.artist, candidate.title)) {
-                addMissingSong({
-                  id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                  title: candidate.title,
-                  artist: candidate.artist,
-                  station: currentStation,
-                  timestamp: new Date(),
-                  status: 'missing',
-                  dna: stationStyle,
-                });
-              }
             }
           }
         }
 
-        triedStations++;
+        checkedCount++;
       }
 
-      // Advance to next station for next song (round-robin)
-      stationIndex = (stationIndex + 1) % Math.max(availableStations.length, 1);
+      // If no valid song from configured station, find substitute with same DNA
+      if (!selectedSong) {
+        const substitute = findSubstitute(stationStyle, songsByStation, timeStr, usedInBlock);
+        if (substitute) {
+          const substituteExists = await checkSongInLibrary(substitute.artist, substitute.title);
+          
+          if (substituteExists) {
+            selectedSong = { ...substitute, existsInLibrary: true };
+            stats.substituted++;
+            blockLogs.push({
+              blockTime: timeStr,
+              type: 'substituted',
+              title: substitute.title,
+              artist: substitute.artist,
+              station: substitute.station,
+              style: substitute.style,
+              reason: `Substituição DNA: ${stationStyle} (de ${stationName})`,
+              substituteFor: stationName || 'UNKNOWN',
+            });
+          }
+        }
+      }
 
-      // If no valid song found from any station, try any song from the pool
+      // Last resort: any unused song from pool
       if (!selectedSong) {
         for (const candidate of allSongsPool) {
           const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
@@ -484,7 +507,7 @@ export function useAutoGradeBuilder() {
                 artist: candidate.artist,
                 station: candidate.station,
                 style: candidate.style,
-                reason: 'Pool geral - variação de rádios',
+                reason: 'Pool geral (estação original sem músicas)',
               });
               break;
             }
@@ -493,7 +516,7 @@ export function useAutoGradeBuilder() {
       }
 
       if (selectedSong) {
-        // Real songs have quotes around filenames
+        // Format: "Artista - Musica.mp3" (already sanitized via filename property)
         songs.push(`"${selectedSong.filename}"`);
         usedInBlock.add(`${selectedSong.title.toLowerCase()}-${selectedSong.artist.toLowerCase()}`);
         markSongAsUsed(selectedSong.title, selectedSong.artist, timeStr);
@@ -518,8 +541,6 @@ export function useAutoGradeBuilder() {
           station: 'FALLBACK',
           reason: 'Nenhuma música válida encontrada, usando coringa',
         });
-        // Break to prevent infinite loop if pool is exhausted
-        break;
       }
     }
 
