@@ -42,7 +42,7 @@ interface AutoGradeState {
 
 const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
 const ARTIST_REPETITION_MINUTES = 60;
-const DEFAULT_MINUTES_BEFORE_BLOCK = 5;
+const DEFAULT_MINUTES_BEFORE_BLOCK = 10; // Build 10 minutes before each block
 
 export function useAutoGradeBuilder() {
   const { toast } = useToast();
@@ -824,16 +824,13 @@ export function useAutoGradeBuilder() {
   }, []);
 
   // Auto-build effect - triggers based on minutesBeforeBlock setting
+  // Only builds at specific times, not continuously
   useEffect(() => {
     if (!isElectronEnv || !state.isAutoEnabled) return;
 
-    console.log('[AUTO-GRADE] 🚀 Starting automatic generation...');
-    console.log(`[AUTO-GRADE] Will build ${state.minutesBeforeBlock} minutes before each block`);
+    console.log(`[AUTO-GRADE] ⏰ Aguardando ${state.minutesBeforeBlock} min antes de cada bloco`);
 
-    // Initial build after 2 seconds
-    const initialBuild = setTimeout(() => buildGrade(), 2000);
-
-    // Check every 30 seconds if we should build
+    // Check every 60 seconds if we should build (reduced from 30s)
     buildIntervalRef.current = setInterval(() => {
       const now = new Date();
       const minutesBefore = state.minutesBeforeBlock;
@@ -841,26 +838,26 @@ export function useAutoGradeBuilder() {
       const currentSecond = now.getSeconds();
 
       // Build times: (30 - minutesBefore) and (60 - minutesBefore)
-      const buildMinute1 = 30 - minutesBefore; // e.g., 25 for 5 min before :30
-      const buildMinute2 = 60 - minutesBefore; // e.g., 55 for 5 min before :00
+      // Example: 10 min before means build at :20 and :50
+      const buildMinute1 = 30 - minutesBefore; // e.g., 20 for 10 min before :30
+      const buildMinute2 = 60 - minutesBefore; // e.g., 50 for 10 min before :00
 
       const shouldBuild = 
-        (currentMinute === buildMinute1 && currentSecond < 30) ||
-        (currentMinute === (buildMinute2 % 60) && currentSecond < 30);
+        (currentMinute === buildMinute1 && currentSecond < 60) ||
+        (currentMinute === (buildMinute2 % 60) && currentSecond < 60);
 
       if (shouldBuild) {
-        console.log(`[AUTO-GRADE] ⏰ Trigger build at ${currentMinute}:${currentSecond}`);
+        console.log(`[AUTO-GRADE] 🔄 Montando bloco (${currentMinute}:${currentSecond.toString().padStart(2, '0')})`);
         buildGrade();
       }
-    }, 30 * 1000);
+    }, 60 * 1000); // Check every 60 seconds
 
     return () => {
-      clearTimeout(initialBuild);
       if (buildIntervalRef.current) clearInterval(buildIntervalRef.current);
     };
   }, [state.isAutoEnabled, state.minutesBeforeBlock, buildGrade]);
 
-  // Update countdown and block times every second
+  // Update countdown and block times every 30 seconds (reduced from 1s)
   useEffect(() => {
     const update = () => {
       const blocks = getBlockTimes();
@@ -876,7 +873,7 @@ export function useAutoGradeBuilder() {
     };
 
     update();
-    const interval = setInterval(update, 1000);
+    const interval = setInterval(update, 30000); // Every 30 seconds
     return () => clearInterval(interval);
   }, [getBlockTimes, getSecondsUntilNextBuild]);
 
