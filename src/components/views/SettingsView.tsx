@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, Save, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music } from 'lucide-react';
+import { Settings, Save, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Select,
   SelectContent,
@@ -17,11 +18,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+interface ArlValidationResult {
+  status: 'idle' | 'validating' | 'valid' | 'invalid';
+  message?: string;
+  user?: string;
+  premium?: boolean;
+}
+
 export function SettingsView() {
   const { config, setConfig, deezerConfig, setDeezerConfig } = useRadioStore();
   const { toast } = useToast();
   const [localConfig, setLocalConfig] = useState(config);
   const [showArl, setShowArl] = useState(false);
+  const [arlValidation, setArlValidation] = useState<ArlValidationResult>({ status: 'idle' });
   const [forbiddenWords, setForbiddenWords] = useState(
     '1.FM, Love Classics, Solitaire, Mahjong, Dayspedia, Games, Online, METROPOLITANA - SP, BAND FM'
   );
@@ -50,9 +59,66 @@ export function SettingsView() {
     });
   };
 
-  const validateArl = (arl: string) => {
+  const validateArlFormat = (arl: string) => {
     // ARL should be a long alphanumeric string (usually 192 chars)
     return arl.length > 100 && /^[a-zA-Z0-9]+$/.test(arl);
+  };
+
+  const handleValidateArl = async () => {
+    if (!deezerConfig.arl) {
+      toast({
+        title: 'ARL não informada',
+        description: 'Cole a ARL do Deezer antes de verificar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setArlValidation({ status: 'validating' });
+
+    try {
+      const { data, error } = await supabase.functions.invoke('validate-deezer-arl', {
+        body: { arl: deezerConfig.arl },
+      });
+
+      if (error) {
+        setArlValidation({ status: 'invalid', message: 'Erro ao conectar com o servidor' });
+        toast({
+          title: 'Erro na validação',
+          description: 'Não foi possível verificar a ARL.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (data.valid) {
+        setArlValidation({ 
+          status: 'valid', 
+          message: data.message,
+          user: data.user,
+          premium: data.premium
+        });
+        toast({
+          title: '✅ ARL Válida!',
+          description: data.message,
+        });
+      } else {
+        setArlValidation({ status: 'invalid', message: data.error });
+        toast({
+          title: '❌ ARL Inválida',
+          description: data.error || 'A ARL não é válida ou está expirada.',
+          variant: 'destructive',
+        });
+      }
+    } catch (err) {
+      console.error('Error validating ARL:', err);
+      setArlValidation({ status: 'invalid', message: 'Erro de conexão' });
+      toast({
+        title: 'Erro de conexão',
+        description: 'Não foi possível conectar ao servidor de validação.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -146,12 +212,51 @@ export function SettingsView() {
                       {showArl ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </Button>
                   </div>
+                  
+                  {/* ARL Validation Status & Button */}
+                  <div className="flex items-center gap-2 mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleValidateArl}
+                      disabled={!deezerConfig.arl || arlValidation.status === 'validating'}
+                      className="flex items-center gap-2"
+                    >
+                      {arlValidation.status === 'validating' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Verificando...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          Verificar ARL
+                        </>
+                      )}
+                    </Button>
+                    
+                    {arlValidation.status === 'valid' && (
+                      <span className="flex items-center gap-1 text-xs text-green-500">
+                        <CheckCircle2 className="w-4 h-4" />
+                        {arlValidation.user}{arlValidation.premium ? ' (Premium)' : ''}
+                      </span>
+                    )}
+                    
+                    {arlValidation.status === 'invalid' && (
+                      <span className="flex items-center gap-1 text-xs text-red-500">
+                        <XCircle className="w-4 h-4" />
+                        {arlValidation.message}
+                      </span>
+                    )}
+                  </div>
+                  
                   <p className="text-xs text-muted-foreground">
                     {deezerConfig.arl ? (
-                      validateArl(deezerConfig.arl) ? (
-                        <span className="text-green-500">✓ ARL válido</span>
+                      validateArlFormat(deezerConfig.arl) ? (
+                        <span className="text-green-500">✓ Formato válido ({deezerConfig.arl.length} caracteres)</span>
                       ) : (
-                        <span className="text-yellow-500">⚠ ARL parece inválido (verifique)</span>
+                        <span className="text-yellow-500">⚠ Formato parece inválido (verifique)</span>
                       )
                     ) : (
                       'Obtenha o ARL nos cookies do Deezer (arl=...)'
