@@ -557,15 +557,62 @@ app.whenReady().then(async () => {
     const deemixInstalled = await checkDeemixInstalled();
     console.log(`[INIT] ${deemixInstalled ? '✓' : '✗'} deemix: ${deemixInstalled ? deemixCommand : 'not installed'}`);
     
-    // Notify renderer about deemix status
-    setTimeout(() => {
-      if (mainWindow) {
-        mainWindow.webContents.send('deemix-status', { 
-          installed: deemixInstalled, 
-          command: deemixInstalled ? deemixCommand : null 
-        });
+    // AUTO-INSTALL DEEMIX if Python is available but deemix is not
+    if (!deemixInstalled) {
+      console.log('[INIT] 🔄 Auto-installing deemix silently...');
+      
+      // Notify renderer about auto-installation
+      setTimeout(() => {
+        if (mainWindow) {
+          mainWindow.webContents.send('deemix-install-progress', { 
+            status: 'auto-installing', 
+            message: 'Instalando deemix automaticamente...' 
+          });
+        }
+      }, 2000);
+      
+      // Install deemix silently
+      const installResult = await installDeemix();
+      
+      if (installResult.success) {
+        console.log('[INIT] ✓ deemix auto-installed successfully!');
+        showNotification(
+          'deemix Instalado!', 
+          'O deemix foi instalado automaticamente. Downloads do Deezer estão prontos!'
+        );
+        
+        setTimeout(() => {
+          if (mainWindow) {
+            mainWindow.webContents.send('deemix-status', { 
+              installed: true, 
+              command: deemixCommand,
+              autoInstalled: true
+            });
+          }
+        }, 1000);
+      } else {
+        console.error('[INIT] ✗ deemix auto-install failed:', installResult.error);
+        setTimeout(() => {
+          if (mainWindow) {
+            mainWindow.webContents.send('deemix-status', { 
+              installed: false, 
+              error: installResult.error,
+              autoInstallFailed: true
+            });
+          }
+        }, 1000);
       }
-    }, 3000);
+    } else {
+      // Notify renderer about deemix status
+      setTimeout(() => {
+        if (mainWindow) {
+          mainWindow.webContents.send('deemix-status', { 
+            installed: deemixInstalled, 
+            command: deemixInstalled ? deemixCommand : null 
+          });
+        }
+      }, 3000);
+    }
   }
   
   // Check for updates after window is ready (only in production)
