@@ -125,9 +125,11 @@ export function useAutoGradeBuilder() {
     return station?.styles?.[0] || 'POP/VARIADO';
   }, [stations]);
 
-  // Check if song/artist was used recently (within 60 minutes)
-  const isRecentlyUsed = useCallback((title: string, artist: string, currentBlockTime: string): boolean => {
-    const artistRepetitionMinutes = config.artistRepetitionMinutes || ARTIST_REPETITION_MINUTES;
+  // Check if song/artist was used recently
+  // For full day generation, use shorter window (30 min) to allow more variety
+  const isRecentlyUsed = useCallback((title: string, artist: string, currentBlockTime: string, isFullDay: boolean = false): boolean => {
+    // Use shorter repetition time for full day generation
+    const artistRepetitionMinutes = isFullDay ? 30 : (config.artistRepetitionMinutes || ARTIST_REPETITION_MINUTES);
     const normalizedTitle = title.toLowerCase().trim();
     const normalizedArtist = artist.toLowerCase().trim();
 
@@ -198,28 +200,36 @@ export function useAutoGradeBuilder() {
   }, [existingMissingSongs]);
 
   // Fetch recent songs from Supabase with styles
+  // Increased limits to support full day generation (48 blocks x 10 songs = 480 songs needed)
   const fetchRecentSongs = useCallback(async (): Promise<Record<string, SongEntry[]>> => {
     try {
       const { data, error } = await supabase
         .from('scraped_songs')
         .select('title, artist, station_name, scraped_at')
         .order('scraped_at', { ascending: false })
-        .limit(500);
+        .limit(2000); // Increased from 500 to 2000
 
       if (error) throw error;
 
       const songsByStation: Record<string, SongEntry[]> = {};
       const stationNameToStyle: Record<string, string> = {};
+      const seenSongs = new Set<string>(); // Avoid duplicates
 
       stations.forEach(s => {
         stationNameToStyle[s.name] = s.styles?.[0] || 'POP/VARIADO';
       });
 
       data?.forEach(song => {
+        // Skip duplicates (same title + artist)
+        const songKey = `${song.title.toLowerCase()}-${song.artist.toLowerCase()}`;
+        if (seenSongs.has(songKey)) return;
+        seenSongs.add(songKey);
+
         if (!songsByStation[song.station_name]) {
           songsByStation[song.station_name] = [];
         }
-        if (songsByStation[song.station_name].length < 50) {
+        // Increased limit per station from 50 to 150
+        if (songsByStation[song.station_name].length < 150) {
           const style = stationNameToStyle[song.station_name] || 'POP/VARIADO';
           songsByStation[song.station_name].push({
             title: song.title,
@@ -230,6 +240,9 @@ export function useAutoGradeBuilder() {
           });
         }
       });
+
+      const totalSongs = Object.values(songsByStation).reduce((sum, arr) => sum + arr.length, 0);
+      console.log(`[AUTO-GRADE] Pool de músicas: ${totalSongs} únicas de ${Object.keys(songsByStation).length} estações`);
 
       return songsByStation;
     } catch (error) {
@@ -305,11 +318,13 @@ export function useAutoGradeBuilder() {
   }, [rankingSongs, isRecentlyUsed, markSongAsUsed]);
 
   // Generate a single block line with format: "musica1.mp3",vht,"musica2.mp3",vht,...
+  // isFullDay = true uses shorter repetition window (30 min instead of 60)
   const generateBlockLine = useCallback(async (
     hour: number,
     minute: number,
     songsByStation: Record<string, SongEntry[]>,
-    stats: { skipped: number; substituted: number; missing: number }
+    stats: { skipped: number; substituted: number; missing: number },
+    isFullDay: boolean = false
   ): Promise<{ line: string; logs: Parameters<typeof addBlockLogs>[0] }> => {
     const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     const programName = getProgramForHour(hour);
@@ -394,7 +409,7 @@ export function useAutoGradeBuilder() {
         const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
 
         // Check if not used in this block and not recently used
-        if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr)) {
+        if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
           // Check if exists in library (Electron only)
           const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
           
@@ -427,7 +442,7 @@ export function useAutoGradeBuilder() {
               });
             }
           }
-        } else if (usedInBlock.has(key) || isRecentlyUsed(candidate.title, candidate.artist, timeStr)) {
+        } else if (usedInBlock.has(key) || isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
           skipCount++;
           blockLogs.push({
             blockTime: timeStr,
@@ -578,7 +593,8 @@ export function useAutoGradeBuilder() {
       // Generate all 48 blocks (00:00 to 23:30)
       for (let hour = 0; hour < 24; hour++) {
         for (const minute of [0, 30]) {
-          const result = await generateBlockLine(hour, minute, songsByStation, stats);
+          // Pass isFullDay=true for shorter repetition window
+          const result = await generateBlockLine(hour, minute, songsByStation, stats, true);
           lines.push(result.line);
           allLogs.push(...result.logs);
           
@@ -683,12 +699,12 @@ export function useAutoGradeBuilder() {
       const stats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: Parameters<typeof addBlockLogs>[0] = [];
 
-      // Generate current and next blocks
+      // Generate current and next blocks (isFullDay=false for normal repetition rules)
       const currentResult = await generateBlockLine(
-        blocks.current.hour, blocks.current.minute, songsByStation, stats
+        blocks.current.hour, blocks.current.minute, songsByStation, stats, false
       );
       const nextResult = await generateBlockLine(
-        blocks.next.hour, blocks.next.minute, songsByStation, stats
+        blocks.next.hour, blocks.next.minute, songsByStation, stats, false
       );
       
       allLogs.push(...currentResult.logs, ...nextResult.logs);
