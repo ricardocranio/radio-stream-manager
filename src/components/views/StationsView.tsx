@@ -13,6 +13,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useSyncStationsToSupabase, syncStationsToSupabase } from '@/hooks/useSyncStationsToSupabase';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 // Types for mytuner stations
 interface RadioConfig {
@@ -164,13 +175,29 @@ export function StationsView() {
   };
 
   const handleDeleteStation = async (stationId: string) => {
+    const station = stations.find(s => s.id === stationId);
+    
+    // Remove from local state
     setStations(stations.filter(s => s.id !== stationId));
     setEditingStation(null);
     setEditForm(null);
     setIsAddingNew(false);
+    
+    // Also remove from Supabase
+    if (station?.name) {
+      try {
+        await supabase
+          .from('radio_stations')
+          .delete()
+          .eq('name', station.name.trim());
+      } catch (e) {
+        console.log('Local delete only:', e);
+      }
+    }
+    
     toast({
       title: 'Emissora removida',
-      description: 'A emissora foi excluída.',
+      description: `${station?.name || 'Emissora'} foi excluída com sucesso.`,
     });
   };
 
@@ -480,9 +507,36 @@ export function StationsView() {
                       </Button>
                     </>
                   ) : (
-                    <Button variant="outline" size="sm" onClick={() => handleEdit(station)}>
-                      Editar
-                    </Button>
+                    <>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir emissora?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Tem certeza que deseja excluir <strong>{station.name}</strong>? 
+                              Esta ação não pode ser desfeita.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteStation(station.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Excluir
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(station)}>
+                        Editar
+                      </Button>
+                    </>
                   )}
                 </div>
               </CardContent>
