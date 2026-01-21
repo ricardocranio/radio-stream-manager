@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Clock, Eye, Save, X, Music, Newspaper, Edit2, FileText, Loader2 } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Clock, Eye, Save, X, Music, Newspaper, Edit2, FileText, Loader2, Copy, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +14,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { sanitizeFilename } from '@/lib/sanitizeFilename';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface BlockInfo {
   time: string;
@@ -38,6 +40,8 @@ export function GradeScheduleCard() {
   const [editedSongs, setEditedSongs] = useState<BlockSong[]>([]);
   const [capturedSongs, setCapturedSongs] = useState<CapturedSong[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<'songs' | 'preview'>('songs');
 
   // Fetch captured songs from Supabase
   useEffect(() => {
@@ -217,6 +221,36 @@ export function GradeScheduleCard() {
     setEditedSongs(updated);
   };
 
+  // Generate .txt preview line for the block
+  const generateTxtPreview = useCallback((block: BlockInfo | null): string => {
+    if (!block) return '';
+    
+    const songs = isEditing ? editedSongs : block.songs;
+    if (songs.length === 0) return `${block.time} (ID=${block.programName}) [vazio]`;
+    
+    // Format: "Artist - Title.mp3",vht,"Artist - Title.mp3",vht,...
+    const songFiles = songs.map(s => {
+      const filename = sanitizeFilename(`${s.artist} - ${s.title}.mp3`);
+      return `"${filename}"`;
+    }).join(',vht,');
+    
+    return `${block.time} (ID=${block.programName}) ${songFiles}`;
+  }, [isEditing, editedSongs]);
+
+  // Handle copy to clipboard
+  const handleCopyTxt = useCallback(() => {
+    if (selectedBlock) {
+      const txtContent = generateTxtPreview(selectedBlock);
+      navigator.clipboard.writeText(txtContent);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast({
+        title: '📋 Copiado!',
+        description: 'Linha do bloco copiada para a área de transferência.',
+      });
+    }
+  }, [selectedBlock, generateTxtPreview, toast]);
+
   // Get label styles
   const getLabelStyle = (label: BlockInfo['label']) => {
     switch (label) {
@@ -301,7 +335,7 @@ export function GradeScheduleCard() {
       </Card>
 
       {/* Block Details Dialog */}
-      <Dialog open={!!selectedBlock} onOpenChange={(open) => !open && setSelectedBlock(null)}>
+      <Dialog open={!!selectedBlock} onOpenChange={(open) => { if (!open) { setSelectedBlock(null); setActiveTab('songs'); } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -314,115 +348,174 @@ export function GradeScheduleCard() {
           </DialogHeader>
           
           {selectedBlock && (
-            <div className="space-y-4">
-              {/* Fixed Content */}
-              {selectedBlock.fixedContent.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
-                    <Newspaper className="w-4 h-4 text-purple-400" />
-                    Conteúdos Fixos ({selectedBlock.fixedContent.length})
-                  </h4>
-                  <div className="space-y-1">
-                    {selectedBlock.fixedContent.map((fc) => (
-                      <div
-                        key={fc.id}
-                        className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center gap-2"
-                      >
-                        <Newspaper className="w-4 h-4 text-purple-400 shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-foreground truncate">{fc.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">{fc.fileName}</p>
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'songs' | 'preview')} className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="songs" className="gap-2">
+                  <Music className="w-4 h-4" />
+                  Músicas
+                </TabsTrigger>
+                <TabsTrigger value="preview" className="gap-2">
+                  <FileText className="w-4 h-4" />
+                  Preview .txt
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="songs" className="mt-4 space-y-4">
+                {/* Fixed Content */}
+                {selectedBlock.fixedContent.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+                      <Newspaper className="w-4 h-4 text-purple-400" />
+                      Conteúdos Fixos ({selectedBlock.fixedContent.length})
+                    </h4>
+                    <div className="space-y-1">
+                      {selectedBlock.fixedContent.map((fc) => (
+                        <div
+                          key={fc.id}
+                          className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center gap-2"
+                        >
+                          <Newspaper className="w-4 h-4 text-purple-400 shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground truncate">{fc.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{fc.fileName}</p>
+                          </div>
+                          <Badge variant="secondary" className="text-[10px]">
+                            {fc.type}
+                          </Badge>
                         </div>
-                        <Badge variant="secondary" className="text-[10px]">
-                          {fc.type}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Songs */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <Music className="w-4 h-4 text-primary" />
-                    Músicas ({selectedBlock.songs.length})
-                  </h4>
-                  {!isEditing ? (
-                    <Button variant="outline" size="sm" onClick={handleStartEdit} className="gap-1.5">
-                      <Edit2 className="w-3.5 h-3.5" />
-                      Editar
-                    </Button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
-                        <X className="w-3.5 h-3.5 mr-1" />
-                        Cancelar
-                      </Button>
-                      <Button variant="default" size="sm" onClick={handleSaveChanges} className="gap-1.5">
-                        <Save className="w-3.5 h-3.5" />
-                        Salvar
-                      </Button>
+                      ))}
                     </div>
-                  )}
-                </div>
-                
-                <ScrollArea className="h-[280px]">
-                  <div className="space-y-1.5 pr-2">
-                    {(isEditing ? editedSongs : selectedBlock.songs).map((song, index) => (
-                      <div
-                        key={song.id}
-                        className={`p-2 rounded-lg border ${song.isFixed ? 'bg-purple-500/10 border-purple-500/20' : 'bg-secondary/30 border-border'}`}
-                      >
-                        {isEditing ? (
-                          <div className="space-y-1.5">
-                            <Input
-                              value={song.title}
-                              onChange={(e) => handleEditSong(index, 'title', e.target.value)}
-                              className="h-7 text-sm"
-                              placeholder="Título"
-                            />
-                            <Input
-                              value={song.artist}
-                              onChange={(e) => handleEditSong(index, 'artist', e.target.value)}
-                              className="h-7 text-sm"
-                              placeholder="Artista"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground font-mono w-5 shrink-0">
-                              {(index + 1).toString().padStart(2, '0')}
-                            </span>
-                            {song.isFixed ? (
-                              <Newspaper className="w-4 h-4 text-purple-400 shrink-0" />
-                            ) : (
-                              <Music className="w-4 h-4 text-primary shrink-0" />
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-foreground truncate">{song.title}</p>
-                              <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
-                            </div>
-                            <Badge variant="outline" className="text-[10px] shrink-0">
-                              {song.source}
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    
-                    {selectedBlock.songs.length === 0 && (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <Music className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                        <p className="text-sm">Nenhuma música neste bloco</p>
-                        <p className="text-xs mt-1">Aguardando capturas...</p>
+                  </div>
+                )}
+
+                {/* Songs */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                      <Music className="w-4 h-4 text-primary" />
+                      Músicas ({selectedBlock.songs.length})
+                    </h4>
+                    {!isEditing ? (
+                      <Button variant="outline" size="sm" onClick={handleStartEdit} className="gap-1.5">
+                        <Edit2 className="w-3.5 h-3.5" />
+                        Editar
+                      </Button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
+                          <X className="w-3.5 h-3.5 mr-1" />
+                          Cancelar
+                        </Button>
+                        <Button variant="default" size="sm" onClick={handleSaveChanges} className="gap-1.5">
+                          <Save className="w-3.5 h-3.5" />
+                          Salvar
+                        </Button>
                       </div>
                     )}
                   </div>
-                </ScrollArea>
-              </div>
-            </div>
+                  
+                  <ScrollArea className="h-[250px]">
+                    <div className="space-y-1.5 pr-2">
+                      {(isEditing ? editedSongs : selectedBlock.songs).map((song, index) => (
+                        <div
+                          key={song.id}
+                          className={`p-2 rounded-lg border ${song.isFixed ? 'bg-purple-500/10 border-purple-500/20' : 'bg-secondary/30 border-border'}`}
+                        >
+                          {isEditing ? (
+                            <div className="space-y-1.5">
+                              <Input
+                                value={song.title}
+                                onChange={(e) => handleEditSong(index, 'title', e.target.value)}
+                                className="h-7 text-sm"
+                                placeholder="Título"
+                              />
+                              <Input
+                                value={song.artist}
+                                onChange={(e) => handleEditSong(index, 'artist', e.target.value)}
+                                className="h-7 text-sm"
+                                placeholder="Artista"
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground font-mono w-5 shrink-0">
+                                {(index + 1).toString().padStart(2, '0')}
+                              </span>
+                              {song.isFixed ? (
+                                <Newspaper className="w-4 h-4 text-purple-400 shrink-0" />
+                              ) : (
+                                <Music className="w-4 h-4 text-primary shrink-0" />
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-foreground truncate">{song.title}</p>
+                                <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                              </div>
+                              <Badge variant="outline" className="text-[10px] shrink-0">
+                                {song.source}
+                              </Badge>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      
+                      {selectedBlock.songs.length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Music className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                          <p className="text-sm">Nenhuma música neste bloco</p>
+                          <p className="text-xs mt-1">Aguardando capturas...</p>
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="preview" className="mt-4 space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-emerald-500" />
+                      Formato do Arquivo .txt
+                    </h4>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={handleCopyTxt}
+                      className="gap-1.5"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          Copiado!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          Copiar
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  
+                  <div className="p-3 rounded-lg bg-black/50 border border-border font-mono text-xs overflow-x-auto">
+                    <pre className="whitespace-pre-wrap break-all text-emerald-400">
+                      {generateTxtPreview(selectedBlock)}
+                    </pre>
+                  </div>
+                  
+                  <div className="mt-4 p-3 rounded-lg bg-secondary/30 border border-border">
+                    <h5 className="text-xs font-medium text-muted-foreground mb-2">📖 Legenda do formato:</h5>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <p><code className="text-amber-400">HH:MM</code> — Horário do bloco</p>
+                      <p><code className="text-blue-400">(ID=PROGRAMA)</code> — Identificador do programa</p>
+                      <p><code className="text-emerald-400">"Artista - Titulo.mp3"</code> — Música (com aspas)</p>
+                      <p><code className="text-purple-400">vht</code> — Separador/vinheta (sem aspas)</p>
+                      <p><code className="text-red-400">mus.mp3</code> — Código coringa (sem aspas)</p>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
           )}
         </DialogContent>
       </Dialog>
