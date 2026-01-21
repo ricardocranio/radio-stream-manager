@@ -132,6 +132,27 @@ export function SequenceView() {
     });
   };
 
+  const handleRemovePosition = (positionToRemove: number) => {
+    if (localSequence.length <= 5) {
+      toast({
+        title: 'Mínimo atingido',
+        description: 'A sequência precisa ter pelo menos 5 posições.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    // Remove the position and renumber remaining positions
+    const newSequence = localSequence
+      .filter(item => item.position !== positionToRemove)
+      .map((item, index) => ({ ...item, position: index + 1 }));
+    
+    setLocalSequence(newSequence);
+    toast({
+      title: 'Posição removida',
+      description: `Posição ${positionToRemove} foi excluída.`,
+    });
+  };
+
   const handleAddFormPosition = () => {
     const newPosition = formSequence.length + 1;
     setFormSequence([...formSequence, { position: newPosition, radioSource: 'bh' }]);
@@ -140,6 +161,14 @@ export function SequenceView() {
   const handleRemoveFormLastPosition = () => {
     if (formSequence.length <= 5) return;
     setFormSequence(formSequence.slice(0, -1));
+  };
+
+  const handleRemoveFormPosition = (positionToRemove: number) => {
+    if (formSequence.length <= 5) return;
+    const newSequence = formSequence
+      .filter(item => item.position !== positionToRemove)
+      .map((item, index) => ({ ...item, position: index + 1 }));
+    setFormSequence(newSequence);
   };
 
   const openNewScheduleDialog = () => {
@@ -424,11 +453,11 @@ export function SequenceView() {
                 {localSequence.map((item) => (
                   <div
                     key={item.position}
-                    className="flex items-center gap-3 p-2 rounded-lg bg-secondary/30 border border-border hover:border-primary/30 transition-colors"
+                    className="flex items-center gap-2 p-2 rounded-lg bg-secondary/30 border border-border hover:border-primary/30 transition-colors group"
                   >
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <GripVertical className="w-4 h-4" />
-                      <span className="font-mono font-bold text-foreground w-6 text-sm">
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <GripVertical className="w-3 h-3" />
+                      <span className="font-mono font-bold text-foreground w-5 text-xs">
                         {item.position.toString().padStart(2, '0')}
                       </span>
                     </div>
@@ -436,7 +465,7 @@ export function SequenceView() {
                       value={item.radioSource}
                       onValueChange={(value) => handleChange(item.position, value)}
                     >
-                      <SelectTrigger className="flex-1 h-9">
+                      <SelectTrigger className="flex-1 h-8 text-sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -447,9 +476,18 @@ export function SequenceView() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Badge variant="outline" className={`${getStationColor(item.radioSource)} text-[10px]`}>
-                      {item.radioSource.toUpperCase()}
+                    <Badge variant="outline" className={`${getStationColor(item.radioSource)} text-[9px] px-1`}>
+                      {item.radioSource.toUpperCase().slice(0, 4)}
                     </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => handleRemovePosition(item.position)}
+                      disabled={localSequence.length <= 5}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -771,16 +809,16 @@ export function SequenceView() {
                 {formSequence.map((item) => (
                   <div
                     key={item.position}
-                    className="flex items-center gap-2 p-2 rounded-lg bg-secondary/30 border border-border"
+                    className="flex items-center gap-1 p-2 rounded-lg bg-secondary/30 border border-border group"
                   >
-                    <span className="font-mono font-bold text-foreground w-6 text-sm">
+                    <span className="font-mono font-bold text-foreground w-5 text-xs">
                       {item.position.toString().padStart(2, '0')}
                     </span>
                     <Select
                       value={item.radioSource}
                       onValueChange={(value) => handleFormSequenceChange(item.position, value)}
                     >
-                      <SelectTrigger className="flex-1 h-8 text-xs">
+                      <SelectTrigger className="flex-1 h-7 text-xs">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -791,6 +829,16 @@ export function SequenceView() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => handleRemoveFormPosition(item.position)}
+                      disabled={formSequence.length <= 5}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
                   </div>
                 ))}
               </div>

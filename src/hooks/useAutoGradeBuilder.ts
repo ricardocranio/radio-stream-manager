@@ -420,10 +420,155 @@ export function useAutoGradeBuilder() {
     // Track song index per station to avoid repeating from start
     const stationSongIndex: Record<string, number> = {};
 
+    // Helper to get the next fixed content for this block
+    let fixoIndexUsed = 0;
+    const getNextFixoContent = (): string | null => {
+      const availableFixed = fixedContent.filter(fc => 
+        fc.enabled && 
+        fc.type !== 'top50' && 
+        fc.type !== 'vozbrasil'
+      );
+      if (availableFixed.length === 0) return null;
+      
+      // Use round-robin for multiple FIXO in sequence
+      const selectedFixed = availableFixed[fixoIndexUsed % availableFixed.length];
+      fixoIndexUsed++;
+      
+      const fixedFileName = sanitizeFilename(selectedFixed.fileName);
+      blockLogs.push({
+        blockTime: timeStr,
+        type: 'fixed',
+        title: selectedFixed.name,
+        artist: selectedFixed.fileName,
+        station: 'FIXO',
+        reason: `Conteúdo fixo da sequência`,
+      });
+      return `"${fixedFileName}"`;
+    };
+
+    // Helper to get TOP50 song for sequence position
+    let top50IndexUsed = 0;
+    const getNextTop50Song = (): string | null => {
+      const sortedRanking = [...rankingSongs].sort((a, b) => b.plays - a.plays);
+      
+      while (top50IndexUsed < sortedRanking.length) {
+        const rankSong = sortedRanking[top50IndexUsed];
+        const key = `${rankSong.title.toLowerCase()}-${rankSong.artist.toLowerCase()}`;
+        top50IndexUsed++;
+        
+        if (!usedInBlock.has(key) && !isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
+          usedInBlock.add(key);
+          markSongAsUsed(rankSong.title, rankSong.artist, timeStr);
+          
+          blockLogs.push({
+            blockTime: timeStr,
+            type: 'used',
+            title: rankSong.title,
+            artist: rankSong.artist,
+            station: 'TOP50',
+            style: rankSong.style,
+            reason: `TOP50 posição ${top50IndexUsed}`,
+          });
+          
+          return `"${sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`)}"`;
+        }
+      }
+      return null;
+    };
+
     // Follow the user-configured SEQUENCE (position 1 = Band FM, position 2 = Clube FM, etc.)
     for (const seq of sequence) {
-      if (songs.length >= 10) break; // Max 10 songs per block
+      if (songs.length >= sequence.length) break; // Use sequence length as max
 
+      // Handle special sequence types
+      if (seq.radioSource === 'fixo') {
+        // FIXO in sequence - insert fixed content
+        const fixoContent = getNextFixoContent();
+        if (fixoContent) {
+          songs.push(fixoContent);
+        } else {
+          // No fixed content available, use coringa
+          const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
+          songs.push(coringaCode);
+          blockLogs.push({
+            blockTime: timeStr,
+            type: 'substituted',
+            title: 'FIXO',
+            artist: 'CORINGA',
+            station: 'FALLBACK',
+            reason: 'Nenhum conteúdo fixo disponível',
+          });
+        }
+        continue;
+      }
+
+      if (seq.radioSource === 'top50') {
+        // TOP50 in sequence - insert top ranked song
+        const top50Song = getNextTop50Song();
+        if (top50Song) {
+          songs.push(top50Song);
+        } else {
+          // No TOP50 available, use coringa
+          const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
+          songs.push(coringaCode);
+          blockLogs.push({
+            blockTime: timeStr,
+            type: 'substituted',
+            title: 'TOP50',
+            artist: 'CORINGA',
+            station: 'FALLBACK',
+            reason: 'Ranking TOP50 vazio',
+          });
+        }
+        continue;
+      }
+
+      if (seq.radioSource === 'random_pop') {
+        // Random from any station
+        let foundRandom = false;
+        for (const candidate of allSongsPool) {
+          const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+          
+          if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
+            const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
+            
+            if (libraryResult.exists) {
+              const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              songs.push(`"${correctFilename}"`);
+              usedInBlock.add(key);
+              markSongAsUsed(candidate.title, candidate.artist, timeStr);
+              
+              blockLogs.push({
+                blockTime: timeStr,
+                type: 'used',
+                title: candidate.title,
+                artist: candidate.artist,
+                station: candidate.station,
+                style: candidate.style,
+                reason: 'Aleatório',
+              });
+              foundRandom = true;
+              break;
+            }
+          }
+        }
+        
+        if (!foundRandom) {
+          const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
+          songs.push(coringaCode);
+          blockLogs.push({
+            blockTime: timeStr,
+            type: 'substituted',
+            title: 'RANDOM',
+            artist: 'CORINGA',
+            station: 'FALLBACK',
+            reason: 'Nenhuma música aleatória disponível',
+          });
+        }
+        continue;
+      }
+
+      // Normal station logic
       const stationName = stationIdToName[seq.radioSource];
       const stationStyle = getStationStyle(seq.radioSource);
       const stationSongs = stationName ? songsByStation[stationName] : [];
