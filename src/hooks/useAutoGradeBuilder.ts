@@ -421,7 +421,7 @@ export function useAutoGradeBuilder() {
       let startIndex = stationSongIndex[stationName] || 0;
       let checkedCount = 0;
 
-      // Try to find a valid song from the configured station
+      // PRIORITY 1: Try to find a song from the configured station that EXISTS in library
       while (checkedCount < (stationSongs?.length || 0) && !selectedSong) {
         const songIdx = (startIndex + checkedCount) % stationSongs.length;
         const candidate = stationSongs[songIdx];
@@ -429,27 +429,15 @@ export function useAutoGradeBuilder() {
 
         // Check if not used in this block and not recently used
         if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-          // Check if exists in library (Electron only)
           const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
           
-          // USE THE SONG REGARDLESS - just mark as missing for download
-          selectedSong = { ...candidate, existsInLibrary };
-          stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
-          
-          if (!existsInLibrary) {
-            // Song is missing from library - mark for download but still use it
-            stats.missing++;
-            blockLogs.push({
-              blockTime: timeStr,
-              type: 'missing',
-              title: candidate.title,
-              artist: candidate.artist,
-              station: stationName || 'UNKNOWN',
-              style: stationStyle,
-              reason: 'Não encontrada no acervo local (será baixada)',
-            });
-            
-            // Add to missing songs list if not already there
+          if (existsInLibrary) {
+            // Found a song that EXISTS - use it!
+            selectedSong = { ...candidate, existsInLibrary: true };
+            stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
+            break;
+          } else {
+            // Mark as missing for download later, but DON'T use it
             if (!isSongAlreadyMissing(candidate.artist, candidate.title)) {
               addMissingSong({
                 id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -462,66 +450,103 @@ export function useAutoGradeBuilder() {
               });
             }
           }
-          break;
         }
-
         checkedCount++;
       }
 
-      // If no valid song from configured station, find substitute with same DNA
+      // PRIORITY 2: Substitute with TOP50 song that EXISTS
       if (!selectedSong) {
-        const substitute = findSubstitute(stationStyle, songsByStation, timeStr, usedInBlock);
-        if (substitute) {
-          const substituteExists = await checkSongInLibrary(substitute.artist, substitute.title);
+        const sortedRanking = [...rankingSongs].sort((a, b) => b.plays - a.plays);
+        
+        for (const rankSong of sortedRanking) {
+          const key = `${rankSong.title.toLowerCase()}-${rankSong.artist.toLowerCase()}`;
           
-          // USE THE SUBSTITUTE REGARDLESS
-          selectedSong = { ...substitute, existsInLibrary: substituteExists };
-          stats.substituted++;
-          blockLogs.push({
-            blockTime: timeStr,
-            type: 'substituted',
-            title: substitute.title,
-            artist: substitute.artist,
-            station: substitute.station,
-            style: substitute.style,
-            reason: `Substituição DNA: ${stationStyle} (de ${stationName})`,
-            substituteFor: stationName || 'UNKNOWN',
-          });
-          
-          if (!substituteExists && !isSongAlreadyMissing(substitute.artist, substitute.title)) {
-            addMissingSong({
-              id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              title: substitute.title,
-              artist: substitute.artist,
-              station: substitute.station,
-              timestamp: new Date(),
-              status: 'missing',
-              dna: substitute.style,
-            });
+          if (!usedInBlock.has(key) && !isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
+            const existsInLibrary = await checkSongInLibrary(rankSong.artist, rankSong.title);
+            
+            if (existsInLibrary) {
+              selectedSong = {
+                title: rankSong.title,
+                artist: rankSong.artist,
+                station: 'TOP50',
+                style: rankSong.style,
+                filename: sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`),
+                existsInLibrary: true,
+              };
+              stats.substituted++;
+              blockLogs.push({
+                blockTime: timeStr,
+                type: 'substituted',
+                title: rankSong.title,
+                artist: rankSong.artist,
+                station: 'TOP50',
+                style: rankSong.style,
+                reason: `TOP50 substituto (posição ${sortedRanking.indexOf(rankSong) + 1})`,
+                substituteFor: stationName || 'UNKNOWN',
+              });
+              break;
+            }
           }
         }
       }
 
-      // Last resort: any unused song from pool
+      // PRIORITY 3: Substitute with same DNA/style song that EXISTS
+      if (!selectedSong) {
+        // Try songs from other stations with same style
+        for (const [otherStation, songs] of Object.entries(songsByStation)) {
+          if (otherStation === stationName) continue; // Skip same station
+          
+          for (const candidate of songs) {
+            if (candidate.style !== stationStyle) continue; // Must match DNA
+            
+            const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+            
+            if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
+              const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
+              
+              if (existsInLibrary) {
+                selectedSong = { ...candidate, existsInLibrary: true };
+                stats.substituted++;
+                blockLogs.push({
+                  blockTime: timeStr,
+                  type: 'substituted',
+                  title: candidate.title,
+                  artist: candidate.artist,
+                  station: candidate.station,
+                  style: candidate.style,
+                  reason: `DNA similar: ${stationStyle}`,
+                  substituteFor: stationName || 'UNKNOWN',
+                });
+                break;
+              }
+            }
+          }
+          if (selectedSong) break;
+        }
+      }
+
+      // PRIORITY 4: Any song from pool that EXISTS
       if (!selectedSong) {
         for (const candidate of allSongsPool) {
           const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
           
           if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
             const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
-            // USE IT REGARDLESS
-            selectedSong = { ...candidate, existsInLibrary };
-            stats.substituted++;
-            blockLogs.push({
-              blockTime: timeStr,
-              type: 'substituted',
-              title: candidate.title,
-              artist: candidate.artist,
-              station: candidate.station,
-              style: candidate.style,
-              reason: 'Pool geral (estação original sem músicas)',
-            });
-            break;
+            
+            if (existsInLibrary) {
+              selectedSong = { ...candidate, existsInLibrary: true };
+              stats.substituted++;
+              blockLogs.push({
+                blockTime: timeStr,
+                type: 'substituted',
+                title: candidate.title,
+                artist: candidate.artist,
+                station: candidate.station,
+                style: candidate.style,
+                reason: 'Pool geral (última opção)',
+              });
+              break;
+            }
           }
         }
       }
