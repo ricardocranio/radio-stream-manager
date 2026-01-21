@@ -1601,144 +1601,104 @@ export function MissingView() {
             />
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="glass-card border-destructive/20">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="w-8 h-8 text-destructive" />
-                  <div>
-                    <p className="text-2xl font-bold">{filteredSongs.length}</p>
-                    <p className="text-xs text-muted-foreground">Total Faltando</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            {Object.entries(groupedByStation)
-              .slice(0, 3)
-              .map(([station, songs]) => (
-                <Card key={station} className="glass-card">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <Music className="w-8 h-8 text-primary" />
-                      <div>
-                        <p className="text-2xl font-bold">{songs.length}</p>
-                        <p className="text-xs text-muted-foreground">{station}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-          </div>
-
-          {/* Grouped Lists */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Stats Summary - Compact */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <Badge variant="destructive" className="text-sm px-3 py-1">
+              <AlertTriangle className="w-4 h-4 mr-1" />
+              {filteredSongs.length} Faltando
+            </Badge>
             {Object.entries(groupedByStation).map(([station, songs]) => (
-              <Card key={station} className="glass-card">
-                <CardHeader className="border-b border-border">
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-destructive" />
-                      {station}
-                    </span>
-                    <Badge variant="destructive">{songs.length}</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
-                    {songs.map((song) => (
-                      <div
-                        key={song.id}
-                        className={`p-4 flex items-center justify-between hover:bg-secondary/30 transition-colors ${
-                          song.status === 'downloaded' ? 'bg-green-500/5' : 
-                          song.status === 'error' ? 'bg-destructive/5' : ''
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                            song.status === 'downloaded' ? 'bg-green-500/10' :
-                            song.status === 'error' ? 'bg-destructive/10' :
-                            'bg-destructive/10'
-                          }`}>
-                            {song.status === 'downloaded' ? (
-                              <CheckCircle className="w-5 h-5 text-green-500" />
-                            ) : song.status === 'downloading' ? (
-                              <Loader2 className="w-5 h-5 text-primary animate-spin" />
-                            ) : (
-                              <Music className={`w-5 h-5 ${song.status === 'error' ? 'text-destructive' : 'text-destructive'}`} />
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-medium text-foreground">{song.title}</p>
-                            <p className="text-sm text-muted-foreground">{song.artist}</p>
-                          </div>
-                        </div>
-                        <div className="flex gap-1">
-                          {/* Deezer Download Button */}
-                          {(simulationMode || (deezerConfig.enabled && deezerConfig.arl)) && song.status !== 'downloaded' && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-primary hover:text-primary"
-                              onClick={() => handleDeezerDownload(song.id, song.artist, song.title)}
-                              disabled={downloadStatus[song.id] === 'downloading' || batchDownloadProgress.isRunning || (!simulationMode && deemixInstalled === false)}
-                              title={simulationMode ? 'Simular download' : 'Baixar do Deezer'}
-                            >
-                              {getStatusIcon(song.id)}
-                            </Button>
-                          )}
-                          
-                          {/* Remove from list */}
-                          {song.status === 'downloaded' && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-green-500 hover:text-green-600"
-                              onClick={() => removeMissingSong(song.id)}
-                              title="Remover da lista"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                            </Button>
-                          )}
-                          
-                          {/* External Search Dropdown */}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" title="Buscar em serviços">
-                                <ExternalLink className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-popover border-border">
-                              <DropdownMenuItem
-                                onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'deezer'))}
-                              >
-                                🎵 Buscar no Deezer
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'tidal'))}
-                              >
-                                🌊 Buscar no Tidal
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'youtube'))}
-                              >
-                                ▶️ Buscar no YouTube
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'spotify'))}
-                              >
-                                💚 Buscar no Spotify
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+              <Badge key={station} variant="outline" className="text-xs">
+                {station}: {songs.length}
+              </Badge>
             ))}
           </div>
+
+          {/* Compact List - No visual cards per station */}
+          <Card className="glass-card">
+            <CardContent className="p-0">
+              <ScrollArea className="h-[400px]">
+                <div className="divide-y divide-border">
+                  {filteredSongs.map((song) => (
+                    <div
+                      key={song.id}
+                      className={`px-4 py-2 flex items-center justify-between hover:bg-secondary/30 transition-colors ${
+                        song.status === 'downloaded' ? 'bg-green-500/5' : 
+                        song.status === 'error' ? 'bg-destructive/5' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {song.status === 'downloaded' ? (
+                          <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                        ) : song.status === 'downloading' ? (
+                          <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
+                        ) : song.status === 'error' ? (
+                          <XCircle className="w-4 h-4 text-destructive shrink-0" />
+                        ) : (
+                          <Music className="w-4 h-4 text-muted-foreground shrink-0" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-foreground text-sm truncate">
+                            {song.artist} - {song.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{song.station}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        {/* Deezer Download Button */}
+                        {(simulationMode || (deezerConfig.enabled && deezerConfig.arl)) && song.status !== 'downloaded' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-primary hover:text-primary"
+                            onClick={() => handleDeezerDownload(song.id, song.artist, song.title)}
+                            disabled={downloadStatus[song.id] === 'downloading' || batchDownloadProgress.isRunning || (!simulationMode && deemixInstalled === false)}
+                            title={simulationMode ? 'Simular download' : 'Baixar do Deezer'}
+                          >
+                            {getStatusIcon(song.id)}
+                          </Button>
+                        )}
+                        
+                        {/* Remove from list */}
+                        {song.status === 'downloaded' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-green-500 hover:text-green-600"
+                            onClick={() => removeMissingSong(song.id)}
+                            title="Remover da lista"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                        
+                        {/* External Search Dropdown */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Buscar em serviços">
+                              <ExternalLink className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-popover border-border">
+                            <DropdownMenuItem
+                              onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'deezer'))}
+                            >
+                              🎵 Deezer
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => openExternalLink(getSearchUrl(song.artist, song.title, 'youtube'))}
+                            >
+                              ▶️ YouTube
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
 
           {filteredSongs.length === 0 && (
             <Card className="glass-card">
