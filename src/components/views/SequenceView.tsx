@@ -66,8 +66,13 @@ export function SequenceView() {
   const [formPriority, setFormPriority] = useState(1);
   const [formSequence, setFormSequence] = useState<SequenceConfig[]>(sequence);
 
+  // Build radio options with FIXO at the bottom of the list
+  const stationOptions = stations
+    .filter(s => s.enabled !== false)
+    .map((s) => ({ value: s.id, label: s.name }));
+  
   const radioOptions = [
-    ...stations.map((s) => ({ value: s.id, label: s.name })),
+    ...stationOptions,
     { value: 'fixo', label: '📌 FIXO (Conteúdo Fixo)' },
     { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)' },
     { value: 'top50', label: '🏆 TOP50 (Curadoria)' },
