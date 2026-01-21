@@ -138,6 +138,9 @@ function cleanText(text: string): string {
     .replace(/\.(jpg|jpeg|png|gif|webp|svg|ico)[^\s]*/gi, '')
     .replace(/\*\*/g, '')
     .replace(/\*/g, '')
+    // Remove time indicators like "6 min ago", "3 min ago", "LIVE", "1 hour ago"
+    .replace(/\d+\s*(min|hour|hora|segundo|sec)\s*(ago)?/gi, '')
+    .replace(/LIVE$/i, '')
     .replace(/\s+/g, ' ')
     .trim();
 }

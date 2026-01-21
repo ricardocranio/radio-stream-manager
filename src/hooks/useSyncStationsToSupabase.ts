@@ -59,15 +59,25 @@ export function useSyncStationsToSupabase() {
 
       // Insert new stations that exist locally but not in Supabase
       for (const localStation of stations) {
-        if (!supabaseStationNames.has(localStation.name)) {
-          await supabase
-            .from('radio_stations')
-            .insert({
-              name: localStation.name,
-              scrape_url: localStation.scrapeUrl,
-              styles: localStation.styles,
-              enabled: localStation.enabled,
-            });
+        // Normalize station name (trim whitespace)
+        const normalizedName = localStation.name.trim();
+        
+        if (!supabaseStationNames.has(normalizedName)) {
+          // Also check with original name in case of whitespace differences
+          const hasExisting = supabaseStations?.some(s => 
+            s.name.trim() === normalizedName
+          );
+          
+          if (!hasExisting) {
+            await supabase
+              .from('radio_stations')
+              .insert({
+                name: normalizedName,
+                scrape_url: localStation.scrapeUrl,
+                styles: localStation.styles,
+                enabled: localStation.enabled,
+              });
+          }
         }
       }
 
@@ -98,10 +108,13 @@ export async function syncStationsToSupabase(stations: { name: string; scrapeUrl
 
     // Update or insert each local station
     for (const station of stations) {
+      // Normalize station name (trim whitespace)
+      const normalizedName = station.name.trim();
+      
       const { data: existing } = await supabase
         .from('radio_stations')
         .select('id')
-        .eq('name', station.name)
+        .eq('name', normalizedName)
         .single();
 
       if (existing) {
@@ -114,14 +127,34 @@ export async function syncStationsToSupabase(stations: { name: string; scrapeUrl
           })
           .eq('id', existing.id);
       } else {
-        await supabase
+        // Check if station exists with whitespace differences
+        const { data: existingWithSpace } = await supabase
           .from('radio_stations')
-          .insert({
-            name: station.name,
-            scrape_url: station.scrapeUrl,
-            styles: station.styles,
-            enabled: station.enabled,
-          });
+          .select('id')
+          .ilike('name', normalizedName)
+          .single();
+          
+        if (existingWithSpace) {
+          // Update existing and fix the name
+          await supabase
+            .from('radio_stations')
+            .update({
+              name: normalizedName,
+              scrape_url: station.scrapeUrl,
+              styles: station.styles,
+              enabled: station.enabled,
+            })
+            .eq('id', existingWithSpace.id);
+        } else {
+          await supabase
+            .from('radio_stations')
+            .insert({
+              name: normalizedName,
+              scrape_url: station.scrapeUrl,
+              styles: station.styles,
+              enabled: station.enabled,
+            });
+        }
       }
     }
 
