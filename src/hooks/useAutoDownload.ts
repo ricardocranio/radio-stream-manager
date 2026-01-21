@@ -158,9 +158,9 @@ export function useAutoDownload() {
         setQueueLength(downloadQueueRef.current.length);
       }
 
-      // Wait between downloads based on config (default 20 minutes, converted to ms)
-      const intervalMs = (currentState.deezerConfig.autoDownloadIntervalMinutes || 20) * 60 * 1000;
-      console.log(`[AUTO-DL] Waiting ${currentState.deezerConfig.autoDownloadIntervalMinutes || 20} minutes before next download`);
+      // Wait between downloads based on config (default 1 minute, converted to ms)
+      const intervalMs = (currentState.deezerConfig.autoDownloadIntervalMinutes || 1) * 60 * 1000;
+      console.log(`[AUTO-DL] Waiting ${currentState.deezerConfig.autoDownloadIntervalMinutes || 1} minute(s) before next download`);
       await new Promise(resolve => setTimeout(resolve, intervalMs));
     }
 
