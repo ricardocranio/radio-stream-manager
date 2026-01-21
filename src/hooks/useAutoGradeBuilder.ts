@@ -482,7 +482,8 @@ export function useAutoGradeBuilder() {
       }
 
       if (selectedSong) {
-        songs.push(`"${selectedSong.filename}"`);
+        // No quotes around filenames - they already have .mp3 extension
+        songs.push(selectedSong.filename);
         usedInBlock.add(`${selectedSong.title.toLowerCase()}-${selectedSong.artist.toLowerCase()}`);
         markSongAsUsed(selectedSong.title, selectedSong.artist, timeStr);
         
@@ -495,12 +496,13 @@ export function useAutoGradeBuilder() {
           style: selectedSong.style,
         });
       } else {
-        // Ultimate fallback: coringa
-        songs.push(`"${config.coringaCode || 'mus'}"`);
+        // Ultimate fallback: coringa (no quotes)
+        const coringaCode = config.coringaCode || 'mus';
+        songs.push(coringaCode.endsWith('.mp3') ? coringaCode : `${coringaCode}.mp3`);
         blockLogs.push({
           blockTime: timeStr,
           type: 'substituted',
-          title: config.coringaCode || 'mus',
+          title: coringaCode,
           artist: 'CORINGA',
           station: 'FALLBACK',
           reason: 'Nenhuma música válida encontrada, usando coringa',
