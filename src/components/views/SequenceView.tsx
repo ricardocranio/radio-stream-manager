@@ -67,16 +67,25 @@ export function SequenceView() {
   const [formPriority, setFormPriority] = useState(1);
   const [formSequence, setFormSequence] = useState<SequenceConfig[]>(sequence);
 
-  // Build radio options with stations first, then special options, FIXO at the end
+  // Build radio options with stations first, then special options, then each fixed content
   const stationOptions = stations
     .filter(s => s.enabled !== false)
     .map((s) => ({ value: s.id, label: s.name }));
   
+  // Create individual options for each fixed content
+  const fixedContentOptions = fixedContent
+    .filter(c => c.enabled)
+    .map((c) => ({ 
+      value: `fixo_${c.id}`, 
+      label: `📌 ${c.name}`,
+      isFixo: true 
+    }));
+  
   const radioOptions = [
     ...stationOptions,
-    { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)' },
-    { value: 'top50', label: '🏆 TOP50 (Curadoria)' },
-    { value: 'fixo', label: '📌 FIXO (Conteúdo Fixo)' },
+    { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)', isFixo: false },
+    { value: 'top50', label: '🏆 TOP50 (Curadoria)', isFixo: false },
+    ...fixedContentOptions,
   ];
 
   const handleChange = (position: number, value: string) => {
@@ -247,6 +256,11 @@ export function SequenceView() {
   };
 
   const getStationColor = (source: string) => {
+    // Check if it's a fixed content item
+    if (source.startsWith('fixo_')) {
+      return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+    }
+    
     const colors: Record<string, string> = {
       bh: 'bg-primary/20 text-primary border-primary/30',
       band: 'bg-accent/20 text-accent border-accent/30',
@@ -277,6 +291,34 @@ export function SequenceView() {
       other: '📁 Outro',
     };
     return labels[type] || type;
+  };
+
+  // Get display name for a sequence item source
+  const getSourceDisplayName = (source: string): string => {
+    // Check if it's a fixed content item
+    if (source.startsWith('fixo_')) {
+      const contentId = source.replace('fixo_', '');
+      const content = fixedContent.find(c => c.id === contentId);
+      return content?.name || 'FIXO';
+    }
+    
+    // Check if it's a station
+    const station = stations.find(s => s.id === source);
+    if (station) return station.name;
+    
+    // Special options
+    if (source === 'random_pop') return 'Aleatório';
+    if (source === 'top50') return 'TOP50';
+    
+    return source;
+  };
+
+  // Get short label for badge
+  const getSourceBadgeLabel = (source: string): string => {
+    if (source.startsWith('fixo_')) {
+      return '📌';
+    }
+    return source.toUpperCase().slice(0, 4);
   };
 
   const formatTime = (hour: number, minute: number) => {
@@ -477,7 +519,7 @@ export function SequenceView() {
                       </SelectContent>
                     </Select>
                     <Badge variant="outline" className={`${getStationColor(item.radioSource)} text-[9px] px-1`}>
-                      {item.radioSource.toUpperCase().slice(0, 4)}
+                      {getSourceBadgeLabel(item.radioSource)}
                     </Badge>
                     <Button
                       variant="ghost"
@@ -589,7 +631,6 @@ export function SequenceView() {
               
               <div className="grid grid-cols-5 gap-2">
                 {(activeScheduled ? activeSequence : localSequence).map((item) => {
-                  const station = stations.find((s) => s.id === item.radioSource);
                   return (
                     <div
                       key={item.position}
@@ -597,7 +638,7 @@ export function SequenceView() {
                     >
                       <span className="text-2xl font-bold">{item.position}</span>
                       <span className="text-[10px] uppercase tracking-wide mt-1 text-center px-1 truncate w-full">
-                        {station?.name || item.radioSource}
+                        {getSourceDisplayName(item.radioSource)}
                       </span>
                     </div>
                   );

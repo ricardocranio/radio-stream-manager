@@ -480,9 +480,42 @@ export function useAutoGradeBuilder() {
     for (const seq of sequence) {
       if (songs.length >= sequence.length) break; // Use sequence length as max
 
-      // Handle special sequence types
+      // Handle special sequence types - check for specific fixed content (fixo_ID)
+      if (seq.radioSource.startsWith('fixo_')) {
+        // Specific FIXO content selected by ID
+        const contentId = seq.radioSource.replace('fixo_', '');
+        const specificContent = fixedContent.find(fc => fc.id === contentId && fc.enabled);
+        
+        if (specificContent) {
+          const fixedFileName = sanitizeFilename(specificContent.fileName);
+          blockLogs.push({
+            blockTime: timeStr,
+            type: 'fixed',
+            title: specificContent.name,
+            artist: specificContent.fileName,
+            station: 'FIXO',
+            reason: `Conteúdo fixo específico da sequência`,
+          });
+          songs.push(`"${fixedFileName}"`);
+        } else {
+          // Specific content not found or disabled, use coringa
+          const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
+          songs.push(coringaCode);
+          blockLogs.push({
+            blockTime: timeStr,
+            type: 'substituted',
+            title: 'FIXO',
+            artist: 'CORINGA',
+            station: 'FALLBACK',
+            reason: `Conteúdo fixo ID ${contentId} não encontrado ou desabilitado`,
+          });
+        }
+        continue;
+      }
+      
+      // Handle generic 'fixo' (backwards compatibility)
       if (seq.radioSource === 'fixo') {
-        // FIXO in sequence - insert fixed content
+        // FIXO in sequence - insert fixed content (round-robin)
         const fixoContent = getNextFixoContent();
         if (fixoContent) {
           songs.push(fixoContent);
