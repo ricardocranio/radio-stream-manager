@@ -248,6 +248,8 @@ const defaultConfig: SystemConfig = {
   monitorInterval: 300,
   forbiddenWords: ['1.FM', 'Love Classics', 'Solitaire', 'Mahjong', 'Dayspedia', 'Games', 'Online', 'METROPOLITANA - SP', 'BAND FM'],
   funkWords: ['funk', 'mc ', 'sequencia', 'proibidão', 'baile', 'kondzilla', 'gr6'],
+  // Power saving mode
+  powerSavingMode: false,
 };
 
 const defaultDeezerConfig: DeezerConfig = {

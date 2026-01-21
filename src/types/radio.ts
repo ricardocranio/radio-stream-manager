@@ -57,6 +57,8 @@ export interface SystemConfig {
   monitorInterval?: number;
   forbiddenWords?: string[];
   funkWords?: string[];
+  // Performance
+  powerSavingMode?: boolean;
 }
 
 export interface SequenceConfig {

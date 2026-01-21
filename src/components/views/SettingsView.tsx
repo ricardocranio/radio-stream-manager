@@ -502,16 +502,32 @@ export function SettingsView() {
           </CardContent>
         </Card>
 
-        {/* Advanced Settings */}
-        <Card className="glass-card lg:col-span-2">
+        {/* Performance Settings */}
+        <Card className="glass-card border-orange-500/20 lg:col-span-2">
           <CardHeader className="border-b border-border">
             <CardTitle className="flex items-center gap-2">
-              <Settings className="w-5 h-5 text-muted-foreground" />
-              Configurações Avançadas
+              <Settings className="w-5 h-5 text-orange-500" />
+              Performance e Economia de Recursos
             </CardTitle>
           </CardHeader>
           <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Power Saving Mode - NEW */}
+              <div className="flex items-center justify-between p-4 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                <div>
+                  <Label className="text-orange-400">🔋 Modo Economia</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Reduz atualizações quando o app está em segundo plano (3x mais lento)
+                  </p>
+                </div>
+                <Switch
+                  checked={(localConfig as any).powerSavingMode ?? false}
+                  onCheckedChange={(checked) =>
+                    setLocalConfig((prev) => ({ ...prev, powerSavingMode: checked }))
+                  }
+                />
+              </div>
+
               <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border">
                 <div>
                   <Label>Curadoria TOP50 (10x10)</Label>
@@ -567,6 +583,16 @@ export function SettingsView() {
                   <Label>Cache de Inventário</Label>
                   <p className="text-xs text-muted-foreground mt-1">
                     Cache por 1 hora
+                  </p>
+                </div>
+                <Switch defaultChecked />
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border">
+                <div>
+                  <Label>Notificações Toast</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Mostrar alertas de novas músicas
                   </p>
                 </div>
                 <Switch defaultChecked />

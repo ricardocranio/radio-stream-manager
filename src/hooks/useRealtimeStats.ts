@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { withRetry, ErrorCodes, createError } from '@/lib/errorHandler';
 import { debounce } from '@/lib/errorHandler';
+import { useRadioStore } from '@/store/radioStore';
 
 interface LastSongByStation {
   title: string;
@@ -36,12 +37,17 @@ interface RealtimeStats {
 }
 
 const REFRESH_INTERVAL = 30; // seconds
+const BACKGROUND_REFRESH_MULTIPLIER = 3; // 3x slower when in background
 
 // Singleton channel to avoid duplicate subscriptions
 let globalChannel: ReturnType<typeof supabase.channel> | null = null;
 let subscriberCount = 0;
 
 export function useRealtimeStats() {
+  // Get power saving mode from store
+  const powerSavingMode = useRadioStore((s) => s.config.powerSavingMode ?? false);
+  const isInBackgroundRef = useRef(false);
+  
   const [stats, setStats] = useState<RealtimeStats>({
     totalSongs: 0,
     songsLast24h: 0,
@@ -60,6 +66,23 @@ export function useRealtimeStats() {
   // Use refs for countdown to avoid re-renders
   const countdownRef = useRef<number>(REFRESH_INTERVAL);
   const countdownDisplayRef = useRef<number>(REFRESH_INTERVAL);
+
+  // Track background state
+  useEffect(() => {
+    const handleVisibility = () => {
+      isInBackgroundRef.current = document.hidden;
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // Get effective refresh interval based on power saving mode
+  const getEffectiveInterval = useCallback(() => {
+    if (powerSavingMode && isInBackgroundRef.current) {
+      return REFRESH_INTERVAL * BACKGROUND_REFRESH_MULTIPLIER;
+    }
+    return REFRESH_INTERVAL;
+  }, [powerSavingMode]);
 
   const loadStats = useCallback(async () => {
     const context = { component: 'useRealtimeStats', action: 'loadStats' };
@@ -175,30 +198,42 @@ export function useRealtimeStats() {
     loadStats();
   }, [loadStats]);
 
-  // Auto-refresh every 30 seconds - OPTIMIZED: removed per-second countdown re-renders
+  // Auto-refresh with power saving support
   useEffect(() => {
-    const refreshInterval = setInterval(() => {
-      loadStats();
-      countdownRef.current = REFRESH_INTERVAL;
-      countdownDisplayRef.current = REFRESH_INTERVAL;
-    }, REFRESH_INTERVAL * 1000);
+    let refreshIntervalId: NodeJS.Timeout;
+    let countdownIntervalId: NodeJS.Timeout;
 
-    // Update countdown display every 5 seconds instead of every 1 second
-    const countdownInterval = setInterval(() => {
-      countdownRef.current = Math.max(0, countdownRef.current - 5);
-      countdownDisplayRef.current = countdownRef.current;
-      // Only update state every 5 seconds to reduce re-renders
-      setStats(prev => {
-        if (prev.nextRefreshIn === countdownRef.current) return prev;
-        return { ...prev, nextRefreshIn: countdownRef.current };
-      });
-    }, 5000);
+    const setupIntervals = () => {
+      const effectiveInterval = getEffectiveInterval();
+      
+      refreshIntervalId = setInterval(() => {
+        // Skip refresh if in background with power saving
+        if (powerSavingMode && isInBackgroundRef.current) {
+          return;
+        }
+        loadStats();
+        countdownRef.current = effectiveInterval;
+        countdownDisplayRef.current = effectiveInterval;
+      }, effectiveInterval * 1000);
+
+      // Update countdown display every 5 seconds
+      countdownIntervalId = setInterval(() => {
+        countdownRef.current = Math.max(0, countdownRef.current - 5);
+        countdownDisplayRef.current = countdownRef.current;
+        setStats(prev => {
+          if (prev.nextRefreshIn === countdownRef.current) return prev;
+          return { ...prev, nextRefreshIn: countdownRef.current };
+        });
+      }, 5000);
+    };
+
+    setupIntervals();
 
     return () => {
-      clearInterval(refreshInterval);
-      clearInterval(countdownInterval);
+      clearInterval(refreshIntervalId);
+      clearInterval(countdownIntervalId);
     };
-  }, [loadStats]);
+  }, [loadStats, getEffectiveInterval, powerSavingMode]);
 
   // Subscribe to realtime updates with error handling
   useEffect(() => {
