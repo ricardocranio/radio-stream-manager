@@ -7,12 +7,14 @@ import { ThemeProvider } from "next-themes";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { useCleanStart } from "./hooks/useCleanStart";
+import { useSyncStationsFromDb } from "./hooks/useSyncStationsFromDb";
 
 const queryClient = new QueryClient();
 
-// Component that runs the clean start hook
-function CleanStartProvider({ children }: { children: React.ReactNode }) {
+// Component that runs initialization hooks
+function AppInitializer({ children }: { children: React.ReactNode }) {
   useCleanStart();
+  useSyncStationsFromDb();
   return <>{children}</>;
 }
 
@@ -20,7 +22,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <TooltipProvider>
-        <CleanStartProvider>
+        <AppInitializer>
           <Toaster />
           <Sonner />
           <HashRouter>
@@ -30,7 +32,7 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </HashRouter>
-        </CleanStartProvider>
+        </AppInitializer>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>

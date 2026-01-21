@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule } from '@/types/radio';
+import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule, ScheduledSequence } from '@/types/radio';
 
 export interface DeezerConfig {
   arl: string;
@@ -103,6 +103,13 @@ interface RadioState {
   // Sequence Config
   sequence: SequenceConfig[];
   setSequence: (sequence: SequenceConfig[]) => void;
+  
+  // Scheduled Sequences (time-based sequences)
+  scheduledSequences: ScheduledSequence[];
+  setScheduledSequences: (sequences: ScheduledSequence[]) => void;
+  addScheduledSequence: (sequence: ScheduledSequence) => void;
+  updateScheduledSequence: (id: string, updates: Partial<ScheduledSequence>) => void;
+  removeScheduledSequence: (id: string) => void;
   
   // Block Schedule
   blocks: BlockSchedule[];
@@ -368,6 +375,22 @@ export const useRadioStore = create<RadioState>()(
       sequence: defaultSequence,
       setSequence: (sequence) => set({ sequence }),
 
+      // Scheduled Sequences
+      scheduledSequences: [],
+      setScheduledSequences: (scheduledSequences) => set({ scheduledSequences }),
+      addScheduledSequence: (sequence) =>
+        set((state) => ({ scheduledSequences: [...state.scheduledSequences, sequence] })),
+      updateScheduledSequence: (id, updates) =>
+        set((state) => ({
+          scheduledSequences: state.scheduledSequences.map((s) =>
+            s.id === id ? { ...s, ...updates } : s
+          ),
+        })),
+      removeScheduledSequence: (id) =>
+        set((state) => ({
+          scheduledSequences: state.scheduledSequences.filter((s) => s.id !== id),
+        })),
+
       blocks: [],
       setBlocks: (blocks) => set({ blocks }),
 
@@ -566,6 +589,7 @@ export const useRadioStore = create<RadioState>()(
         config: state.config,
         deezerConfig: state.deezerConfig,
         sequence: state.sequence,
+        scheduledSequences: state.scheduledSequences,
         fixedContent: state.fixedContent,
         blockSongs: state.blockSongs,
         missingSongs: state.missingSongs,
@@ -619,4 +643,38 @@ export const getDownloadStats = () => {
   const failed = state.downloadHistory.filter((e) => e.status === 'error').length;
   const successRate = total > 0 ? Math.round((success / total) * 100) : 0;
   return { total, success, failed, successRate };
+};
+
+// Helper function to get active sequence based on current time and scheduled sequences
+export const getActiveSequence = (): SequenceConfig[] => {
+  const state = useRadioStore.getState();
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  const currentTimeMinutes = currentHour * 60 + currentMinute;
+  
+  const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
+  const currentDay = dayMap[now.getDay()];
+  
+  // Find active scheduled sequence
+  const activeScheduled = state.scheduledSequences
+    .filter((s) => s.enabled)
+    .filter((s) => s.weekDays.length === 0 || s.weekDays.includes(currentDay))
+    .filter((s) => {
+      const startMinutes = s.startHour * 60 + s.startMinute;
+      const endMinutes = s.endHour * 60 + s.endMinute;
+      
+      // Handle overnight ranges
+      if (endMinutes <= startMinutes) {
+        return currentTimeMinutes >= startMinutes || currentTimeMinutes < endMinutes;
+      }
+      return currentTimeMinutes >= startMinutes && currentTimeMinutes < endMinutes;
+    })
+    .sort((a, b) => b.priority - a.priority);
+  
+  if (activeScheduled.length > 0) {
+    return activeScheduled[0].sequence;
+  }
+  
+  return state.sequence;
 };
