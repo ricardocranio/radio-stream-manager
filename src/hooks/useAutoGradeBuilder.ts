@@ -383,7 +383,7 @@ export function useAutoGradeBuilder() {
       // Continue to generate songs
     }
 
-    // Normal block with 10 songs + 11 VHTs
+    // Normal block with 10 songs from different stations
     const songs: string[] = [];
     const usedInBlock = new Set<string>();
     const stationIdToName: Record<string, string> = {};
@@ -392,106 +392,102 @@ export function useAutoGradeBuilder() {
       stationIdToName[s.id] = s.name;
     });
 
-    for (const seq of sequence) {
-      if (songs.length >= 10) break; // Max 10 songs per block
-      
-      const stationName = stationIdToName[seq.radioSource];
-      const stationStyle = getStationStyle(seq.radioSource);
-      const stationSongs = stationName ? songsByStation[stationName] : [];
+    // Get all available station names with songs
+    const availableStations = Object.keys(songsByStation).filter(
+      name => songsByStation[name]?.length > 0
+    );
 
+    // Create a flattened pool of all songs with station info
+    const allSongsPool: SongEntry[] = [];
+    for (const stationName of availableStations) {
+      const stationSongs = songsByStation[stationName];
+      for (const song of stationSongs) {
+        allSongsPool.push(song);
+      }
+    }
+
+    // Track which station index to use for round-robin distribution
+    let stationIndex = 0;
+
+    // Generate 10 songs, rotating through stations for variety
+    while (songs.length < 10) {
       let selectedSong: SongEntry | null = null;
-      let songIndex = 0;
-      let skipCount = 0;
+      let triedStations = 0;
 
-      // Try to find a valid song from the station
-      while (songIndex < (stationSongs?.length || 0)) {
-        const candidate = stationSongs[songIndex];
-        const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+      // Try each station in round-robin until we find a valid song
+      while (triedStations < availableStations.length && !selectedSong) {
+        const currentStation = availableStations[(stationIndex + triedStations) % availableStations.length];
+        const stationSongs = songsByStation[currentStation] || [];
+        const stationStyle = stations.find(s => s.name === currentStation)?.styles?.[0] || 'POP/VARIADO';
 
-        // Check if not used in this block and not recently used
-        if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-          // Check if exists in library (Electron only)
-          const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
-          
-          if (existsInLibrary) {
-            selectedSong = { ...candidate, existsInLibrary: true };
-            break;
-          } else {
-            // Song is missing from library
-            stats.missing++;
-            blockLogs.push({
-              blockTime: timeStr,
-              type: 'missing',
-              title: candidate.title,
-              artist: candidate.artist,
-              station: stationName || 'UNKNOWN',
-              style: stationStyle,
-              reason: 'Não encontrada no acervo local',
-            });
+        // Try to find a valid song from this station
+        for (const candidate of stationSongs) {
+          const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+
+          // Check if not used in this block and not recently used
+          if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
+            // Check if exists in library (Electron only)
+            const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
             
-            // Add to missing songs list if not already there
-            if (!isSongAlreadyMissing(candidate.artist, candidate.title)) {
-              addMissingSong({
-                id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            if (existsInLibrary) {
+              selectedSong = { ...candidate, existsInLibrary: true };
+              break;
+            } else {
+              // Song is missing from library
+              stats.missing++;
+              blockLogs.push({
+                blockTime: timeStr,
+                type: 'missing',
                 title: candidate.title,
                 artist: candidate.artist,
-                station: stationName || 'UNKNOWN',
-                timestamp: new Date(),
-                status: 'missing',
-                dna: stationStyle,
+                station: currentStation,
+                style: stationStyle,
+                reason: 'Não encontrada no acervo local',
               });
+              
+              // Add to missing songs list if not already there
+              if (!isSongAlreadyMissing(candidate.artist, candidate.title)) {
+                addMissingSong({
+                  id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                  title: candidate.title,
+                  artist: candidate.artist,
+                  station: currentStation,
+                  timestamp: new Date(),
+                  status: 'missing',
+                  dna: stationStyle,
+                });
+              }
             }
           }
-        } else if (usedInBlock.has(key) || isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-          skipCount++;
-          blockLogs.push({
-            blockTime: timeStr,
-            type: 'skipped',
-            title: candidate.title,
-            artist: candidate.artist,
-            station: stationName || 'UNKNOWN',
-            style: stationStyle,
-            reason: usedInBlock.has(key) ? 'Já usada neste bloco' : 'Repetição dentro de 60 min',
-          });
         }
 
-        songIndex++;
+        triedStations++;
       }
 
-      stats.skipped += skipCount;
+      // Advance to next station for next song (round-robin)
+      stationIndex = (stationIndex + 1) % Math.max(availableStations.length, 1);
 
-      // If no valid song found, find substitute with same DNA
+      // If no valid song found from any station, try any song from the pool
       if (!selectedSong) {
-        const substitute = findSubstitute(stationStyle, songsByStation, timeStr, usedInBlock);
-        if (substitute) {
-          // Verify substitute exists in library
-          const substituteExists = await checkSongInLibrary(substitute.artist, substitute.title);
+        for (const candidate of allSongsPool) {
+          const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
           
-          if (substituteExists) {
-            selectedSong = { ...substitute, existsInLibrary: true };
-            stats.substituted++;
-            blockLogs.push({
-              blockTime: timeStr,
-              type: 'substituted',
-              title: substitute.title,
-              artist: substitute.artist,
-              station: substitute.station,
-              style: substitute.style,
-              reason: `Substituição DNA: ${stationStyle}`,
-              substituteFor: stationName || 'UNKNOWN',
-            });
-          } else {
-            // Even substitute is missing
-            stats.missing++;
-            blockLogs.push({
-              blockTime: timeStr,
-              type: 'missing',
-              title: substitute.title,
-              artist: substitute.artist,
-              station: substitute.station,
-              style: substitute.style,
-              reason: 'Substituto também não encontrado no acervo',
-            });
+          if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
+            const existsInLibrary = await checkSongInLibrary(candidate.artist, candidate.title);
+            if (existsInLibrary) {
+              selectedSong = { ...candidate, existsInLibrary: true };
+              stats.substituted++;
+              blockLogs.push({
+                blockTime: timeStr,
+                type: 'substituted',
+                title: candidate.title,
+                artist: candidate.artist,
+                station: candidate.station,
+                style: candidate.style,
+                reason: 'Pool geral - variação de rádios',
+              });
+              break;
+            }
           }
         }
       }
@@ -513,7 +509,6 @@ export function useAutoGradeBuilder() {
       } else {
         // Ultimate fallback: coringa code (NO quotes, just the code with .mp3)
         const coringaCode = config.coringaCode || 'mus';
-        // Codes don't have quotes
         songs.push(coringaCode.endsWith('.mp3') ? coringaCode : `${coringaCode}.mp3`);
         blockLogs.push({
           blockTime: timeStr,
@@ -523,6 +518,8 @@ export function useAutoGradeBuilder() {
           station: 'FALLBACK',
           reason: 'Nenhuma música válida encontrada, usando coringa',
         });
+        // Break to prevent infinite loop if pool is exhausted
+        break;
       }
     }
 
