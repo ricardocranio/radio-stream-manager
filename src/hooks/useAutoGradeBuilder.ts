@@ -482,8 +482,8 @@ export function useAutoGradeBuilder() {
       }
 
       if (selectedSong) {
-        // No quotes around filenames - they already have .mp3 extension
-        songs.push(selectedSong.filename);
+        // Real songs have quotes around filenames
+        songs.push(`"${selectedSong.filename}"`);
         usedInBlock.add(`${selectedSong.title.toLowerCase()}-${selectedSong.artist.toLowerCase()}`);
         markSongAsUsed(selectedSong.title, selectedSong.artist, timeStr);
         
@@ -496,8 +496,9 @@ export function useAutoGradeBuilder() {
           style: selectedSong.style,
         });
       } else {
-        // Ultimate fallback: coringa (no quotes)
+        // Ultimate fallback: coringa code (NO quotes, just the code with .mp3)
         const coringaCode = config.coringaCode || 'mus';
+        // Codes don't have quotes
         songs.push(coringaCode.endsWith('.mp3') ? coringaCode : `${coringaCode}.mp3`);
         blockLogs.push({
           blockTime: timeStr,

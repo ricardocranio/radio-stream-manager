@@ -425,8 +425,8 @@ export function BlockEditorView() {
     const key = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     const program = getProgramForHour(hour);
     const songs = blockSongs[key] || dynamicSongPool.slice(0, 10).map((s, i) => ({ ...s, id: `${key}-${i}` }));
-    // Sanitize filenames: remove accents, replace & with "e", remove special chars (no quotes)
-    const songFiles = songs.map(s => sanitizeFilename(s.file)).join(',vht,');
+    // Real songs have quotes around filenames
+    const songFiles = songs.map(s => `"${sanitizeFilename(s.file)}"`).join(',vht,');
     return `${time} (ID=${program}) ${songFiles}`;
   }, [blockSongs, dynamicSongPool]);
 
