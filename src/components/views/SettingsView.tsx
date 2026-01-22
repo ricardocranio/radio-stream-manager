@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { Settings, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music, Loader2, CheckCircle2, XCircle, BarChart3 } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
+import { useSimilarityLogStore } from '@/store/similarityLogStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +28,8 @@ interface ArlValidationResult {
 
 export function SettingsView() {
   const { config, setConfig, deezerConfig, setDeezerConfig } = useRadioStore();
+  const similarityStats = useSimilarityLogStore((state) => state.stats);
+  const resetSimilarityStats = useSimilarityLogStore((state) => state.resetStats);
   const { toast } = useToast();
   const [localConfig, setLocalConfig] = useState(config);
   const [showArl, setShowArl] = useState(false);
@@ -558,6 +561,79 @@ export function SettingsView() {
                 Define o quão similar uma música capturada precisa ser com o arquivo local para ser considerada "encontrada". 
                 Valores menores = mais flexível (mais matches), valores maiores = mais rigoroso (menos falsos positivos).
               </p>
+
+              {/* Similarity Stats Panel */}
+              {similarityStats.totalChecked > 0 && (
+                <div className="mt-4 p-4 rounded-lg bg-muted/50 border border-border">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm font-medium">Estatísticas de Similaridade</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        resetSimilarityStats();
+                        toast({
+                          title: 'Estatísticas resetadas',
+                          description: 'O contador de similaridade foi zerado.',
+                        });
+                      }}
+                      className="text-xs h-7"
+                    >
+                      <RotateCcw className="w-3 h-3 mr-1" />
+                      Resetar
+                    </Button>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="text-center p-2 rounded bg-background">
+                      <div className="text-lg font-bold text-foreground">{similarityStats.totalChecked}</div>
+                      <div className="text-xs text-muted-foreground">Verificadas</div>
+                    </div>
+                    <div className="text-center p-2 rounded bg-green-500/10">
+                      <div className="text-lg font-bold text-green-500">{similarityStats.accepted}</div>
+                      <div className="text-xs text-muted-foreground">Aceitas</div>
+                    </div>
+                    <div className="text-center p-2 rounded bg-red-500/10">
+                      <div className="text-lg font-bold text-red-500">{similarityStats.rejected}</div>
+                      <div className="text-xs text-muted-foreground">Rejeitadas</div>
+                    </div>
+                    <div className="text-center p-2 rounded bg-blue-500/10">
+                      <div className="text-lg font-bold text-blue-500">
+                        {Math.round(similarityStats.averageSimilarity * 100)}%
+                      </div>
+                      <div className="text-xs text-muted-foreground">Média</div>
+                    </div>
+                  </div>
+
+                  {/* Detailed breakdown */}
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                        Abaixo threshold: {similarityStats.belowThreshold}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-gray-500"></span>
+                        Sem match: {similarityStats.noMatch}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                        Erros: {similarityStats.errors}
+                      </span>
+                    </div>
+                    {similarityStats.totalChecked > 0 && (
+                      <div className="mt-2 text-xs">
+                        <span className="text-green-500 font-medium">
+                          Taxa de aceite: {Math.round((similarityStats.accepted / similarityStats.totalChecked) * 100)}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
