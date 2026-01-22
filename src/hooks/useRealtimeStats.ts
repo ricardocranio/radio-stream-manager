@@ -36,8 +36,8 @@ interface RealtimeStats {
   nextRefreshIn: number;
 }
 
-const REFRESH_INTERVAL = 120; // Stats refresh every 2 minutes
-const BACKGROUND_REFRESH_MULTIPLIER = 3;
+const REFRESH_INTERVAL = 600; // Stats refresh every 10 minutes (was 2 min)
+const BACKGROUND_REFRESH_MULTIPLIER = 2; // Background = 20 minutes
 
 export function useRealtimeStats() {
   const powerSavingMode = useRadioStore((s) => s.config.powerSavingMode ?? false);
