@@ -87,13 +87,7 @@ export function useAutoDownload() {
         };
         addDownloadHistory(historyEntry);
 
-        // Show notification
-        if (window.electronAPI?.showNotification) {
-          window.electronAPI.showNotification(
-            '✅ Download Automático',
-            `${song.artist} - ${song.title}`
-          );
-        }
+        // Notification removed as per user request - downloads are silent now
 
         console.log(`[AUTO-DL] Success: ${song.artist} - ${song.title}`);
         return true;

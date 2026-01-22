@@ -77,13 +77,7 @@ export function useBackgroundServices() {
         };
         useRadioStore.getState().addDownloadHistory(historyEntry);
 
-        // Show notification
-        if (window.electronAPI?.showNotification) {
-          window.electronAPI.showNotification(
-            '✅ Download Automático',
-            `${song.artist} - ${song.title}`
-          );
-        }
+        // Notification removed as per user request - downloads are silent now
 
         console.log(`[BG-SERVICE] ✅ Success: ${song.artist} - ${song.title}`);
         return true;

@@ -982,8 +982,8 @@ export function useAutoGradeBuilder() {
             }
           }
 
-          // Small delay to prevent UI freeze and allow state updates
-          await new Promise(resolve => setTimeout(resolve, 10));
+          // Delay between blocks to prevent UI freeze and allow state updates (2 seconds)
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
 
