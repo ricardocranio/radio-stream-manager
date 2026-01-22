@@ -212,40 +212,48 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     const state = useRadioStore.getState();
     const { deezerConfig, missingSongs } = state;
 
-    // Log status for debugging
-    const hasMissing = missingSongs.filter(s => s.status === 'missing').length;
-    if (hasMissing > 0) {
-      console.log(`[GLOBAL-SVC] 🔍 Checking ${hasMissing} missing songs, autoDownload: ${deezerConfig.autoDownload}, enabled: ${deezerConfig.enabled}, hasARL: ${!!deezerConfig.arl}`);
+    // Count songs with 'missing' status (verified as not in music library)
+    const pendingMissing = missingSongs.filter(s => s.status === 'missing');
+    const alreadyQueued = pendingMissing.filter(s => processedSongsRef.current.has(s.id)).length;
+    const newToQueue = pendingMissing.filter(s => !processedSongsRef.current.has(s.id));
+
+    // Periodic status log
+    if (pendingMissing.length > 0) {
+      console.log(`[GLOBAL-SVC] 🎵 Fila: ${pendingMissing.length} músicas faltando no banco | ${alreadyQueued} já na fila | ${newToQueue.length} novas`);
     }
 
-    if (!deezerConfig.autoDownload || !deezerConfig.enabled || !deezerConfig.arl) {
+    // Check if auto-download is configured
+    if (!deezerConfig.autoDownload) {
+      if (newToQueue.length > 0) {
+        console.log(`[GLOBAL-SVC] ⏸️ Download automático DESATIVADO - ${newToQueue.length} músicas aguardando`);
+      }
+      return;
+    }
+    
+    if (!deezerConfig.enabled || !deezerConfig.arl) {
+      if (newToQueue.length > 0) {
+        console.log(`[GLOBAL-SVC] ⚠️ Deezer não configurado (enabled: ${deezerConfig.enabled}, hasARL: ${!!deezerConfig.arl})`);
+      }
       return;
     }
 
-    // Get all missing songs that haven't been processed yet
-    const songsToQueue = missingSongs.filter(
-      song => 
-        song.status === 'missing' && 
-        !processedSongsRef.current.has(song.id)
-    );
-
-    // Add new songs to queue
-    for (const song of songsToQueue) {
-      console.log(`[GLOBAL-SVC] 📥 Queueing for download: ${song.artist} - ${song.title}`);
+    // Add new songs to queue (only songs verified as missing from music library)
+    for (const song of newToQueue) {
+      console.log(`[GLOBAL-SVC] 📥 Adicionando à fila: ${song.artist} - ${song.title} (não encontrado no banco musical)`);
       processedSongsRef.current.add(song.id);
       downloadQueueRef.current.push({ song, retryCount: 0 });
     }
     
     // Update queue length in state and store
-    if (songsToQueue.length > 0) {
-      console.log(`[GLOBAL-SVC] 📊 Queue updated: ${downloadQueueRef.current.length} songs pending`);
+    if (newToQueue.length > 0) {
+      console.log(`[GLOBAL-SVC] 📊 Fila atualizada: ${downloadQueueRef.current.length} músicas pendentes para download`);
       setDownloadState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
       useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
     }
 
     // Start processing if queue has items and not already processing
     if (downloadQueueRef.current.length > 0 && !isProcessingRef.current) {
-      console.log(`[GLOBAL-SVC] 🚀 Starting download queue processing...`);
+      console.log(`[GLOBAL-SVC] 🚀 Iniciando downloads automáticos...`);
       processDownloadQueue();
     }
   }, [processDownloadQueue]);
