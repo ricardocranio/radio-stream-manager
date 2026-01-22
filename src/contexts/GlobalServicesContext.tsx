@@ -394,39 +394,50 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
 
     isGlobalServicesRunning = true;
     isInitializedRef.current = true;
-    console.log('[GLOBAL-SVC] 🚀 Starting ALL global services...');
-    console.log('[GLOBAL-SVC] ✅ Grade Builder: ACTIVE (from useAutoGradeBuilder hook)');
-    console.log('[GLOBAL-SVC] ✅ Download Service: ACTIVE');
-    console.log('[GLOBAL-SVC] ✅ Scraping Service: ACTIVE');
+    
+    // Get current config state
+    const state = useRadioStore.getState();
+    const { deezerConfig, stations, config } = state;
+    const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl).length;
+    
+    console.log('╔══════════════════════════════════════════════════════════════╗');
+    console.log('║     🚀 SISTEMA AUTOMATIZADO - INICIANDO TODOS OS SERVIÇOS    ║');
+    console.log('╠══════════════════════════════════════════════════════════════╣');
+    console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras)` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
+    console.log(`║ 🎵 Grade Builder: ✅ ATIVO (${gradeBuilder.minutesBeforeBlock || 10} min antes de cada bloco)`.padEnd(65) + '║');
+    console.log(`║ 📥 Downloads:     ${deezerConfig.autoDownload ? '✅ AUTOMÁTICO' : '⏸️ MANUAL (ativar em Config)'}`.padEnd(65) + '║');
+    console.log(`║ 💾 Banco Musical: ${config.musicFolders?.length > 0 ? `✅ ${config.musicFolders.length} pastas` : '⚠️ Configurar pastas'}`.padEnd(65) + '║');
+    console.log(`║ 🔄 Sync Cloud:    ✅ ATIVO (Supabase Realtime)`.padEnd(65) + '║');
+    console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
+    console.log('╚══════════════════════════════════════════════════════════════╝');
 
-    // 1. Download check every 10 seconds
+    // 1. Download check every 10 seconds (automatic if enabled)
     downloadIntervalRef.current = setInterval(() => {
       checkNewMissingSongs();
     }, 10000);
-    checkNewMissingSongs();
+    checkNewMissingSongs(); // Initial check
 
-    // 2. Scraping every 3 minutes (if configured)
+    // 2. Scraping every 3 minutes (automatic for enabled stations)
     scrapeIntervalRef.current = setInterval(() => {
-      const state = useRadioStore.getState();
-      const { stations } = state;
-      const hasEnabledStations = stations.some(s => s.enabled && s.scrapeUrl);
+      const currentState = useRadioStore.getState();
+      const hasEnabledStations = currentState.stations.some(s => s.enabled && s.scrapeUrl);
       if (hasEnabledStations) {
         scrapeAllStations();
       }
     }, 3 * 60 * 1000);
 
     // Initial scrape
-    const initialState = useRadioStore.getState();
-    if (initialState.stations.some(s => s.enabled && s.scrapeUrl)) {
+    if (enabledStations > 0) {
       scrapeAllStations();
     }
 
-    // NOTE: Grade builder intervals are managed by useAutoGradeBuilder hook itself
+    // NOTE: Grade builder runs its own intervals via useAutoGradeBuilder hook
 
-    console.log('[GLOBAL-SVC] ✅ All services started successfully');
+    console.log('[GLOBAL-SVC] ✅ Todos os serviços automáticos iniciados com sucesso!');
+    console.log('[GLOBAL-SVC] 💡 Sistema funcionando em segundo plano - nenhuma intervenção necessária');
 
     return () => {
-      console.log('[GLOBAL-SVC] 🛑 Stopping all global services');
+      console.log('[GLOBAL-SVC] 🛑 Parando todos os serviços globais');
       if (downloadIntervalRef.current) clearInterval(downloadIntervalRef.current);
       if (scrapeIntervalRef.current) clearInterval(scrapeIntervalRef.current);
       isGlobalServicesRunning = false;
