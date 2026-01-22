@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useRadioStore } from '@/store/radioStore';
+import { useSimilarityLogStore } from '@/store/similarityLogStore';
 
 interface CheckResult {
   exists: boolean;
@@ -16,6 +17,7 @@ interface CheckResult {
  */
 export function useCheckMusicLibrary() {
   const config = useRadioStore((state) => state.config);
+  const addSimilarityLog = useSimilarityLogStore((state) => state.addLog);
 
   /**
    * Check song using SIMILARITY matching with configurable threshold
@@ -31,16 +33,54 @@ export function useCheckMusicLibrary() {
           artist,
           title,
           musicFolders: config.musicFolders,
-          threshold, // Pass configurable threshold
-        });
+          threshold,
+        } as any); // Type assertion to bypass potential stale types
         
-        if (result.exists) {
-          console.log(`[LIBRARY] ✓ Match found: ${artist} - ${title} → ${result.filename} (${Math.round((result.similarity || 0) * 100)}% similar, threshold: ${Math.round(threshold * 100)}%)`);
+        // Log similarity check result
+        if (result.exists && result.similarity !== undefined) {
+          addSimilarityLog({
+            artist,
+            title,
+            matchedFilename: result.filename,
+            similarity: result.similarity,
+            threshold,
+            accepted: true,
+            reason: 'match_found',
+          });
+        } else if (result.similarity !== undefined && result.similarity > 0) {
+          // Found a potential match but below threshold
+          addSimilarityLog({
+            artist,
+            title,
+            matchedFilename: result.filename,
+            similarity: result.similarity,
+            threshold,
+            accepted: false,
+            reason: 'below_threshold',
+          });
+        } else {
+          // No match found at all
+          addSimilarityLog({
+            artist,
+            title,
+            similarity: 0,
+            threshold,
+            accepted: false,
+            reason: 'no_match',
+          });
         }
         
         return result;
       } catch (error) {
         console.error('Error checking song in library:', error);
+        addSimilarityLog({
+          artist,
+          title,
+          similarity: 0,
+          threshold,
+          accepted: false,
+          reason: 'error',
+        });
         return { exists: false };
       }
     }
@@ -63,7 +103,7 @@ export function useCheckMusicLibrary() {
     // Fallback for web: simulate check (always returns false in web mode)
     console.log(`[WEB] Would check: ${artist} - ${title} in ${config.musicFolders.join(', ')}`);
     return { exists: false };
-  }, [config.musicFolders, config.similarityThreshold]);
+  }, [config.musicFolders, config.similarityThreshold, addSimilarityLog]);
 
   const checkMultipleSongs = useCallback(async (
     songs: Array<{ artist: string; title: string }>
@@ -99,11 +139,18 @@ export async function checkSongInLibrary(
         artist,
         title,
         musicFolders,
-        threshold, // Pass configurable threshold
-      });
+        threshold,
+      } as any); // Type assertion to bypass potential stale types
+      
+      const thresholdPercent = Math.round(threshold * 100);
+      const similarityPercent = Math.round((result.similarity || 0) * 100);
       
       if (result.exists) {
-        console.log(`[LIBRARY] ✓ Match: ${artist} - ${title} → ${result.filename} (${Math.round((result.similarity || 0) * 100)}%, threshold: ${Math.round(threshold * 100)}%)`);
+        console.log(`[LIBRARY] ✅ Match: ${artist} - ${title} → ${result.filename} (${similarityPercent}% ≥ ${thresholdPercent}%)`);
+      } else if (result.similarity && result.similarity > 0) {
+        console.log(`[LIBRARY] ❌ Below threshold: ${artist} - ${title} → ${result.filename} (${similarityPercent}% < ${thresholdPercent}%)`);
+      } else {
+        console.log(`[LIBRARY] ⚠️ No match: ${artist} - ${title}`);
       }
       
       return result;
