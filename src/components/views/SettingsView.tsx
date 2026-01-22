@@ -528,6 +528,37 @@ export function SettingsView() {
             <p className="text-xs text-muted-foreground">
               O sistema vasculha recursivamente todas as subpastas procurando arquivos de áudio (.mp3, .flac, .wav, .m4a, .aac, .ogg, .wma)
             </p>
+
+            {/* Similarity Threshold Slider */}
+            <div className="space-y-2 pt-4 border-t border-border">
+              <div className="flex items-center justify-between mb-2">
+                <Label>Threshold de Similaridade</Label>
+                <span className="text-sm font-mono text-blue-500">
+                  {Math.round((localConfig.similarityThreshold || 0.75) * 100)}%
+                </span>
+              </div>
+              <Slider
+                value={[(localConfig.similarityThreshold || 0.75) * 100]}
+                onValueChange={([value]) =>
+                  setLocalConfig((prev) => ({ ...prev, similarityThreshold: value / 100 }))
+                }
+                min={50}
+                max={95}
+                step={5}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>50%</span>
+                <span>65%</span>
+                <span>75%</span>
+                <span>85%</span>
+                <span>95%</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Define o quão similar uma música capturada precisa ser com o arquivo local para ser considerada "encontrada". 
+                Valores menores = mais flexível (mais matches), valores maiores = mais rigoroso (menos falsos positivos).
+              </p>
+            </div>
           </CardContent>
         </Card>
 
