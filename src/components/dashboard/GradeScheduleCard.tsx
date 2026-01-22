@@ -229,16 +229,82 @@ export function GradeScheduleCard() {
     }
   };
 
-  // Handle save changes
-  const handleSaveChanges = () => {
+  // Handle save changes - saves to local state AND exports to destination folder
+  const handleSaveChanges = async () => {
     if (selectedBlock) {
       setBlockSongs(selectedBlock.time, editedSongs);
       setSelectedBlock({ ...selectedBlock, songs: editedSongs });
       setIsEditing(false);
-      toast({
-        title: '✅ Bloco atualizado',
-        description: `Grade das ${selectedBlock.time} foi salva.`,
-      });
+
+      // Also save to physical file in destination folder
+      if (window.electronAPI?.saveGradeFile && window.electronAPI?.readGradeFile) {
+        try {
+          const filename = `${dayInfo.dayName}.txt`;
+          
+          // Read existing file
+          let existingContent = '';
+          try {
+            const readResult = await window.electronAPI.readGradeFile({
+              folder: config.gradeFolder,
+              filename,
+            });
+            if (readResult.success && readResult.content) {
+              existingContent = readResult.content;
+            }
+          } catch {
+            console.log('[GRADE-CARD] No existing file, will create new');
+          }
+
+          // Generate line for this block
+          const songFiles = editedSongs.map(s => {
+            const songFilename = sanitizeFilename(`${s.artist} - ${s.title}.mp3`);
+            return `"${songFilename}"`;
+          }).join(',vht,');
+          const blockLine = `${selectedBlock.time} (ID=${selectedBlock.programName}) ${songFiles}`;
+
+          // Parse and update
+          const lineMap = new Map<string, string>();
+          existingContent.split('\n').filter(l => l.trim()).forEach(line => {
+            const match = line.match(/^(\d{2}:\d{2})/);
+            if (match) lineMap.set(match[1], line);
+          });
+          lineMap.set(selectedBlock.time, blockLine);
+
+          // Sort and save
+          const sortedContent = Array.from(lineMap.keys())
+            .sort()
+            .map(t => lineMap.get(t))
+            .join('\n');
+
+          const result = await window.electronAPI.saveGradeFile({
+            folder: config.gradeFolder,
+            filename,
+            content: sortedContent,
+          });
+
+          if (result.success) {
+            console.log(`[GRADE-CARD] ✅ Bloco ${selectedBlock.time} exportado para ${result.filePath}`);
+            toast({
+              title: '✅ Bloco atualizado e exportado',
+              description: `Grade das ${selectedBlock.time} foi salva em ${filename}`,
+            });
+          } else {
+            throw new Error(result.error);
+          }
+        } catch (error) {
+          console.error('[GRADE-CARD] Error saving to file:', error);
+          toast({
+            title: '⚠️ Bloco salvo localmente',
+            description: `Não foi possível exportar para a pasta destino: ${error}`,
+            variant: 'destructive',
+          });
+        }
+      } else {
+        toast({
+          title: '✅ Bloco atualizado',
+          description: `Grade das ${selectedBlock.time} foi salva.`,
+        });
+      }
     }
   };
 

@@ -1328,6 +1328,7 @@ export function useAutoGradeBuilder() {
 
   // Auto-build effect - triggers based on minutesBeforeBlock setting
   // Builds automatically and saves to destination folder every time a new block starts
+  // ALSO saves periodically to ensure file is always up to date
   useEffect(() => {
     if (!isElectronEnv || !state.isAutoEnabled) return;
 
@@ -1335,6 +1336,7 @@ export function useAutoGradeBuilder() {
 
     // Track the last block we built for to avoid duplicate builds within same minute
     let lastBuiltBlock = '';
+    let lastPeriodicSave = Date.now();
 
     // Check every 30 seconds to ensure we catch block transitions
     buildIntervalRef.current = setInterval(() => {
@@ -1375,6 +1377,15 @@ export function useAutoGradeBuilder() {
         console.log(`[AUTO-GRADE] 🔄 Atualizando grade para bloco ${blockKey} (faltam ${minutesUntilBlock} min)`);
         lastBuiltBlock = blockKey;
         buildGrade();
+        lastPeriodicSave = Date.now();
+      } else {
+        // PERIODIC SAVE: Also save every 5 minutes to ensure file is always current
+        const timeSinceLastSave = Date.now() - lastPeriodicSave;
+        if (timeSinceLastSave >= 5 * 60 * 1000) {
+          console.log(`[AUTO-GRADE] 📁 Salvamento periódico (5 min) - garantindo arquivo atualizado`);
+          buildGrade();
+          lastPeriodicSave = Date.now();
+        }
       }
     }, 30 * 1000); // Check every 30 seconds for better responsiveness
 
@@ -1383,12 +1394,9 @@ export function useAutoGradeBuilder() {
     const currentMinute = now.getMinutes();
     const minutesBefore = state.minutesBeforeBlock;
     
-    // Check if we should build immediately
-    const minutesUntilNextBlock = currentMinute < 30 ? 30 - currentMinute : 60 - currentMinute;
-    if (minutesUntilNextBlock <= minutesBefore) {
-      console.log(`[AUTO-GRADE] 🚀 Build inicial - próximo bloco em ${minutesUntilNextBlock} min`);
-      buildGrade();
-    }
+    // ALWAYS build immediately on mount to ensure file exists
+    console.log(`[AUTO-GRADE] 🚀 Build inicial - salvando grade na pasta destino`);
+    buildGrade();
 
     return () => {
       if (buildIntervalRef.current) clearInterval(buildIntervalRef.current);
