@@ -21,6 +21,16 @@ interface UsedSong {
   blockTime: string;
 }
 
+// Songs that were missing but queued for download - will be available in next block
+interface CarryOverSong {
+  title: string;
+  artist: string;
+  station: string;
+  style: string;
+  addedAt: Date;
+  targetBlock: string; // Block where this song should be used (after download)
+}
+
 interface AutoGradeState {
   isBuilding: boolean;
   lastBuildTime: Date | null;
@@ -88,6 +98,9 @@ export function useAutoGradeBuilder() {
   const lastBuildRef = useRef<string | null>(null);
   const buildIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const usedSongsRef = useRef<UsedSong[]>([]);
+  // Carry-over: songs that were missing but queued for download
+  // These will be prioritized in the next block since downloads are fast (~1 min)
+  const carryOverSongsRef = useRef<CarryOverSong[]>([]);
 
   // Get day code for filename
   const getDayCode = useCallback(() => {
@@ -178,6 +191,43 @@ export function useAutoGradeBuilder() {
   // Clear used songs (for new day)
   const clearUsedSongs = useCallback(() => {
     usedSongsRef.current = [];
+    carryOverSongsRef.current = []; // Also clear carry-over for new day
+  }, []);
+
+  // Add song to carry-over queue (will be used in next block after download)
+  const addCarryOverSong = useCallback((song: Omit<CarryOverSong, 'addedAt'>) => {
+    // Avoid duplicates
+    const exists = carryOverSongsRef.current.some(
+      s => s.title.toLowerCase() === song.title.toLowerCase() && 
+           s.artist.toLowerCase() === song.artist.toLowerCase()
+    );
+    if (!exists) {
+      carryOverSongsRef.current.push({
+        ...song,
+        addedAt: new Date(),
+      });
+      console.log(`[CARRY-OVER] Adicionado para próximo bloco: ${song.artist} - ${song.title}`);
+    }
+    // Limit to last 50 songs
+    if (carryOverSongsRef.current.length > 50) {
+      carryOverSongsRef.current = carryOverSongsRef.current.slice(-50);
+    }
+  }, []);
+
+  // Get carry-over songs for current block and remove them from queue
+  const getCarryOverSongs = useCallback((blockTime: string): CarryOverSong[] => {
+    const validSongs = carryOverSongsRef.current.filter(song => {
+      // Song is valid if it was added at least 1 minute ago (download time)
+      const ageMs = Date.now() - song.addedAt.getTime();
+      return ageMs >= 60000; // 1 minute minimum
+    });
+    // Remove used songs from carry-over
+    carryOverSongsRef.current = carryOverSongsRef.current.filter(song => {
+      const ageMs = Date.now() - song.addedAt.getTime();
+      return ageMs < 60000;
+    });
+    console.log(`[CARRY-OVER] ${validSongs.length} músicas disponíveis do bloco anterior`);
+    return validSongs;
   }, []);
 
   // Check if song exists in music library and get the correct filename
@@ -433,6 +483,31 @@ export function useAutoGradeBuilder() {
       }
     }
 
+    // PRIORITY 0: Check carry-over songs from previous block (already downloaded)
+    const carryOverAvailable = getCarryOverSongs(timeStr);
+    const carryOverByStation: Record<string, SongEntry[]> = {};
+    
+    for (const carryOver of carryOverAvailable) {
+      // Verify that carry-over song now exists in library
+      const libraryResult = await findSongInLibrary(carryOver.artist, carryOver.title);
+      if (libraryResult.exists) {
+        const correctFilename = libraryResult.filename || sanitizeFilename(`${carryOver.artist} - ${carryOver.title}.mp3`);
+        const songEntry: SongEntry = {
+          title: carryOver.title,
+          artist: carryOver.artist,
+          station: carryOver.station,
+          style: carryOver.style,
+          filename: correctFilename,
+          existsInLibrary: true,
+        };
+        if (!carryOverByStation[carryOver.station]) {
+          carryOverByStation[carryOver.station] = [];
+        }
+        carryOverByStation[carryOver.station].push(songEntry);
+        console.log(`[CARRY-OVER] ✅ Música agora disponível: ${carryOver.artist} - ${carryOver.title}`);
+      }
+    }
+
     // Track song index per station to avoid repeating from start
     const stationSongIndex: Record<string, number> = {};
 
@@ -635,38 +710,70 @@ export function useAutoGradeBuilder() {
       let startIndex = stationSongIndex[stationName] || 0;
       let checkedCount = 0;
 
-      // PRIORITY 1: Try to find a song from the configured station that EXISTS in library
-      while (checkedCount < (stationSongs?.length || 0) && !selectedSong) {
-        const songIdx = (startIndex + checkedCount) % stationSongs.length;
-        const candidate = stationSongs[songIdx];
-        const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+      // PRIORITY 0: Check carry-over songs for this station first (already downloaded!)
+      const carryOverForStation = carryOverByStation[stationName] || [];
+      for (const carryOverSong of carryOverForStation) {
+        const key = `${carryOverSong.title.toLowerCase()}-${carryOverSong.artist.toLowerCase()}`;
+        if (!usedInBlock.has(key) && !isRecentlyUsed(carryOverSong.title, carryOverSong.artist, timeStr, isFullDay)) {
+          selectedSong = carryOverSong;
+          usedInBlock.add(key);
+          blockLogs.push({
+            blockTime: timeStr,
+            type: 'used',
+            title: carryOverSong.title,
+            artist: carryOverSong.artist,
+            station: carryOverSong.station,
+            style: carryOverSong.style,
+            reason: '✅ Carry-over do bloco anterior (já baixada)',
+          });
+          console.log(`[CARRY-OVER] ✅ Usando música recuperada: ${carryOverSong.artist} - ${carryOverSong.title}`);
+          break;
+        }
+      }
 
-        // Check if not used in this block and not recently used
-        if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-          const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
-          
-          if (libraryResult.exists) {
-            // Found a song that EXISTS - use the filename from library for correct spelling
-            const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-            selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-            stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
-            break;
-          } else {
-            // Mark as missing for download later, but DON'T use it
-            if (!isSongAlreadyMissing(candidate.artist, candidate.title)) {
-              addMissingSong({
-                id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      // PRIORITY 1: Try to find a song from the configured station that EXISTS in library
+      if (!selectedSong) {
+        while (checkedCount < (stationSongs?.length || 0) && !selectedSong) {
+          const songIdx = (startIndex + checkedCount) % stationSongs.length;
+          const candidate = stationSongs[songIdx];
+          const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+
+          // Check if not used in this block and not recently used
+          if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
+            const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
+            
+            if (libraryResult.exists) {
+              // Found a song that EXISTS - use the filename from library for correct spelling
+              const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+              stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
+              break;
+            } else {
+              // Mark as missing for download AND add to carry-over for next block
+              if (!isSongAlreadyMissing(candidate.artist, candidate.title)) {
+                addMissingSong({
+                  id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                  title: candidate.title,
+                  artist: candidate.artist,
+                  station: stationName || 'UNKNOWN',
+                  timestamp: new Date(),
+                  status: 'missing',
+                  dna: stationStyle,
+                });
+              }
+              
+              // Add to carry-over queue for next block (downloads are fast ~1 min)
+              addCarryOverSong({
                 title: candidate.title,
                 artist: candidate.artist,
                 station: stationName || 'UNKNOWN',
-                timestamp: new Date(),
-                status: 'missing',
-                dna: stationStyle,
+                style: stationStyle,
+                targetBlock: timeStr,
               });
             }
           }
+          checkedCount++;
         }
-        checkedCount++;
       }
 
       // PRIORITY 2: Substitute with TOP50 song that EXISTS
@@ -864,7 +971,7 @@ export function useAutoGradeBuilder() {
     getProgramForHour, getFixedContentForTime, isWeekday, getTop50Songs,
     stations, sequence, getStationStyle, isRecentlyUsed, findSubstitute,
     markSongAsUsed, config.coringaCode, checkSongInLibrary, isSongAlreadyMissing,
-    addMissingSong
+    addMissingSong, addCarryOverSong, getCarryOverSongs, findSongInLibrary
   ]);
 
   // Calculate current and next block times
