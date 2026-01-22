@@ -1166,6 +1166,7 @@ export function useAutoGradeBuilder() {
   ]);
 
   // Build current and next blocks (incremental update to existing file)
+  // ALWAYS saves to destination folder - ensuring current time slot is updated
   const buildGrade = useCallback(async () => {
     if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
       console.log('[AUTO-GRADE] Not in Electron mode, skipping');
@@ -1179,13 +1180,7 @@ export function useAutoGradeBuilder() {
       const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
 
-      // Skip if we already built this block recently
-      if (lastBuildRef.current === currentTimeKey) {
-        setState(prev => ({ ...prev, isBuilding: false }));
-        return;
-      }
-
-      console.log(`[AUTO-GRADE] 🔄 Updating blocks: ${currentTimeKey}, ${nextTimeKey}`);
+      console.log(`[AUTO-GRADE] 🔄 Atualizando blocos: ${currentTimeKey}, ${nextTimeKey} -> salvando na pasta destino`);
 
       const songsByStation = await fetchRecentSongs();
       const stats = { skipped: 0, substituted: 0, missing: 0 };
@@ -1243,7 +1238,7 @@ export function useAutoGradeBuilder() {
       });
 
       if (result.success) {
-        lastBuildRef.current = currentTimeKey;
+        console.log(`[AUTO-GRADE] ✅ Grade salva na pasta destino: ${result.filePath}`);
 
         addGradeHistory({
           id: `grade-${Date.now()}`,
@@ -1332,33 +1327,68 @@ export function useAutoGradeBuilder() {
   }, []);
 
   // Auto-build effect - triggers based on minutesBeforeBlock setting
-  // Only builds at specific times, not continuously
+  // Builds automatically and saves to destination folder every time a new block starts
   useEffect(() => {
     if (!isElectronEnv || !state.isAutoEnabled) return;
 
-    console.log(`[AUTO-GRADE] ⏰ Aguardando ${state.minutesBeforeBlock} min antes de cada bloco`);
+    console.log(`[AUTO-GRADE] ⏰ Modo automático ATIVO - atualiza ${state.minutesBeforeBlock} min antes de cada bloco`);
 
-    // Check every 60 seconds if we should build (reduced from 30s)
+    // Track the last block we built for to avoid duplicate builds within same minute
+    let lastBuiltBlock = '';
+
+    // Check every 30 seconds to ensure we catch block transitions
     buildIntervalRef.current = setInterval(() => {
       const now = new Date();
       const minutesBefore = state.minutesBeforeBlock;
       const currentMinute = now.getMinutes();
-      const currentSecond = now.getSeconds();
+      const currentHour = now.getHours();
 
-      // Build times: (30 - minutesBefore) and (60 - minutesBefore)
-      // Example: 10 min before means build at :20 and :50
-      const buildMinute1 = 30 - minutesBefore; // e.g., 20 for 10 min before :30
-      const buildMinute2 = 60 - minutesBefore; // e.g., 50 for 10 min before :00
+      // Determine the NEXT block we're preparing for
+      // Blocks are at :00 and :30
+      let targetBlockHour = currentHour;
+      let targetBlockMinute = 0;
 
-      const shouldBuild = 
-        (currentMinute === buildMinute1 && currentSecond < 60) ||
-        (currentMinute === (buildMinute2 % 60) && currentSecond < 60);
+      if (currentMinute < 30) {
+        // We're before :30, target is :30
+        targetBlockMinute = 30;
+      } else {
+        // We're after :30, target is :00 of next hour
+        targetBlockHour = (currentHour + 1) % 24;
+        targetBlockMinute = 0;
+      }
+
+      // Calculate minutes until target block
+      let minutesUntilBlock: number;
+      if (currentMinute < 30) {
+        minutesUntilBlock = 30 - currentMinute;
+      } else {
+        minutesUntilBlock = 60 - currentMinute;
+      }
+
+      // Create a unique key for this build cycle
+      const blockKey = `${targetBlockHour.toString().padStart(2, '0')}:${targetBlockMinute.toString().padStart(2, '0')}`;
+
+      // Build if we're within the configured window AND haven't built for this block yet
+      const shouldBuild = minutesUntilBlock <= minutesBefore && lastBuiltBlock !== blockKey;
 
       if (shouldBuild) {
-        console.log(`[AUTO-GRADE] 🔄 Montando bloco (${currentMinute}:${currentSecond.toString().padStart(2, '0')})`);
+        console.log(`[AUTO-GRADE] 🔄 Atualizando grade para bloco ${blockKey} (faltam ${minutesUntilBlock} min)`);
+        lastBuiltBlock = blockKey;
         buildGrade();
       }
-    }, 60 * 1000); // Check every 60 seconds
+    }, 30 * 1000); // Check every 30 seconds for better responsiveness
+
+    // Also run immediately on mount to catch current block
+    const now = new Date();
+    const currentMinute = now.getMinutes();
+    const minutesBefore = state.minutesBeforeBlock;
+    
+    // Check if we should build immediately
+    const minutesUntilNextBlock = currentMinute < 30 ? 30 - currentMinute : 60 - currentMinute;
+    if (minutesUntilNextBlock <= minutesBefore) {
+      console.log(`[AUTO-GRADE] 🚀 Build inicial - próximo bloco em ${minutesUntilNextBlock} min`);
+      buildGrade();
+    }
 
     return () => {
       if (buildIntervalRef.current) clearInterval(buildIntervalRef.current);
