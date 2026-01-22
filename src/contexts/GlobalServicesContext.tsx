@@ -403,28 +403,29 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log('╔══════════════════════════════════════════════════════════════╗');
     console.log('║     🚀 SISTEMA AUTOMATIZADO - INICIANDO TODOS OS SERVIÇOS    ║');
     console.log('╠══════════════════════════════════════════════════════════════╣');
-    console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras)` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
+    console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras) - 5 min` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
     console.log(`║ 🎵 Grade Builder: ✅ ATIVO (${gradeBuilder.minutesBeforeBlock || 10} min antes de cada bloco)`.padEnd(65) + '║');
-    console.log(`║ 📥 Downloads:     ${deezerConfig.autoDownload ? '✅ AUTOMÁTICO' : '⏸️ MANUAL (ativar em Config)'}`.padEnd(65) + '║');
+    console.log(`║ 📥 Downloads:     ${deezerConfig.autoDownload ? '✅ AUTOMÁTICO - check 30s' : '⏸️ MANUAL (ativar em Config)'}`.padEnd(65) + '║');
     console.log(`║ 💾 Banco Musical: ${config.musicFolders?.length > 0 ? `✅ ${config.musicFolders.length} pastas` : '⚠️ Configurar pastas'}`.padEnd(65) + '║');
-    console.log(`║ 🔄 Sync Cloud:    ✅ ATIVO (Supabase Realtime)`.padEnd(65) + '║');
+    console.log(`║ 📊 Stats:         ✅ ATIVO - refresh 10 min`.padEnd(65) + '║');
+    console.log(`║ 🔄 Sync Cloud:    ✅ ATIVO (Realtime)`.padEnd(65) + '║');
     console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
-    // 1. Download check every 10 seconds (automatic if enabled)
+    // 1. Download check every 30 seconds (was 10s - optimized for performance)
     downloadIntervalRef.current = setInterval(() => {
       checkNewMissingSongs();
-    }, 10000);
+    }, 30000);
     checkNewMissingSongs(); // Initial check
 
-    // 2. Scraping every 3 minutes (automatic for enabled stations)
+    // 2. Scraping every 5 minutes (was 3 min - optimized for performance)
     scrapeIntervalRef.current = setInterval(() => {
       const currentState = useRadioStore.getState();
       const hasEnabledStations = currentState.stations.some(s => s.enabled && s.scrapeUrl);
       if (hasEnabledStations) {
         scrapeAllStations();
       }
-    }, 3 * 60 * 1000);
+    }, 5 * 60 * 1000);
 
     // Initial scrape
     if (enabledStations > 0) {
