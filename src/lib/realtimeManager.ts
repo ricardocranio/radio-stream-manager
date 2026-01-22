@@ -23,8 +23,8 @@ interface ManagedChannel {
 
 class RealtimeManager {
   private channels: Map<string, ManagedChannel> = new Map();
-  private readonly MAX_RETRIES = 3;
-  private readonly RETRY_DELAY = 2000;
+  private readonly MAX_RETRIES = 5;
+  private readonly RETRY_DELAY = 5000; // Increased from 2s to 5s
 
   /**
    * Subscribe to a table's INSERT events
@@ -89,7 +89,6 @@ class RealtimeManager {
     }
 
     managed.status = 'connecting';
-    console.log(`[REALTIME-MGR] Connecting to ${channelKey}...`);
 
     const channel = supabase
       .channel(channelKey)
@@ -114,25 +113,26 @@ class RealtimeManager {
         const current = this.channels.get(channelKey);
         if (!current) return;
 
-        console.log(`[REALTIME-MGR] ${channelKey} status: ${status}`);
-
+        // Only log connection changes, not every status
         if (status === 'SUBSCRIBED') {
+          if (current.status !== 'connected') {
+            console.log(`[REALTIME-MGR] ✓ ${channelKey} connected`);
+          }
           current.status = 'connected';
           current.retryCount = 0;
-          console.log(`[REALTIME-MGR] ✓ ${channelKey} connected`);
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          if (current.status === 'connected') {
+            console.warn(`[REALTIME-MGR] ${channelKey} disconnected`);
+          }
           current.status = 'error';
           
-          if (current.retryCount < this.MAX_RETRIES) {
+          if (current.retryCount < this.MAX_RETRIES && current.subscribers.length > 0) {
             current.retryCount++;
             const delay = this.RETRY_DELAY * current.retryCount;
-            console.warn(`[REALTIME-MGR] ${channelKey} error, retry ${current.retryCount}/${this.MAX_RETRIES} in ${delay}ms`);
             
             current.retryTimeoutId = setTimeout(() => {
               this.connectChannel(channelKey, table);
             }, delay);
-          } else {
-            console.error(`[REALTIME-MGR] ${channelKey} max retries reached`);
           }
         }
       });
