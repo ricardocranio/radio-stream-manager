@@ -9,14 +9,16 @@ import NotFound from "./pages/NotFound";
 import { useCleanStart } from "./hooks/useCleanStart";
 import { useSyncStationsFromDb } from "./hooks/useSyncStationsFromDb";
 import { useDailyReset } from "./hooks/useDailyReset";
+import { useBackgroundServices } from "./hooks/useBackgroundServices";
 
 const queryClient = new QueryClient();
 
-// Component that runs initialization hooks
+// Component that runs initialization hooks - RUNS ONCE AT APP LEVEL
 function AppInitializer({ children }: { children: React.ReactNode }) {
   useCleanStart();
   useSyncStationsFromDb();
   useDailyReset(); // Reset automático às 20:00
+  useBackgroundServices(); // Serviços de background (downloads, grades) - SEMPRE ATIVO
   return <>{children}</>;
 }
 
