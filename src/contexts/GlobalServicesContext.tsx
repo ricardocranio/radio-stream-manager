@@ -249,12 +249,12 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       console.log(`[GLOBAL-SVC] 📊 Fila atualizada: ${downloadQueueRef.current.length} músicas pendentes para download`);
       setDownloadState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
       useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
-    }
-
-    // Start processing if queue has items and not already processing
-    if (downloadQueueRef.current.length > 0 && !isProcessingRef.current) {
-      console.log(`[GLOBAL-SVC] 🚀 Iniciando downloads automáticos...`);
-      processDownloadQueue();
+      
+      // IMMEDIATELY start processing - don't wait for next interval
+      if (!isProcessingRef.current) {
+        console.log(`[GLOBAL-SVC] 🚀 Iniciando downloads IMEDIATAMENTE...`);
+        processDownloadQueue();
+      }
     }
   }, [processDownloadQueue]);
 

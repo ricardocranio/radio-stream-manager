@@ -309,8 +309,8 @@ const defaultDeezerConfig: DeezerConfig = {
   downloadFolder: 'C:\\Playlist\\Downloads',
   quality: 'MP3_320',
   enabled: true,
-  autoDownload: false,
-  autoDownloadIntervalMinutes: 1, // Default 1 minute between downloads (can be 0.5 to 30)
+  autoDownload: true, // ENABLED by default - downloads start immediately when songs are missing
+  autoDownloadIntervalMinutes: 1, // Legacy - now uses 5s between downloads
 };
 
 const defaultFixedContent: FixedContent[] = [
