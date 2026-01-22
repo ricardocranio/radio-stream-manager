@@ -208,53 +208,50 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     useAutoDownloadStore.getState().setIsProcessing(false);
   }, [downloadSong]);
 
+  // Throttle logging to avoid spam
+  const lastLogTimeRef = useRef<number>(0);
+  
   const checkNewMissingSongs = useCallback(() => {
     const state = useRadioStore.getState();
     const { deezerConfig, missingSongs } = state;
 
     // Count songs with 'missing' status (verified as not in music library)
     const pendingMissing = missingSongs.filter(s => s.status === 'missing');
-    const alreadyQueued = pendingMissing.filter(s => processedSongsRef.current.has(s.id)).length;
     const newToQueue = pendingMissing.filter(s => !processedSongsRef.current.has(s.id));
 
-    // Periodic status log
-    if (pendingMissing.length > 0) {
-      console.log(`[GLOBAL-SVC] 🎵 Fila: ${pendingMissing.length} músicas faltando no banco | ${alreadyQueued} já na fila | ${newToQueue.length} novas`);
+    // Throttled status log - only log every 60 seconds to reduce spam
+    const now = Date.now();
+    const shouldLog = now - lastLogTimeRef.current > 60000;
+    
+    if (shouldLog && pendingMissing.length > 0) {
+      lastLogTimeRef.current = now;
+      console.log(`[GLOBAL-SVC] 📊 Status: ${pendingMissing.length} músicas faltando | ${newToQueue.length} novas`);
     }
 
-    // Check if auto-download is configured
-    if (!deezerConfig.autoDownload) {
-      if (newToQueue.length > 0) {
-        console.log(`[GLOBAL-SVC] ⏸️ Download automático DESATIVADO - ${newToQueue.length} músicas aguardando`);
-      }
+    // Check if auto-download is configured - silent if no new songs
+    if (!deezerConfig.autoDownload || !deezerConfig.enabled || !deezerConfig.arl) {
       return;
     }
-    
-    if (!deezerConfig.enabled || !deezerConfig.arl) {
-      if (newToQueue.length > 0) {
-        console.log(`[GLOBAL-SVC] ⚠️ Deezer não configurado (enabled: ${deezerConfig.enabled}, hasARL: ${!!deezerConfig.arl})`);
-      }
+
+    // Only process if there are NEW songs to add
+    if (newToQueue.length === 0) {
       return;
     }
 
     // Add new songs to queue (only songs verified as missing from music library)
     for (const song of newToQueue) {
-      console.log(`[GLOBAL-SVC] 📥 Adicionando à fila: ${song.artist} - ${song.title} (não encontrado no banco musical)`);
       processedSongsRef.current.add(song.id);
       downloadQueueRef.current.push({ song, retryCount: 0 });
     }
     
     // Update queue length in state and store
-    if (newToQueue.length > 0) {
-      console.log(`[GLOBAL-SVC] 📊 Fila atualizada: ${downloadQueueRef.current.length} músicas pendentes para download`);
-      setDownloadState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
-      useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
-      
-      // IMMEDIATELY start processing - don't wait for next interval
-      if (!isProcessingRef.current) {
-        console.log(`[GLOBAL-SVC] 🚀 Iniciando downloads IMEDIATAMENTE...`);
-        processDownloadQueue();
-      }
+    console.log(`[GLOBAL-SVC] 📥 +${newToQueue.length} músicas adicionadas à fila`);
+    setDownloadState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
+    useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
+    
+    // IMMEDIATELY start processing - don't wait for next interval
+    if (!isProcessingRef.current) {
+      processDownloadQueue();
     }
   }, [processDownloadQueue]);
 
@@ -412,10 +409,10 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
-    // 1. Download check every 10 seconds - IMMEDIATE processing when songs arrive
+    // 1. Download check every 30 seconds (was 10s - reduced for performance)
     downloadIntervalRef.current = setInterval(() => {
       checkNewMissingSongs();
-    }, 10000);
+    }, 30000);
     checkNewMissingSongs(); // Initial check immediately
 
     // 2. Scraping every 5 minutes (was 3 min - optimized for performance)
