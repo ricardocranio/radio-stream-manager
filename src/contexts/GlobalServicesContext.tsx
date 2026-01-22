@@ -71,7 +71,6 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   const downloadQueueRef = useRef<DownloadQueueItem[]>([]);
   const isProcessingRef = useRef(false);
   const processedSongsRef = useRef<Set<string>>(new Set());
-  const lastCheckRef = useRef<string[]>([]);
   const downloadIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Scraping
@@ -213,32 +212,40 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     const state = useRadioStore.getState();
     const { deezerConfig, missingSongs } = state;
 
+    // Log status for debugging
+    const hasMissing = missingSongs.filter(s => s.status === 'missing').length;
+    if (hasMissing > 0) {
+      console.log(`[GLOBAL-SVC] 🔍 Checking ${hasMissing} missing songs, autoDownload: ${deezerConfig.autoDownload}, enabled: ${deezerConfig.enabled}, hasARL: ${!!deezerConfig.arl}`);
+    }
+
     if (!deezerConfig.autoDownload || !deezerConfig.enabled || !deezerConfig.arl) {
       return;
     }
 
-    const currentIds = missingSongs
-      .filter(s => s.status === 'missing')
-      .map(s => s.id);
-    
-    const newSongs = missingSongs.filter(
+    // Get all missing songs that haven't been processed yet
+    const songsToQueue = missingSongs.filter(
       song => 
         song.status === 'missing' && 
-        !lastCheckRef.current.includes(song.id) &&
         !processedSongsRef.current.has(song.id)
     );
 
-    for (const song of newSongs) {
-      console.log(`[GLOBAL-SVC] 📥 New missing song: ${song.artist} - ${song.title}`);
+    // Add new songs to queue
+    for (const song of songsToQueue) {
+      console.log(`[GLOBAL-SVC] 📥 Queueing for download: ${song.artist} - ${song.title}`);
       processedSongsRef.current.add(song.id);
       downloadQueueRef.current.push({ song, retryCount: 0 });
     }
     
-    setDownloadState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
-    useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
-    lastCheckRef.current = currentIds;
+    // Update queue length in state and store
+    if (songsToQueue.length > 0) {
+      console.log(`[GLOBAL-SVC] 📊 Queue updated: ${downloadQueueRef.current.length} songs pending`);
+      setDownloadState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
+      useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
+    }
 
+    // Start processing if queue has items and not already processing
     if (downloadQueueRef.current.length > 0 && !isProcessingRef.current) {
+      console.log(`[GLOBAL-SVC] 🚀 Starting download queue processing...`);
       processDownloadQueue();
     }
   }, [processDownloadQueue]);
@@ -426,7 +433,6 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         console.log('[GLOBAL-SVC] 🔄 Reset signal received, clearing queue and refs');
         downloadQueueRef.current = [];
         processedSongsRef.current.clear();
-        lastCheckRef.current = [];
         isProcessingRef.current = false;
         setDownloadState({ queueLength: 0, isProcessing: false });
       }
