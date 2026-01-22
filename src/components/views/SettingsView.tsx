@@ -381,21 +381,30 @@ export function SettingsView() {
                   <div className="flex items-center justify-between mb-2">
                     <Label>Intervalo de Download Automático</Label>
                     <span className="text-sm font-mono text-primary">
-                      {deezerConfig.autoDownloadIntervalMinutes || 20} min
+                      {(deezerConfig.autoDownloadIntervalMinutes || 1) < 1 
+                        ? `${Math.round((deezerConfig.autoDownloadIntervalMinutes || 0.5) * 60)}s`
+                        : `${deezerConfig.autoDownloadIntervalMinutes || 1} min`}
                     </span>
                   </div>
                   <Slider
-                    value={[deezerConfig.autoDownloadIntervalMinutes || 20]}
+                    value={[deezerConfig.autoDownloadIntervalMinutes || 1]}
                     onValueChange={([value]) =>
                       updateDeezerConfig({ autoDownloadIntervalMinutes: value })
                     }
-                    min={5}
-                    max={60}
-                    step={5}
+                    min={0.5}
+                    max={30}
+                    step={0.5}
                     className="w-full"
                   />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>30s</span>
+                    <span>1min</span>
+                    <span>5min</span>
+                    <span>15min</span>
+                    <span>30min</span>
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Tempo entre cada download automático (padrão: 20 min)
+                    Tempo entre cada download automático (padrão: 1 min)
                   </p>
                 </div>
 

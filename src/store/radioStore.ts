@@ -308,7 +308,7 @@ const defaultDeezerConfig: DeezerConfig = {
   quality: 'MP3_320',
   enabled: true,
   autoDownload: false,
-  autoDownloadIntervalMinutes: 20, // Default 20 minutes between downloads
+  autoDownloadIntervalMinutes: 1, // Default 1 minute between downloads (can be 0.5 to 30)
 };
 
 const defaultFixedContent: FixedContent[] = [
