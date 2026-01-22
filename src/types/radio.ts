@@ -59,6 +59,8 @@ export interface SystemConfig {
   funkWords?: string[];
   // Performance
   powerSavingMode?: boolean;
+  // Similarity threshold for music library matching (0.5 to 0.95)
+  similarityThreshold?: number;
 }
 
 export interface SequenceConfig {

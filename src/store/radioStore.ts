@@ -300,6 +300,8 @@ const defaultConfig: SystemConfig = {
   funkWords: ['funk', 'mc ', 'sequencia', 'proibidão', 'baile', 'kondzilla', 'gr6'],
   // Power saving mode
   powerSavingMode: false,
+  // Similarity threshold for music library matching (0.5 to 0.95)
+  similarityThreshold: 0.75,
 };
 
 const defaultDeezerConfig: DeezerConfig = {

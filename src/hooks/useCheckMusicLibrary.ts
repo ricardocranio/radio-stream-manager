@@ -11,17 +11,19 @@ interface CheckResult {
 
 /**
  * Hook to check if a song exists in the local music library
- * Uses Electron IPC with SIMILARITY matching (75% threshold) when available
+ * Uses Electron IPC with SIMILARITY matching (configurable threshold) when available
  * Falls back to simulation for web
  */
 export function useCheckMusicLibrary() {
   const config = useRadioStore((state) => state.config);
 
   /**
-   * Check song using SIMILARITY matching (75% threshold)
+   * Check song using SIMILARITY matching with configurable threshold
    * Uses find-song-match which applies Levenshtein distance comparison
    */
   const checkSongExists = useCallback(async (artist: string, title: string): Promise<CheckResult> => {
+    const threshold = config.similarityThreshold || 0.75;
+    
     // Use Electron API if available - IMPORTANT: use findSongMatch for similarity
     if (window.electronAPI?.findSongMatch) {
       try {
@@ -29,10 +31,11 @@ export function useCheckMusicLibrary() {
           artist,
           title,
           musicFolders: config.musicFolders,
+          threshold, // Pass configurable threshold
         });
         
         if (result.exists) {
-          console.log(`[LIBRARY] ✓ Match found: ${artist} - ${title} → ${result.filename} (${Math.round((result.similarity || 0) * 100)}% similar)`);
+          console.log(`[LIBRARY] ✓ Match found: ${artist} - ${title} → ${result.filename} (${Math.round((result.similarity || 0) * 100)}% similar, threshold: ${Math.round(threshold * 100)}%)`);
         }
         
         return result;
@@ -60,7 +63,7 @@ export function useCheckMusicLibrary() {
     // Fallback for web: simulate check (always returns false in web mode)
     console.log(`[WEB] Would check: ${artist} - ${title} in ${config.musicFolders.join(', ')}`);
     return { exists: false };
-  }, [config.musicFolders]);
+  }, [config.musicFolders, config.similarityThreshold]);
 
   const checkMultipleSongs = useCallback(async (
     songs: Array<{ artist: string; title: string }>
@@ -81,11 +84,13 @@ export function useCheckMusicLibrary() {
 
 /**
  * Standalone function to check a song in the library using SIMILARITY
+ * @param threshold - Similarity threshold (0.5 to 0.95), defaults to 0.75
  */
 export async function checkSongInLibrary(
   artist: string,
   title: string,
-  musicFolders: string[]
+  musicFolders: string[],
+  threshold: number = 0.75
 ): Promise<CheckResult> {
   // Prefer findSongMatch for similarity matching
   if (window.electronAPI?.findSongMatch) {
@@ -94,10 +99,11 @@ export async function checkSongInLibrary(
         artist,
         title,
         musicFolders,
+        threshold, // Pass configurable threshold
       });
       
       if (result.exists) {
-        console.log(`[LIBRARY] ✓ Match: ${artist} - ${title} → ${result.filename} (${Math.round((result.similarity || 0) * 100)}%)`);
+        console.log(`[LIBRARY] ✓ Match: ${artist} - ${title} → ${result.filename} (${Math.round((result.similarity || 0) * 100)}%, threshold: ${Math.round(threshold * 100)}%)`);
       }
       
       return result;

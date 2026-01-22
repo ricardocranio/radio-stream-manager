@@ -47,6 +47,7 @@ interface CheckSongParams {
   artist: string;
   title: string;
   musicFolders: string[];
+  threshold?: number; // Similarity threshold (0.5 to 0.95), defaults to 0.75
 }
 
 interface CheckSongResult {
