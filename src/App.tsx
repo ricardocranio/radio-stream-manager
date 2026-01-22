@@ -9,7 +9,7 @@ import NotFound from "./pages/NotFound";
 import { useCleanStart } from "./hooks/useCleanStart";
 import { useSyncStationsFromDb } from "./hooks/useSyncStationsFromDb";
 import { useDailyReset } from "./hooks/useDailyReset";
-import { useBackgroundServices } from "./hooks/useBackgroundServices";
+import { GlobalServicesProvider } from "./contexts/GlobalServicesContext";
 
 const queryClient = new QueryClient();
 
@@ -18,7 +18,10 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
   useCleanStart();
   useSyncStationsFromDb();
   useDailyReset(); // Reset automático às 20:00
-  useBackgroundServices(); // Serviços de background (downloads, grades) - SEMPRE ATIVO
+  // GlobalServicesProvider now handles ALL background services:
+  // - Auto-download queue
+  // - Auto-scraping
+  // - Auto grade builder
   return <>{children}</>;
 }
 
@@ -26,17 +29,19 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <TooltipProvider>
-        <AppInitializer>
-          <Toaster />
-          <Sonner />
-          <HashRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </HashRouter>
-        </AppInitializer>
+        <GlobalServicesProvider>
+          <AppInitializer>
+            <Toaster />
+            <Sonner />
+            <HashRouter>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </HashRouter>
+          </AppInitializer>
+        </GlobalServicesProvider>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>
