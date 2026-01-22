@@ -198,9 +198,9 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
       }
 
-      const intervalMinutes = currentState.deezerConfig.autoDownloadIntervalMinutes || 1;
-      const intervalMs = intervalMinutes * 60 * 1000;
-      await new Promise(resolve => setTimeout(resolve, intervalMs));
+      // Small delay between downloads to avoid overwhelming the API (5 seconds)
+      // Previously waited the full interval - now downloads are IMMEDIATE
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
 
     isProcessingRef.current = false;
@@ -405,18 +405,18 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log('╠══════════════════════════════════════════════════════════════╣');
     console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras) - 5 min` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
     console.log(`║ 🎵 Grade Builder: ✅ ATIVO (${gradeBuilder.minutesBeforeBlock || 10} min antes de cada bloco)`.padEnd(65) + '║');
-    console.log(`║ 📥 Downloads:     ${deezerConfig.autoDownload ? '✅ AUTOMÁTICO - check 30s' : '⏸️ MANUAL (ativar em Config)'}`.padEnd(65) + '║');
+    console.log(`║ 📥 Downloads:     ${deezerConfig.autoDownload ? '✅ IMEDIATO (5s entre cada)' : '⏸️ MANUAL (ativar em Config)'}`.padEnd(65) + '║');
     console.log(`║ 💾 Banco Musical: ${config.musicFolders?.length > 0 ? `✅ ${config.musicFolders.length} pastas` : '⚠️ Configurar pastas'}`.padEnd(65) + '║');
     console.log(`║ 📊 Stats:         ✅ ATIVO - refresh 10 min`.padEnd(65) + '║');
     console.log(`║ 🔄 Sync Cloud:    ✅ ATIVO (Realtime)`.padEnd(65) + '║');
     console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
-    // 1. Download check every 30 seconds (was 10s - optimized for performance)
+    // 1. Download check every 10 seconds - IMMEDIATE processing when songs arrive
     downloadIntervalRef.current = setInterval(() => {
       checkNewMissingSongs();
-    }, 30000);
-    checkNewMissingSongs(); // Initial check
+    }, 10000);
+    checkNewMissingSongs(); // Initial check immediately
 
     // 2. Scraping every 5 minutes (was 3 min - optimized for performance)
     scrapeIntervalRef.current = setInterval(() => {
