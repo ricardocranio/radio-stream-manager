@@ -32,7 +32,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scrapeStations: (stations) => ipcRenderer.invoke('scrape-stations', stations),
   scrapeStation: (station) => ipcRenderer.invoke('scrape-station', station),
   
-  // Music library check
+  // Music library check - with similarity matching
   checkSongExists: (params) => ipcRenderer.invoke('check-song-exists', params),
   findSongMatch: (params) => ipcRenderer.invoke('find-song-match', params),
   getMusicLibraryStats: (params) => ipcRenderer.invoke('get-music-library-stats', params),
