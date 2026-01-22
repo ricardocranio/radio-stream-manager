@@ -5,7 +5,7 @@
  * CONTINUAMENTE desde o boot da aplicação, independente da navegação.
  * 
  * Serviços incluídos:
- * - Auto Grade Builder (montagem de grades)
+ * - Auto Grade Builder (montagem de grades) - via useAutoGradeBuilder hook
  * - Auto Scraping (captura de músicas)
  * - Auto Download (download de músicas faltantes)
  * - Sincronização de dados
@@ -15,32 +15,12 @@ import React, { createContext, useContext, useEffect, useRef, useCallback, useSt
 import { useRadioStore, MissingSong, DownloadHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { radioScraperApi } from '@/lib/api/radioScraper';
+import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
 // ============= TYPES =============
-
-interface AutoGradeState {
-  isBuilding: boolean;
-  lastBuildTime: Date | null;
-  currentBlock: string;
-  nextBlock: string;
-  lastSavedFile: string | null;
-  error: string | null;
-  blocksGenerated: number;
-  isAutoEnabled: boolean;
-  nextBuildIn: number;
-  minutesBeforeBlock: number;
-  fullDayProgress: number;
-  fullDayTotal: number;
-  skippedSongs: number;
-  substitutedSongs: number;
-  missingSongs: number;
-  currentProcessingSong: string | null;
-  currentProcessingBlock: string | null;
-  lastSaveProgress: number;
-}
 
 interface ScrapeStats {
   lastScrape: Date | null;
@@ -57,15 +37,12 @@ interface DownloadQueueItem {
   retryCount: number;
 }
 
+// The gradeBuilder object returned by useAutoGradeBuilder
+type GradeBuilderType = ReturnType<typeof useAutoGradeBuilder>;
+
 interface GlobalServicesContextType {
-  // Grade Builder
-  gradeBuilder: {
-    state: AutoGradeState;
-    buildSingleBlock: (timeStr?: string) => Promise<void>;
-    buildFullDay: (dayCode?: string) => Promise<void>;
-    setAutoEnabled: (enabled: boolean) => void;
-    setMinutesBeforeBlock: (minutes: number) => void;
-  };
+  // Grade Builder - directly from the hook
+  gradeBuilder: GradeBuilderType;
   // Scraping
   scraping: {
     stats: ScrapeStats;
@@ -84,9 +61,11 @@ const GlobalServicesContext = createContext<GlobalServicesContextType | null>(nu
 // Singleton flags
 let isGlobalServicesRunning = false;
 
-const DEFAULT_MINUTES_BEFORE_BLOCK = 10;
-
 export function GlobalServicesProvider({ children }: { children: React.ReactNode }) {
+  // ============= GLOBAL GRADE BUILDER - RUNS FROM BOOT =============
+  // This hook contains its own intervals and runs continuously in background
+  const gradeBuilder = useAutoGradeBuilder();
+  
   // ============= REFS =============
   // Download
   const downloadQueueRef = useRef<DownloadQueueItem[]>([]);
@@ -98,34 +77,9 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   // Scraping
   const scrapeIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Grade Builder
-  const lastBuildRef = useRef<string | null>(null);
-  const buildIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
   const isInitializedRef = useRef(false);
 
   // ============= STATE =============
-  const [gradeState, setGradeState] = useState<AutoGradeState>({
-    isBuilding: false,
-    lastBuildTime: null,
-    currentBlock: '--:--',
-    nextBlock: '--:--',
-    lastSavedFile: null,
-    error: null,
-    blocksGenerated: 0,
-    isAutoEnabled: true,
-    nextBuildIn: 0,
-    minutesBeforeBlock: DEFAULT_MINUTES_BEFORE_BLOCK,
-    fullDayProgress: 0,
-    fullDayTotal: 0,
-    skippedSongs: 0,
-    substitutedSongs: 0,
-    missingSongs: 0,
-    currentProcessingSong: null,
-    currentProcessingBlock: null,
-    lastSaveProgress: 0,
-  });
-
   const [scrapeStats, setScrapeStats] = useState<ScrapeStats>({
     lastScrape: null,
     successCount: 0,
@@ -314,7 +268,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  const scrapeAllStations = useCallback(async (forceRefresh = false) => {
+  const scrapeAllStations = useCallback(async (_forceRefresh = false) => {
     const { stations, addCapturedSong, addOrUpdateRankingSong } = useRadioStore.getState();
     const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl);
     
@@ -371,7 +325,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
 
           for (const song of (recentSongs || []).slice(0, 3)) {
             addCapturedSong({
-              id: `${stationName}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              id: `${stationName}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
               title: song.title,
               artist: song.artist,
               station: stationName,
@@ -416,84 +370,6 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     return { successCount, errorCount, newSongsCount };
   }, [scrapeStation]);
 
-  // ============= GRADE BUILDER SERVICE =============
-  // Helper functions for grade builder
-  const getDayCode = useCallback(() => {
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
-    return days[new Date().getDay()];
-  }, []);
-
-  const buildSingleBlock = useCallback(async (timeStr?: string) => {
-    // Simplified for now - the full implementation would be in the original hook
-    // This is called from the DashboardView when the user clicks "Gerar Bloco"
-    console.log(`[GLOBAL-SVC] 📋 Building block for ${timeStr || 'current time'}`);
-    setGradeState(prev => ({ ...prev, isBuilding: true }));
-    
-    // Add actual build logic here from useAutoGradeBuilder
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setGradeState(prev => ({ 
-      ...prev, 
-      isBuilding: false, 
-      lastBuildTime: new Date(),
-      blocksGenerated: prev.blocksGenerated + 1 
-    }));
-  }, []);
-
-  const buildFullDay = useCallback(async (dayCode?: string) => {
-    console.log(`[GLOBAL-SVC] 📅 Building full day grade for ${dayCode || getDayCode()}`);
-    setGradeState(prev => ({ ...prev, isBuilding: true, fullDayProgress: 0, fullDayTotal: 48 }));
-    
-    // The full implementation calls the actual grade building logic
-    // For now, just log that the service is running
-    
-    setGradeState(prev => ({ ...prev, isBuilding: false }));
-  }, [getDayCode]);
-
-  const setAutoEnabled = useCallback((enabled: boolean) => {
-    setGradeState(prev => ({ ...prev, isAutoEnabled: enabled }));
-  }, []);
-
-  const setMinutesBeforeBlock = useCallback((minutes: number) => {
-    setGradeState(prev => ({ ...prev, minutesBeforeBlock: minutes }));
-  }, []);
-
-  // ============= AUTO GRADE BUILD TIMER =============
-  const checkAndBuildGrade = useCallback(() => {
-    const state = useRadioStore.getState();
-    if (!gradeState.isAutoEnabled) return;
-
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-
-    // Check if we're near a block time (blocks at :00 and :30)
-    const nextBlockMinute = currentMinute < 30 ? 30 : 0;
-    const nextBlockHour = currentMinute >= 30 ? (currentHour + 1) % 24 : currentHour;
-    
-    const minutesToNextBlock = nextBlockMinute === 0 
-      ? (60 - currentMinute) 
-      : (30 - currentMinute);
-
-    setGradeState(prev => ({ 
-      ...prev, 
-      nextBlock: `${String(nextBlockHour).padStart(2, '0')}:${String(nextBlockMinute).padStart(2, '0')}`,
-      nextBuildIn: minutesToNextBlock 
-    }));
-
-    // Build if we're at the configured minutes before the block
-    if (minutesToNextBlock === gradeState.minutesBeforeBlock) {
-      const blockStr = `${String(nextBlockHour).padStart(2, '0')}:${String(nextBlockMinute).padStart(2, '0')}`;
-      
-      // Avoid building the same block twice
-      if (lastBuildRef.current !== blockStr) {
-        lastBuildRef.current = blockStr;
-        console.log(`[GLOBAL-SVC] ⏰ Auto-building grade for ${blockStr}`);
-        buildSingleBlock(blockStr);
-      }
-    }
-  }, [gradeState.isAutoEnabled, gradeState.minutesBeforeBlock, buildSingleBlock]);
-
   // ============= INITIALIZATION =============
   useEffect(() => {
     if (isGlobalServicesRunning || isInitializedRef.current) {
@@ -504,6 +380,9 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     isGlobalServicesRunning = true;
     isInitializedRef.current = true;
     console.log('[GLOBAL-SVC] 🚀 Starting ALL global services...');
+    console.log('[GLOBAL-SVC] ✅ Grade Builder: ACTIVE (from useAutoGradeBuilder hook)');
+    console.log('[GLOBAL-SVC] ✅ Download Service: ACTIVE');
+    console.log('[GLOBAL-SVC] ✅ Scraping Service: ACTIVE');
 
     // 1. Download check every 10 seconds
     downloadIntervalRef.current = setInterval(() => {
@@ -527,11 +406,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       scrapeAllStations();
     }
 
-    // 3. Grade builder check every minute
-    buildIntervalRef.current = setInterval(() => {
-      checkAndBuildGrade();
-    }, 60000);
-    checkAndBuildGrade();
+    // NOTE: Grade builder intervals are managed by useAutoGradeBuilder hook itself
 
     console.log('[GLOBAL-SVC] ✅ All services started successfully');
 
@@ -539,11 +414,10 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       console.log('[GLOBAL-SVC] 🛑 Stopping all global services');
       if (downloadIntervalRef.current) clearInterval(downloadIntervalRef.current);
       if (scrapeIntervalRef.current) clearInterval(scrapeIntervalRef.current);
-      if (buildIntervalRef.current) clearInterval(buildIntervalRef.current);
       isGlobalServicesRunning = false;
       isInitializedRef.current = false;
     };
-  }, [checkNewMissingSongs, scrapeAllStations, checkAndBuildGrade]);
+  }, [checkNewMissingSongs, scrapeAllStations]);
 
   // Watch for reset signal
   useEffect(() => {
@@ -562,13 +436,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   }, []);
 
   const contextValue: GlobalServicesContextType = {
-    gradeBuilder: {
-      state: gradeState,
-      buildSingleBlock,
-      buildFullDay,
-      setAutoEnabled,
-      setMinutesBeforeBlock,
-    },
+    gradeBuilder,
     scraping: {
       stats: scrapeStats,
       scrapeAllStations,

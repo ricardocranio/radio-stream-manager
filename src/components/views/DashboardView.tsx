@@ -4,7 +4,6 @@ import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
 import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
-import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
 import { useMusicLibraryStats } from '@/hooks/useMusicLibraryStats';
 import { useGlobalServices } from '@/contexts/GlobalServicesContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,11 +21,9 @@ export function DashboardView() {
   const { stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs } = useRadioStore();
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
   const { stats: realtimeStats, refresh: refreshStats } = useRealtimeStats();
-  // Use local hook for UI-specific actions but state comes from global context
-  const gradeBuilder = useAutoGradeBuilder();
   const { stats: libraryStats } = useMusicLibraryStats();
-  // Global services for background operations (downloads, scraping)
-  const { downloads, scraping } = useGlobalServices();
+  // All services from global context - runs from boot, independent of navigation
+  const { gradeBuilder, downloads, scraping } = useGlobalServices();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
