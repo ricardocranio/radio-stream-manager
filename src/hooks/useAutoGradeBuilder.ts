@@ -38,6 +38,10 @@ interface AutoGradeState {
   skippedSongs: number;
   substitutedSongs: number;
   missingSongs: number;
+  // Current processing info
+  currentProcessingSong: string | null;
+  currentProcessingBlock: string | null;
+  lastSaveProgress: number;
 }
 
 const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
@@ -76,6 +80,9 @@ export function useAutoGradeBuilder() {
     skippedSongs: 0,
     substitutedSongs: 0,
     missingSongs: 0,
+    currentProcessingSong: null,
+    currentProcessingBlock: null,
+    lastSaveProgress: 0,
   });
 
   const lastBuildRef = useRef<string | null>(null);
@@ -878,7 +885,7 @@ export function useAutoGradeBuilder() {
     };
   }, []);
 
-  // Generate complete day's grade (48 blocks from 00:00 to 23:30)
+  // Generate complete day's grade (48 blocks from 00:00 to 23:30) with PROGRESSIVE SAVING
   const buildFullDayGrade = useCallback(async () => {
     if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
       toast({
@@ -897,11 +904,17 @@ export function useAutoGradeBuilder() {
       skippedSongs: 0,
       substitutedSongs: 0,
       missingSongs: 0,
+      currentProcessingSong: null,
+      currentProcessingBlock: null,
+      lastSaveProgress: 0,
     }));
 
+    const dayCode = getDayCode();
+    const filename = `${dayCode}.txt`;
+
     try {
-      console.log('[AUTO-GRADE] 🚀 Building full day grade...');
-      logSystemError('GRADE', 'info', 'Iniciando geração da grade completa do dia');
+      console.log('[AUTO-GRADE] 🚀 Building full day grade with progressive saving...');
+      logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
       
       clearUsedSongs();
 
@@ -910,37 +923,79 @@ export function useAutoGradeBuilder() {
       const stats = { skipped: 0, substituted: 0, missing: 0 };
       const lines: string[] = [];
       const allLogs: Parameters<typeof addBlockLogs>[0] = [];
+      let blockCount = 0;
 
-      // Generate all 48 blocks (00:00 to 23:30)
+      // Generate all 48 blocks (00:00 to 23:30) with progressive saving
       for (let hour = 0; hour < 24; hour++) {
         for (const minute of [0, 30]) {
+          const blockTimeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+          
+          // Update current processing block
+          setState(prev => ({
+            ...prev,
+            currentProcessingBlock: blockTimeStr,
+            currentProcessingSong: `Processando bloco ${blockTimeStr}...`,
+          }));
+
           // Pass isFullDay=true for shorter repetition window
           const result = await generateBlockLine(hour, minute, songsByStation, stats, true);
           lines.push(result.line);
           allLogs.push(...result.logs);
+          blockCount++;
+          
+          // Extract last processed song from logs for display
+          const lastLog = result.logs.filter(l => l.type === 'used' || l.type === 'substituted').pop();
+          const currentSongInfo = lastLog 
+            ? `${lastLog.artist} - ${lastLog.title}` 
+            : 'Processando...';
           
           setState(prev => ({
             ...prev,
-            fullDayProgress: prev.fullDayProgress + 1,
+            fullDayProgress: blockCount,
             skippedSongs: stats.skipped,
             substitutedSongs: stats.substituted,
             missingSongs: stats.missing,
+            currentProcessingSong: currentSongInfo,
           }));
+
+          // PROGRESSIVE SAVE: Save every 4 blocks (2 hours of programming)
+          if (blockCount % 4 === 0 || blockCount === 48) {
+            const content = lines.join('\n');
+            
+            try {
+              const saveResult = await window.electronAPI.saveGradeFile({
+                folder: config.gradeFolder,
+                filename,
+                content,
+              });
+              
+              if (saveResult.success) {
+                console.log(`[AUTO-GRADE] 💾 Progressive save: ${blockCount}/48 blocos`);
+                setState(prev => ({
+                  ...prev,
+                  lastSaveProgress: blockCount,
+                  lastSavedFile: filename,
+                }));
+              }
+            } catch (saveError) {
+              console.error('[AUTO-GRADE] Progressive save error:', saveError);
+            }
+          }
+
+          // Small delay to prevent UI freeze and allow state updates
+          await new Promise(resolve => setTimeout(resolve, 10));
         }
       }
 
       // Add all logs to store
       addBlockLogs(allLogs);
 
-      // Save to file
-      const dayCode = getDayCode();
-      const filename = `${dayCode}.txt`;
-      const content = lines.join('\n');
-
+      // Final save (redundant but ensures complete save)
+      const finalContent = lines.join('\n');
       const result = await window.electronAPI.saveGradeFile({
         folder: config.gradeFolder,
         filename,
-        content,
+        content: finalContent,
       });
 
       if (result.success) {
@@ -968,6 +1023,8 @@ export function useAutoGradeBuilder() {
           skippedSongs: stats.skipped,
           substitutedSongs: stats.substituted,
           missingSongs: stats.missing,
+          currentProcessingSong: null,
+          currentProcessingBlock: null,
         }));
 
         toast({
@@ -982,7 +1039,14 @@ export function useAutoGradeBuilder() {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       logSystemError('GRADE', 'error', 'Erro na geração da grade completa', errorMessage);
       
-      setState(prev => ({ ...prev, isBuilding: false, error: errorMessage, fullDayTotal: 0 }));
+      setState(prev => ({ 
+        ...prev, 
+        isBuilding: false, 
+        error: errorMessage, 
+        fullDayTotal: 0,
+        currentProcessingSong: null,
+        currentProcessingBlock: null,
+      }));
       toast({
         title: '❌ Erro na Grade',
         description: errorMessage,

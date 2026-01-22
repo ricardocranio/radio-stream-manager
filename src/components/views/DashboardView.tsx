@@ -402,17 +402,43 @@ export function DashboardView() {
 
             {/* Progress bar for full day generation */}
             {gradeBuilder.isBuilding && gradeBuilder.fullDayTotal > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-3 p-3 rounded-lg bg-muted/30 border border-border">
+                {/* Progress header */}
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Gerando grade completa...</span>
-                  <span className="font-mono text-primary">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />
+                    <span className="text-foreground font-medium">
+                      Bloco {gradeBuilder.currentProcessingBlock || '...'}
+                    </span>
+                  </div>
+                  <span className="font-mono text-primary font-bold">
                     {gradeBuilder.fullDayProgress}/{gradeBuilder.fullDayTotal} blocos
                   </span>
                 </div>
+                
+                {/* Progress bar */}
                 <Progress 
                   value={(gradeBuilder.fullDayProgress / gradeBuilder.fullDayTotal) * 100} 
-                  className="h-2"
+                  className="h-3"
                 />
+
+                {/* Current song being processed */}
+                {gradeBuilder.currentProcessingSong && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <Music className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <span className="text-muted-foreground truncate">
+                      Processando: <span className="text-foreground">{gradeBuilder.currentProcessingSong}</span>
+                    </span>
+                  </div>
+                )}
+
+                {/* Progressive save indicator */}
+                {gradeBuilder.lastSaveProgress > 0 && gradeBuilder.lastSaveProgress < 48 && (
+                  <div className="flex items-center gap-2 text-xs text-emerald-400">
+                    <HardDrive className="w-3.5 h-3.5" />
+                    <span>Salvamento progressivo: {gradeBuilder.lastSaveProgress} blocos salvos</span>
+                  </div>
+                )}
               </div>
             )}
 
