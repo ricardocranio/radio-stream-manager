@@ -56,7 +56,7 @@ interface AutoGradeState {
 
 const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
 const ARTIST_REPETITION_MINUTES = 60;
-const DEFAULT_MINUTES_BEFORE_BLOCK = 10; // Build 10 minutes before each block
+const DEFAULT_MINUTES_BEFORE_BLOCK = 10; // Build 10 minutes before each block (e.g., 16:30 block saves at 16:20)
 
 export function useAutoGradeBuilder() {
   const { toast } = useToast();

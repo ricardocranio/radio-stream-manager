@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Clock, Eye, Save, X, Music, Newspaper, Edit2, FileText, Loader2, Copy, Check, FolderOpen, Calendar } from 'lucide-react';
+import { Clock, Eye, Save, X, Music, Newspaper, Edit2, FileText, Loader2, Copy, Check, FolderOpen, Calendar, HardDrive } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,8 +16,9 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useGlobalServices } from '@/contexts/GlobalServicesContext';
 
 interface BlockInfo {
   time: string;
@@ -36,6 +37,7 @@ interface CapturedSong {
 
 export function GradeScheduleCard() {
   const { blockSongs, programs, fixedContent, setBlockSongs, stations, config } = useRadioStore();
+  const { gradeBuilder } = useGlobalServices();
   const { toast } = useToast();
   const [selectedBlock, setSelectedBlock] = useState<BlockInfo | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -44,6 +46,10 @@ export function GradeScheduleCard() {
   const [isLoading, setIsLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'songs' | 'preview'>('songs');
+
+  // Last save info from gradeBuilder
+  const lastSaveTime = gradeBuilder.lastBuildTime;
+  const lastSavedFile = gradeBuilder.lastSavedFile;
 
   // Get current day info
   const dayInfo = useMemo(() => {
@@ -382,7 +388,17 @@ export function GradeScheduleCard() {
               </Button>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground capitalize mt-1">{dayInfo.dateFormatted}</p>
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-xs text-muted-foreground capitalize">{dayInfo.dateFormatted}</p>
+            {/* Last save indicator */}
+            {lastSaveTime && (
+              <div className="flex items-center gap-1.5 text-[10px] text-emerald-500" title={`Último salvamento: ${format(lastSaveTime, 'HH:mm:ss')}`}>
+                <HardDrive className="w-3 h-3" />
+                <span>Salvo {formatDistanceToNow(lastSaveTime, { locale: ptBR, addSuffix: true })}</span>
+                {lastSavedFile && <span className="text-muted-foreground">({lastSavedFile})</span>}
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-3 flex-1 min-h-0">
           {isLoading ? (
