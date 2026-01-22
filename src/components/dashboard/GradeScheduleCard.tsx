@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Clock, Eye, Save, X, Music, Newspaper, Edit2, FileText, Loader2, Copy, Check } from 'lucide-react';
+import { Clock, Eye, Save, X, Music, Newspaper, Edit2, FileText, Loader2, Copy, Check, FolderOpen, Calendar } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,8 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface BlockInfo {
   time: string;
@@ -33,7 +35,7 @@ interface CapturedSong {
 }
 
 export function GradeScheduleCard() {
-  const { blockSongs, programs, fixedContent, setBlockSongs, stations } = useRadioStore();
+  const { blockSongs, programs, fixedContent, setBlockSongs, stations, config } = useRadioStore();
   const { toast } = useToast();
   const [selectedBlock, setSelectedBlock] = useState<BlockInfo | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -42,6 +44,32 @@ export function GradeScheduleCard() {
   const [isLoading, setIsLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'songs' | 'preview'>('songs');
+
+  // Get current day info
+  const dayInfo = useMemo(() => {
+    const now = new Date();
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
+    const dayName = days[now.getDay()];
+    const dateFormatted = format(now, "EEEE, dd 'de' MMMM", { locale: ptBR });
+    return { dayName, dateFormatted };
+  }, []);
+
+  // Handle open grade folder
+  const handleOpenGradeFolder = async () => {
+    if (window.electronAPI?.openFolder) {
+      await window.electronAPI.openFolder(config.gradeFolder);
+      toast({
+        title: '📂 Pasta aberta',
+        description: `Abrindo ${config.gradeFolder}`,
+      });
+    } else {
+      toast({
+        title: '⚠️ Modo Web',
+        description: 'Abrir pasta disponível apenas no aplicativo desktop.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   // Fetch captured songs from Supabase
   useEffect(() => {
@@ -267,13 +295,28 @@ export function GradeScheduleCard() {
     <>
       <Card className="glass-card border-emerald-500/20 flex flex-col">
         <CardHeader className="pb-3 border-b border-border shrink-0">
-          <CardTitle className="text-base flex items-center gap-2">
-            <FileText className="w-5 h-5 text-emerald-500 shrink-0" />
-            <span className="truncate">Grades Montadas</span>
-            <Badge variant="outline" className="ml-auto text-[10px]">
-              {isLoading ? '...' : `${songsPool.length} músicas`}
-            </Badge>
-          </CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="w-5 h-5 text-emerald-500 shrink-0" />
+              <span className="truncate">Grades Montadas</span>
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-[10px] gap-1">
+                <Calendar className="w-3 h-3" />
+                {dayInfo.dayName}.txt
+              </Badge>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={handleOpenGradeFolder}
+                title="Abrir pasta de grades"
+              >
+                <FolderOpen className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground capitalize mt-1">{dayInfo.dateFormatted}</p>
         </CardHeader>
         <CardContent className="p-3 flex-1 min-h-0">
           {isLoading ? (

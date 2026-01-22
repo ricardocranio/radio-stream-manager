@@ -310,16 +310,19 @@ export function useAutoGradeBuilder() {
     return null;
   }, [rankingSongs, isRecentlyUsed]);
 
-  // Get TOP50 songs for grade
-  const getTop50Songs = useCallback((count: number, blockTime: string): string[] => {
+  // Get TOP50 songs for grade - returns REAL song names, not position placeholders
+  const getTop50Songs = useCallback((count: number, blockTime: string, startPosition: number = 0): string[] => {
     const sorted = [...rankingSongs].sort((a, b) => b.plays - a.plays);
     const result: string[] = [];
 
-    for (const song of sorted) {
-      if (result.length >= count) break;
+    // Start from the specified position (for 19:30 block, start from position 11)
+    for (let i = startPosition; i < sorted.length && result.length < count; i++) {
+      const song = sorted[i];
       
       if (!isRecentlyUsed(song.title, song.artist, blockTime)) {
-        result.push(sanitizeFilename(`POSICAO${result.length + 1}.MP3`));
+        // Use REAL song name, not position placeholder
+        const realFilename = sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
+        result.push(realFilename);
         markSongAsUsed(song.title, song.artist, blockTime);
       }
     }
@@ -357,22 +360,28 @@ export function useAutoGradeBuilder() {
       };
     }
 
-    // TOP50 blocks
+    // TOP50 blocks - calculate correct starting position based on time
     const top50Item = fixedItems.find(fc => fc.type === 'top50');
     if (top50Item) {
       const top50Count = top50Item.top50Count || 10;
-      const top50Songs = getTop50Songs(top50Count, timeStr);
+      
+      // For 19:30 block, start from position 11; for 20:00 start from 21, etc.
+      // Each block shows 10 songs, so calculate offset based on block number
+      const blockIndex = (hour - 19) * 2 + (minute === 30 ? 1 : 0);
+      const startPosition = Math.max(0, blockIndex * 10);
+      
+      const top50Songs = getTop50Songs(top50Count, timeStr, startPosition);
       if (top50Songs.length > 0) {
         blockLogs.push({
           blockTime: timeStr,
           type: 'fixed',
-          title: `TOP50 - ${top50Count} músicas`,
+          title: `TOP50 - Posições ${startPosition + 1} a ${startPosition + top50Songs.length}`,
           artist: 'Ranking',
           station: 'TOP50',
-          reason: 'Bloco TOP50',
+          reason: `Bloco TOP50 (posições ${startPosition + 1}-${startPosition + top50Songs.length})`,
         });
         return { 
-          line: `${timeStr} (ID=${programName}) ${top50Songs.map(s => `"${s}"`).join(',vht,')}`,
+          line: `${timeStr} (ID=TOP50) ${top50Songs.map(s => `"${s}"`).join(',vht,')}`,
           logs: blockLogs,
         };
       }
@@ -753,6 +762,43 @@ export function useAutoGradeBuilder() {
         }
       }
 
+      // PRIORITY 5: CURADORIA - Try any song from ranking that exists in library
+      if (!selectedSong) {
+        // Use ALL ranking songs as curadoria pool (not just top ones)
+        const shuffledRanking = [...rankingSongs].sort(() => Math.random() - 0.5);
+        
+        for (const rankSong of shuffledRanking) {
+          const key = `${rankSong.title.toLowerCase()}-${rankSong.artist.toLowerCase()}`;
+          
+          if (!usedInBlock.has(key) && !isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
+            const libraryResult = await findSongInLibrary(rankSong.artist, rankSong.title);
+            
+            if (libraryResult.exists) {
+              const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
+              selectedSong = {
+                title: rankSong.title,
+                artist: rankSong.artist,
+                station: 'CURADORIA',
+                style: rankSong.style,
+                filename: correctFilename,
+                existsInLibrary: true,
+              };
+              stats.substituted++;
+              blockLogs.push({
+                blockTime: timeStr,
+                type: 'substituted',
+                title: rankSong.title,
+                artist: rankSong.artist,
+                station: 'CURADORIA',
+                style: rankSong.style,
+                reason: 'Curadoria automática do ranking',
+              });
+              break;
+            }
+          }
+        }
+      }
+
       if (selectedSong) {
         // Format: "Artista - Musica.mp3" (already sanitized via filename property)
         songs.push(`"${selectedSong.filename}"`);
@@ -771,13 +817,14 @@ export function useAutoGradeBuilder() {
         // Ultimate fallback: coringa code (NO quotes, NO .mp3)
         const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
         songs.push(coringaCode);
+        stats.missing++;
         blockLogs.push({
           blockTime: timeStr,
           type: 'substituted',
           title: coringaCode,
           artist: 'CORINGA',
           station: 'FALLBACK',
-          reason: 'Nenhuma música válida encontrada, usando coringa',
+          reason: 'Nenhuma música válida encontrada, usando coringa para curadoria manual',
         });
       }
     }
