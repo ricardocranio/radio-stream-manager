@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { DashboardView } from '@/components/views/DashboardView';
+import { SimplifiedDashboardView } from '@/components/views/SimplifiedDashboardView';
 import { StationsView } from '@/components/views/StationsView';
 import { CapturedSongsView } from '@/components/views/CapturedSongsView';
 import { SequenceView } from '@/components/views/SequenceView';
@@ -18,6 +19,7 @@ import { BlockEditorView } from '@/components/views/BlockEditorView';
 import { VozBrasilView } from '@/components/views/VozBrasilView';
 import { SpecialMonitoringView } from '@/components/views/SpecialMonitoringView';
 import { useRadioStore, MissingSong } from '@/store/radioStore';
+import { useUIModeStore } from '@/store/uiModeStore';
 import { CapturedSong } from '@/types/radio';
 import { useAutoDownload } from '@/hooks/useAutoDownload';
 import { useCheckMusicLibrary } from '@/hooks/useCheckMusicLibrary';
@@ -91,6 +93,7 @@ const simulatedSongsDatabase = {
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const { mode } = useUIModeStore();
   const { 
     addCapturedSong, 
     setIsRunning, 
@@ -273,6 +276,20 @@ const Index = () => {
   }, []);
 
   const renderView = () => {
+    // If in simplified mode, show simplified dashboard regardless of active tab
+    // (except for settings and missing which are still available)
+    if (mode === 'simplified') {
+      switch (activeTab) {
+        case 'missing':
+          return <MissingView />;
+        case 'settings':
+          return <SettingsView />;
+        default:
+          return <SimplifiedDashboardView />;
+      }
+    }
+    
+    // Complete mode - show all views
     switch (activeTab) {
       case 'dashboard':
         return <DashboardView />;

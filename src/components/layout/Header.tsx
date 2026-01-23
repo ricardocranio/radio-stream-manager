@@ -1,14 +1,17 @@
-import { Power, RefreshCw, Clock, Sun, Moon } from 'lucide-react';
+import { Power, RefreshCw, Clock, Sun, Moon, Layers, Zap } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
+import { useUIModeStore } from '@/store/uiModeStore';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { StatusIndicator } from '@/components/StatusIndicator';
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
+import { cn } from '@/lib/utils';
 
 export function Header() {
   const { isRunning, setIsRunning, lastUpdate } = useRadioStore();
+  const { mode, toggleMode } = useUIModeStore();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -47,6 +50,34 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2 md:gap-3">
+        {/* UI Mode Toggle */}
+        {mounted && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleMode}
+            className={cn(
+              "gap-2 transition-all",
+              mode === 'simplified' 
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20" 
+                : "hover:bg-primary/10"
+            )}
+            title={mode === 'simplified' ? 'Modo Simplificado (leve)' : 'Modo Completo'}
+          >
+            {mode === 'simplified' ? (
+              <>
+                <Zap className="w-4 h-4" />
+                <span className="hidden md:inline">Leve</span>
+              </>
+            ) : (
+              <>
+                <Layers className="w-4 h-4" />
+                <span className="hidden md:inline">Completo</span>
+              </>
+            )}
+          </Button>
+        )}
+
         {/* Theme Toggle */}
         {mounted && (
           <Button
