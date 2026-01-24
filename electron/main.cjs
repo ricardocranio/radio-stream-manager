@@ -26,7 +26,7 @@ let tray = null;
 let serviceMode = 'window'; // 'window' or 'service'
 let localhostServer = null;
 let localhostPort = 8080; // Configurable port
-let autoStartServiceMode = false; // Start in service mode on launch
+let autoStartServiceMode = true; // DEFAULT: Start in service mode on launch
 
 // Load service mode settings from file (simple JSON persistence)
 const settingsPath = path.join(app.getPath('userData'), 'service-settings.json');
@@ -36,11 +36,17 @@ function loadServiceSettings() {
     if (fs.existsSync(settingsPath)) {
       const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
       localhostPort = data.localhostPort || 8080;
-      autoStartServiceMode = data.autoStartServiceMode || false;
+      // Default to TRUE if not explicitly set to false
+      autoStartServiceMode = data.autoStartServiceMode !== false;
       console.log(`[SERVICE] Loaded settings: port=${localhostPort}, autoStart=${autoStartServiceMode}`);
+    } else {
+      // No settings file = first run, default to service mode
+      autoStartServiceMode = true;
+      console.log('[SERVICE] First run - defaulting to service mode');
     }
   } catch (error) {
     console.error('[SERVICE] Failed to load settings:', error);
+    autoStartServiceMode = true; // Default to service mode on error
   }
 }
 
@@ -631,9 +637,11 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   }
 
-  // Show window when ready
+  // Show window when ready (only if NOT starting in service mode)
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+    if (!autoStartServiceMode) {
+      mainWindow.show();
+    }
   });
 
   // Minimize to tray instead of closing
@@ -918,13 +926,18 @@ app.whenReady().then(async () => {
   createTray();
   setupAutoUpdater();
   
-  // Check if auto-start service mode is enabled
+  // Check if auto-start service mode is enabled (DEFAULT: TRUE)
   if (autoStartServiceMode) {
-    console.log('[INIT] Auto-starting in service mode...');
-    // Wait for window to be ready, then activate service mode
-    setTimeout(() => {
-      activateServiceMode();
-    }, 2000);
+    console.log('[INIT] 🚀 Starting in SERVICE MODE (default)...');
+    // Activate service mode immediately and open browser
+    setTimeout(async () => {
+      await activateServiceMode();
+      // Open browser automatically
+      shell.openExternal(`http://127.0.0.1:${localhostPort}`);
+      console.log(`[INIT] 🌐 Opened browser at http://127.0.0.1:${localhostPort}`);
+    }, 1500);
+  } else {
+    console.log('[INIT] Starting in WINDOW mode (user preference)');
   }
   
   // Check Python/pip availability on startup and notify if missing
