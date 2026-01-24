@@ -1533,7 +1533,6 @@ async function performDeezerDownload(params) {
     return { success: false, error: error.message || 'Erro ao baixar do Deezer' };
   }
 }
-}
 
 // Deezer Download Handler using deemix CLI (IPC version - uses shared function)
 ipcMain.handle('download-from-deezer', async (event, params) => {
