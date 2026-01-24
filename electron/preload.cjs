@@ -72,4 +72,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAutoStartServiceMode: () => ipcRenderer.invoke('get-auto-start-service-mode'),
   onServerStatus: (callback) => ipcRenderer.on('server-status', (_, status) => callback(status)),
   onServiceModeChanged: (callback) => ipcRenderer.on('service-mode-changed', (_, mode) => callback(mode)),
+  
+  // App lifecycle controls
+  quitApp: () => ipcRenderer.send('quit-app'),
+  minimizeToTray: () => ipcRenderer.send('minimize-to-tray'),
 });

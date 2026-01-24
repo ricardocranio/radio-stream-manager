@@ -1108,6 +1108,24 @@ ipcMain.handle('get-auto-start-service-mode', () => {
   return autoStartServiceMode;
 });
 
+// =============== APP LIFECYCLE IPC HANDLERS ===============
+
+// Quit the application completely
+ipcMain.on('quit-app', () => {
+  console.log('[APP] Quit requested by user');
+  app.isQuitting = true;
+  app.quit();
+});
+
+// Minimize to system tray (service mode)
+ipcMain.on('minimize-to-tray', async () => {
+  console.log('[APP] Minimize to tray requested');
+  await activateServiceMode();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('service-mode-changed', 'service');
+  }
+});
+
 // IPC Handlers for communication with renderer
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();

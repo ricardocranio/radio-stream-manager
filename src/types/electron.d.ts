@@ -246,6 +246,10 @@ interface ElectronAPI {
   onServerStatus: (callback: (status: ServiceModeStatus) => void) => void;
   onServiceModeChanged: (callback: (mode: 'window' | 'service') => void) => void;
   
+  // App lifecycle controls
+  quitApp: () => void;
+  minimizeToTray: () => void;
+  
   // Platform detection
   platform: string;
   isElectron: boolean;
