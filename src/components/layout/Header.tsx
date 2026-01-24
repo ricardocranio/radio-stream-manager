@@ -1,4 +1,4 @@
-import { Power, RefreshCw, Clock, Sun, Moon, Layers, Zap, Server, Monitor, ExternalLink, Wifi, WifiOff, AlertCircle } from 'lucide-react';
+import { Power, RefreshCw, Clock, Sun, Moon, Layers, Zap, Server, Monitor, ExternalLink, Wifi, WifiOff, AlertCircle, X, LogOut } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { useUIModeStore } from '@/store/uiModeStore';
 import { useServiceModeStore } from '@/store/serviceModeStore';
@@ -17,6 +17,17 @@ import {
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -30,7 +41,7 @@ export function Header() {
   const [serverUrl, setServerUrl] = useState(`http://localhost:${localhostPort}`);
   const [serverError, setServerError] = useState<string | null>(null);
   const [isOpeningBrowser, setIsOpeningBrowser] = useState(false);
-
+  const [showCloseDialog, setShowCloseDialog] = useState(false);
   // Avoid hydration mismatch and setup Electron listeners
   useEffect(() => {
     setMounted(true);
@@ -114,6 +125,25 @@ export function Header() {
       } finally {
         setIsOpeningBrowser(false);
       }
+    }
+  };
+
+  // Handle app close with confirmation
+  const handleCloseApp = () => {
+    if (isElectron && window.electronAPI?.quitApp) {
+      window.electronAPI.quitApp();
+    }
+  };
+
+  // Handle minimize to tray (service mode)
+  const handleMinimizeToTray = () => {
+    if (isElectron && window.electronAPI?.minimizeToTray) {
+      window.electronAPI.minimizeToTray();
+      setShowCloseDialog(false);
+      toast({
+        title: '📥 Modo Serviço Ativado',
+        description: 'O app está rodando na bandeja do sistema. Acesse via localhost.',
+      });
     }
   };
 
@@ -318,6 +348,71 @@ export function Header() {
           <Power className="w-4 h-4 md:mr-2" />
           <span className="hidden md:inline">{isRunning ? 'Parar' : 'Iniciar'}</span>
         </Button>
+
+        {/* Close App Button (Electron only) */}
+        {mounted && isElectron && (
+          <AlertDialog open={showCloseDialog} onOpenChange={setShowCloseDialog}>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                title="Fechar aplicativo"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="max-w-md">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2">
+                  <Power className="w-5 h-5 text-primary" />
+                  Deseja sair do aplicativo?
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-left space-y-3">
+                  <p>Escolha como deseja continuar:</p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-start gap-2 p-2 rounded-md bg-blue-500/10 border border-blue-500/20">
+                      <Server className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+                      <div>
+                        <span className="font-medium text-blue-600 dark:text-blue-400">Modo Serviço:</span>
+                        <span className="text-muted-foreground ml-1">
+                          Minimiza na bandeja. Downloads e monitoramento continuam funcionando.
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 p-2 rounded-md bg-destructive/10 border border-destructive/20">
+                      <LogOut className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                      <div>
+                        <span className="font-medium text-destructive">Fechar:</span>
+                        <span className="text-muted-foreground ml-1">
+                          Encerra completamente o aplicativo.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+                <AlertDialogCancel className="sm:flex-1">Cancelar</AlertDialogCancel>
+                <Button 
+                  variant="outline" 
+                  className="sm:flex-1 gap-2 border-blue-500/30 text-blue-600 hover:bg-blue-500/10"
+                  onClick={handleMinimizeToTray}
+                >
+                  <Server className="w-4 h-4" />
+                  Modo Serviço
+                </Button>
+                <AlertDialogAction 
+                  className="sm:flex-1 gap-2 bg-destructive hover:bg-destructive/90"
+                  onClick={handleCloseApp}
+                >
+                  <LogOut className="w-4 h-4" />
+                  Fechar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
     </header>
   );
