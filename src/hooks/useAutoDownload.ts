@@ -6,6 +6,56 @@ import { withRetry, createError, ErrorCodes } from '@/lib/errorHandler';
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
+// Check if running in Service Mode (localhost with Electron backend)
+const isServiceMode = () => {
+  // Service mode = accessing via localhost but Electron is running in background
+  const isLocalhost = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+  return isLocalhost && !isElectron;
+};
+
+// Download via HTTP API (for service mode)
+async function downloadViaAPI(params: {
+  artist: string;
+  title: string;
+  arl: string;
+  outputFolder: string;
+  outputFolder2?: string;
+  quality: string;
+}): Promise<{ success: boolean; error?: string; track?: any }> {
+  try {
+    // Use current origin (localhost:PORT) for API call
+    const response = await fetch('/api/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return { success: false, error: errorData.error || `HTTP ${response.status}` };
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('[AUTO-DL-API] Fetch error:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Erro de conexão' };
+  }
+}
+
+// Check if Electron backend is available (for service mode)
+async function checkElectronBackend(): Promise<boolean> {
+  try {
+    const response = await fetch('/api/health', { method: 'GET' });
+    if (response.ok) {
+      const data = await response.json();
+      return data.electron === true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 // Constants
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 5000;
@@ -31,6 +81,7 @@ export function useAutoDownload() {
   const processedSongsRef = useRef<Set<string>>(new Set());
   const lastCheckRef = useRef<string[]>([]);
   const lastResetCounterRef = useRef(0);
+  const electronBackendAvailableRef = useRef<boolean | null>(null);
 
   // Watch for reset signal and clear internal refs
   useEffect(() => {
@@ -44,10 +95,23 @@ export function useAutoDownload() {
     }
   }, [resetCounter]);
 
+  // Check for Electron backend availability on mount (for service mode)
+  useEffect(() => {
+    if (isServiceMode()) {
+      checkElectronBackend().then(available => {
+        electronBackendAvailableRef.current = available;
+        console.log(`[AUTO-DL] Service mode detected, Electron backend: ${available ? 'AVAILABLE' : 'NOT AVAILABLE'}`);
+      });
+    }
+  }, []);
+
   // Download a single song
   const downloadSong = useCallback(async (song: MissingSong): Promise<boolean> => {
-    if (!isElectron || !window.electronAPI?.downloadFromDeezer) {
-      console.log('[AUTO-DL] ❌ Skipping - not in Electron environment');
+    const canUseElectronDirect = isElectron && window.electronAPI?.downloadFromDeezer;
+    const canUseServiceMode = isServiceMode() && electronBackendAvailableRef.current;
+    
+    if (!canUseElectronDirect && !canUseServiceMode) {
+      console.log('[AUTO-DL] ❌ Skipping - not in Electron environment and no service mode backend');
       return false;
     }
 
@@ -65,20 +129,28 @@ export function useAutoDownload() {
       return false;
     }
 
-    console.log(`[AUTO-DL] Downloading: ${song.artist} - ${song.title}`);
+    console.log(`[AUTO-DL] Downloading: ${song.artist} - ${song.title} (mode: ${canUseElectronDirect ? 'IPC' : 'API'})`);
     updateMissingSong(song.id, { status: 'downloading' });
 
     const startTime = Date.now();
 
     try {
-      const result = await window.electronAPI.downloadFromDeezer({
+      const downloadParams = {
         artist: song.artist,
         title: song.title,
         arl: state.deezerConfig.arl,
         outputFolder: state.deezerConfig.downloadFolder,
-        outputFolder2: state.deezerConfig.downloadFolder2 || undefined, // Segunda pasta (opcional)
+        outputFolder2: state.deezerConfig.downloadFolder2 || undefined,
         quality: state.deezerConfig.quality,
-      });
+      };
+      
+      // Use IPC if in Electron, otherwise use HTTP API (service mode)
+      let result;
+      if (canUseElectronDirect) {
+        result = await window.electronAPI.downloadFromDeezer(downloadParams);
+      } else {
+        result = await downloadViaAPI(downloadParams);
+      }
 
       const duration = Date.now() - startTime;
 
@@ -184,6 +256,9 @@ export function useAutoDownload() {
 
   // Watch for new missing songs
   useEffect(() => {
+    const inServiceMode = isServiceMode();
+    const canDownload = isElectron || (inServiceMode && electronBackendAvailableRef.current);
+    
     // Log current config status for debugging
     console.log('[AUTO-DL] 📊 Config status:', {
       autoDownload: deezerConfig.autoDownload,
@@ -191,8 +266,16 @@ export function useAutoDownload() {
       hasArl: !!deezerConfig.arl,
       hasDownloadFolder: !!deezerConfig.downloadFolder,
       missingSongsCount: missingSongs.filter(s => s.status === 'missing').length,
+      isElectron,
+      isServiceMode: inServiceMode,
+      electronBackendAvailable: electronBackendAvailableRef.current,
+      canDownload,
     });
 
+    if (!canDownload) {
+      console.log('[AUTO-DL] ⏸️ Cannot download - no Electron or service mode backend');
+      return;
+    }
     if (!deezerConfig.autoDownload) {
       console.log('[AUTO-DL] ⏸️ Auto-download is OFF');
       return;
