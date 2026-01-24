@@ -115,6 +115,9 @@ function createLocalhostServer(attemptPort = null) {
       return;
     }
 
+    // Parse JSON bodies
+    expressApp.use(express.json());
+
     // Serve static files from dist folder
     expressApp.use(express.static(distPath));
 
@@ -124,11 +127,63 @@ function createLocalhostServer(attemptPort = null) {
         status: 'ok', 
         port: portToTry, 
         uptime: process.uptime(),
-        memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB'
+        memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+        electron: true
+      });
+    });
+
+    // =============== API ENDPOINTS FOR SERVICE MODE ===============
+    
+    // Download from Deezer via API (for browser access in service mode)
+    expressApp.post('/api/download', async (req, res) => {
+      const { artist, title, arl, outputFolder, outputFolder2, quality } = req.body;
+      
+      console.log(`[API] Download request: ${artist} - ${title}`);
+      console.log(`[API] Output 1: ${outputFolder}`);
+      console.log(`[API] Output 2: ${outputFolder2 || '(não configurado)'}`);
+      
+      if (!artist || !title || !arl || !outputFolder) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Parâmetros obrigatórios faltando: artist, title, arl, outputFolder' 
+        });
+      }
+      
+      try {
+        // Use the same download logic as IPC handler
+        const result = await performDeezerDownload({ artist, title, arl, outputFolder, outputFolder2, quality });
+        res.json(result);
+      } catch (error) {
+        console.error('[API] Download error:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Check if deemix is installed
+    expressApp.get('/api/deemix/status', async (req, res) => {
+      try {
+        const installed = await checkDeemixInstalled();
+        res.json({ 
+          installed, 
+          command: deemixCommand || null 
+        });
+      } catch (error) {
+        res.json({ installed: false, error: error.message });
+      }
+    });
+
+    // Get deezer config status
+    expressApp.get('/api/status', (req, res) => {
+      res.json({
+        electron: true,
+        serviceMode: serviceMode,
+        serverRunning: !!localhostServer,
+        port: portToTry
       });
     });
 
     // SPA fallback - serve index.html for all routes (Express 5 syntax)
+    // Must be AFTER all API routes
     expressApp.get('/{*splat}', (req, res) => {
       res.sendFile(indexPath);
     });
@@ -1285,8 +1340,8 @@ function saveArlToDeemixConfig(arl) {
   }
 }
 
-// Deezer Download Handler using deemix CLI
-ipcMain.handle('download-from-deezer', async (event, params) => {
+// Shared download logic - used by both IPC and HTTP API
+async function performDeezerDownload(params) {
   const { artist, title, arl, outputFolder, outputFolder2, quality } = params;
   
   console.log(`[DEEMIX] === Starting download ===`);
@@ -1477,6 +1532,13 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
     console.error('[DEEMIX] Download error:', error);
     return { success: false, error: error.message || 'Erro ao baixar do Deezer' };
   }
+}
+}
+
+// Deezer Download Handler using deemix CLI (IPC version - uses shared function)
+ipcMain.handle('download-from-deezer', async (event, params) => {
+  console.log(`[DEEMIX-IPC] Received download request via IPC`);
+  return performDeezerDownload(params);
 });
 
 // Batch download notification

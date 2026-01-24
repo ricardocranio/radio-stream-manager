@@ -1,4 +1,4 @@
-import { Globe, Monitor, Download, Save, FolderOpen, CheckCircle2, Info } from 'lucide-react';
+import { Globe, Monitor, Download, Save, FolderOpen, CheckCircle2, Info, Server, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -13,20 +13,34 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
+// Check if Electron backend is available (service mode)
+async function checkServiceMode(): Promise<boolean> {
+  try {
+    const response = await fetch('/api/health', { method: 'GET' });
+    if (response.ok) {
+      const data = await response.json();
+      return data.electron === true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 interface FeatureStatus {
   name: string;
-  available: boolean;
+  available: boolean | 'service'; // 'service' means available when service mode detected
   description: string;
   icon: React.ReactNode;
 }
 
-const features: FeatureStatus[] = [
+const getFeatures = (serviceMode: boolean): FeatureStatus[] => [
   {
     name: 'Dashboard & Monitoramento',
     available: true,
@@ -53,19 +67,23 @@ const features: FeatureStatus[] = [
   },
   {
     name: 'Downloads Automáticos',
-    available: false,
-    description: 'Requer Deemix instalado no desktop',
+    available: serviceMode, // Available in service mode!
+    description: serviceMode 
+      ? '✓ Conectado ao Electron em background' 
+      : 'Requer Electron rodando em modo serviço',
     icon: <Download className="w-3.5 h-3.5" />,
   },
   {
     name: 'Salvar Arquivos',
-    available: false,
-    description: 'Salvar grades/configs diretamente em pastas locais',
+    available: serviceMode,
+    description: serviceMode 
+      ? '✓ Salva via Electron em background' 
+      : 'Salvar grades/configs diretamente em pastas locais',
     icon: <Save className="w-3.5 h-3.5" />,
   },
   {
     name: 'Selecionar Pastas',
-    available: false,
+    available: false, // Always requires desktop UI
     description: 'Escolher pastas do sistema via diálogo nativo',
     icon: <FolderOpen className="w-3.5 h-3.5" />,
   },
@@ -73,38 +91,82 @@ const features: FeatureStatus[] = [
 
 export function BrowserModeBanner() {
   const [isOpen, setIsOpen] = useState(false);
+  const [serviceMode, setServiceMode] = useState<boolean | null>(null);
+
+  // Check for service mode on mount
+  useEffect(() => {
+    checkServiceMode().then(setServiceMode);
+  }, []);
 
   // Don't show in Electron
   if (isElectron) {
     return null;
   }
 
-  const availableCount = features.filter(f => f.available).length;
-  const desktopOnlyCount = features.filter(f => !f.available).length;
+  const features = getFeatures(serviceMode === true);
+  const availableCount = features.filter(f => f.available === true).length;
+  const desktopOnlyCount = features.filter(f => f.available === false).length;
 
   return (
-    <Alert className="border-blue-500/30 bg-blue-500/5 mb-4">
-      <Globe className="h-4 w-4 text-blue-500" />
+    <Alert className={cn(
+      "mb-4",
+      serviceMode 
+        ? "border-emerald-500/30 bg-emerald-500/5" 
+        : "border-blue-500/30 bg-blue-500/5"
+    )}>
+      {serviceMode ? (
+        <Server className="h-4 w-4 text-emerald-500" />
+      ) : (
+        <Globe className="h-4 w-4 text-blue-500" />
+      )}
       <AlertDescription className="ml-2">
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-medium text-blue-600 dark:text-blue-400">Modo Navegador</span>
-              <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[10px]">
-                {availableCount} funções disponíveis
-              </Badge>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="outline" className="bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] cursor-help">
-                      {desktopOnlyCount} apenas desktop
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[250px]">
-                    <p className="text-xs">Downloads e salvamento de arquivos requerem o app desktop com Deemix instalado</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              {serviceMode === null ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+                  <span className="text-muted-foreground text-sm">Verificando conexão...</span>
+                </>
+              ) : serviceMode ? (
+                <>
+                  <span className="font-medium text-emerald-600 dark:text-emerald-400">🟢 Modo Serviço</span>
+                  <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[10px]">
+                    Electron conectado
+                  </Badge>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="bg-primary/10 border-primary/30 text-primary text-[10px] cursor-help">
+                          Downloads ativos ✓
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[250px]">
+                        <p className="text-xs">O Electron está rodando em background e downloads automáticos funcionam normalmente!</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </>
+              ) : (
+                <>
+                  <span className="font-medium text-blue-600 dark:text-blue-400">Modo Navegador</span>
+                  <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[10px]">
+                    {availableCount} funções disponíveis
+                  </Badge>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] cursor-help">
+                          {desktopOnlyCount} apenas desktop
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[250px]">
+                        <p className="text-xs">Inicie o app desktop em Modo Serviço para habilitar downloads</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </>
+              )}
             </div>
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1">
@@ -143,7 +205,11 @@ export function BrowserModeBanner() {
               ))}
             </div>
             <p className="text-[11px] text-muted-foreground pt-2 border-t border-border/50">
-              💡 <strong>Dica:</strong> O modo navegador é ideal para monitoramento leve. Para downloads automáticos, use o app desktop.
+              {serviceMode ? (
+                <>✅ <strong>Modo Serviço Ativo:</strong> Downloads automáticos estão funcionando normalmente via Electron em background.</>
+              ) : (
+                <>💡 <strong>Dica:</strong> Inicie o app desktop em "Modo Serviço" para habilitar downloads enquanto usa o navegador.</>
+              )}
             </p>
           </CollapsibleContent>
         </Collapsible>
@@ -154,7 +220,16 @@ export function BrowserModeBanner() {
 
 // Small inline indicator for desktop-only features
 export function DesktopOnlyBadge({ className }: { className?: string }) {
-  if (isElectron) return null;
+  const [serviceMode, setServiceMode] = useState<boolean>(false);
+  
+  useEffect(() => {
+    if (!isElectron) {
+      checkServiceMode().then(setServiceMode);
+    }
+  }, []);
+  
+  // Don't show if in Electron OR in service mode (backend available)
+  if (isElectron || serviceMode) return null;
   
   return (
     <TooltipProvider>
@@ -172,7 +247,7 @@ export function DesktopOnlyBadge({ className }: { className?: string }) {
           </Badge>
         </TooltipTrigger>
         <TooltipContent>
-          <p className="text-xs">Esta função requer o aplicativo desktop</p>
+          <p className="text-xs">Inicie o Electron em Modo Serviço para habilitar</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
