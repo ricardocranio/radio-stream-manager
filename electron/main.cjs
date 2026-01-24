@@ -28,6 +28,34 @@ let localhostServer = null;
 let localhostPort = 8080; // Configurable port
 let autoStartServiceMode = false; // Start in service mode on launch
 
+// Load service mode settings from file (simple JSON persistence)
+const settingsPath = path.join(app.getPath('userData'), 'service-settings.json');
+
+function loadServiceSettings() {
+  try {
+    if (fs.existsSync(settingsPath)) {
+      const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      localhostPort = data.localhostPort || 8080;
+      autoStartServiceMode = data.autoStartServiceMode || false;
+      console.log(`[SERVICE] Loaded settings: port=${localhostPort}, autoStart=${autoStartServiceMode}`);
+    }
+  } catch (error) {
+    console.error('[SERVICE] Failed to load settings:', error);
+  }
+}
+
+function saveServiceSettings() {
+  try {
+    fs.writeFileSync(settingsPath, JSON.stringify({
+      localhostPort,
+      autoStartServiceMode
+    }, null, 2));
+    console.log('[SERVICE] Settings saved');
+  } catch (error) {
+    console.error('[SERVICE] Failed to save settings:', error);
+  }
+}
+
 // Create Express server for localhost access
 function createLocalhostServer() {
   if (localhostServer) {
@@ -93,7 +121,7 @@ function activateServiceMode() {
   
   // Wait a moment for server to start, then open browser and hide window
   setTimeout(() => {
-    shell.openExternal(`http://127.0.0.1:${LOCALHOST_PORT}`);
+    shell.openExternal(`http://127.0.0.1:${localhostPort}`);
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.hide();
     }
@@ -101,7 +129,7 @@ function activateServiceMode() {
     // Show notification
     showNotification(
       '🔧 Modo Serviço Ativado',
-      `Acesse via http://localhost:${LOCALHOST_PORT} - App minimizado na bandeja`
+      `Acesse via http://localhost:${localhostPort} - App minimizado na bandeja`
     );
     
     // Update tray menu
@@ -136,7 +164,7 @@ function updateTrayMenu() {
       label: isService ? '🌐 Abrir no Navegador' : 'Abrir Programador',
       click: () => {
         if (isService) {
-          shell.openExternal(`http://127.0.0.1:${LOCALHOST_PORT}`);
+          shell.openExternal(`http://127.0.0.1:${localhostPort}`);
         } else {
           mainWindow.show();
         }
@@ -154,7 +182,7 @@ function updateTrayMenu() {
     },
     { type: 'separator' },
     {
-      label: isService ? `Status: Serviço (porta ${LOCALHOST_PORT})` : 'Status: Janela',
+      label: isService ? `Status: Serviço (porta ${localhostPort})` : 'Status: Janela',
       enabled: false,
     },
     {
@@ -536,7 +564,7 @@ function createTray() {
   // Double-click: open browser in service mode, show window in window mode
   tray.on('double-click', () => {
     if (serviceMode === 'service') {
-      shell.openExternal(`http://127.0.0.1:${LOCALHOST_PORT}`);
+      shell.openExternal(`http://127.0.0.1:${localhostPort}`);
     } else {
       mainWindow.show();
     }
@@ -676,12 +704,24 @@ function ensureDefaultFolders() {
 
 // App ready
 app.whenReady().then(async () => {
+  // Load service mode settings first
+  loadServiceSettings();
+  
   // Ensure default folders exist
   ensureDefaultFolders();
   
   createWindow();
   createTray();
   setupAutoUpdater();
+  
+  // Check if auto-start service mode is enabled
+  if (autoStartServiceMode) {
+    console.log('[INIT] Auto-starting in service mode...');
+    // Wait for window to be ready, then activate service mode
+    setTimeout(() => {
+      activateServiceMode();
+    }, 2000);
+  }
   
   // Check Python/pip availability on startup and notify if missing
   const pythonStatus = await checkPythonAvailable();
@@ -826,7 +866,7 @@ ipcMain.handle('open-in-browser', async () => {
     createLocalhostServer();
     await new Promise(resolve => setTimeout(resolve, 500));
   }
-  shell.openExternal(`http://127.0.0.1:${LOCALHOST_PORT}`);
+  shell.openExternal(`http://127.0.0.1:${localhostPort}`);
 });
 
 // Get localhost URL
@@ -837,12 +877,14 @@ ipcMain.handle('get-localhost-url', () => {
 // Set localhost port
 ipcMain.handle('set-localhost-port', (event, port) => {
   localhostPort = port;
+  saveServiceSettings();
   console.log(`[SERVICE] Port changed to ${port}`);
 });
 
 // Set auto-start service mode
 ipcMain.handle('set-auto-start-service-mode', (event, enabled) => {
   autoStartServiceMode = enabled;
+  saveServiceSettings();
   console.log(`[SERVICE] Auto-start service mode: ${enabled}`);
 });
 
