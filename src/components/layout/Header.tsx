@@ -1,4 +1,4 @@
-import { Power, RefreshCw, Clock, Sun, Moon, Layers, Zap, Server, Monitor, ExternalLink, Wifi, WifiOff } from 'lucide-react';
+import { Power, RefreshCw, Clock, Sun, Moon, Layers, Zap, Server, Monitor, ExternalLink, Wifi, WifiOff, AlertCircle } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { useUIModeStore } from '@/store/uiModeStore';
 import { useServiceModeStore } from '@/store/serviceModeStore';
@@ -16,6 +16,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
+import { toast } from '@/hooks/use-toast';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -23,10 +24,12 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 export function Header() {
   const { isRunning, setIsRunning, lastUpdate } = useRadioStore();
   const { mode, toggleMode } = useUIModeStore();
-  const { serviceMode, toggleServiceMode, isServerRunning, setServerRunning, localhostPort } = useServiceModeStore();
+  const { serviceMode, toggleServiceMode, isServerRunning, setServerRunning, localhostPort, setLocalhostPort } = useServiceModeStore();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [serverUrl, setServerUrl] = useState(`http://localhost:${localhostPort}`);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [isOpeningBrowser, setIsOpeningBrowser] = useState(false);
 
   // Avoid hydration mismatch and setup Electron listeners
   useEffect(() => {
@@ -34,15 +37,24 @@ export function Header() {
     
     // Listen for server status updates from Electron
     if (isElectron && window.electronAPI?.onServerStatus) {
-      window.electronAPI.onServerStatus((status) => {
+      window.electronAPI.onServerStatus((status: any) => {
         setServerRunning(status.running);
-        setServerUrl(status.url);
+        if (status.running) {
+          setServerUrl(status.url);
+          setServerError(null);
+          // Update port in store if it changed (fallback port)
+          if (status.port && status.port !== localhostPort) {
+            setLocalhostPort(status.port);
+          }
+        } else if (status.error) {
+          setServerError(status.details || 'Erro desconhecido');
+        }
       });
     }
     
     // Listen for service mode changes from Electron (e.g., from tray)
     if (isElectron && window.electronAPI?.onServiceModeChanged) {
-      window.electronAPI.onServiceModeChanged((mode) => {
+      window.electronAPI.onServiceModeChanged((mode: 'window' | 'service') => {
         // Sync store with Electron's mode
         const store = useServiceModeStore.getState();
         if (store.serviceMode !== mode) {
@@ -50,7 +62,7 @@ export function Header() {
         }
       });
     }
-  }, [setServerRunning]);
+  }, [setServerRunning, setLocalhostPort, localhostPort]);
 
   // Update server URL when port changes
   useEffect(() => {
@@ -73,7 +85,35 @@ export function Header() {
 
   const handleOpenInBrowser = async () => {
     if (isElectron && window.electronAPI?.openInBrowser) {
-      await window.electronAPI.openInBrowser();
+      setIsOpeningBrowser(true);
+      try {
+        const result: { success: boolean; port?: number; url?: string; error?: string; message?: string } = 
+          await window.electronAPI.openInBrowser();
+        
+        if (!result.success) {
+          toast({
+            title: '❌ Erro ao abrir navegador',
+            description: result.message || 'Não foi possível iniciar o servidor local',
+            variant: 'destructive',
+          });
+          setServerError(result.message || null);
+        } else {
+          // Update port if it changed (fallback)
+          if (result.port && result.port !== localhostPort) {
+            setLocalhostPort(result.port);
+          }
+          setServerError(null);
+        }
+      } catch (error: unknown) {
+        console.error('Error opening browser:', error);
+        toast({
+          title: '❌ Erro',
+          description: 'Falha ao comunicar com o servidor local',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsOpeningBrowser(false);
+      }
     }
   };
 
@@ -98,7 +138,7 @@ export function Header() {
         </div>
         
         {/* Server Status Indicator (when in service mode or server is running) */}
-        {mounted && isElectron && isServerRunning && (
+        {mounted && isElectron && isServerRunning && !serverError && (
           <div className="hidden md:flex items-center gap-1.5 ml-2">
             <Badge 
               variant="outline" 
@@ -108,6 +148,26 @@ export function Header() {
               localhost:{localhostPort}
             </Badge>
           </div>
+        )}
+        
+        {/* Server Error Indicator */}
+        {mounted && isElectron && serverError && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge 
+                  variant="outline" 
+                  className="bg-destructive/10 border-destructive/30 text-destructive gap-1.5 text-[10px] px-2 py-0.5 cursor-help"
+                >
+                  <AlertCircle className="w-3 h-3" />
+                  Erro Servidor
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[300px]">
+                <p className="text-sm">{serverError}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
       </div>
 
@@ -162,13 +222,23 @@ export function Header() {
                   variant="ghost"
                   size="icon"
                   onClick={handleOpenInBrowser}
-                  className="h-9 w-9"
+                  disabled={isOpeningBrowser}
+                  className={cn(
+                    "h-9 w-9 transition-all",
+                    isOpeningBrowser && "animate-pulse"
+                  )}
                 >
-                  <ExternalLink className="w-4 h-4 text-blue-500" />
+                  {isOpeningBrowser ? (
+                    <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />
+                  ) : (
+                    <ExternalLink className="w-4 h-4 text-blue-500" />
+                  )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                Abrir no navegador ({serverUrl})
+                {isOpeningBrowser 
+                  ? 'Iniciando servidor...' 
+                  : `Abrir no navegador (${serverUrl})`}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
