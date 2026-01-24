@@ -76,6 +76,7 @@ export function useAutoDownload() {
         title: song.title,
         arl: state.deezerConfig.arl,
         outputFolder: state.deezerConfig.downloadFolder,
+        outputFolder2: state.deezerConfig.downloadFolder2 || undefined, // Segunda pasta (opcional)
         quality: state.deezerConfig.quality,
       });
 

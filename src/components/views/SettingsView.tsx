@@ -359,7 +359,65 @@ export function SettingsView() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Pasta onde as músicas baixadas serão salvas. {!(window.electronAPI?.isElectron) && "Digite o caminho completo (ex: C:\\Playlist\\Downloads)"}
+                    Pasta principal onde as músicas baixadas serão salvas
+                  </p>
+                </div>
+
+                {/* Segunda pasta de download */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="downloadFolder2">Pasta de Download 2 (Opcional)</Label>
+                    <span className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded">
+                      Cópia espelho
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      id="downloadFolder2"
+                      value={deezerConfig.downloadFolder2 || ''}
+                      onChange={(e) =>
+                        updateDeezerConfig({ downloadFolder2: e.target.value })
+                      }
+                      placeholder="Ex: X:\Músicas\externo (deixe vazio para desativar)"
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      title={window.electronAPI?.isElectron ? "Selecionar pasta" : "Disponível apenas no app desktop"}
+                      onClick={async () => {
+                        if (window.electronAPI?.isElectron && window.electronAPI?.selectFolder) {
+                          try {
+                            const folder = await window.electronAPI.selectFolder();
+                            if (folder) {
+                              updateDeezerConfig({ downloadFolder2: folder });
+                              toast({
+                                title: 'Pasta 2 selecionada',
+                                description: `Pasta "${folder}" configurada como destino secundário.`,
+                              });
+                            }
+                          } catch (err) {
+                            console.error('Error selecting folder:', err);
+                            toast({
+                              title: 'Erro ao selecionar pasta',
+                              description: 'Não foi possível abrir o seletor de pastas.',
+                              variant: 'destructive',
+                            });
+                          }
+                        } else {
+                          toast({
+                            title: '🖥️ Recurso Desktop',
+                            description: 'A seleção de pasta só funciona no aplicativo desktop.',
+                            variant: 'destructive',
+                          });
+                        }
+                      }}
+                    >
+                      <FolderOpen className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Os arquivos serão copiados para esta pasta também (útil para backup ou rede)
                   </p>
                 </div>
 

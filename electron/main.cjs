@@ -1287,11 +1287,12 @@ function saveArlToDeemixConfig(arl) {
 
 // Deezer Download Handler using deemix CLI
 ipcMain.handle('download-from-deezer', async (event, params) => {
-  const { artist, title, arl, outputFolder, quality } = params;
+  const { artist, title, arl, outputFolder, outputFolder2, quality } = params;
   
   console.log(`[DEEMIX] === Starting download ===`);
   console.log(`[DEEMIX] Track: ${artist} - ${title}`);
-  console.log(`[DEEMIX] Output: ${outputFolder}`);
+  console.log(`[DEEMIX] Output 1: ${outputFolder}`);
+  console.log(`[DEEMIX] Output 2: ${outputFolder2 || '(não configurado)'}`);
   console.log(`[DEEMIX] Quality: ${quality}`);
   
   try {
@@ -1402,18 +1403,54 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
 
         console.log('[DEEMIX] Success output:', stdout);
         
-        // Verify the file was created
+        // Find the downloaded file
+        let downloadedFile = null;
         try {
           const files = fs.readdirSync(outputFolder);
           console.log(`[DEEMIX] Files in output folder: ${files.join(', ')}`);
+          
+          // Find the most recently modified file (likely the one just downloaded)
+          const recentFiles = files
+            .map(f => ({
+              name: f,
+              path: path.join(outputFolder, f),
+              stat: fs.statSync(path.join(outputFolder, f))
+            }))
+            .filter(f => f.stat.isFile() && (f.name.endsWith('.mp3') || f.name.endsWith('.flac')))
+            .sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs);
+          
+          if (recentFiles.length > 0) {
+            downloadedFile = recentFiles[0].path;
+            console.log(`[DEEMIX] Downloaded file: ${downloadedFile}`);
+          }
         } catch (e) {
           console.log('[DEEMIX] Could not list output folder:', e.message);
+        }
+        
+        // Copy to secondary folder if configured
+        if (outputFolder2 && downloadedFile) {
+          try {
+            // Ensure second folder exists
+            if (!fs.existsSync(outputFolder2)) {
+              fs.mkdirSync(outputFolder2, { recursive: true });
+              console.log(`[DEEMIX] Created secondary folder: ${outputFolder2}`);
+            }
+            
+            const fileName = path.basename(downloadedFile);
+            const destPath = path.join(outputFolder2, fileName);
+            
+            fs.copyFileSync(downloadedFile, destPath);
+            console.log(`[DEEMIX] ✓ Copied to secondary folder: ${destPath}`);
+          } catch (copyError) {
+            console.error(`[DEEMIX] ⚠ Failed to copy to secondary folder: ${copyError.message}`);
+            // Don't fail the download, just log the error
+          }
         }
         
         // Show Windows notification
         showNotification(
           '✅ Download Concluído',
-          `${track.artist.name} - ${track.title}`,
+          `${track.artist.name} - ${track.title}${outputFolder2 ? ' (2 pastas)' : ''}`,
           () => {
             shell.openPath(outputFolder);
           }
@@ -1430,7 +1467,8 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
           },
           output: stdout,
           outputFolder: outputFolder,
-          message: `Download concluído: ${track.artist.name} - ${track.title}`
+          outputFolder2: outputFolder2 || null,
+          message: `Download concluído: ${track.artist.name} - ${track.title}${outputFolder2 ? ' (salvo em 2 pastas)' : ''}`
         });
       });
     });
