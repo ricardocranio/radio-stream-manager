@@ -47,13 +47,21 @@ export function useAutoDownload() {
   // Download a single song
   const downloadSong = useCallback(async (song: MissingSong): Promise<boolean> => {
     if (!isElectron || !window.electronAPI?.downloadFromDeezer) {
-      console.log('[AUTO-DL] Skipping - not in Electron');
+      console.log('[AUTO-DL] ❌ Skipping - not in Electron environment');
       return false;
     }
 
     const state = useRadioStore.getState();
-    if (!state.deezerConfig.enabled || !state.deezerConfig.arl) {
-      console.log('[AUTO-DL] Skipping - Deezer not configured');
+    if (!state.deezerConfig.enabled) {
+      console.log('[AUTO-DL] ❌ Skipping - Deezer not enabled in config');
+      return false;
+    }
+    if (!state.deezerConfig.arl) {
+      console.log('[AUTO-DL] ❌ Skipping - No ARL token configured');
+      return false;
+    }
+    if (!state.deezerConfig.downloadFolder) {
+      console.log('[AUTO-DL] ❌ Skipping - No download folder configured');
       return false;
     }
 
@@ -117,12 +125,23 @@ export function useAutoDownload() {
 
   // Process the download queue
   const processQueue = useCallback(async () => {
-    if (isProcessingRef.current || downloadQueueRef.current.length === 0) {
+    if (isProcessingRef.current) {
+      console.log('[AUTO-DL] ⏳ Already processing queue, skipping');
+      return;
+    }
+    
+    if (downloadQueueRef.current.length === 0) {
+      console.log('[AUTO-DL] 📭 Queue is empty, nothing to process');
       return;
     }
 
     const state = useRadioStore.getState();
-    if (!state.deezerConfig.autoDownload || !state.deezerConfig.enabled) {
+    if (!state.deezerConfig.autoDownload) {
+      console.log('[AUTO-DL] ⏸️ Auto-download is disabled');
+      return;
+    }
+    if (!state.deezerConfig.enabled) {
+      console.log('[AUTO-DL] ⏸️ Deezer integration is disabled');
       return;
     }
 
@@ -164,7 +183,29 @@ export function useAutoDownload() {
 
   // Watch for new missing songs
   useEffect(() => {
-    if (!deezerConfig.autoDownload || !deezerConfig.enabled || !deezerConfig.arl) {
+    // Log current config status for debugging
+    console.log('[AUTO-DL] 📊 Config status:', {
+      autoDownload: deezerConfig.autoDownload,
+      enabled: deezerConfig.enabled,
+      hasArl: !!deezerConfig.arl,
+      hasDownloadFolder: !!deezerConfig.downloadFolder,
+      missingSongsCount: missingSongs.filter(s => s.status === 'missing').length,
+    });
+
+    if (!deezerConfig.autoDownload) {
+      console.log('[AUTO-DL] ⏸️ Auto-download is OFF');
+      return;
+    }
+    if (!deezerConfig.enabled) {
+      console.log('[AUTO-DL] ⏸️ Deezer integration is OFF');
+      return;
+    }
+    if (!deezerConfig.arl) {
+      console.log('[AUTO-DL] ⚠️ No ARL token configured - go to Settings → Deezer');
+      return;
+    }
+    if (!deezerConfig.downloadFolder) {
+      console.log('[AUTO-DL] ⚠️ No download folder configured - go to Settings → Deezer');
       return;
     }
 
@@ -181,9 +222,13 @@ export function useAutoDownload() {
         !processedSongsRef.current.has(song.id)
     );
 
+    if (newSongs.length > 0) {
+      console.log(`[AUTO-DL] 🎵 Found ${newSongs.length} new missing song(s) to download`);
+    }
+
     // Add new songs to queue
     for (const song of newSongs) {
-      console.log(`[AUTO-DL] New missing song detected: ${song.artist} - ${song.title}`);
+      console.log(`[AUTO-DL] ➕ Queuing: ${song.artist} - ${song.title}`);
       processedSongsRef.current.add(song.id);
       downloadQueueRef.current.push({
         song,
@@ -199,7 +244,8 @@ export function useAutoDownload() {
 
     // Start processing if not already
     if (downloadQueueRef.current.length > 0 && !isProcessingRef.current) {
+      console.log(`[AUTO-DL] 🚀 Starting queue processing (${downloadQueueRef.current.length} items)`);
       processQueue();
     }
-  }, [missingSongs, deezerConfig.autoDownload, deezerConfig.enabled, deezerConfig.arl, processQueue, setQueueLength]);
+  }, [missingSongs, deezerConfig.autoDownload, deezerConfig.enabled, deezerConfig.arl, deezerConfig.downloadFolder, processQueue, setQueueLength]);
 }
