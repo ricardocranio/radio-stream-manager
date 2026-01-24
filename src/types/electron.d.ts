@@ -3,7 +3,8 @@ interface DeezerDownloadParams {
   title: string;
   arl: string;
   outputFolder: string;
-  outputFolder2?: string; // Segunda pasta de download (opcional)
+  /** Segunda pasta de download (opcional) - arquivo será copiado para esta pasta também */
+  outputFolder2?: string;
   quality: 'MP3_128' | 'MP3_320' | 'FLAC';
 }
 
