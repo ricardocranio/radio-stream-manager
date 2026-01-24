@@ -16,6 +16,7 @@ import { useRadioStore, MissingSong, DownloadHistoryEntry } from '@/store/radioS
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { radioScraperApi } from '@/lib/api/radioScraper';
 import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
+import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -281,7 +282,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   }, []);
 
   const scrapeAllStations = useCallback(async (_forceRefresh = false) => {
-    const { stations, addCapturedSong, addOrUpdateRankingSong } = useRadioStore.getState();
+    const { stations, addCapturedSong, addOrUpdateRankingSong, addMissingSong, missingSongs, config } = useRadioStore.getState();
     const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl);
     
     if (enabledStations.length === 0) {
@@ -302,6 +303,67 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     let errorCount = 0;
     let newSongsCount = 0;
     const failedStations: string[] = [];
+    
+    // Helper to check if song is already in missing list
+    const isSongAlreadyMissing = (artist: string, title: string) => {
+      const normalizedArtist = artist.toLowerCase().trim();
+      const normalizedTitle = title.toLowerCase().trim();
+      return missingSongs.some(s => 
+        s.artist.toLowerCase().trim() === normalizedArtist && 
+        s.title.toLowerCase().trim() === normalizedTitle
+      );
+    };
+    
+    // Helper to process a captured song with library check
+    const processCapturedSong = async (
+      songData: { title: string; artist: string; timestamp?: string },
+      stationName: string,
+      stationStyle: string,
+      scrapeUrl: string
+    ) => {
+      const songId = `${stationName}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+      
+      // Check if song exists in music library
+      const libraryCheck = await checkSongInLibrary(
+        songData.artist, 
+        songData.title, 
+        config.musicFolders || [],
+        config.similarityThreshold || 0.75
+      );
+      
+      const existsInLibrary = libraryCheck.exists;
+      const songStatus = existsInLibrary ? 'found' : 'missing';
+      
+      // Add to captured songs
+      addCapturedSong({
+        id: songId,
+        title: songData.title,
+        artist: songData.artist,
+        station: stationName,
+        timestamp: songData.timestamp ? new Date(songData.timestamp) : new Date(),
+        status: songStatus,
+        source: scrapeUrl,
+      });
+      
+      // Update ranking
+      addOrUpdateRankingSong(songData.title, songData.artist, stationStyle);
+      
+      // If not in library AND not already in missing list, add to missing
+      if (!existsInLibrary && !isSongAlreadyMissing(songData.artist, songData.title)) {
+        addMissingSong({
+          id: `missing-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          title: songData.title,
+          artist: songData.artist,
+          station: stationName,
+          timestamp: new Date(),
+          status: 'missing',
+          dna: stationStyle,
+        });
+        console.log(`[GLOBAL-SVC] 📥 Nova música faltando: ${songData.artist} - ${songData.title}`);
+      }
+      
+      return true;
+    };
 
     const batchSize = 3;
     for (let i = 0; i < enabledStations.length; i += batchSize) {
@@ -320,33 +382,15 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
           const { stationName, nowPlaying, recentSongs, scrapeUrl } = result.value;
           const stationStyle = station.styles?.[0] || 'POP/VARIADO';
           
+          // Process nowPlaying with library check
           if (nowPlaying) {
-            addCapturedSong({
-              id: `${stationName}-${Date.now()}`,
-              title: nowPlaying.title,
-              artist: nowPlaying.artist,
-              station: stationName,
-              timestamp: new Date(),
-              status: 'found',
-              source: scrapeUrl,
-            });
-            
-            addOrUpdateRankingSong(nowPlaying.title, nowPlaying.artist, stationStyle);
+            await processCapturedSong(nowPlaying, stationName, stationStyle, scrapeUrl);
             newSongsCount++;
           }
 
+          // Process recent songs with library check
           for (const song of (recentSongs || []).slice(0, 3)) {
-            addCapturedSong({
-              id: `${stationName}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-              title: song.title,
-              artist: song.artist,
-              station: stationName,
-              timestamp: new Date(song.timestamp),
-              status: 'found',
-              source: scrapeUrl,
-            });
-            
-            addOrUpdateRankingSong(song.title, song.artist, stationStyle);
+            await processCapturedSong(song, stationName, stationStyle, scrapeUrl);
             newSongsCount++;
           }
         } else {
