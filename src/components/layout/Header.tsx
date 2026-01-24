@@ -1,6 +1,7 @@
-import { Power, RefreshCw, Clock, Sun, Moon, Layers, Zap } from 'lucide-react';
+import { Power, RefreshCw, Clock, Sun, Moon, Layers, Zap, Server, Monitor, ExternalLink } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { useUIModeStore } from '@/store/uiModeStore';
+import { useServiceModeStore } from '@/store/serviceModeStore';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -8,17 +9,47 @@ import { StatusIndicator } from '@/components/StatusIndicator';
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+
+// Check if running in Electron
+const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
 export function Header() {
   const { isRunning, setIsRunning, lastUpdate } = useRadioStore();
   const { mode, toggleMode } = useUIModeStore();
+  const { serviceMode, toggleServiceMode, isServerRunning, setServerRunning } = useServiceModeStore();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [localhostUrl, setLocalhostUrl] = useState('http://localhost:8080');
 
-  // Avoid hydration mismatch
+  // Avoid hydration mismatch and setup Electron listeners
   useEffect(() => {
     setMounted(true);
-  }, []);
+    
+    // Listen for server status updates from Electron
+    if (isElectron && window.electronAPI?.onServerStatus) {
+      window.electronAPI.onServerStatus((status) => {
+        setServerRunning(status.running);
+        setLocalhostUrl(status.url);
+      });
+    }
+    
+    // Listen for service mode changes from Electron (e.g., from tray)
+    if (isElectron && window.electronAPI?.onServiceModeChanged) {
+      window.electronAPI.onServiceModeChanged((mode) => {
+        // Sync store with Electron's mode
+        const store = useServiceModeStore.getState();
+        if (store.serviceMode !== mode) {
+          store.setServiceMode(mode);
+        }
+      });
+    }
+  }, [setServerRunning]);
 
   const handleToggle = () => {
     setIsRunning(!isRunning);
@@ -26,6 +57,18 @@ export function Header() {
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
+
+  const handleServiceModeToggle = () => {
+    if (isElectron) {
+      toggleServiceMode();
+    }
+  };
+
+  const handleOpenInBrowser = async () => {
+    if (isElectron && window.electronAPI?.openInBrowser) {
+      await window.electronAPI.openInBrowser();
+    }
   };
 
   return (
@@ -50,6 +93,65 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2 md:gap-3">
+        {/* Service Mode Toggle (Electron only) */}
+        {mounted && isElectron && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleServiceModeToggle}
+                  className={cn(
+                    "gap-2 transition-all",
+                    serviceMode === 'service' 
+                      ? "bg-blue-500/10 border-blue-500/30 text-blue-500 hover:bg-blue-500/20" 
+                      : "hover:bg-primary/10"
+                  )}
+                >
+                  {serviceMode === 'service' ? (
+                    <>
+                      <Server className="w-4 h-4" />
+                      <span className="hidden md:inline">Serviço</span>
+                    </>
+                  ) : (
+                    <>
+                      <Monitor className="w-4 h-4" />
+                      <span className="hidden md:inline">Janela</span>
+                    </>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {serviceMode === 'service' 
+                  ? 'Modo Serviço: App na bandeja, acesso via localhost:8080'
+                  : 'Clique para ativar Modo Serviço (menor consumo de RAM)'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
+        {/* Open in Browser Button (when in service mode) */}
+        {mounted && isElectron && serviceMode === 'service' && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleOpenInBrowser}
+                  className="h-9 w-9"
+                >
+                  <ExternalLink className="w-4 h-4 text-blue-500" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Abrir no navegador ({localhostUrl})
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
         {/* UI Mode Toggle */}
         {mounted && (
           <Button

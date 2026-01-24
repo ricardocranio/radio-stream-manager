@@ -136,6 +136,12 @@ interface StationConfig {
   enabled: boolean;
 }
 
+interface ServiceModeStatus {
+  running: boolean;
+  port: number;
+  url: string;
+}
+
 interface ElectronAPI {
   // App info
   getAppVersion: () => Promise<string>;
@@ -215,6 +221,14 @@ interface ElectronAPI {
   onPythonStatus: (callback: (status: { available: boolean; message: string; downloadUrl: string }) => void) => void;
   onDeemixStatus: (callback: (status: { installed: boolean; command: string | null }) => void) => void;
   getDeemixCommand: () => Promise<string | null>;
+  
+  // Service Mode (Tray + Localhost)
+  setServiceMode: (mode: 'window' | 'service') => Promise<void>;
+  getServiceMode: () => Promise<'window' | 'service'>;
+  openInBrowser: () => Promise<void>;
+  getLocalhostUrl: () => Promise<string>;
+  onServerStatus: (callback: (status: ServiceModeStatus) => void) => void;
+  onServiceModeChanged: (callback: (mode: 'window' | 'service') => void) => void;
   
   // Platform detection
   platform: string;
