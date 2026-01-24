@@ -56,85 +56,234 @@ function saveServiceSettings() {
   }
 }
 
-// Create Express server for localhost access
-function createLocalhostServer() {
-  if (localhostServer) {
-    console.log('[SERVICE] Server already running');
-    return;
-  }
+// Available fallback ports to try
+const FALLBACK_PORTS = [8080, 3000, 5173, 8000, 9000, 8888, 9090];
+let serverStartAttempts = 0;
+const MAX_SERVER_ATTEMPTS = FALLBACK_PORTS.length;
 
-  const expressApp = express();
-  const appPath = app.getAppPath();
-  const distPath = app.isPackaged ? path.join(appPath, 'dist') : path.join(__dirname, '../dist');
-
-  // Serve static files from dist folder
-  expressApp.use(express.static(distPath));
-
-  // SPA fallback - serve index.html for all routes (Express 5 syntax)
-  expressApp.get('/{*splat}', (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
-  });
-
-  localhostServer = expressApp.listen(localhostPort, '127.0.0.1', () => {
-    console.log(`[SERVICE] ✓ Localhost server running at http://127.0.0.1:${localhostPort}`);
-    
-    // Notify renderer about server status
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('server-status', {
-        running: true,
-        port: localhostPort,
-        url: `http://127.0.0.1:${localhostPort}`
-      });
-    }
-    
-    // Update tray tooltip
-    if (tray) {
-      tray.setToolTip(`Programador Rádio - Serviço ativo em localhost:${localhostPort}`);
-    }
-  });
-
-  localhostServer.on('error', (error) => {
-    console.error('[SERVICE] Server error:', error);
-    if (error.code === 'EADDRINUSE') {
-      console.log(`[SERVICE] Port ${localhostPort} is in use, trying to open existing...`);
-      shell.openExternal(`http://127.0.0.1:${localhostPort}`);
-    }
-  });
-}
-
-function stopLocalhostServer() {
-  if (localhostServer) {
-    localhostServer.close(() => {
-      console.log('[SERVICE] Localhost server stopped');
-      localhostServer = null;
+// Notify renderer about server errors
+function notifyServerError(errorType, details) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('server-status', {
+      running: false,
+      error: true,
+      errorType,
+      details,
+      port: localhostPort
     });
   }
 }
 
+// Show friendly error notification
+function showServerErrorNotification(title, message) {
+  showNotification(title, message);
+  console.error(`[SERVICE] ${title}: ${message}`);
+}
+
+// Create Express server for localhost access with robust error handling
+function createLocalhostServer(attemptPort = null) {
+  if (localhostServer) {
+    console.log('[SERVICE] Server already running');
+    return Promise.resolve({ success: true, port: localhostPort });
+  }
+
+  const portToTry = attemptPort || localhostPort;
+  
+  return new Promise((resolve) => {
+    const expressApp = express();
+    const appPath = app.getAppPath();
+    const distPath = app.isPackaged ? path.join(appPath, 'dist') : path.join(__dirname, '../dist');
+
+    // Check if dist folder exists
+    if (!fs.existsSync(distPath)) {
+      const errorMsg = `Pasta de distribuição não encontrada: ${distPath}`;
+      console.error(`[SERVICE] ${errorMsg}`);
+      showServerErrorNotification('❌ Erro de Inicialização', errorMsg);
+      notifyServerError('DIST_NOT_FOUND', errorMsg);
+      resolve({ success: false, error: 'DIST_NOT_FOUND', message: errorMsg });
+      return;
+    }
+
+    // Check if index.html exists
+    const indexPath = path.join(distPath, 'index.html');
+    if (!fs.existsSync(indexPath)) {
+      const errorMsg = 'Arquivo index.html não encontrado. Execute o build primeiro.';
+      console.error(`[SERVICE] ${errorMsg}`);
+      showServerErrorNotification('❌ Erro de Build', errorMsg);
+      notifyServerError('INDEX_NOT_FOUND', errorMsg);
+      resolve({ success: false, error: 'INDEX_NOT_FOUND', message: errorMsg });
+      return;
+    }
+
+    // Serve static files from dist folder
+    expressApp.use(express.static(distPath));
+
+    // Health check endpoint
+    expressApp.get('/api/health', (req, res) => {
+      res.json({ 
+        status: 'ok', 
+        port: portToTry, 
+        uptime: process.uptime(),
+        memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB'
+      });
+    });
+
+    // SPA fallback - serve index.html for all routes (Express 5 syntax)
+    expressApp.get('/{*splat}', (req, res) => {
+      res.sendFile(indexPath);
+    });
+
+    // Error handling middleware
+    expressApp.use((err, req, res, next) => {
+      console.error('[SERVICE] Express error:', err);
+      res.status(500).json({ 
+        error: 'Erro interno do servidor',
+        message: err.message 
+      });
+    });
+
+    const server = expressApp.listen(portToTry, '127.0.0.1', () => {
+      console.log(`[SERVICE] ✓ Localhost server running at http://127.0.0.1:${portToTry}`);
+      localhostServer = server;
+      localhostPort = portToTry;
+      serverStartAttempts = 0; // Reset attempts on success
+      
+      // Save the successful port
+      saveServiceSettings();
+      
+      // Notify renderer about server status
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('server-status', {
+          running: true,
+          port: portToTry,
+          url: `http://127.0.0.1:${portToTry}`
+        });
+      }
+      
+      // Update tray tooltip
+      if (tray) {
+        tray.setToolTip(`Programador Rádio - Serviço ativo em localhost:${portToTry}`);
+      }
+      
+      resolve({ success: true, port: portToTry });
+    });
+
+    server.on('error', (error) => {
+      console.error(`[SERVICE] Server error on port ${portToTry}:`, error.code);
+      
+      if (error.code === 'EADDRINUSE') {
+        serverStartAttempts++;
+        console.log(`[SERVICE] Port ${portToTry} is in use (attempt ${serverStartAttempts}/${MAX_SERVER_ATTEMPTS})`);
+        
+        if (serverStartAttempts < MAX_SERVER_ATTEMPTS) {
+          // Find next available port to try
+          const currentIndex = FALLBACK_PORTS.indexOf(portToTry);
+          const nextPort = FALLBACK_PORTS[(currentIndex + 1) % FALLBACK_PORTS.length];
+          
+          console.log(`[SERVICE] Trying fallback port: ${nextPort}`);
+          showNotification(
+            '⚠️ Porta em Uso',
+            `Porta ${portToTry} ocupada. Tentando ${nextPort}...`
+          );
+          
+          // Try next port
+          createLocalhostServer(nextPort).then(resolve);
+        } else {
+          // All ports failed
+          const errorMsg = `Todas as portas estão em uso: ${FALLBACK_PORTS.join(', ')}`;
+          showServerErrorNotification('❌ Erro de Conexão', errorMsg);
+          notifyServerError('ALL_PORTS_IN_USE', errorMsg);
+          serverStartAttempts = 0;
+          resolve({ success: false, error: 'ALL_PORTS_IN_USE', message: errorMsg });
+        }
+      } else if (error.code === 'EACCES') {
+        const errorMsg = `Sem permissão para usar porta ${portToTry}. Tente executar como administrador.`;
+        showServerErrorNotification('❌ Erro de Permissão', errorMsg);
+        notifyServerError('PERMISSION_DENIED', errorMsg);
+        resolve({ success: false, error: 'PERMISSION_DENIED', message: errorMsg });
+      } else {
+        const errorMsg = `Erro ao iniciar servidor: ${error.message}`;
+        showServerErrorNotification('❌ Erro do Servidor', errorMsg);
+        notifyServerError('SERVER_ERROR', errorMsg);
+        resolve({ success: false, error: 'SERVER_ERROR', message: errorMsg });
+      }
+    });
+
+    // Handle server close
+    server.on('close', () => {
+      console.log('[SERVICE] Server closed');
+      localhostServer = null;
+    });
+  });
+}
+
+function stopLocalhostServer() {
+  return new Promise((resolve) => {
+    if (localhostServer) {
+      localhostServer.close((err) => {
+        if (err) {
+          console.error('[SERVICE] Error stopping server:', err);
+        } else {
+          console.log('[SERVICE] Localhost server stopped');
+        }
+        localhostServer = null;
+        resolve();
+      });
+      
+      // Force close after timeout
+      setTimeout(() => {
+        if (localhostServer) {
+          console.log('[SERVICE] Force closing server...');
+          localhostServer = null;
+          resolve();
+        }
+      }, 3000);
+    } else {
+      resolve();
+    }
+  });
+}
+
 // Switch to service mode (minimize to tray + open browser)
-function activateServiceMode() {
+async function activateServiceMode() {
   serviceMode = 'service';
   console.log('[SERVICE] Activating service mode...');
   
-  // Start localhost server
-  createLocalhostServer();
+  // Start localhost server with fallback ports
+  const result = await createLocalhostServer();
   
-  // Wait a moment for server to start, then open browser and hide window
-  setTimeout(() => {
-    shell.openExternal(`http://127.0.0.1:${localhostPort}`);
+  if (result.success) {
+    // Open browser and hide window
+    shell.openExternal(`http://127.0.0.1:${result.port}`);
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.hide();
     }
     
-    // Show notification
+    // Show success notification
     showNotification(
       '🔧 Modo Serviço Ativado',
-      `Acesse via http://localhost:${localhostPort} - App minimizado na bandeja`
+      `Acesse via http://localhost:${result.port} - App minimizado na bandeja`
     );
     
     // Update tray menu
     updateTrayMenu();
-  }, 1000);
+  } else {
+    // Server failed to start, revert to window mode
+    serviceMode = 'window';
+    console.error('[SERVICE] Failed to start server, staying in window mode');
+    
+    showNotification(
+      '❌ Erro ao Ativar Modo Serviço',
+      result.message || 'Não foi possível iniciar o servidor local'
+    );
+    
+    // Keep window visible
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+    }
+    
+    updateTrayMenu();
+  }
 }
 
 // Switch back to window mode
@@ -843,7 +992,7 @@ app.on('before-quit', () => {
 // Set service mode
 ipcMain.handle('set-service-mode', async (event, mode) => {
   if (mode === 'service') {
-    activateServiceMode();
+    await activateServiceMode();
   } else {
     activateWindowMode();
   }
@@ -859,14 +1008,25 @@ ipcMain.handle('get-service-mode', () => {
   return serviceMode;
 });
 
-// Open in browser (localhost)
+// Open in browser (localhost) with robust error handling
 ipcMain.handle('open-in-browser', async () => {
-  // Ensure server is running
-  if (!localhostServer) {
-    createLocalhostServer();
-    await new Promise(resolve => setTimeout(resolve, 500));
+  try {
+    // Ensure server is running
+    if (!localhostServer) {
+      const result = await createLocalhostServer();
+      if (!result.success) {
+        return { success: false, error: result.error, message: result.message };
+      }
+    }
+    
+    // Open in default browser
+    await shell.openExternal(`http://127.0.0.1:${localhostPort}`);
+    return { success: true, port: localhostPort, url: `http://127.0.0.1:${localhostPort}` };
+  } catch (error) {
+    console.error('[SERVICE] Error opening browser:', error);
+    showNotification('❌ Erro', `Não foi possível abrir o navegador: ${error.message}`);
+    return { success: false, error: 'BROWSER_ERROR', message: error.message };
   }
-  shell.openExternal(`http://127.0.0.1:${localhostPort}`);
 });
 
 // Get localhost URL

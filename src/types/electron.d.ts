@@ -140,6 +140,17 @@ interface ServiceModeStatus {
   running: boolean;
   port: number;
   url: string;
+  error?: boolean;
+  errorType?: string;
+  details?: string;
+}
+
+interface OpenBrowserResult {
+  success: boolean;
+  port?: number;
+  url?: string;
+  error?: string;
+  message?: string;
 }
 
 interface ElectronAPI {
@@ -225,7 +236,7 @@ interface ElectronAPI {
   // Service Mode (Tray + Localhost)
   setServiceMode: (mode: 'window' | 'service') => Promise<void>;
   getServiceMode: () => Promise<'window' | 'service'>;
-  openInBrowser: () => Promise<void>;
+  openInBrowser: () => Promise<OpenBrowserResult>;
   getLocalhostUrl: () => Promise<string>;
   setLocalhostPort: (port: number) => Promise<void>;
   setAutoStartServiceMode: (enabled: boolean) => Promise<void>;
