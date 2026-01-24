@@ -1,4 +1,4 @@
-import { Globe, Monitor, Download, Save, FolderOpen, CheckCircle2, Info, Server, Loader2 } from 'lucide-react';
+import { Globe, Monitor, Download, Save, FolderOpen, CheckCircle2, Info, Server, Loader2, ExternalLink } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+// Removed duplicate isElectron declaration - now at top
 
 // Check if Electron backend is available (service mode)
 async function checkServiceMode(): Promise<boolean> {
@@ -168,12 +169,39 @@ export function BrowserModeBanner() {
                 </>
               )}
             </div>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1">
-                <Info className="w-3.5 h-3.5" />
-                {isOpen ? 'Ocultar' : 'Ver detalhes'}
-              </Button>
-            </CollapsibleTrigger>
+            <div className="flex items-center gap-2">
+              {/* Button to open desktop version */}
+              {!serviceMode && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-7 px-2 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                        onClick={() => {
+                          // Try to trigger desktop app or show instructions
+                          const desktopUrl = 'pgmr://open';
+                          window.open(desktopUrl, '_blank');
+                        }}
+                      >
+                        <Monitor className="w-3.5 h-3.5" />
+                        Abrir Desktop
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[280px]">
+                      <p className="text-xs">Abre a versão desktop do aplicativo com todas as funcionalidades</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1">
+                  <Info className="w-3.5 h-3.5" />
+                  {isOpen ? 'Ocultar' : 'Ver detalhes'}
+                </Button>
+              </CollapsibleTrigger>
+            </div>
           </div>
 
           <CollapsibleContent className="mt-3 space-y-2">

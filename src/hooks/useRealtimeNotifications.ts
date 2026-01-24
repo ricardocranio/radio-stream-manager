@@ -1,8 +1,9 @@
 import { useEffect, useRef, useCallback, useId } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { useRadioStore } from '@/store/radioStore';
+import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { realtimeManager } from '@/lib/realtimeManager';
 import { rankingBatcher } from '@/lib/rankingBatcher';
+import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
 
 interface NotificationOptions {
   enableBrowserNotifications?: boolean;
@@ -13,7 +14,7 @@ interface NotificationOptions {
 
 export function useRealtimeNotifications(options: NotificationOptions = {}) {
   const { toast } = useToast();
-  const { applyRankingBatch } = useRadioStore();
+  const { applyRankingBatch, config, missingSongs, addMissingSong } = useRadioStore();
   const lastSongIdRef = useRef<string | null>(null);
   const notificationPermissionRef = useRef<NotificationPermission>('default');
   const subscriberId = useId();
@@ -25,6 +26,16 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
     onNewSong,
     onRankingUpdate,
   } = options;
+
+  // Helper to check if song is already in missing list
+  const isSongAlreadyMissing = useCallback((artist: string, title: string) => {
+    const normalizedArtist = artist.toLowerCase().trim();
+    const normalizedTitle = title.toLowerCase().trim();
+    return missingSongs.some(s => 
+      s.artist.toLowerCase().trim() === normalizedArtist && 
+      s.title.toLowerCase().trim() === normalizedTitle
+    );
+  }, [missingSongs]);
 
   // Initialize ranking batcher once
   useEffect(() => {
@@ -93,7 +104,7 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
     const unsubscribe = realtimeManager.subscribe(
       'scraped_songs',
       `notifications_${subscriberId}`,
-      (payload) => {
+      async (payload) => {
         const newSong = payload.new as {
           id: string;
           title: string;
@@ -134,11 +145,44 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
         // Use batcher instead of direct update
         rankingBatcher.queueUpdate(newSong.title, newSong.artist, style);
         onRankingUpdate?.(1);
+
+        // ============= CHECK MUSIC LIBRARY AND ADD TO MISSING IF NEEDED =============
+        // This is the critical integration: verify if captured song exists locally
+        try {
+          const musicFolders = config?.musicFolders || [];
+          const threshold = config?.similarityThreshold || 0.75;
+          
+          if (musicFolders.length > 0) {
+            const libraryCheck = await checkSongInLibrary(
+              newSong.artist,
+              newSong.title,
+              musicFolders,
+              threshold
+            );
+            
+            // If not found in library AND not already in missing list, add to missing
+            if (!libraryCheck.exists && !isSongAlreadyMissing(newSong.artist, newSong.title)) {
+              const missingSongEntry: MissingSong = {
+                id: `missing-rt-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                title: newSong.title,
+                artist: newSong.artist,
+                station: newSong.station_name,
+                timestamp: new Date(),
+                status: 'missing',
+                dna: style,
+              };
+              addMissingSong(missingSongEntry);
+              console.log(`[REALTIME] 📥 Nova música faltando detectada: ${newSong.artist} - ${newSong.title}`);
+            }
+          }
+        } catch (error) {
+          console.warn('[REALTIME] Erro ao verificar música no banco:', error);
+        }
       }
     );
 
     return unsubscribe;
-  }, [subscriberId, showToastNotification, showBrowserNotification, onNewSong, onRankingUpdate]);
+  }, [subscriberId, showToastNotification, showBrowserNotification, onNewSong, onRankingUpdate, config, isSongAlreadyMissing, addMissingSong]);
 
   // Request notification permission manually
   const requestPermission = useCallback(async () => {
