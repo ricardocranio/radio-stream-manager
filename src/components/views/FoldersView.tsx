@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Folder, FolderPlus, Trash2, Save, HardDrive } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Folder, FolderPlus, Trash2, Save, HardDrive, CheckCircle } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,11 +11,59 @@ export function FoldersView() {
   const { config, setConfig } = useRadioStore();
   const { toast } = useToast();
   const [localConfig, setLocalConfig] = useState(config);
+  const [isSaved, setIsSaved] = useState(true);
+  
+  // Track if initial load is complete to avoid auto-save on mount
+  const isInitialMount = useRef(true);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-save localConfig when it changes (with debounce)
+  const autoSaveConfig = useCallback(() => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    setIsSaved(false);
+    
+    saveTimeoutRef.current = setTimeout(() => {
+      setConfig(localConfig);
+      setIsSaved(true);
+      console.log('[FOLDERS] ✓ Auto-saved paths:', {
+        gradeFolder: localConfig.gradeFolder,
+        contentFolder: localConfig.contentFolder,
+      });
+    }, 800); // 800ms debounce
+  }, [localConfig, setConfig]);
+
+  useEffect(() => {
+    // Skip auto-save on initial mount
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
+    autoSaveConfig();
+    
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [localConfig, autoSaveConfig]);
+
+  // Sync localConfig when store config changes externally
+  useEffect(() => {
+    setLocalConfig(config);
+  }, [config]);
 
   const handleSave = () => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
     setConfig(localConfig);
+    setIsSaved(true);
     toast({
-      title: 'Configurações salvas',
+      title: '✓ Configurações salvas',
       description: 'Os caminhos das pastas foram atualizados.',
     });
   };
@@ -46,7 +94,16 @@ export function FoldersView() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="min-w-0">
           <h2 className="text-2xl font-bold text-foreground">Pastas e Arquivos</h2>
-          <p className="text-muted-foreground text-sm">Configure os caminhos das pastas do sistema</p>
+          <p className="text-muted-foreground text-sm">
+            Configure os caminhos das pastas do sistema
+            {isSaved ? (
+              <span className="text-emerald-500 ml-2 inline-flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" /> Salvo
+              </span>
+            ) : (
+              <span className="text-amber-500 ml-2">Salvando...</span>
+            )}
+          </p>
         </div>
         <Button size="sm" onClick={handleSave} className="shrink-0">
           <Save className="w-4 h-4 sm:mr-2" />
