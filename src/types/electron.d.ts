@@ -1,11 +1,9 @@
-/** Parâmetros para download via Deezer/deemix */
 interface DeezerDownloadParams {
   artist: string;
   title: string;
   arl: string;
   outputFolder: string;
-  /** Segunda pasta de download (opcional) - arquivo será copiado automaticamente */
-  outputFolder2?: string;
+  outputFolder2?: string; // Segunda pasta de download (opcional)
   quality: 'MP3_128' | 'MP3_320' | 'FLAC';
 }
 
