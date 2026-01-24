@@ -18,10 +18,10 @@ interface ServiceModeState {
 export const useServiceModeStore = create<ServiceModeState>()(
   persist(
     (set, get) => ({
-      serviceMode: 'window',
+      serviceMode: 'service', // Default: service mode for lightweight operation
       localhostPort: 8080,
       isServerRunning: false,
-      autoStartServiceMode: false,
+      autoStartServiceMode: true, // Default: start minimized in tray
       
       setServiceMode: (mode) => set({ serviceMode: mode }),
       setServerRunning: (running) => set({ isServerRunning: running }),
