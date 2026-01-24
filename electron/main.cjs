@@ -4,6 +4,7 @@ const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
+const express = require('express');
 
 // Auto-updater (only in packaged app)
 let autoUpdater = null;
@@ -20,6 +21,159 @@ let scrapedSongsCache = new Map();
 
 let mainWindow;
 let tray = null;
+
+// =============== SERVICE MODE (TRAY + LOCALHOST) ===============
+let serviceMode = 'window'; // 'window' or 'service'
+let localhostServer = null;
+const LOCALHOST_PORT = 8080;
+
+// Create Express server for localhost access
+function createLocalhostServer() {
+  if (localhostServer) {
+    console.log('[SERVICE] Server already running');
+    return;
+  }
+
+  const expressApp = express();
+  const appPath = app.getAppPath();
+  const distPath = app.isPackaged ? path.join(appPath, 'dist') : path.join(__dirname, '../dist');
+
+  // Serve static files from dist folder
+  expressApp.use(express.static(distPath));
+
+  // SPA fallback - serve index.html for all routes
+  expressApp.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+
+  localhostServer = expressApp.listen(LOCALHOST_PORT, '127.0.0.1', () => {
+    console.log(`[SERVICE] ✓ Localhost server running at http://127.0.0.1:${LOCALHOST_PORT}`);
+    
+    // Notify renderer about server status
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('server-status', {
+        running: true,
+        port: LOCALHOST_PORT,
+        url: `http://127.0.0.1:${LOCALHOST_PORT}`
+      });
+    }
+    
+    // Update tray tooltip
+    if (tray) {
+      tray.setToolTip(`Programador Rádio - Serviço ativo em localhost:${LOCALHOST_PORT}`);
+    }
+  });
+
+  localhostServer.on('error', (error) => {
+    console.error('[SERVICE] Server error:', error);
+    if (error.code === 'EADDRINUSE') {
+      console.log(`[SERVICE] Port ${LOCALHOST_PORT} is in use, trying to open existing...`);
+      shell.openExternal(`http://127.0.0.1:${LOCALHOST_PORT}`);
+    }
+  });
+}
+
+function stopLocalhostServer() {
+  if (localhostServer) {
+    localhostServer.close(() => {
+      console.log('[SERVICE] Localhost server stopped');
+      localhostServer = null;
+    });
+  }
+}
+
+// Switch to service mode (minimize to tray + open browser)
+function activateServiceMode() {
+  serviceMode = 'service';
+  console.log('[SERVICE] Activating service mode...');
+  
+  // Start localhost server
+  createLocalhostServer();
+  
+  // Wait a moment for server to start, then open browser and hide window
+  setTimeout(() => {
+    shell.openExternal(`http://127.0.0.1:${LOCALHOST_PORT}`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.hide();
+    }
+    
+    // Show notification
+    showNotification(
+      '🔧 Modo Serviço Ativado',
+      `Acesse via http://localhost:${LOCALHOST_PORT} - App minimizado na bandeja`
+    );
+    
+    // Update tray menu
+    updateTrayMenu();
+  }, 1000);
+}
+
+// Switch back to window mode
+function activateWindowMode() {
+  serviceMode = 'window';
+  console.log('[SERVICE] Activating window mode...');
+  
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  
+  // Update tray menu
+  updateTrayMenu();
+  
+  // Note: We keep the server running so users can still access via browser if they want
+}
+
+// Update tray context menu based on current mode
+function updateTrayMenu() {
+  if (!tray) return;
+  
+  const isService = serviceMode === 'service';
+  
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: isService ? '🌐 Abrir no Navegador' : 'Abrir Programador',
+      click: () => {
+        if (isService) {
+          shell.openExternal(`http://127.0.0.1:${LOCALHOST_PORT}`);
+        } else {
+          mainWindow.show();
+        }
+      },
+    },
+    {
+      label: isService ? '🖥️ Voltar para Janela' : '🔧 Modo Serviço',
+      click: () => {
+        if (isService) {
+          activateWindowMode();
+        } else {
+          activateServiceMode();
+        }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: isService ? `Status: Serviço (porta ${LOCALHOST_PORT})` : 'Status: Janela',
+      enabled: false,
+    },
+    {
+      label: `RAM: ~${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`,
+      enabled: false,
+    },
+    { type: 'separator' },
+    {
+      label: 'Sair',
+      click: () => {
+        stopLocalhostServer();
+        app.isQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
+
+  tray.setContextMenu(contextMenu);
+  tray.setToolTip(`Programador Rádio - ${isService ? 'Serviço' : 'Janela'} v${app.getVersion()}`);
+}
 
 // Prevent multiple instances
 const gotTheLock = app.requestSingleInstanceLock();
@@ -375,32 +529,23 @@ function createTray() {
   const iconPath = path.join(__dirname, '../public/favicon.ico');
   tray = new Tray(iconPath);
   
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Abrir Programador',
-      click: () => {
-        mainWindow.show();
-      },
-    },
-    {
-      label: 'Status: Ativo',
-      enabled: false,
-    },
-    { type: 'separator' },
-    {
-      label: 'Sair',
-      click: () => {
-        app.isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
+  // Use updateTrayMenu for consistent menu across modes
+  updateTrayMenu();
 
-  tray.setToolTip(`Programador Rádio - v${app.getVersion()}`);
-  tray.setContextMenu(contextMenu);
-
+  // Double-click: open browser in service mode, show window in window mode
+  tray.on('double-click', () => {
+    if (serviceMode === 'service') {
+      shell.openExternal(`http://127.0.0.1:${LOCALHOST_PORT}`);
+    } else {
+      mainWindow.show();
+    }
+  });
+  
+  // Single click: show window
   tray.on('click', () => {
-    mainWindow.show();
+    if (serviceMode === 'window') {
+      mainWindow.show();
+    }
   });
 }
 
@@ -648,7 +793,44 @@ app.on('window-all-closed', () => {
 
 // Before quit
 app.on('before-quit', () => {
+  stopLocalhostServer();
   app.isQuitting = true;
+});
+
+// =============== SERVICE MODE IPC HANDLERS ===============
+
+// Set service mode
+ipcMain.handle('set-service-mode', async (event, mode) => {
+  if (mode === 'service') {
+    activateServiceMode();
+  } else {
+    activateWindowMode();
+  }
+  
+  // Notify renderer about mode change
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('service-mode-changed', mode);
+  }
+});
+
+// Get current service mode
+ipcMain.handle('get-service-mode', () => {
+  return serviceMode;
+});
+
+// Open in browser (localhost)
+ipcMain.handle('open-in-browser', async () => {
+  // Ensure server is running
+  if (!localhostServer) {
+    createLocalhostServer();
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  shell.openExternal(`http://127.0.0.1:${LOCALHOST_PORT}`);
+});
+
+// Get localhost URL
+ipcMain.handle('get-localhost-url', () => {
+  return `http://127.0.0.1:${LOCALHOST_PORT}`;
 });
 
 // IPC Handlers for communication with renderer
