@@ -5,6 +5,7 @@ import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConf
 export interface DeezerConfig {
   arl: string;
   downloadFolder: string;
+  downloadFolder2: string; // Segunda pasta de download (opcional)
   quality: 'MP3_128' | 'MP3_320' | 'FLAC';
   enabled: boolean;
   autoDownload: boolean;
@@ -307,6 +308,7 @@ const defaultConfig: SystemConfig = {
 const defaultDeezerConfig: DeezerConfig = {
   arl: '', // User must provide their own ARL token via Settings
   downloadFolder: 'C:\\Playlist\\Downloads',
+  downloadFolder2: '', // Segunda pasta vazia por padrão
   quality: 'MP3_320',
   enabled: true,
   autoDownload: true, // ENABLED by default - downloads start immediately when songs are missing
