@@ -25,7 +25,8 @@ let tray = null;
 // =============== SERVICE MODE (TRAY + LOCALHOST) ===============
 let serviceMode = 'window'; // 'window' or 'service'
 let localhostServer = null;
-const LOCALHOST_PORT = 8080;
+let localhostPort = 8080; // Configurable port
+let autoStartServiceMode = false; // Start in service mode on launch
 
 // Create Express server for localhost access
 function createLocalhostServer() {
@@ -46,29 +47,29 @@ function createLocalhostServer() {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 
-  localhostServer = expressApp.listen(LOCALHOST_PORT, '127.0.0.1', () => {
-    console.log(`[SERVICE] ✓ Localhost server running at http://127.0.0.1:${LOCALHOST_PORT}`);
+  localhostServer = expressApp.listen(localhostPort, '127.0.0.1', () => {
+    console.log(`[SERVICE] ✓ Localhost server running at http://127.0.0.1:${localhostPort}`);
     
     // Notify renderer about server status
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('server-status', {
         running: true,
-        port: LOCALHOST_PORT,
-        url: `http://127.0.0.1:${LOCALHOST_PORT}`
+        port: localhostPort,
+        url: `http://127.0.0.1:${localhostPort}`
       });
     }
     
     // Update tray tooltip
     if (tray) {
-      tray.setToolTip(`Programador Rádio - Serviço ativo em localhost:${LOCALHOST_PORT}`);
+      tray.setToolTip(`Programador Rádio - Serviço ativo em localhost:${localhostPort}`);
     }
   });
 
   localhostServer.on('error', (error) => {
     console.error('[SERVICE] Server error:', error);
     if (error.code === 'EADDRINUSE') {
-      console.log(`[SERVICE] Port ${LOCALHOST_PORT} is in use, trying to open existing...`);
-      shell.openExternal(`http://127.0.0.1:${LOCALHOST_PORT}`);
+      console.log(`[SERVICE] Port ${localhostPort} is in use, trying to open existing...`);
+      shell.openExternal(`http://127.0.0.1:${localhostPort}`);
     }
   });
 }
@@ -830,7 +831,24 @@ ipcMain.handle('open-in-browser', async () => {
 
 // Get localhost URL
 ipcMain.handle('get-localhost-url', () => {
-  return `http://127.0.0.1:${LOCALHOST_PORT}`;
+  return `http://127.0.0.1:${localhostPort}`;
+});
+
+// Set localhost port
+ipcMain.handle('set-localhost-port', (event, port) => {
+  localhostPort = port;
+  console.log(`[SERVICE] Port changed to ${port}`);
+});
+
+// Set auto-start service mode
+ipcMain.handle('set-auto-start-service-mode', (event, enabled) => {
+  autoStartServiceMode = enabled;
+  console.log(`[SERVICE] Auto-start service mode: ${enabled}`);
+});
+
+// Get auto-start service mode
+ipcMain.handle('get-auto-start-service-mode', () => {
+  return autoStartServiceMode;
 });
 
 // IPC Handlers for communication with renderer

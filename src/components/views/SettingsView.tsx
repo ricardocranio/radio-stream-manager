@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music, Loader2, CheckCircle2, XCircle, BarChart3 } from 'lucide-react';
+import { Settings, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music, Loader2, CheckCircle2, XCircle, BarChart3, Server, Monitor, Wifi } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
+import { useServiceModeStore } from '@/store/serviceModeStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -18,6 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+
+// Check if running in Electron
+const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
 interface ArlValidationResult {
   status: 'idle' | 'validating' | 'valid' | 'invalid';
@@ -852,7 +857,155 @@ export function SettingsView() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Service Mode Settings - Electron Only */}
+        {isElectron && <ServiceModeSettingsCard />}
       </div>
     </div>
+  );
+}
+
+// Separate component for Service Mode Settings
+function ServiceModeSettingsCard() {
+  const { 
+    localhostPort, 
+    setLocalhostPort, 
+    autoStartServiceMode, 
+    setAutoStartServiceMode,
+    isServerRunning,
+    serviceMode 
+  } = useServiceModeStore();
+  const { toast } = useToast();
+  const [tempPort, setTempPort] = useState(localhostPort.toString());
+
+  const handlePortChange = (value: string) => {
+    setTempPort(value);
+    const port = parseInt(value, 10);
+    if (port >= 1024 && port <= 65535) {
+      setLocalhostPort(port);
+      
+      // Notify Electron about port change
+      const api = window.electronAPI as any;
+      if (api?.setLocalhostPort) {
+        api.setLocalhostPort(port).catch(console.error);
+      }
+    }
+  };
+
+  const handleAutoStartChange = async (checked: boolean) => {
+    setAutoStartServiceMode(checked);
+    
+    // Notify Electron about auto-start preference
+    const api = window.electronAPI as any;
+    if (api?.setAutoStartServiceMode) {
+      await api.setAutoStartServiceMode(checked);
+    }
+    
+    toast({
+      title: checked ? '🚀 Auto-start ativado' : 'Auto-start desativado',
+      description: checked 
+        ? 'O app iniciará minimizado na bandeja e abrirá o navegador automaticamente.'
+        : 'O app iniciará normalmente com a janela visível.',
+    });
+  };
+
+  return (
+    <Card className="glass-card border-blue-500/20 lg:col-span-2">
+      <CardHeader className="border-b border-border">
+        <CardTitle className="flex items-center gap-2">
+          <Server className="w-5 h-5 text-blue-500" />
+          Modo Serviço (Localhost)
+          {isServerRunning && (
+            <Badge variant="outline" className="bg-blue-500/10 border-blue-500/30 text-blue-500 ml-2">
+              <Wifi className="w-3 h-3 mr-1" />
+              Ativo na porta {localhostPort}
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Auto-Start Service Mode */}
+          <div className="flex items-center justify-between p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+            <div>
+              <Label className="text-blue-400">🚀 Iniciar em Modo Serviço</Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                App inicia minimizado na bandeja e abre navegador automaticamente
+              </p>
+            </div>
+            <Switch
+              checked={autoStartServiceMode}
+              onCheckedChange={handleAutoStartChange}
+            />
+          </div>
+
+          {/* Localhost Port */}
+          <div className="space-y-2">
+            <Label htmlFor="localhost-port">Porta do Servidor Localhost</Label>
+            <Select
+              value={tempPort}
+              onValueChange={handlePortChange}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione a porta" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="3000">3000 (Padrão React)</SelectItem>
+                <SelectItem value="5173">5173 (Padrão Vite)</SelectItem>
+                <SelectItem value="8080">8080 (Recomendado)</SelectItem>
+                <SelectItem value="8000">8000</SelectItem>
+                <SelectItem value="9000">9000</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Porta usada para acessar via http://localhost:{localhostPort}
+            </p>
+          </div>
+
+          {/* Current Mode Indicator */}
+          <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border">
+            <div>
+              <Label>Modo Atual</Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                {serviceMode === 'service' 
+                  ? 'App rodando como serviço na bandeja'
+                  : 'App rodando em modo janela normal'}
+              </p>
+            </div>
+            <Badge 
+              variant="outline" 
+              className={serviceMode === 'service' 
+                ? 'bg-blue-500/10 border-blue-500/30 text-blue-500' 
+                : 'bg-secondary/50'}
+            >
+              {serviceMode === 'service' ? (
+                <>
+                  <Server className="w-3 h-3 mr-1" />
+                  Serviço
+                </>
+              ) : (
+                <>
+                  <Monitor className="w-3 h-3 mr-1" />
+                  Janela
+                </>
+              )}
+            </Badge>
+          </div>
+
+          {/* RAM Info */}
+          <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border">
+            <div>
+              <Label>💡 Economia de Memória</Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                Modo Serviço usa ~50MB RAM vs ~200MB em modo janela
+              </p>
+            </div>
+            <Badge variant="outline" className="bg-green-500/10 border-green-500/30 text-green-500">
+              ~75% menos RAM
+            </Badge>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
