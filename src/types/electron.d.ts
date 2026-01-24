@@ -227,6 +227,9 @@ interface ElectronAPI {
   getServiceMode: () => Promise<'window' | 'service'>;
   openInBrowser: () => Promise<void>;
   getLocalhostUrl: () => Promise<string>;
+  setLocalhostPort: (port: number) => Promise<void>;
+  setAutoStartServiceMode: (enabled: boolean) => Promise<void>;
+  getAutoStartServiceMode: () => Promise<boolean>;
   onServerStatus: (callback: (status: ServiceModeStatus) => void) => void;
   onServiceModeChanged: (callback: (mode: 'window' | 'service') => void) => void;
   

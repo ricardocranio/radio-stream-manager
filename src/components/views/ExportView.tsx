@@ -155,7 +155,7 @@ export function ExportView() {
 
   // Get day code for current day
   const getDayCode = () => {
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'sáb'];
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
     return days[new Date().getDay()];
   };
 

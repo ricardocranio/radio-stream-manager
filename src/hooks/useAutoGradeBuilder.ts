@@ -104,7 +104,7 @@ export function useAutoGradeBuilder() {
 
   // Get day code for filename
   const getDayCode = useCallback(() => {
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
     return days[new Date().getDay()];
   }, []);
 

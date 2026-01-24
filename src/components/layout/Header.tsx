@@ -1,4 +1,4 @@
-import { Power, RefreshCw, Clock, Sun, Moon, Layers, Zap, Server, Monitor, ExternalLink } from 'lucide-react';
+import { Power, RefreshCw, Clock, Sun, Moon, Layers, Zap, Server, Monitor, ExternalLink, Wifi, WifiOff } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { useUIModeStore } from '@/store/uiModeStore';
 import { useServiceModeStore } from '@/store/serviceModeStore';
@@ -15,6 +15,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { Badge } from '@/components/ui/badge';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -22,10 +23,10 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 export function Header() {
   const { isRunning, setIsRunning, lastUpdate } = useRadioStore();
   const { mode, toggleMode } = useUIModeStore();
-  const { serviceMode, toggleServiceMode, isServerRunning, setServerRunning } = useServiceModeStore();
+  const { serviceMode, toggleServiceMode, isServerRunning, setServerRunning, localhostPort } = useServiceModeStore();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [localhostUrl, setLocalhostUrl] = useState('http://localhost:8080');
+  const [serverUrl, setServerUrl] = useState(`http://localhost:${localhostPort}`);
 
   // Avoid hydration mismatch and setup Electron listeners
   useEffect(() => {
@@ -35,7 +36,7 @@ export function Header() {
     if (isElectron && window.electronAPI?.onServerStatus) {
       window.electronAPI.onServerStatus((status) => {
         setServerRunning(status.running);
-        setLocalhostUrl(status.url);
+        setServerUrl(status.url);
       });
     }
     
@@ -50,6 +51,11 @@ export function Header() {
       });
     }
   }, [setServerRunning]);
+
+  // Update server URL when port changes
+  useEffect(() => {
+    setServerUrl(`http://localhost:${localhostPort}`);
+  }, [localhostPort]);
 
   const handleToggle = () => {
     setIsRunning(!isRunning);
@@ -90,6 +96,19 @@ export function Header() {
             {format(new Date(), "EEEE, dd 'de' MMMM • HH:mm", { locale: ptBR })}
           </span>
         </div>
+        
+        {/* Server Status Indicator (when in service mode or server is running) */}
+        {mounted && isElectron && isServerRunning && (
+          <div className="hidden md:flex items-center gap-1.5 ml-2">
+            <Badge 
+              variant="outline" 
+              className="bg-blue-500/10 border-blue-500/30 text-blue-500 gap-1.5 text-[10px] px-2 py-0.5"
+            >
+              <Wifi className="w-3 h-3" />
+              localhost:{localhostPort}
+            </Badge>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2 md:gap-3">
@@ -113,6 +132,9 @@ export function Header() {
                     <>
                       <Server className="w-4 h-4" />
                       <span className="hidden md:inline">Serviço</span>
+                      {isServerRunning && (
+                        <span className="hidden lg:inline text-[10px] opacity-70">:{localhostPort}</span>
+                      )}
                     </>
                   ) : (
                     <>
@@ -124,7 +146,7 @@ export function Header() {
               </TooltipTrigger>
               <TooltipContent>
                 {serviceMode === 'service' 
-                  ? 'Modo Serviço: App na bandeja, acesso via localhost:8080'
+                  ? `Modo Serviço: App na bandeja, acesso via localhost:${localhostPort}`
                   : 'Clique para ativar Modo Serviço (menor consumo de RAM)'}
               </TooltipContent>
             </Tooltip>
@@ -146,7 +168,7 @@ export function Header() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                Abrir no navegador ({localhostUrl})
+                Abrir no navegador ({serverUrl})
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
