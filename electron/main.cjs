@@ -70,8 +70,8 @@ function createLocalhostServer() {
   // Serve static files from dist folder
   expressApp.use(express.static(distPath));
 
-  // SPA fallback - serve index.html for all routes
-  expressApp.get('*', (req, res) => {
+  // SPA fallback - serve index.html for all routes (Express 5 syntax)
+  expressApp.get('/{*splat}', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 
