@@ -287,15 +287,18 @@ Deno.serve(async (req) => {
     const scrapeResult = await tryFallbackSources(apiKey, safeName, formattedUrl);
 
     if (!scrapeResult.success || !scrapeResult.data) {
-      console.error('All scrape attempts failed');
+      console.error('All scrape attempts failed for:', safeName);
+      // Return 200 with error info instead of 500 to avoid frontend error handling issues
       return new Response(
         JSON.stringify({ 
           success: false, 
           stationName: safeName,
-          error: 'Failed to retrieve station data',
+          error: 'Unable to retrieve station data - station may have anti-scraping protection',
+          nowPlaying: null,
+          recentSongs: [],
           scrapedAt: new Date().toISOString(),
         }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -310,10 +313,17 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Error scraping radio');
+    console.error('Error scraping radio:', error);
+    // Return 200 with error info for graceful degradation
     return new Response(
-      JSON.stringify({ success: false, error: 'An error occurred', scrapedAt: new Date().toISOString() }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ 
+        success: false, 
+        error: 'An error occurred during scraping', 
+        nowPlaying: null,
+        recentSongs: [],
+        scrapedAt: new Date().toISOString() 
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
