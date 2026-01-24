@@ -17,6 +17,7 @@ import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { radioScraperApi } from '@/lib/api/radioScraper';
 import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
+import { cleanAndValidateSong } from '@/lib/cleanSongMetadata';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -321,12 +322,22 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       stationStyle: string,
       scrapeUrl: string
     ) => {
+      // CRITICAL: Clean and validate song data before processing
+      const cleanedSong = cleanAndValidateSong(songData.artist, songData.title);
+      
+      // Skip invalid entries (addresses, station info, etc.)
+      if (!cleanedSong) {
+        console.log(`[GLOBAL-SVC] ⚠️ Dados inválidos ignorados: "${songData.artist} - ${songData.title}"`);
+        return false;
+      }
+      
+      const { artist, title } = cleanedSong;
       const songId = `${stationName}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
       
       // Check if song exists in music library
       const libraryCheck = await checkSongInLibrary(
-        songData.artist, 
-        songData.title, 
+        artist, 
+        title, 
         config.musicFolders || [],
         config.similarityThreshold || 0.75
       );
@@ -334,32 +345,32 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       const existsInLibrary = libraryCheck.exists;
       const songStatus = existsInLibrary ? 'found' : 'missing';
       
-      // Add to captured songs
+      // Add to captured songs with CLEANED data
       addCapturedSong({
         id: songId,
-        title: songData.title,
-        artist: songData.artist,
+        title: title,
+        artist: artist,
         station: stationName,
         timestamp: songData.timestamp ? new Date(songData.timestamp) : new Date(),
         status: songStatus,
         source: scrapeUrl,
       });
       
-      // Update ranking
-      addOrUpdateRankingSong(songData.title, songData.artist, stationStyle);
+      // Update ranking with cleaned data
+      addOrUpdateRankingSong(title, artist, stationStyle);
       
       // If not in library AND not already in missing list, add to missing
-      if (!existsInLibrary && !isSongAlreadyMissing(songData.artist, songData.title)) {
+      if (!existsInLibrary && !isSongAlreadyMissing(artist, title)) {
         addMissingSong({
           id: `missing-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-          title: songData.title,
-          artist: songData.artist,
+          title: title,
+          artist: artist,
           station: stationName,
           timestamp: new Date(),
           status: 'missing',
           dna: stationStyle,
         });
-        console.log(`[GLOBAL-SVC] 📥 Nova música faltando: ${songData.artist} - ${songData.title}`);
+        console.log(`[GLOBAL-SVC] 📥 Nova música faltando: ${artist} - ${title}`);
       }
       
       return true;

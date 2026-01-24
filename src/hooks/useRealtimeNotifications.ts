@@ -4,6 +4,7 @@ import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { realtimeManager } from '@/lib/realtimeManager';
 import { rankingBatcher } from '@/lib/rankingBatcher';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
+import { cleanAndValidateSong } from '@/lib/cleanSongMetadata';
 
 interface NotificationOptions {
   enableBrowserNotifications?: boolean;
@@ -105,7 +106,7 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
       'scraped_songs',
       `notifications_${subscriberId}`,
       async (payload) => {
-        const newSong = payload.new as {
+        const rawSong = payload.new as {
           id: string;
           title: string;
           artist: string;
@@ -114,36 +115,47 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
         };
 
         // Avoid duplicate notifications
-        if (lastSongIdRef.current === newSong.id) return;
-        lastSongIdRef.current = newSong.id;
+        if (lastSongIdRef.current === rawSong.id) return;
+        lastSongIdRef.current = rawSong.id;
 
-        // Callback
-        onNewSong?.(newSong);
+        // CRITICAL: Clean and validate song data before processing
+        const cleanedSong = cleanAndValidateSong(rawSong.artist, rawSong.title);
+        
+        // Skip invalid entries (addresses, station info, garbage data)
+        if (!cleanedSong) {
+          console.log(`[REALTIME] ⚠️ Dados inválidos ignorados: "${rawSong.artist} - ${rawSong.title}"`);
+          return;
+        }
+        
+        const { artist, title } = cleanedSong;
+
+        // Callback with cleaned data
+        onNewSong?.({ title, artist, station_name: rawSong.station_name });
 
         // Show notifications only for now_playing songs (reduced frequency)
-        if (newSong.is_now_playing) {
+        if (rawSong.is_now_playing) {
           showBrowserNotification(
             '🎵 Nova música!',
-            `${newSong.artist} - ${newSong.title}\n📻 ${newSong.station_name}`
+            `${artist} - ${title}\n📻 ${rawSong.station_name}`
           );
           // Toast only for now_playing, already rate-limited
           showToastNotification(
             '🎵 Nova música!',
-            `${newSong.artist} - ${newSong.title}`
+            `${artist} - ${title}`
           );
         }
 
         // Queue ranking update (batched, not immediate)
         let style = 'POP/VARIADO';
-        const stationLower = newSong.station_name.toLowerCase();
+        const stationLower = rawSong.station_name.toLowerCase();
         if (stationLower.includes('bh') || stationLower.includes('sertanejo') || stationLower.includes('clube')) {
           style = 'SERTANEJO';
         } else if (stationLower.includes('band') || stationLower.includes('pagode')) {
           style = 'PAGODE';
         }
 
-        // Use batcher instead of direct update
-        rankingBatcher.queueUpdate(newSong.title, newSong.artist, style);
+        // Use batcher instead of direct update with cleaned data
+        rankingBatcher.queueUpdate(title, artist, style);
         onRankingUpdate?.(1);
 
         // ============= CHECK MUSIC LIBRARY AND ADD TO MISSING IF NEEDED =============
@@ -154,25 +166,25 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
           
           if (musicFolders.length > 0) {
             const libraryCheck = await checkSongInLibrary(
-              newSong.artist,
-              newSong.title,
+              artist,
+              title,
               musicFolders,
               threshold
             );
             
             // If not found in library AND not already in missing list, add to missing
-            if (!libraryCheck.exists && !isSongAlreadyMissing(newSong.artist, newSong.title)) {
+            if (!libraryCheck.exists && !isSongAlreadyMissing(artist, title)) {
               const missingSongEntry: MissingSong = {
                 id: `missing-rt-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-                title: newSong.title,
-                artist: newSong.artist,
-                station: newSong.station_name,
+                title: title,
+                artist: artist,
+                station: rawSong.station_name,
                 timestamp: new Date(),
                 status: 'missing',
                 dna: style,
               };
               addMissingSong(missingSongEntry);
-              console.log(`[REALTIME] 📥 Nova música faltando detectada: ${newSong.artist} - ${newSong.title}`);
+              console.log(`[REALTIME] 📥 Nova música faltando detectada: ${artist} - ${title}`);
             }
           }
         } catch (error) {
