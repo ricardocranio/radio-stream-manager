@@ -188,6 +188,75 @@ function createLocalhostServer(attemptPort = null) {
       });
     });
 
+    // =============== MUSIC LIBRARY API ENDPOINTS (for browser Service Mode) ===============
+    
+    // Get music library stats
+    expressApp.post('/api/music-library-stats', (req, res) => {
+      const { musicFolders } = req.body;
+      
+      console.log(`[API] Music library stats request for ${musicFolders?.length || 0} folders`);
+      
+      if (!musicFolders || !Array.isArray(musicFolders)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'musicFolders array required' 
+        });
+      }
+      
+      try {
+        const files = scanMusicLibrary(musicFolders);
+        console.log(`[API] Found ${files.length} files in library`);
+        res.json({ 
+          success: true, 
+          count: files.length,
+          folders: musicFolders.length 
+        });
+      } catch (error) {
+        console.error('[API] Music library stats error:', error);
+        res.status(500).json({ success: false, count: 0, folders: 0, error: error.message });
+      }
+    });
+
+    // Check if song exists in library (similarity matching)
+    expressApp.post('/api/check-song', (req, res) => {
+      const { artist, title, musicFolders, threshold } = req.body;
+      
+      if (!artist || !title || !musicFolders) {
+        return res.status(400).json({ 
+          exists: false, 
+          error: 'artist, title, and musicFolders required' 
+        });
+      }
+      
+      try {
+        const result = findSongMatch(artist, title, musicFolders, threshold || 0.75);
+        res.json(result);
+      } catch (error) {
+        console.error('[API] Check song error:', error);
+        res.json({ exists: false, error: error.message });
+      }
+    });
+
+    // Find best song match in library
+    expressApp.post('/api/find-song-match', (req, res) => {
+      const { artist, title, musicFolders, threshold } = req.body;
+      
+      if (!artist || !title || !musicFolders) {
+        return res.status(400).json({ 
+          exists: false, 
+          error: 'artist, title, and musicFolders required' 
+        });
+      }
+      
+      try {
+        const result = findSongMatch(artist, title, musicFolders, threshold || 0.75);
+        res.json(result);
+      } catch (error) {
+        console.error('[API] Find match error:', error);
+        res.json({ exists: false, error: error.message });
+      }
+    });
+
     // SPA fallback - serve index.html for all routes (Express 5 syntax)
     // Must be AFTER all API routes
     expressApp.get('/{*splat}', (req, res) => {

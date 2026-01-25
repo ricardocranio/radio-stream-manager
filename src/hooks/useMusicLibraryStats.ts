@@ -45,7 +45,43 @@ export function useMusicLibraryStats() {
       return;
     }
 
+    // If Electron API not available, try HTTP API (Service Mode browser access)
     if (!window.electronAPI?.getMusicLibraryStats) {
+      try {
+        // Check if we're in Service Mode (localhost)
+        const isLocalhost = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+        
+        if (isLocalhost && config.musicFolders.length > 0) {
+          console.log('[MUSIC-LIBRARY] Using HTTP API for service mode');
+          const response = await fetch('/api/music-library-stats', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ musicFolders: config.musicFolders }),
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+              const httpStats: MusicLibraryStats = {
+                count: result.count,
+                folders: result.folders,
+                isLoading: false,
+                lastUpdated: new Date(),
+                error: null,
+              };
+              setStats(httpStats);
+              cachedStats = httpStats;
+              cacheTimestamp = Date.now();
+              console.log(`[MUSIC-LIBRARY] HTTP API returned ${result.count} files`);
+              return;
+            }
+          }
+        }
+      } catch (httpError) {
+        console.warn('[MUSIC-LIBRARY] HTTP API failed:', httpError);
+      }
+      
+      // Fallback for web mode
       const webStats: MusicLibraryStats = {
         count: 0,
         folders: config.musicFolders.length,
