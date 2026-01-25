@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw } from 'lucide-react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Wifi, WifiOff, CheckCheck, Cloud } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
@@ -18,6 +18,8 @@ import { GradePreviewCard } from '@/components/dashboard/GradePreviewCard';
 import { GradeScheduleCard } from '@/components/dashboard/GradeScheduleCard';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { Checkbox } from '@/components/ui/checkbox';
 
 export function DashboardView() {
   const { stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs, resetAllCounts } = useRadioStore();
@@ -28,6 +30,8 @@ export function DashboardView() {
   const { gradeBuilder, downloads, scraping } = useGlobalServices();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [includeSupabase, setIncludeSupabase] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   
   // Realtime notifications hook
   const { requestPermission } = useRealtimeNotifications({
@@ -60,9 +64,40 @@ export function DashboardView() {
   };
 
   // Handle reset all counts
-  const handleResetAll = () => {
-    resetAllCounts();
-    toast.success('Todas as contagens foram zeradas!');
+  const handleResetAll = async () => {
+    setIsResetting(true);
+    
+    try {
+      // Always reset local data
+      resetAllCounts();
+      
+      // If includeSupabase is true, also clear remote data
+      if (includeSupabase) {
+        const { data, error } = await supabase.functions.invoke('manage-special-monitoring', {
+          body: { action: 'clear-scraped-songs' }
+        });
+        
+        if (error) {
+          console.error('[RESET] Error clearing Supabase:', error);
+          toast.error('Erro ao limpar dados remotos. Dados locais foram zerados.');
+        } else if (data?.success) {
+          toast.success(`Todos os dados foram zerados! (${data.deleted || 'todas'} músicas remotas removidas)`);
+        } else {
+          toast.warning('Dados locais zerados. Supabase pode não ter sido limpo completamente.');
+        }
+      } else {
+        toast.success('Todas as contagens locais foram zeradas!');
+      }
+      
+      // Refresh stats
+      await refreshStats();
+    } catch (error) {
+      console.error('[RESET] Error:', error);
+      toast.error('Erro ao zerar dados');
+    } finally {
+      setIsResetting(false);
+      setIncludeSupabase(false);
+    }
   };
 
   const localStats = {
@@ -105,7 +140,7 @@ export function DashboardView() {
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6 animate-fade-in">
       {/* Realtime Stats from Supabase */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-3">
         <Card className="glass-card border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
@@ -273,31 +308,80 @@ export function DashboardView() {
                 <AlertTriangle className="w-5 h-5 text-destructive" />
                 Zerar Todas as Contagens?
               </AlertDialogTitle>
-              <AlertDialogDescription className="space-y-2">
-                <p>Esta ação irá zerar completamente:</p>
-                <ul className="list-disc list-inside text-sm space-y-1 mt-2">
-                  <li>Músicas capturadas locais</li>
-                  <li>Lista de músicas faltando</li>
-                  <li>Histórico de downloads</li>
-                  <li>Histórico de grade</li>
-                  <li>Ranking TOP50</li>
-                  <li>Blocos montados</li>
-                </ul>
-                <p className="text-destructive font-medium mt-3">Esta ação não pode ser desfeita!</p>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2">
+                  <p>Esta ação irá zerar completamente:</p>
+                  <ul className="list-disc list-inside text-sm space-y-1 mt-2">
+                    <li>Músicas capturadas locais</li>
+                    <li>Lista de músicas faltando</li>
+                    <li>Histórico de downloads</li>
+                    <li>Histórico de grade</li>
+                    <li>Ranking TOP50</li>
+                    <li>Blocos montados</li>
+                  </ul>
+                  
+                  {/* Option to include Supabase */}
+                  <div className="flex items-center space-x-2 mt-4 p-3 rounded-lg bg-muted/50 border border-border">
+                    <Checkbox 
+                      id="includeSupabase" 
+                      checked={includeSupabase}
+                      onCheckedChange={(checked) => setIncludeSupabase(checked === true)}
+                    />
+                    <label
+                      htmlFor="includeSupabase"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
+                    >
+                      <Cloud className="w-4 h-4 text-primary" />
+                      Incluir dados do Supabase (músicas capturadas remotas)
+                    </label>
+                  </div>
+                  
+                  <p className="text-destructive font-medium mt-3">Esta ação não pode ser desfeita!</p>
+                </div>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogCancel disabled={isResetting}>Cancelar</AlertDialogCancel>
               <AlertDialogAction 
                 onClick={handleResetAll}
+                disabled={isResetting}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                <RotateCcw className="w-4 h-4 mr-2" />
+                {isResetting ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                )}
                 Zerar Tudo
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Backend Status Card */}
+        <Card className={`glass-card ${downloads.backendConnected ? 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5' : 'border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-yellow-500/5'}`}>
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Backend</p>
+                <p className={`text-sm md:text-base font-medium ${downloads.backendConnected ? 'text-emerald-500' : 'text-yellow-500'}`}>
+                  {downloads.backendConnected ? 'Conectado' : 'Desconectado'}
+                </p>
+                <p className={`text-[10px] md:text-xs ${downloads.backendConnected ? 'text-emerald-500/70' : 'text-yellow-500/70'} flex items-center gap-1`}>
+                  <CheckCheck className="w-3 h-3" />
+                  <span className="hidden sm:inline">{downloads.songsVerified} verificadas</span>
+                </p>
+              </div>
+              <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg ${downloads.backendConnected ? 'bg-emerald-500/20' : 'bg-yellow-500/20'} flex items-center justify-center shrink-0`}>
+                {downloads.backendConnected ? (
+                  <Wifi className="w-4 h-4 md:w-5 md:h-5 text-emerald-500" />
+                ) : (
+                  <WifiOff className="w-4 h-4 md:w-5 md:h-5 text-yellow-500" />
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Station Distribution - Filled grid without gaps */}
