@@ -259,6 +259,12 @@ interface MusicLibraryStatsResult {
  */
 export async function getMusicLibraryStatsViaAPI(musicFolders: string[]): Promise<MusicLibraryStatsResult> {
   try {
+    // Check backend connectivity first
+    const backendAvailable = getBackendAvailable();
+    if (backendAvailable === false) {
+      return { success: false, count: 0, folders: 0, error: 'Backend desconectado' };
+    }
+
     const response = await fetch('/api/music-library-stats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -266,14 +272,29 @@ export async function getMusicLibraryStatsViaAPI(musicFolders: string[]): Promis
       signal: AbortSignal.timeout(30000), // 30 second timeout
     });
     
-    if (response.ok) {
-      return await response.json();
+    if (!response.ok) {
+      let errorDetail = `HTTP ${response.status}`;
+      try {
+        const errorBody = await response.json();
+        if (errorBody.error) errorDetail = errorBody.error;
+      } catch { /* ignore */ }
+      return { success: false, count: 0, folders: 0, error: errorDetail };
     }
     
-    return { success: false, count: 0, folders: 0, error: `HTTP ${response.status}` };
+    try {
+      return await response.json();
+    } catch {
+      return { success: false, count: 0, folders: 0, error: 'Resposta inválida' };
+    }
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    if (errorMessage.includes('Failed to fetch')) {
+      return { success: false, count: 0, folders: 0, error: 'Backend não acessível' };
+    }
+    
     console.error('[SERVICE-API] getMusicLibraryStats error:', error);
-    return { success: false, count: 0, folders: 0, error: String(error) };
+    return { success: false, count: 0, folders: 0, error: errorMessage };
   }
 }
 
@@ -296,6 +317,12 @@ export async function findSongMatchViaAPI(
   threshold: number = 0.75
 ): Promise<SongMatchResult> {
   try {
+    // Check backend connectivity first
+    const backendAvailable = getBackendAvailable();
+    if (backendAvailable === false) {
+      return { exists: false, error: 'Backend desconectado' };
+    }
+
     const response = await fetch('/api/find-song-match', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -303,14 +330,29 @@ export async function findSongMatchViaAPI(
       signal: AbortSignal.timeout(10000), // 10 second timeout
     });
     
-    if (response.ok) {
-      return await response.json();
+    if (!response.ok) {
+      let errorDetail = `HTTP ${response.status}`;
+      try {
+        const errorBody = await response.json();
+        if (errorBody.error) errorDetail = errorBody.error;
+      } catch { /* ignore */ }
+      return { exists: false, error: errorDetail };
     }
     
-    return { exists: false, error: `HTTP ${response.status}` };
+    try {
+      return await response.json();
+    } catch {
+      return { exists: false, error: 'Resposta inválida' };
+    }
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    if (errorMessage.includes('Failed to fetch')) {
+      return { exists: false, error: 'Backend não acessível' };
+    }
+    
     console.error('[SERVICE-API] findSongMatch error:', error);
-    return { exists: false, error: String(error) };
+    return { exists: false, error: errorMessage };
   }
 }
 
@@ -334,21 +376,63 @@ interface DownloadResult {
  */
 export async function downloadViaAPI(params: DownloadParams): Promise<DownloadResult> {
   try {
+    // Check backend connectivity before attempting download
+    const backendAvailable = getBackendAvailable();
+    if (backendAvailable === false) {
+      return { 
+        success: false, 
+        error: 'Backend desconectado. Verifique se o Electron está em execução.' 
+      };
+    }
+
     const response = await fetch('/api/download', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
+      signal: AbortSignal.timeout(120000), // 2 minute timeout for downloads
     });
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return { success: false, error: errorData.error || `HTTP ${response.status}` };
+      // Try to parse error details
+      let errorDetail = `HTTP ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.error) {
+          errorDetail = errorData.error;
+        }
+      } catch {
+        // Ignore JSON parse error
+      }
+      return { success: false, error: errorDetail };
     }
     
-    return await response.json();
+    // Safely parse response
+    try {
+      return await response.json();
+    } catch {
+      return { success: false, error: 'Resposta inválida do servidor' };
+    }
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    if (errorMessage.includes('Failed to fetch')) {
+      console.error('[SERVICE-API] download: Backend não acessível');
+      return { 
+        success: false, 
+        error: 'Falha na conexão com backend. Verifique se o Electron está em execução.' 
+      };
+    }
+    
+    if (errorMessage.includes('timeout') || errorMessage.includes('aborted')) {
+      console.error('[SERVICE-API] download: Timeout');
+      return { 
+        success: false, 
+        error: 'Tempo esgotado ao baixar. Tente novamente.' 
+      };
+    }
+    
     console.error('[SERVICE-API] download error:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Erro de conexão' };
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -357,18 +441,34 @@ export async function downloadViaAPI(params: DownloadParams): Promise<DownloadRe
  */
 export async function checkDeemixStatusViaAPI(): Promise<{ installed: boolean; command?: string; error?: string }> {
   try {
+    // Check backend connectivity first
+    const backendAvailable = getBackendAvailable();
+    if (backendAvailable === false) {
+      return { installed: false, error: 'Backend desconectado' };
+    }
+
     const response = await fetch('/api/deemix/status', {
       method: 'GET',
       signal: AbortSignal.timeout(5000),
     });
     
-    if (response.ok) {
-      return await response.json();
+    if (!response.ok) {
+      return { installed: false, error: `HTTP ${response.status}` };
     }
     
-    return { installed: false, error: `HTTP ${response.status}` };
+    try {
+      return await response.json();
+    } catch {
+      return { installed: false, error: 'Resposta inválida' };
+    }
   } catch (error) {
-    return { installed: false, error: String(error) };
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    if (errorMessage.includes('Failed to fetch')) {
+      return { installed: false, error: 'Backend não acessível' };
+    }
+    
+    return { installed: false, error: errorMessage };
   }
 }
 
