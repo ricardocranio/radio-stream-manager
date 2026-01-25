@@ -259,10 +259,14 @@ interface MusicLibraryStatsResult {
  */
 export async function getMusicLibraryStatsViaAPI(musicFolders: string[]): Promise<MusicLibraryStatsResult> {
   try {
-    // Check backend connectivity first
-    const backendAvailable = getBackendAvailable();
-    if (backendAvailable === false) {
-      return { success: false, count: 0, folders: 0, error: 'Backend desconectado' };
+    // Check backend connectivity - do fresh check if cache is false/null
+    let backendAvailable = getBackendAvailable();
+    if (backendAvailable !== true) {
+      // Try a fresh check before giving up
+      backendAvailable = await checkElectronBackend();
+      if (!backendAvailable) {
+        return { success: false, count: 0, folders: 0, error: 'Backend desconectado' };
+      }
     }
 
     const response = await fetch('/api/music-library-stats', {
@@ -317,10 +321,14 @@ export async function findSongMatchViaAPI(
   threshold: number = 0.75
 ): Promise<SongMatchResult> {
   try {
-    // Check backend connectivity first
-    const backendAvailable = getBackendAvailable();
-    if (backendAvailable === false) {
-      return { exists: false, error: 'Backend desconectado' };
+    // Check backend connectivity - do fresh check if cache is false/null
+    let backendAvailable = getBackendAvailable();
+    if (backendAvailable !== true) {
+      // Try a fresh check before giving up
+      backendAvailable = await checkElectronBackend();
+      if (!backendAvailable) {
+        return { exists: false, error: 'Backend desconectado' };
+      }
     }
 
     const response = await fetch('/api/find-song-match', {
@@ -376,13 +384,17 @@ interface DownloadResult {
  */
 export async function downloadViaAPI(params: DownloadParams): Promise<DownloadResult> {
   try {
-    // Check backend connectivity before attempting download
-    const backendAvailable = getBackendAvailable();
-    if (backendAvailable === false) {
-      return { 
-        success: false, 
-        error: 'Backend desconectado. Verifique se o Electron está em execução.' 
-      };
+    // Check backend connectivity - do fresh check if cache is false/null
+    let backendAvailable = getBackendAvailable();
+    if (backendAvailable !== true) {
+      // Try a fresh check before giving up
+      backendAvailable = await checkElectronBackend();
+      if (!backendAvailable) {
+        return { 
+          success: false, 
+          error: 'Backend desconectado. Verifique se o Electron está em execução.' 
+        };
+      }
     }
 
     const response = await fetch('/api/download', {
@@ -441,10 +453,14 @@ export async function downloadViaAPI(params: DownloadParams): Promise<DownloadRe
  */
 export async function checkDeemixStatusViaAPI(): Promise<{ installed: boolean; command?: string; error?: string }> {
   try {
-    // Check backend connectivity first
-    const backendAvailable = getBackendAvailable();
-    if (backendAvailable === false) {
-      return { installed: false, error: 'Backend desconectado' };
+    // Check backend connectivity - do fresh check if cache is false/null
+    let backendAvailable = getBackendAvailable();
+    if (backendAvailable !== true) {
+      // Try a fresh check before giving up
+      backendAvailable = await checkElectronBackend();
+      if (!backendAvailable) {
+        return { installed: false, error: 'Backend desconectado' };
+      }
     }
 
     const response = await fetch('/api/deemix/status', {
@@ -489,13 +505,17 @@ export async function saveGradeFileViaAPI(
   content: string
 ): Promise<SaveGradeResult> {
   try {
-    // Check backend connectivity before attempting save
-    const backendAvailable = getBackendAvailable();
-    if (backendAvailable === false) {
-      return { 
-        success: false, 
-        error: 'Backend desconectado. Verifique se o Electron está em execução.' 
-      };
+    // Check backend connectivity - do fresh check if cache is false/null
+    let backendAvailable = getBackendAvailable();
+    if (backendAvailable !== true) {
+      // Try a fresh check before giving up
+      backendAvailable = await checkElectronBackend();
+      if (!backendAvailable) {
+        return { 
+          success: false, 
+          error: 'Backend desconectado. Verifique se o Electron está em execução.' 
+        };
+      }
     }
 
     const response = await fetch('/api/save-grade-file', {
@@ -561,13 +581,17 @@ export async function readGradeFileViaAPI(
   filename: string
 ): Promise<ReadGradeResult> {
   try {
-    // Check backend connectivity before attempting read
-    const backendAvailable = getBackendAvailable();
-    if (backendAvailable === false) {
-      return { 
-        success: false, 
-        error: 'Backend desconectado. Verifique se o Electron está em execução.' 
-      };
+    // Check backend connectivity - do fresh check if cache is false/null
+    let backendAvailable = getBackendAvailable();
+    if (backendAvailable !== true) {
+      // Try a fresh check before giving up
+      backendAvailable = await checkElectronBackend();
+      if (!backendAvailable) {
+        return { 
+          success: false, 
+          error: 'Backend desconectado. Verifique se o Electron está em execução.' 
+        };
+      }
     }
 
     const response = await fetch('/api/read-grade-file', {

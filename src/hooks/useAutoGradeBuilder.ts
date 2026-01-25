@@ -4,7 +4,7 @@ import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { isElectron as isElectronNative, isServiceMode, findSongMatchViaAPI, saveGradeFileViaAPI, readGradeFileViaAPI, checkElectronBackend, isLovablePreview } from '@/lib/serviceMode';
+import { isElectron as isElectronNative, isServiceMode, findSongMatchViaAPI, saveGradeFileViaAPI, readGradeFileViaAPI, checkElectronBackend, isLovablePreview, getBackendAvailable, onBackendReconnect } from '@/lib/serviceMode';
 
 interface SongEntry {
   title: string;
@@ -55,23 +55,25 @@ interface AutoGradeState {
   lastSaveProgress: number;
 }
 
-// Cache for backend availability - check once per session
-let backendAvailabilityCache: boolean | null = null;
-
 // Verify backend is available before operations
+// Uses the GLOBAL cache from serviceMode.ts - no separate cache here!
 async function verifyBackendAvailable(): Promise<boolean> {
   // Native Electron always available
   if (isElectronNative && window.electronAPI?.findSongMatch) {
     return true;
   }
   
-  // Service Mode - check via health endpoint
+  // Service Mode - use global cache first, then check if needed
   if (isServiceMode()) {
-    if (backendAvailabilityCache !== null) {
-      return backendAvailabilityCache;
+    const cachedStatus = getBackendAvailable();
+    
+    // If we have a recent positive cache, trust it
+    if (cachedStatus === true) {
+      return true;
     }
+    
+    // If cache is null or false, perform a fresh check
     const available = await checkElectronBackend();
-    backendAvailabilityCache = available;
     console.log(`[GRADE] Backend availability: ${available ? '✅ CONNECTED' : '❌ NOT AVAILABLE'}`);
     return available;
   }
@@ -157,6 +159,32 @@ export function useAutoGradeBuilder() {
   // Carry-over: songs that were missing but queued for download
   // These will be prioritized in the next block since downloads are fast (~1 min)
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
+  
+  // Track backend status and clear errors on reconnect
+  const backendConnectedRef = useRef<boolean | null>(null);
+  
+  // Subscribe to backend reconnection events to clear error state
+  useEffect(() => {
+    if (!isServiceMode()) return;
+    
+    const unsubscribe = onBackendReconnect((connected) => {
+      console.log(`[GRADE] Backend reconnect event: ${connected ? '✅ CONNECTED' : '❌ DISCONNECTED'}`);
+      backendConnectedRef.current = connected;
+      
+      if (connected) {
+        // Clear any existing error when backend reconnects
+        setState(prev => {
+          if (prev.error?.includes('Backend desconectado') || prev.error?.includes('desconectado')) {
+            console.log('[GRADE] ✅ Clearing backend error after reconnection');
+            return { ...prev, error: null };
+          }
+          return prev;
+        });
+      }
+    });
+    
+    return unsubscribe;
+  }, []);
 
   // Get day code for filename
   const getDayCode = useCallback(() => {
