@@ -169,6 +169,9 @@ interface RadioState {
   applyRankingBatch: (updates: Array<{ title: string; artist: string; style: string; count: number }>) => void;
   clearRanking: () => void;
 
+  // Reset all counts at once
+  resetAllCounts: () => void;
+
   // Auto Scrape Setting (persisted)
   autoScrapeEnabled: boolean;
   setAutoScrapeEnabled: (enabled: boolean) => void;
@@ -578,6 +581,16 @@ export const useRadioStore = create<RadioState>()(
           return { rankingSongs: updatedSongs.slice(0, 100) };
         }),
       clearRanking: () => set({ rankingSongs: [] }),
+
+      // Reset all counts at once
+      resetAllCounts: () => set({
+        capturedSongs: [],
+        missingSongs: [],
+        downloadHistory: [],
+        gradeHistory: [],
+        rankingSongs: [],
+        blockSongs: {},
+      }),
 
       // Auto Scrape Setting
       autoScrapeEnabled: false,
