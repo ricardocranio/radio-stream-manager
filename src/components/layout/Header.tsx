@@ -312,25 +312,41 @@ export function Header() {
                   size="sm"
                   onClick={async () => {
                     try {
-                      // Try to call API to show desktop window (works in Service Mode)
+                      // First, check if backend is available via health check
+                      const healthResponse = await fetch('/api/health', {
+                        method: 'GET',
+                        signal: AbortSignal.timeout(3000),
+                      });
+                      
+                      if (!healthResponse.ok) {
+                        throw new Error('Backend não detectado');
+                      }
+                      
+                      const healthData = await healthResponse.json();
+                      if (!healthData.electron) {
+                        throw new Error('Não é ambiente Electron');
+                      }
+                      
+                      // Now try to show the window
                       const response = await fetch('/api/show-window', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
+                        signal: AbortSignal.timeout(5000),
                       });
                       
                       if (response.ok) {
                         toast({
                           title: '✓ Desktop Aberto',
-                          description: 'A janela do aplicativo foi aberta.',
+                          description: 'A janela do aplicativo foi focada.',
                         });
                       } else {
-                        throw new Error('Backend não respondeu');
+                        throw new Error('Falha ao abrir janela');
                       }
                     } catch (error) {
                       console.error('Error opening desktop:', error);
                       toast({
                         title: '⚠️ Desktop não disponível',
-                        description: 'O aplicativo desktop não está rodando em segundo plano.',
+                        description: 'Inicie o aplicativo Electron para usar este recurso. O app deve estar rodando na bandeja do sistema.',
                         variant: 'destructive',
                       });
                     }
