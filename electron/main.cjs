@@ -285,6 +285,71 @@ function createLocalhostServer(attemptPort = null) {
       }
     });
 
+    // =============== GRADE FILE API ENDPOINTS (for browser Service Mode) ===============
+
+    // Save grade file via API
+    expressApp.post('/api/save-grade-file', (req, res) => {
+      const { folder, filename, content } = req.body;
+      
+      console.log(`[API] Save grade request: ${filename} to ${folder}`);
+      
+      if (!folder || !filename || content === undefined) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'folder, filename, and content are required' 
+        });
+      }
+      
+      try {
+        // Ensure folder exists
+        if (!fs.existsSync(folder)) {
+          fs.mkdirSync(folder, { recursive: true });
+          console.log(`[API] Created folder: ${folder}`);
+        }
+        
+        const filePath = path.join(folder, filename);
+        fs.writeFileSync(filePath, content, 'utf-8');
+        
+        console.log(`[API] Grade file saved: ${filePath}`);
+        
+        res.json({
+          success: true,
+          filePath,
+        });
+      } catch (error) {
+        console.error('[API] Save grade error:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Read grade file via API
+    expressApp.post('/api/read-grade-file', (req, res) => {
+      const { folder, filename } = req.body;
+      
+      console.log(`[API] Read grade request: ${filename} from ${folder}`);
+      
+      if (!folder || !filename) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'folder and filename are required' 
+        });
+      }
+      
+      try {
+        const filePath = path.join(folder, filename);
+        
+        if (!fs.existsSync(filePath)) {
+          return res.json({ success: false, error: 'Arquivo não encontrado' });
+        }
+        
+        const content = fs.readFileSync(filePath, 'utf-8');
+        res.json({ success: true, content, filePath });
+      } catch (error) {
+        console.error('[API] Read grade error:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
     // SPA fallback - serve index.html for all routes (Express 5 syntax)
     // Must be AFTER all API routes
     expressApp.get('/{*splat}', (req, res) => {

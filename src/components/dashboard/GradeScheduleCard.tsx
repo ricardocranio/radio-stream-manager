@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore, BlockSong, FixedContent } from '@/store/radioStore';
 import { supabase } from '@/integrations/supabase/client';
+import { isElectron, isServiceMode, readGradeFileViaAPI, saveGradeFileViaAPI } from '@/lib/serviceMode';
 import {
   Dialog,
   DialogContent,
@@ -243,17 +244,25 @@ export function GradeScheduleCard() {
       setIsEditing(false);
 
       // Also save to physical file in destination folder
-      if (window.electronAPI?.saveGradeFile && window.electronAPI?.readGradeFile) {
+      const canSaveFile = window.electronAPI?.saveGradeFile || isServiceMode();
+      if (canSaveFile) {
         try {
           const filename = `${dayInfo.dayName}.txt`;
           
           // Read existing file
           let existingContent = '';
           try {
-            const readResult = await window.electronAPI.readGradeFile({
-              folder: config.gradeFolder,
-              filename,
-            });
+            let readResult: { success: boolean; content?: string };
+            if (window.electronAPI?.readGradeFile) {
+              readResult = await window.electronAPI.readGradeFile({
+                folder: config.gradeFolder,
+                filename,
+              });
+            } else if (isServiceMode()) {
+              readResult = await readGradeFileViaAPI(config.gradeFolder, filename);
+            } else {
+              readResult = { success: false };
+            }
             if (readResult.success && readResult.content) {
               existingContent = readResult.content;
             }
@@ -282,11 +291,18 @@ export function GradeScheduleCard() {
             .map(t => lineMap.get(t))
             .join('\n');
 
-          const result = await window.electronAPI.saveGradeFile({
-            folder: config.gradeFolder,
-            filename,
-            content: sortedContent,
-          });
+          let result: { success: boolean; filePath?: string; error?: string };
+          if (window.electronAPI?.saveGradeFile) {
+            result = await window.electronAPI.saveGradeFile({
+              folder: config.gradeFolder,
+              filename,
+              content: sortedContent,
+            });
+          } else if (isServiceMode()) {
+            result = await saveGradeFileViaAPI(config.gradeFolder, filename, sortedContent);
+          } else {
+            result = { success: false, error: 'Nenhum backend disponível' };
+          }
 
           if (result.success) {
             console.log(`[GRADE-CARD] ✅ Bloco ${selectedBlock.time} exportado para ${result.filePath}`);

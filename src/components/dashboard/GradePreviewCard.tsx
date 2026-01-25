@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { useRadioStore } from '@/store/radioStore';
+import { isElectron, isServiceMode, readGradeFileViaAPI } from '@/lib/serviceMode';
 
 interface GradePreviewProps {
   recentSongsByStation: Record<string, { title: string; artist: string; timestamp: string }[]>;
@@ -57,10 +58,20 @@ export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
       const dayCode = getDayCode();
       const filename = `${dayCode}.txt`;
       
-      const result = await window.electronAPI.readGradeFile({
-        folder: config.gradeFolder,
-        filename,
-      });
+      let result: { success: boolean; content?: string };
+      
+      // Try native Electron API first
+      if (window.electronAPI?.readGradeFile) {
+        result = await window.electronAPI.readGradeFile({
+          folder: config.gradeFolder,
+          filename,
+        });
+      } else if (isServiceMode()) {
+        // Fall back to HTTP API for Service Mode
+        result = await readGradeFileViaAPI(config.gradeFolder, filename);
+      } else {
+        result = { success: false };
+      }
       
       if (result.success && result.content) {
         setFileContent(result.content);
