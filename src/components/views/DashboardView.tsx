@@ -196,17 +196,21 @@ export function DashboardView() {
           </CardContent>
         </Card>
 
-        <Card className="glass-card border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5">
+        <Card className={`glass-card border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5 ${libraryStats.unavailable ? 'opacity-60' : ''}`}>
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-[10px] md:text-xs text-muted-foreground truncate">Banco Musical</p>
-                <p className="text-lg md:text-2xl font-bold text-foreground">
-                  {libraryStats.isLoading ? '...' : libraryStats.count.toLocaleString()}
-                </p>
+                {libraryStats.unavailable ? (
+                  <p className="text-xs md:text-sm font-medium text-amber-500">Desktop Only</p>
+                ) : (
+                  <p className="text-lg md:text-2xl font-bold text-foreground">
+                    {libraryStats.isLoading ? '...' : libraryStats.count.toLocaleString()}
+                  </p>
+                )}
                 <p className="text-[10px] md:text-xs text-amber-500 flex items-center gap-1">
                   <HardDrive className="w-3 h-3" />
-                  <span className="hidden sm:inline">Local</span>
+                  <span className="hidden sm:inline">{libraryStats.unavailable ? 'Indisponível' : 'Local'}</span>
                 </p>
               </div>
               <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">

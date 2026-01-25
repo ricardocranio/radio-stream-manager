@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRadioStore } from '@/store/radioStore';
 import { isElectron, isServiceMode, getMusicLibraryStatsViaAPI } from '@/lib/serviceMode';
 
-interface MusicLibraryStats {
+export interface MusicLibraryStats {
   count: number;
   folders: number;
   isLoading: boolean;
   lastUpdated: Date | null;
   error: string | null;
+  unavailable: boolean; // True when running in web mode without backend access
 }
 
 // Cache to avoid repeated network folder scans
@@ -22,12 +23,17 @@ const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes cache for network folders
  */
 export function useMusicLibraryStats() {
   const config = useRadioStore((state) => state.config);
+  
+  // Determine if library access is unavailable (web mode without Electron backend)
+  const isUnavailable = !isElectron && !isServiceMode();
+  
   const [stats, setStats] = useState<MusicLibraryStats>({
     count: cachedStats?.count || 0,
     folders: cachedStats?.folders || 0,
-    isLoading: !cachedStats,
+    isLoading: !cachedStats && !isUnavailable,
     lastUpdated: cachedStats?.lastUpdated || null,
     error: null,
+    unavailable: isUnavailable,
   });
   
   const isLoadingRef = useRef(false);
@@ -71,6 +77,7 @@ export function useMusicLibraryStats() {
             isLoading: false,
             lastUpdated: new Date(),
             error: null,
+            unavailable: false,
           };
           setStats(newStats);
           cachedStats = newStats;
@@ -110,6 +117,7 @@ export function useMusicLibraryStats() {
             isLoading: false,
             lastUpdated: new Date(),
             error: null,
+            unavailable: false,
           };
           setStats(httpStats);
           cachedStats = httpStats;
@@ -131,13 +139,14 @@ export function useMusicLibraryStats() {
       return;
     }
 
-    // Web mode fallback
+    // Web mode fallback - mark as unavailable
     const webStats: MusicLibraryStats = {
       count: 0,
       folders: config.musicFolders.length,
       isLoading: false,
       lastUpdated: new Date(),
       error: null,
+      unavailable: true,
     };
     setStats(webStats);
     cachedStats = webStats;
