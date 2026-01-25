@@ -144,17 +144,17 @@ export function DashboardView() {
         <Card className="glass-card border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Total Capturadas</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] md:text-xs text-muted-foreground">Total</p>
                 <p className="text-lg md:text-2xl font-bold text-foreground">
                   {realtimeStats.isLoading ? '...' : realtimeStats.totalSongs.toLocaleString()}
                 </p>
                 <p className="text-[10px] md:text-xs text-primary flex items-center gap-1">
-                  <Database className="w-3 h-3" />
-                  <span className="hidden sm:inline">Supabase</span>
+                  <Database className="w-3 h-3 flex-shrink-0" />
+                  <span>Supabase</span>
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
                 <Music className="w-4 h-4 md:w-5 md:h-5 text-primary" />
               </div>
             </div>
@@ -164,17 +164,17 @@ export function DashboardView() {
         <Card className="glass-card border-green-500/20 bg-gradient-to-br from-green-500/10 to-green-500/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Últimas 24h</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] md:text-xs text-muted-foreground">24h</p>
                 <p className="text-lg md:text-2xl font-bold text-foreground">
                   {realtimeStats.isLoading ? '...' : realtimeStats.songsLast24h.toLocaleString()}
                 </p>
                 <p className="text-[10px] md:text-xs text-green-500 flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  <span className="hidden sm:inline">Tempo real</span>
+                  <Clock className="w-3 h-3 flex-shrink-0" />
+                  <span>Tempo real</span>
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-green-500/20 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
                 <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-green-500" />
               </div>
             </div>
@@ -184,17 +184,17 @@ export function DashboardView() {
         <Card className="glass-card border-orange-500/20 bg-gradient-to-br from-orange-500/10 to-orange-500/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Última Hora</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] md:text-xs text-muted-foreground">1 Hora</p>
                 <p className="text-lg md:text-2xl font-bold text-foreground">
                   {realtimeStats.isLoading ? '...' : realtimeStats.songsLastHour.toLocaleString()}
                 </p>
                 <p className="text-[10px] md:text-xs text-orange-500 flex items-center gap-1">
-                  <Zap className="w-3 h-3" />
-                  <span className="hidden sm:inline">Ativo</span>
+                  <Zap className="w-3 h-3 flex-shrink-0" />
+                  <span>Ativo</span>
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-orange-500/20 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-orange-500/20 flex items-center justify-center flex-shrink-0">
                 <Radio className="w-4 h-4 md:w-5 md:h-5 text-orange-500" />
               </div>
             </div>
@@ -204,15 +204,15 @@ export function DashboardView() {
         <Card className="glass-card border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-purple-500/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">No Ranking</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] md:text-xs text-muted-foreground">Ranking</p>
                 <p className="text-lg md:text-2xl font-bold text-foreground">{localStats.rankingTotal}</p>
                 <p className="text-[10px] md:text-xs text-purple-500 flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3" />
+                  <TrendingUp className="w-3 h-3 flex-shrink-0" />
                   TOP50
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
                 <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-purple-500" />
               </div>
             </div>
@@ -222,17 +222,17 @@ export function DashboardView() {
         <Card className="glass-card border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-cyan-500/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Emissoras</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] md:text-xs text-muted-foreground">Emissoras</p>
                 <p className="text-lg md:text-2xl font-bold text-foreground">
                   {realtimeStats.isLoading ? '...' : realtimeStats.activeStations}
                 </p>
                 <p className="text-[10px] md:text-xs text-cyan-500 flex items-center gap-1">
-                  <Radio className="w-3 h-3" />
-                  <span className="hidden sm:inline">Monitorando</span>
+                  <Radio className="w-3 h-3 flex-shrink-0" />
+                  <span>Monitorando</span>
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
                 <Radio className="w-4 h-4 md:w-5 md:h-5 text-cyan-500" />
               </div>
             </div>
@@ -242,21 +242,21 @@ export function DashboardView() {
         <Card className={`glass-card border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5 ${libraryStats.unavailable ? 'opacity-60' : ''}`}>
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Banco Musical</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] md:text-xs text-muted-foreground">Banco</p>
                 {libraryStats.unavailable ? (
-                  <p className="text-xs md:text-sm font-medium text-amber-500">Desktop Only</p>
+                  <p className="text-xs md:text-sm font-medium text-amber-500">N/A</p>
                 ) : (
                   <p className="text-lg md:text-2xl font-bold text-foreground">
                     {libraryStats.isLoading ? '...' : libraryStats.count.toLocaleString()}
                   </p>
                 )}
                 <p className="text-[10px] md:text-xs text-amber-500 flex items-center gap-1">
-                  <HardDrive className="w-3 h-3" />
-                  <span className="hidden sm:inline">{libraryStats.unavailable ? 'Indisponível' : 'Local'}</span>
+                  <HardDrive className="w-3 h-3 flex-shrink-0" />
+                  <span>{libraryStats.unavailable ? 'Indisp.' : 'Local'}</span>
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
                 <HardDrive className="w-4 h-4 md:w-5 md:h-5 text-amber-500" />
               </div>
             </div>
@@ -266,15 +266,15 @@ export function DashboardView() {
         <Card className="glass-card border-red-500/20 bg-gradient-to-br from-red-500/10 to-red-500/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Faltando</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] md:text-xs text-muted-foreground">Faltando</p>
                 <p className="text-lg md:text-2xl font-bold text-foreground">{missingSongs.length}</p>
                 <p className="text-[10px] md:text-xs text-red-500 flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  <span className="hidden sm:inline">No Banco</span>
+                  <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                  <span>No Banco</span>
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-red-500/20 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
                 <AlertTriangle className="w-4 h-4 md:w-5 md:h-5 text-red-500" />
               </div>
             </div>
@@ -287,15 +287,15 @@ export function DashboardView() {
             <Card className="glass-card border-destructive/20 bg-gradient-to-br from-destructive/10 to-destructive/5 cursor-pointer hover:border-destructive/40 transition-colors">
               <CardContent className="p-3 md:p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-[10px] md:text-xs text-muted-foreground truncate">Zerar Tudo</p>
-                    <p className="text-sm md:text-base font-medium text-destructive">Reset Total</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] md:text-xs text-muted-foreground">Zerar</p>
+                    <p className="text-sm md:text-base font-medium text-destructive">Reset</p>
                     <p className="text-[10px] md:text-xs text-destructive/70 flex items-center gap-1">
-                      <RotateCcw className="w-3 h-3" />
-                      <span className="hidden sm:inline">Limpar</span>
+                      <RotateCcw className="w-3 h-3 flex-shrink-0" />
+                      <span>Limpar</span>
                     </p>
                   </div>
-                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-destructive/20 flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-destructive/20 flex items-center justify-center flex-shrink-0">
                     <RotateCcw className="w-4 h-4 md:w-5 md:h-5 text-destructive" />
                   </div>
                 </div>
@@ -362,17 +362,17 @@ export function DashboardView() {
         <Card className={`glass-card ${downloads.backendConnected ? 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5' : 'border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-yellow-500/5'}`}>
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Backend</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] md:text-xs text-muted-foreground">Backend</p>
                 <p className={`text-sm md:text-base font-medium ${downloads.backendConnected ? 'text-emerald-500' : 'text-yellow-500'}`}>
-                  {downloads.backendConnected ? 'Conectado' : 'Desconectado'}
+                  {downloads.backendConnected ? 'OK' : 'Off'}
                 </p>
                 <p className={`text-[10px] md:text-xs ${downloads.backendConnected ? 'text-emerald-500/70' : 'text-yellow-500/70'} flex items-center gap-1`}>
-                  <CheckCheck className="w-3 h-3" />
-                  <span className="hidden sm:inline">{downloads.songsVerified} verificadas</span>
+                  <CheckCheck className="w-3 h-3 flex-shrink-0" />
+                  <span>{downloads.songsVerified} verif.</span>
                 </p>
               </div>
-              <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg ${downloads.backendConnected ? 'bg-emerald-500/20' : 'bg-yellow-500/20'} flex items-center justify-center shrink-0`}>
+              <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg ${downloads.backendConnected ? 'bg-emerald-500/20' : 'bg-yellow-500/20'} flex items-center justify-center flex-shrink-0`}>
                 {downloads.backendConnected ? (
                   <Wifi className="w-4 h-4 md:w-5 md:h-5 text-emerald-500" />
                 ) : (
@@ -424,8 +424,8 @@ export function DashboardView() {
         </Card>
       )}
 
-      {/* Auto Grade Builder Status */}
-      {gradeBuilder.isElectron && (
+      {/* Auto Grade Builder Status - Show in both Electron and Service Mode */}
+      {(gradeBuilder.isElectron || downloads.backendConnected) && (
         <Card className="glass-card border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 to-transparent">
           <CardContent className="p-4 space-y-4">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">

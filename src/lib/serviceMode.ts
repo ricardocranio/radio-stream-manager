@@ -9,12 +9,22 @@
 export const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron === true;
 
 // Check if running in Service Mode (localhost without native Electron)
-// Also detects 127.0.0.1 variant
+// Also detects 127.0.0.1 variant and port 8080 specifically used by Electron service
 export const isServiceMode = (): boolean => {
   if (typeof window === 'undefined') return false;
+  // Don't check Service Mode if we're in native Electron
+  if (isElectron) return false;
+  
   const hostname = window.location.hostname;
+  const port = window.location.port;
+  
+  // Standard localhost detection
   const isLocalhost = hostname === '127.0.0.1' || hostname === 'localhost';
-  return isLocalhost && !isElectron;
+  
+  // Also detect if we're on port 8080 (Electron service mode default port)
+  const isServicePort = port === '8080' || port === '3000' || port === '5173' || port === '8000';
+  
+  return isLocalhost || (isServicePort && !hostname.includes('lovable'));
 };
 
 // Check if we're in Lovable preview environment (not localhost, not electron)
