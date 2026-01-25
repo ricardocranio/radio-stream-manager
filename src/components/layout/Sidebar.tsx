@@ -68,17 +68,14 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       items = [...coreNavItems, ...completeOnlyNavItems, ...sharedNavItems];
     }
     
-    // Add badges to relevant items
+    // Add badges to relevant items - always show missing count (what's not in library)
     return items.map(item => {
-      if (item.id === 'missing') {
-        const badgeCount = queueLength > 0 ? queueLength : missingSongsCount;
-        if (badgeCount > 0) {
-          return {
-            ...item,
-            badge: badgeCount,
-            badgeType: 'dynamic' as const,
-          };
-        }
+      if (item.id === 'missing' && missingSongsCount > 0) {
+        return {
+          ...item,
+          badge: missingSongsCount,
+          badgeType: 'dynamic' as const,
+        };
       }
       return item;
     });
