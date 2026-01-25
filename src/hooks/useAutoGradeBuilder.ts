@@ -4,7 +4,7 @@ import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { isElectron as isElectronNative, isServiceMode, findSongMatchViaAPI, saveGradeFileViaAPI, readGradeFileViaAPI } from '@/lib/serviceMode';
+import { isElectron as isElectronNative, isServiceMode, findSongMatchViaAPI, saveGradeFileViaAPI, readGradeFileViaAPI, checkElectronBackend, isLovablePreview } from '@/lib/serviceMode';
 
 interface SongEntry {
   title: string;
@@ -55,7 +55,30 @@ interface AutoGradeState {
   lastSaveProgress: number;
 }
 
-const isElectronEnv = isElectronNative || isServiceMode();
+// Cache for backend availability - check once per session
+let backendAvailabilityCache: boolean | null = null;
+
+// Verify backend is available before operations
+async function verifyBackendAvailable(): Promise<boolean> {
+  // Native Electron always available
+  if (isElectronNative && window.electronAPI?.findSongMatch) {
+    return true;
+  }
+  
+  // Service Mode - check via health endpoint
+  if (isServiceMode()) {
+    if (backendAvailabilityCache !== null) {
+      return backendAvailabilityCache;
+    }
+    const available = await checkElectronBackend();
+    backendAvailabilityCache = available;
+    console.log(`[GRADE] Backend availability: ${available ? '✅ CONNECTED' : '❌ NOT AVAILABLE'}`);
+    return available;
+  }
+  
+  // Lovable preview - no backend
+  return false;
+}
 
 // Helper function to save grade file (works in both Electron native and Service Mode)
 async function saveGradeFile(folder: string, filename: string, content: string): Promise<{ success: boolean; filePath?: string; error?: string }> {
@@ -65,8 +88,10 @@ async function saveGradeFile(folder: string, filename: string, content: string):
   }
   // Fall back to HTTP API for Service Mode
   if (isServiceMode()) {
+    console.log(`[GRADE] Saving via HTTP API: ${filename}`);
     return saveGradeFileViaAPI(folder, filename, content);
   }
+  console.warn('[GRADE] No backend available for saving file');
   return { success: false, error: 'Nenhum backend disponível' };
 }
 
@@ -82,8 +107,12 @@ async function readGradeFile(folder: string, filename: string): Promise<{ succes
   }
   return { success: false, error: 'Nenhum backend disponível' };
 }
+
 const ARTIST_REPETITION_MINUTES = 60;
 const DEFAULT_MINUTES_BEFORE_BLOCK = 10;
+
+// Helper to check if we're in an environment that can use local operations
+const isElectronEnv = isElectronNative || isServiceMode();
 
 export function useAutoGradeBuilder() {
   const { toast } = useToast();
@@ -286,26 +315,33 @@ export function useAutoGradeBuilder() {
         }
         return { exists: result.exists };
       } catch (error) {
-        console.error('[GRADE] Error finding song match:', error);
-        return { exists: true };
+        console.error('[GRADE] Error finding song match via IPC:', error);
+        // Continue to try HTTP API
       }
     }
     
-    // Try HTTP API for Service Mode
+    // Try HTTP API for Service Mode (localhost)
     if (isServiceMode() && config.musicFolders.length > 0) {
       try {
+        console.log(`[GRADE] Checking library via API: ${artist} - ${title}`);
         const result = await findSongMatchViaAPI(artist, title, config.musicFolders, config.similarityThreshold || 0.75);
         if (result.exists && result.baseName) {
+          console.log(`[GRADE] ✓ Found in library: ${result.baseName}`);
           return { exists: true, filename: `${result.baseName}.mp3` };
         }
+        console.log(`[GRADE] ✗ Not in library: ${artist} - ${title}`);
         return { exists: result.exists };
       } catch (error) {
         console.error('[GRADE] HTTP API error finding song match:', error);
-        return { exists: true };
+        // For Service Mode, if API fails, assume NOT exists to trigger download
+        return { exists: false };
       }
     }
     
-    // Web mode: assume exists
+    // Web-only mode (Lovable Preview or no backend): assume exists
+    // In preview environments, we can't check the user's actual library
+    // This allows preview to show "as if" songs exist
+    console.log('[GRADE] Web-only mode: assuming song exists (no backend available)');
     return { exists: true };
   }, [config.musicFolders, config.similarityThreshold]);
 

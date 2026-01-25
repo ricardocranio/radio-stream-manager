@@ -9,11 +9,21 @@
 export const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron === true;
 
 // Check if running in Service Mode (localhost without native Electron)
+// Also detects 127.0.0.1 variant
 export const isServiceMode = (): boolean => {
   if (typeof window === 'undefined') return false;
   const hostname = window.location.hostname;
   const isLocalhost = hostname === '127.0.0.1' || hostname === 'localhost';
   return isLocalhost && !isElectron;
+};
+
+// Check if we're in Lovable preview environment (not localhost, not electron)
+export const isLovablePreview = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  if (isElectron) return false;
+  if (isServiceMode()) return false;
+  // If we get here, we're in a web browser but not localhost
+  return true;
 };
 
 // Cache for backend availability check

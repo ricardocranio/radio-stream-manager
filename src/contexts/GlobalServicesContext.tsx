@@ -575,10 +575,46 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   );
 }
 
+// Default values for when context is not available (defensive programming)
+const defaultGradeBuilderValues = {
+  isBuilding: false,
+  currentProgress: { processed: 0, total: 0, currentArtist: '', currentTitle: '' },
+  lastBuildResult: null,
+  lastSaveTime: null,
+  minutesBeforeBlock: 10,
+  setMinutesBeforeBlock: () => {},
+  buildCurrentBlock: async () => ({}),
+  isEnabled: true,
+  setIsEnabled: () => {},
+};
+
+const defaultContextValue: GlobalServicesContextType = {
+  gradeBuilder: defaultGradeBuilderValues as any,
+  scraping: {
+    stats: {
+      lastScrape: null,
+      successCount: 0,
+      errorCount: 0,
+      totalSongs: 0,
+      isRunning: false,
+      currentStation: null,
+      failedStations: [],
+    },
+    scrapeAllStations: async () => ({ successCount: 0, errorCount: 0, newSongsCount: 0 }),
+    isRunning: false,
+  },
+  downloads: {
+    queueLength: 0,
+    isProcessing: false,
+  },
+};
+
 export function useGlobalServices() {
   const context = useContext(GlobalServicesContext);
+  // Return default values if context is not available (defensive - prevents app crash)
   if (!context) {
-    throw new Error('useGlobalServices must be used within a GlobalServicesProvider');
+    console.warn('[useGlobalServices] Context not available, using defaults');
+    return defaultContextValue;
   }
   return context;
 }
