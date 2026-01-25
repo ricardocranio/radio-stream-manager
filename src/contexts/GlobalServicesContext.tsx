@@ -18,7 +18,8 @@ import { radioScraperApi } from '@/lib/api/radioScraper';
 import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
 import { cleanAndValidateSong } from '@/lib/cleanSongMetadata';
-import { isElectron, isServiceMode, checkElectronBackend, downloadViaAPI } from '@/lib/serviceMode';
+import { isElectron, isServiceMode, checkElectronBackend, downloadViaAPI, onBackendReconnect, resetReconnectState } from '@/lib/serviceMode';
+import { logSystemError } from '@/store/gradeLogStore';
 
 // ============= TYPES =============
 
@@ -116,11 +117,32 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     if (isServiceMode()) {
       console.log('[GLOBAL-SVC] Service Mode detected - checking backend availability...');
       
+      // Subscribe to auto-reconnect events
+      const unsubscribe = onBackendReconnect((connected) => {
+        electronBackendRef.current = connected;
+        setDownloadState(prev => ({ ...prev, backendConnected: connected }));
+        
+        if (connected) {
+          logSystemError('SYSTEM', 'info', 'Backend reconectado automaticamente', 
+            'Conexão com o Electron foi restaurada.');
+          console.log('[GLOBAL-SVC] 🔄 Backend auto-reconnected!');
+        } else {
+          logSystemError('SYSTEM', 'warning', 'Backend desconectado - tentando reconectar...', 
+            'O sistema tentará reconectar automaticamente.');
+          console.log('[GLOBAL-SVC] ⚠️ Backend disconnected, auto-reconnect started');
+        }
+      });
+      
       // Immediate check on mount
       checkElectronBackend().then(available => {
         electronBackendRef.current = available;
         setDownloadState(prev => ({ ...prev, backendConnected: available }));
         console.log(`[GLOBAL-SVC] Service mode backend: ${available ? '✅ CONNECTED' : '❌ NOT AVAILABLE'}`);
+        
+        if (!available) {
+          logSystemError('SYSTEM', 'warning', 'Backend não disponível ao iniciar', 
+            'O sistema tentará reconectar automaticamente.');
+        }
       });
       
       // Re-check periodically in case backend becomes available later
@@ -132,9 +154,12 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
             console.log(`[GLOBAL-SVC] Service mode backend status changed: ${available ? '✅ CONNECTED' : '❌ DISCONNECTED'}`);
           }
         });
-      }, 15000); // Check every 15 seconds (was 30)
+      }, 15000); // Check every 15 seconds
       
-      return () => clearInterval(intervalId);
+      return () => {
+        clearInterval(intervalId);
+        unsubscribe();
+      };
     }
     
     // Neither Electron nor Service Mode - likely Lovable preview
