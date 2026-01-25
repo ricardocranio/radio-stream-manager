@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { useRadioStore } from '@/store/radioStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
+import { isElectron, isServiceMode, findSongMatchViaAPI } from '@/lib/serviceMode';
 
 interface CheckResult {
   exists: boolean;
@@ -142,59 +143,45 @@ export function useCheckMusicLibrary() {
       }
 
       // Try HTTP API for Service Mode (browser accessing localhost)
-      const isLocalhost = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
-      if (isLocalhost && config.musicFolders.length > 0) {
+      if (isServiceMode() && config.musicFolders.length > 0) {
         try {
           console.log(`[CHECK] Using HTTP API for: ${artist} - ${title}`);
-          const response = await fetch('/api/find-song-match', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+          const result = await findSongMatchViaAPI(artist, title, config.musicFolders, threshold);
+          
+          // Log similarity check result
+          if (result.exists && result.similarity !== undefined) {
+            addSimilarityLog({
               artist,
               title,
-              musicFolders: config.musicFolders,
+              matchedFilename: result.filename,
+              similarity: result.similarity,
               threshold,
-            }),
-          });
-          
-          if (response.ok) {
-            const result = await response.json();
-            
-            // Log similarity check result
-            if (result.exists && result.similarity !== undefined) {
-              addSimilarityLog({
-                artist,
-                title,
-                matchedFilename: result.filename,
-                similarity: result.similarity,
-                threshold,
-                accepted: true,
-                reason: 'match_found',
-              });
-            } else if (result.similarity !== undefined && result.similarity > 0) {
-              addSimilarityLog({
-                artist,
-                title,
-                matchedFilename: result.filename,
-                similarity: result.similarity,
-                threshold,
-                accepted: false,
-                reason: 'below_threshold',
-              });
-            } else {
-              addSimilarityLog({
-                artist,
-                title,
-                similarity: 0,
-                threshold,
-                accepted: false,
-                reason: 'no_match',
-              });
-            }
-            
-            songCheckCache.set(cacheKey, { result, timestamp: Date.now() });
-            return result;
+              accepted: true,
+              reason: 'match_found',
+            });
+          } else if (result.similarity !== undefined && result.similarity > 0) {
+            addSimilarityLog({
+              artist,
+              title,
+              matchedFilename: result.filename,
+              similarity: result.similarity,
+              threshold,
+              accepted: false,
+              reason: 'below_threshold',
+            });
+          } else {
+            addSimilarityLog({
+              artist,
+              title,
+              similarity: 0,
+              threshold,
+              accepted: false,
+              reason: 'no_match',
+            });
           }
+          
+          songCheckCache.set(cacheKey, { result, timestamp: Date.now() });
+          return result;
         } catch (httpError) {
           console.warn(`[CHECK] HTTP API error: ${httpError}`);
         }
@@ -337,40 +324,24 @@ export async function checkSongInLibrary(
   }
 
   // Try HTTP API for Service Mode (browser accessing localhost)
-  const isLocalhost = typeof window !== 'undefined' && 
-    (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');
-  
-  if (isLocalhost && musicFolders.length > 0) {
+  if (isServiceMode() && musicFolders.length > 0) {
     try {
       console.log(`[LIBRARY] Using HTTP API for: ${artist} - ${title}`);
-      const response = await fetch('/api/find-song-match', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          artist,
-          title,
-          musicFolders,
-          threshold,
-        }),
-      });
+      const result = await findSongMatchViaAPI(artist, title, musicFolders, threshold);
       
-      if (response.ok) {
-        const result = await response.json();
-        
-        const thresholdPercent = Math.round(threshold * 100);
-        const similarityPercent = Math.round((result.similarity || 0) * 100);
-        
-        if (result.exists) {
-          console.log(`[LIBRARY] ✅ Match: ${artist} - ${title} → ${result.filename} (${similarityPercent}% ≥ ${thresholdPercent}%)`);
-        } else if (result.similarity && result.similarity > 0) {
-          console.log(`[LIBRARY] ❌ Below threshold: ${artist} - ${title} → ${result.filename} (${similarityPercent}% < ${thresholdPercent}%)`);
-        } else {
-          console.log(`[LIBRARY] ⚠️ No match: ${artist} - ${title}`);
-        }
-        
-        songCheckCache.set(cacheKey, { result, timestamp: Date.now() });
-        return result;
+      const thresholdPercent = Math.round(threshold * 100);
+      const similarityPercent = Math.round((result.similarity || 0) * 100);
+      
+      if (result.exists) {
+        console.log(`[LIBRARY] ✅ Match: ${artist} - ${title} → ${result.filename} (${similarityPercent}% ≥ ${thresholdPercent}%)`);
+      } else if (result.similarity && result.similarity > 0) {
+        console.log(`[LIBRARY] ❌ Below threshold: ${artist} - ${title} → ${result.filename} (${similarityPercent}% < ${thresholdPercent}%)`);
+      } else {
+        console.log(`[LIBRARY] ⚠️ No match: ${artist} - ${title}`);
       }
+      
+      songCheckCache.set(cacheKey, { result, timestamp: Date.now() });
+      return result;
     } catch (httpError) {
       console.warn(`[LIBRARY] HTTP API error: ${httpError}`);
     }
