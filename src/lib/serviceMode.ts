@@ -216,3 +216,71 @@ export async function checkDeemixStatusViaAPI(): Promise<{ installed: boolean; c
     return { installed: false, error: String(error) };
   }
 }
+
+// ============= GRADE FILE API WRAPPERS =============
+
+interface SaveGradeResult {
+  success: boolean;
+  filePath?: string;
+  error?: string;
+}
+
+/**
+ * Save grade file via HTTP API (for Service Mode)
+ */
+export async function saveGradeFileViaAPI(
+  folder: string,
+  filename: string,
+  content: string
+): Promise<SaveGradeResult> {
+  try {
+    const response = await fetch('/api/save-grade-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder, filename, content }),
+      signal: AbortSignal.timeout(30000),
+    });
+    
+    if (response.ok) {
+      return await response.json();
+    }
+    
+    return { success: false, error: `HTTP ${response.status}` };
+  } catch (error) {
+    console.error('[SERVICE-API] saveGradeFile error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+interface ReadGradeResult {
+  success: boolean;
+  content?: string;
+  filePath?: string;
+  error?: string;
+}
+
+/**
+ * Read grade file via HTTP API (for Service Mode)
+ */
+export async function readGradeFileViaAPI(
+  folder: string,
+  filename: string
+): Promise<ReadGradeResult> {
+  try {
+    const response = await fetch('/api/read-grade-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder, filename }),
+      signal: AbortSignal.timeout(10000),
+    });
+    
+    if (response.ok) {
+      return await response.json();
+    }
+    
+    return { success: false, error: `HTTP ${response.status}` };
+  } catch (error) {
+    console.error('[SERVICE-API] readGradeFile error:', error);
+    return { success: false, error: String(error) };
+  }
+}

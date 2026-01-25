@@ -4,7 +4,7 @@ import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { isElectron as isElectronNative, isServiceMode, findSongMatchViaAPI } from '@/lib/serviceMode';
+import { isElectron as isElectronNative, isServiceMode, findSongMatchViaAPI, saveGradeFileViaAPI, readGradeFileViaAPI } from '@/lib/serviceMode';
 
 interface SongEntry {
   title: string;
@@ -56,6 +56,32 @@ interface AutoGradeState {
 }
 
 const isElectronEnv = isElectronNative || isServiceMode();
+
+// Helper function to save grade file (works in both Electron native and Service Mode)
+async function saveGradeFile(folder: string, filename: string, content: string): Promise<{ success: boolean; filePath?: string; error?: string }> {
+  // Try native Electron API first
+  if (window.electronAPI?.saveGradeFile) {
+    return window.electronAPI.saveGradeFile({ folder, filename, content });
+  }
+  // Fall back to HTTP API for Service Mode
+  if (isServiceMode()) {
+    return saveGradeFileViaAPI(folder, filename, content);
+  }
+  return { success: false, error: 'Nenhum backend disponível' };
+}
+
+// Helper function to read grade file (works in both Electron native and Service Mode)
+async function readGradeFile(folder: string, filename: string): Promise<{ success: boolean; content?: string; error?: string }> {
+  // Try native Electron API first
+  if (window.electronAPI?.readGradeFile) {
+    return window.electronAPI.readGradeFile({ folder, filename });
+  }
+  // Fall back to HTTP API for Service Mode
+  if (isServiceMode()) {
+    return readGradeFileViaAPI(folder, filename);
+  }
+  return { success: false, error: 'Nenhum backend disponível' };
+}
 const ARTIST_REPETITION_MINUTES = 60;
 const DEFAULT_MINUTES_BEFORE_BLOCK = 10;
 
@@ -1025,10 +1051,10 @@ export function useAutoGradeBuilder() {
 
   // Generate complete day's grade (48 blocks from 00:00 to 23:30) with PROGRESSIVE SAVING
   const buildFullDayGrade = useCallback(async () => {
-    if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
+    if (!isElectronEnv) {
       toast({
         title: '⚠️ Modo Web',
-        description: 'Geração de grade disponível apenas no aplicativo desktop.',
+        description: 'Geração de grade disponível apenas no aplicativo desktop ou modo serviço.',
       });
       return;
     }
@@ -1101,11 +1127,11 @@ export function useAutoGradeBuilder() {
             const content = lines.join('\n');
             
             try {
-              const saveResult = await window.electronAPI.saveGradeFile({
-                folder: config.gradeFolder,
+              const saveResult = await saveGradeFile(
+                config.gradeFolder,
                 filename,
                 content,
-              });
+              );
               
               if (saveResult.success) {
                 console.log(`[AUTO-GRADE] 💾 Progressive save: ${blockCount}/48 blocos`);
@@ -1130,11 +1156,11 @@ export function useAutoGradeBuilder() {
 
       // Final save (redundant but ensures complete save)
       const finalContent = lines.join('\n');
-      const result = await window.electronAPI.saveGradeFile({
-        folder: config.gradeFolder,
+      const result = await saveGradeFile(
+        config.gradeFolder,
         filename,
-        content: finalContent,
-      });
+        finalContent,
+      );
 
       if (result.success) {
         console.log(`[AUTO-GRADE] ✅ Full day grade saved: ${result.filePath}`);
@@ -1247,8 +1273,8 @@ export function useAutoGradeBuilder() {
   // Build current and next blocks (incremental update to existing file)
   // ALWAYS saves to destination folder - ensuring current time slot is updated
   const buildGrade = useCallback(async () => {
-    if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
-      console.log('[AUTO-GRADE] Not in Electron mode, skipping');
+    if (!isElectronEnv) {
+      console.log('[AUTO-GRADE] Not in Electron/Service mode, skipping');
       return;
     }
 
@@ -1267,10 +1293,10 @@ export function useAutoGradeBuilder() {
       let existingContent = '';
 
       try {
-        const readResult = await window.electronAPI.readGradeFile({
-          folder: config.gradeFolder,
+        const readResult = await readGradeFile(
+          config.gradeFolder,
           filename,
-        });
+        );
         if (readResult.success && readResult.content) {
           existingContent = readResult.content;
           // Load used songs from file to prevent repetition
@@ -1312,11 +1338,11 @@ export function useAutoGradeBuilder() {
         .map(t => lineMap.get(t))
         .join('\n');
 
-      const result = await window.electronAPI.saveGradeFile({
-        folder: config.gradeFolder,
+      const result = await saveGradeFile(
+        config.gradeFolder,
         filename,
-        content: sortedContent,
-      });
+        sortedContent,
+      );
 
       if (result.success) {
         console.log(`[AUTO-GRADE] ✅ Grade salva na pasta destino: ${result.filePath}`);
