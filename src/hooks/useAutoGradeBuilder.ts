@@ -561,10 +561,15 @@ export function useAutoGradeBuilder() {
     // Normal block with 10 songs following the configured SEQUENCE
     const songs: string[] = [];
     const usedInBlock = new Set<string>();
+    
+    // Build mappings for ID -> Name AND Name -> Name (for flexibility)
     const stationIdToName: Record<string, string> = {};
+    const stationNameToName: Record<string, string> = {};
     
     stations.forEach(s => {
       stationIdToName[s.id] = s.name;
+      stationNameToName[s.name] = s.name;
+      stationNameToName[s.name.toLowerCase()] = s.name;
     });
 
     // Create a flattened pool of all songs for fallback
@@ -659,6 +664,11 @@ export function useAutoGradeBuilder() {
       }
       return null;
     };
+
+    // Log sequence configuration for debugging
+    console.log(`[GRADE] 📋 Generating block ${timeStr} with ${sequence.length} positions`);
+    console.log(`[GRADE] 📋 Sequence:`, sequence.map(s => `${s.position}: ${s.radioSource}`).join(', '));
+    console.log(`[GRADE] 📋 Available songs by station:`, Object.keys(songsByStation).map(k => `${k}: ${songsByStation[k].length}`).join(', '));
 
     // Follow the user-configured SEQUENCE (position 1 = Band FM, position 2 = Clube FM, etc.)
     for (const seq of sequence) {
@@ -789,10 +799,32 @@ export function useAutoGradeBuilder() {
         continue;
       }
 
-      // Normal station logic
-      const stationName = stationIdToName[seq.radioSource];
+      // Normal station logic - try ID first, then try by name
+      let stationName = stationIdToName[seq.radioSource];
+      
+      // If not found by ID, try by name (in case radioSource is the station name)
+      if (!stationName) {
+        stationName = stationNameToName[seq.radioSource] || stationNameToName[seq.radioSource.toLowerCase()];
+      }
+      
+      // Still not found? Log warning and skip
+      if (!stationName) {
+        console.warn(`[GRADE] ⚠️ Station not found for radioSource: ${seq.radioSource}`);
+        const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
+        songs.push(coringaCode);
+        blockLogs.push({
+          blockTime: timeStr,
+          type: 'substituted',
+          title: seq.radioSource,
+          artist: 'CORINGA',
+          station: 'FALLBACK',
+          reason: `Emissora "${seq.radioSource}" não encontrada - verificar configuração da Sequência`,
+        });
+        continue;
+      }
+      
       const stationStyle = getStationStyle(seq.radioSource);
-      const stationSongs = stationName ? songsByStation[stationName] : [];
+      const stationSongs = songsByStation[stationName] || [];
       
       // Initialize index for this station
       if (stationSongIndex[stationName] === undefined) {
@@ -1012,6 +1044,9 @@ export function useAutoGradeBuilder() {
         usedInBlock.add(`${selectedSong.title.toLowerCase()}-${selectedSong.artist.toLowerCase()}`);
         markSongAsUsed(selectedSong.title, selectedSong.artist, timeStr);
         
+        // Log successful selection for this sequence position
+        console.log(`[GRADE] ✅ Pos ${seq.position} (${seq.radioSource}): ${selectedSong.artist} - ${selectedSong.title} [${selectedSong.station}]`);
+        
         blockLogs.push({
           blockTime: timeStr,
           type: 'used',
@@ -1025,13 +1060,17 @@ export function useAutoGradeBuilder() {
         const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
         songs.push(coringaCode);
         stats.missing++;
+        
+        // Log fallback for this sequence position
+        console.log(`[GRADE] ❌ Pos ${seq.position} (${seq.radioSource}): CORINGA - nenhuma música encontrada`);
+        
         blockLogs.push({
           blockTime: timeStr,
           type: 'substituted',
           title: coringaCode,
           artist: 'CORINGA',
           station: 'FALLBACK',
-          reason: 'Nenhuma música válida encontrada, usando coringa para curadoria manual',
+          reason: `Posição ${seq.position}: Nenhuma música válida da emissora "${seq.radioSource}"`,
         });
       }
     }
