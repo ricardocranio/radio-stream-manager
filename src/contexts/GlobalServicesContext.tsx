@@ -104,12 +104,34 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         electronBackendRef.current = available;
         console.log(`[GLOBAL-SVC] Service mode backend: ${available ? 'CONNECTED' : 'NOT AVAILABLE'}`);
       });
+      
+      // Re-check periodically in case backend becomes available later
+      const intervalId = setInterval(() => {
+        checkElectronBackend().then(available => {
+          if (available !== electronBackendRef.current) {
+            electronBackendRef.current = available;
+            console.log(`[GLOBAL-SVC] Service mode backend status changed: ${available ? 'CONNECTED' : 'DISCONNECTED'}`);
+          }
+        });
+      }, 30000); // Check every 30 seconds
+      
+      return () => clearInterval(intervalId);
     }
   }, []);
   
   const downloadSong = useCallback(async (song: MissingSong): Promise<boolean> => {
     const canUseElectronDirect = isElectron && window.electronAPI?.downloadFromDeezer;
-    const canUseServiceMode = isServiceMode() && electronBackendRef.current;
+    
+    // For service mode, check backend availability dynamically if not yet confirmed
+    let canUseServiceMode = isServiceMode() && electronBackendRef.current === true;
+    
+    // If in service mode but backend not confirmed, try checking now
+    if (isServiceMode() && electronBackendRef.current === null) {
+      const available = await checkElectronBackend();
+      electronBackendRef.current = available;
+      canUseServiceMode = available;
+      console.log(`[GLOBAL-SVC] On-demand backend check: ${available ? 'CONNECTED' : 'NOT AVAILABLE'}`);
+    }
     
     if (!canUseElectronDirect && !canUseServiceMode) {
       console.log('[GLOBAL-SVC] ❌ Skipping download - no backend available');

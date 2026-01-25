@@ -29,8 +29,13 @@ const BACKEND_CHECK_INTERVAL = 30000; // 30 seconds
 export async function checkElectronBackend(): Promise<boolean> {
   const now = Date.now();
   
-  // Return cached result if recent
-  if (backendAvailableCache !== null && (now - lastBackendCheck) < BACKEND_CHECK_INTERVAL) {
+  // Return cached result if recent (but only if it was true - retry faster if false)
+  if (backendAvailableCache === true && (now - lastBackendCheck) < BACKEND_CHECK_INTERVAL) {
+    return backendAvailableCache;
+  }
+  
+  // If was false, use shorter cache (5 seconds) to retry faster
+  if (backendAvailableCache === false && (now - lastBackendCheck) < 5000) {
     return backendAvailableCache;
   }
   
@@ -41,20 +46,25 @@ export async function checkElectronBackend(): Promise<boolean> {
   
   backendCheckPromise = (async () => {
     try {
+      console.log('[SERVICE-MODE] Checking backend availability...');
       const response = await fetch('/api/health', { 
         method: 'GET',
         signal: AbortSignal.timeout(5000), // 5 second timeout
       });
       if (response.ok) {
         const data = await response.json();
-        backendAvailableCache = data.electron === true;
+        const available = data.electron === true;
+        backendAvailableCache = available;
         lastBackendCheck = now;
-        return backendAvailableCache;
+        console.log(`[SERVICE-MODE] Backend check result: ${available ? '✅ CONNECTED' : '❌ NOT ELECTRON'}`);
+        return available;
       }
+      console.log(`[SERVICE-MODE] Backend check failed: HTTP ${response.status}`);
       backendAvailableCache = false;
       lastBackendCheck = now;
       return false;
-    } catch {
+    } catch (error) {
+      console.log(`[SERVICE-MODE] Backend check error:`, error);
       backendAvailableCache = false;
       lastBackendCheck = now;
       return false;
