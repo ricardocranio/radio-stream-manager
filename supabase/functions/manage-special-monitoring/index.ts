@@ -116,6 +116,24 @@ Deno.serve(async (req) => {
         );
       }
 
+      case 'clear-scraped-songs': {
+        // Clear all scraped songs from the database
+        console.log('Clearing all scraped songs...');
+        
+        const { error, count } = await supabase
+          .from('scraped_songs')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all rows
+        
+        if (error) throw error;
+        
+        console.log(`Deleted ${count || 'all'} scraped songs`);
+        return new Response(
+          JSON.stringify({ success: true, deleted: count }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ success: false, error: 'Invalid action' }),

@@ -53,6 +53,8 @@ interface GlobalServicesContextType {
   downloads: {
     queueLength: number;
     isProcessing: boolean;
+    backendConnected: boolean;
+    songsVerified: number;
   };
 }
 
@@ -92,16 +94,26 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   const [downloadState, setDownloadState] = useState({
     queueLength: 0,
     isProcessing: false,
+    backendConnected: false,
+    songsVerified: 0,
   });
 
   // ============= DOWNLOAD SERVICE =============
   const electronBackendRef = useRef<boolean | null>(null);
+  const songsVerifiedRef = useRef<number>(0);
   
   // Check backend availability on mount for Service Mode
   useEffect(() => {
+    // Check Electron direct
+    if (isElectron && window.electronAPI) {
+      setDownloadState(prev => ({ ...prev, backendConnected: true }));
+      electronBackendRef.current = true;
+    }
+    
     if (isServiceMode()) {
       checkElectronBackend().then(available => {
         electronBackendRef.current = available;
+        setDownloadState(prev => ({ ...prev, backendConnected: available }));
         console.log(`[GLOBAL-SVC] Service mode backend: ${available ? 'CONNECTED' : 'NOT AVAILABLE'}`);
       });
       
@@ -110,6 +122,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         checkElectronBackend().then(available => {
           if (available !== electronBackendRef.current) {
             electronBackendRef.current = available;
+            setDownloadState(prev => ({ ...prev, backendConnected: available }));
             console.log(`[GLOBAL-SVC] Service mode backend status changed: ${available ? 'CONNECTED' : 'DISCONNECTED'}`);
           }
         });
@@ -387,6 +400,10 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         config.similarityThreshold || 0.75
       );
       
+      // Increment verified counter
+      songsVerifiedRef.current++;
+      setDownloadState(prev => ({ ...prev, songsVerified: songsVerifiedRef.current }));
+      
       const existsInLibrary = libraryCheck.exists;
       const songStatus = existsInLibrary ? 'found' : 'missing';
       
@@ -551,7 +568,8 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         downloadQueueRef.current = [];
         processedSongsRef.current.clear();
         isProcessingRef.current = false;
-        setDownloadState({ queueLength: 0, isProcessing: false });
+        songsVerifiedRef.current = 0;
+        setDownloadState(prev => ({ ...prev, queueLength: 0, isProcessing: false, songsVerified: 0 }));
       }
     });
 
@@ -606,6 +624,8 @@ const defaultContextValue: GlobalServicesContextType = {
   downloads: {
     queueLength: 0,
     isProcessing: false,
+    backendConnected: false,
+    songsVerified: 0,
   },
 };
 
