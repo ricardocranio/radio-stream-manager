@@ -302,7 +302,7 @@ export function Header() {
           </Button>
         )}
 
-        {/* Open Desktop Button (only in browser/web mode) */}
+        {/* Open Desktop Button (only in browser/web mode via localhost) */}
         {mounted && !isElectron && (
           <TooltipProvider>
             <Tooltip>
@@ -310,9 +310,30 @@ export function Header() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    // Try to open desktop app via protocol
-                    window.open('pgmr://open', '_blank');
+                  onClick={async () => {
+                    try {
+                      // Try to call API to show desktop window (works in Service Mode)
+                      const response = await fetch('/api/show-window', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                      });
+                      
+                      if (response.ok) {
+                        toast({
+                          title: '✓ Desktop Aberto',
+                          description: 'A janela do aplicativo foi aberta.',
+                        });
+                      } else {
+                        throw new Error('Backend não respondeu');
+                      }
+                    } catch (error) {
+                      console.error('Error opening desktop:', error);
+                      toast({
+                        title: '⚠️ Desktop não disponível',
+                        description: 'O aplicativo desktop não está rodando em segundo plano.',
+                        variant: 'destructive',
+                      });
+                    }
                   }}
                   className="gap-2 bg-primary/10 border-primary/30 text-primary hover:bg-primary/20 transition-all"
                 >
