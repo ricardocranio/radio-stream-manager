@@ -836,8 +836,39 @@ function createWindow() {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, '../public/favicon.ico');
-  tray = new Tray(iconPath);
+  // Try multiple icon paths for packaged vs development
+  const iconPaths = [
+    path.join(__dirname, '../public/favicon.ico'),
+    path.join(__dirname, '../dist/favicon.ico'),
+    path.join(app.getAppPath(), 'public/favicon.ico'),
+    path.join(app.getAppPath(), 'dist/favicon.ico'),
+  ];
+  
+  let iconPath = iconPaths[0];
+  for (const p of iconPaths) {
+    if (fs.existsSync(p)) {
+      iconPath = p;
+      console.log('[TRAY] Using icon:', p);
+      break;
+    }
+  }
+  
+  try {
+    tray = new Tray(iconPath);
+    console.log('[TRAY] Created successfully');
+  } catch (error) {
+    console.error('[TRAY] Failed to create tray:', error);
+    // Create with default icon as fallback
+    try {
+      const { nativeImage } = require('electron');
+      const emptyIcon = nativeImage.createEmpty();
+      tray = new Tray(emptyIcon);
+      console.log('[TRAY] Created with empty icon fallback');
+    } catch (e2) {
+      console.error('[TRAY] Complete failure:', e2);
+      return;
+    }
+  }
   
   // Use updateTrayMenu for consistent menu across modes
   updateTrayMenu();
@@ -846,14 +877,22 @@ function createTray() {
   tray.on('double-click', () => {
     if (serviceMode === 'service') {
       shell.openExternal(`http://127.0.0.1:${localhostPort}`);
-    } else {
+    } else if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
     }
   });
   
-  // Single click: show window
+  // Right-click: show context menu (explicit for Windows)
+  tray.on('right-click', () => {
+    if (tray) {
+      updateTrayMenu(); // Refresh menu before showing
+      tray.popUpContextMenu();
+    }
+  });
+  
+  // Single click: show window in window mode
   tray.on('click', () => {
-    if (serviceMode === 'window') {
+    if (serviceMode === 'window' && mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
     }
   });
