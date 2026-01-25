@@ -18,9 +18,7 @@ import { radioScraperApi } from '@/lib/api/radioScraper';
 import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
 import { cleanAndValidateSong } from '@/lib/cleanSongMetadata';
-
-// Check if running in Electron
-const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+import { isElectron, isServiceMode, checkElectronBackend, downloadViaAPI } from '@/lib/serviceMode';
 
 // ============= TYPES =============
 
@@ -97,8 +95,24 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   });
 
   // ============= DOWNLOAD SERVICE =============
+  const electronBackendRef = useRef<boolean | null>(null);
+  
+  // Check backend availability on mount for Service Mode
+  useEffect(() => {
+    if (isServiceMode()) {
+      checkElectronBackend().then(available => {
+        electronBackendRef.current = available;
+        console.log(`[GLOBAL-SVC] Service mode backend: ${available ? 'CONNECTED' : 'NOT AVAILABLE'}`);
+      });
+    }
+  }, []);
+  
   const downloadSong = useCallback(async (song: MissingSong): Promise<boolean> => {
-    if (!isElectron || !window.electronAPI?.downloadFromDeezer) {
+    const canUseElectronDirect = isElectron && window.electronAPI?.downloadFromDeezer;
+    const canUseServiceMode = isServiceMode() && electronBackendRef.current;
+    
+    if (!canUseElectronDirect && !canUseServiceMode) {
+      console.log('[GLOBAL-SVC] ❌ Skipping download - no backend available');
       return false;
     }
 
@@ -107,19 +121,28 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       return false;
     }
 
-    console.log(`[GLOBAL-SVC] 🎵 Downloading: ${song.artist} - ${song.title}`);
+    console.log(`[GLOBAL-SVC] 🎵 Downloading: ${song.artist} - ${song.title} (mode: ${canUseElectronDirect ? 'IPC' : 'API'})`);
     useRadioStore.getState().updateMissingSong(song.id, { status: 'downloading' });
 
     const startTime = Date.now();
 
     try {
-      const result = await window.electronAPI.downloadFromDeezer({
+      const downloadParams = {
         artist: song.artist,
         title: song.title,
         arl: state.deezerConfig.arl,
         outputFolder: state.deezerConfig.downloadFolder,
+        outputFolder2: state.deezerConfig.downloadFolder2 || undefined,
         quality: state.deezerConfig.quality,
-      });
+      };
+      
+      // Use IPC if in Electron, otherwise use HTTP API (service mode)
+      let result;
+      if (canUseElectronDirect) {
+        result = await window.electronAPI.downloadFromDeezer(downloadParams);
+      } else {
+        result = await downloadViaAPI(downloadParams);
+      }
 
       const duration = Date.now() - startTime;
 

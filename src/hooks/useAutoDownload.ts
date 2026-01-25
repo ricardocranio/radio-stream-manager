@@ -2,59 +2,13 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { withRetry, createError, ErrorCodes } from '@/lib/errorHandler';
-
-// Check if running in Electron
-const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
-
-// Check if running in Service Mode (localhost with Electron backend)
-const isServiceMode = () => {
-  // Service mode = accessing via localhost but Electron is running in background
-  const isLocalhost = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
-  return isLocalhost && !isElectron;
-};
-
-// Download via HTTP API (for service mode)
-async function downloadViaAPI(params: {
-  artist: string;
-  title: string;
-  arl: string;
-  outputFolder: string;
-  outputFolder2?: string;
-  quality: string;
-}): Promise<{ success: boolean; error?: string; track?: any }> {
-  try {
-    // Use current origin (localhost:PORT) for API call
-    const response = await fetch('/api/download', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return { success: false, error: errorData.error || `HTTP ${response.status}` };
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('[AUTO-DL-API] Fetch error:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Erro de conexão' };
-  }
-}
-
-// Check if Electron backend is available (for service mode)
-async function checkElectronBackend(): Promise<boolean> {
-  try {
-    const response = await fetch('/api/health', { method: 'GET' });
-    if (response.ok) {
-      const data = await response.json();
-      return data.electron === true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
+import { 
+  isElectron, 
+  isServiceMode, 
+  checkElectronBackend, 
+  downloadViaAPI,
+  getBackendAvailable 
+} from '@/lib/serviceMode';
 
 // Constants
 const MAX_RETRIES = 3;
@@ -95,14 +49,26 @@ export function useAutoDownload() {
     }
   }, [resetCounter]);
 
-  // Check for Electron backend availability on mount (for service mode)
+  // Check for Electron backend availability on mount and periodically (for service mode)
   useEffect(() => {
-    if (isServiceMode()) {
-      checkElectronBackend().then(available => {
+    const checkBackend = async () => {
+      if (isServiceMode()) {
+        const available = await checkElectronBackend();
         electronBackendAvailableRef.current = available;
-        console.log(`[AUTO-DL] Service mode detected, Electron backend: ${available ? 'AVAILABLE' : 'NOT AVAILABLE'}`);
-      });
-    }
+        console.log(`[AUTO-DL] Service mode backend: ${available ? 'CONNECTED ✓' : 'NOT AVAILABLE'}`);
+      }
+    };
+    
+    checkBackend();
+    
+    // Re-check every 30 seconds in service mode
+    const interval = setInterval(() => {
+      if (isServiceMode()) {
+        checkBackend();
+      }
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   // Download a single song

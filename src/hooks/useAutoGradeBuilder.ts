@@ -4,6 +4,7 @@ import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { isElectron as isElectronNative, isServiceMode, findSongMatchViaAPI } from '@/lib/serviceMode';
 
 interface SongEntry {
   title: string;
@@ -54,9 +55,9 @@ interface AutoGradeState {
   lastSaveProgress: number;
 }
 
-const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
+const isElectronEnv = isElectronNative || isServiceMode();
 const ARTIST_REPETITION_MINUTES = 60;
-const DEFAULT_MINUTES_BEFORE_BLOCK = 10; // Build 10 minutes before each block (e.g., 16:30 block saves at 16:20)
+const DEFAULT_MINUTES_BEFORE_BLOCK = 10;
 
 export function useAutoGradeBuilder() {
   const { toast } = useToast();
@@ -246,25 +247,41 @@ export function useAutoGradeBuilder() {
 
   // Check if song exists in music library and get the correct filename
   const findSongInLibrary = useCallback(async (artist: string, title: string): Promise<{ exists: boolean; filename?: string }> => {
-    if (!isElectronEnv || !window.electronAPI?.findSongMatch) {
-      return { exists: true }; // Web mode: assume exists
-    }
-    try {
-      const result = await window.electronAPI.findSongMatch({
-        artist,
-        title,
-        musicFolders: config.musicFolders,
-      });
-      if (result.exists && result.baseName) {
-        // Return the actual filename from the library (without extension, we add .mp3)
-        return { exists: true, filename: `${result.baseName}.mp3` };
+    // Try native Electron API first
+    if (window.electronAPI?.findSongMatch) {
+      try {
+        const result = await window.electronAPI.findSongMatch({
+          artist,
+          title,
+          musicFolders: config.musicFolders,
+        });
+        if (result.exists && result.baseName) {
+          return { exists: true, filename: `${result.baseName}.mp3` };
+        }
+        return { exists: result.exists };
+      } catch (error) {
+        console.error('[GRADE] Error finding song match:', error);
+        return { exists: true };
       }
-      return { exists: result.exists };
-    } catch (error) {
-      console.error('[GRADE] Error finding song match:', error);
-      return { exists: true }; // On error, assume exists to avoid blocking
     }
-  }, [config.musicFolders]);
+    
+    // Try HTTP API for Service Mode
+    if (isServiceMode() && config.musicFolders.length > 0) {
+      try {
+        const result = await findSongMatchViaAPI(artist, title, config.musicFolders, config.similarityThreshold || 0.75);
+        if (result.exists && result.baseName) {
+          return { exists: true, filename: `${result.baseName}.mp3` };
+        }
+        return { exists: result.exists };
+      } catch (error) {
+        console.error('[GRADE] HTTP API error finding song match:', error);
+        return { exists: true };
+      }
+    }
+    
+    // Web mode: assume exists
+    return { exists: true };
+  }, [config.musicFolders, config.similarityThreshold]);
 
   // Fallback check if song exists (for backwards compatibility)
   const checkSongInLibrary = useCallback(async (artist: string, title: string): Promise<boolean> => {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRadioStore } from '@/store/radioStore';
+import { isElectron, isServiceMode, getMusicLibraryStatsViaAPI } from '@/lib/serviceMode';
 
 interface MusicLibraryStats {
   count: number;
@@ -45,115 +46,102 @@ export function useMusicLibraryStats() {
       return;
     }
 
-    // If Electron API not available, try HTTP API (Service Mode browser access)
-    if (!window.electronAPI?.getMusicLibraryStats) {
+    // Try native Electron API first
+    if (window.electronAPI?.getMusicLibraryStats) {
+      isLoadingRef.current = true;
+      setStats(prev => ({ ...prev, isLoading: true, error: null }));
+      abortControllerRef.current = new AbortController();
+
       try {
-        // Check if we're in Service Mode (localhost)
-        const isLocalhost = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+        const timeoutMs = 30000;
         
-        if (isLocalhost && config.musicFolders.length > 0) {
-          console.log('[MUSIC-LIBRARY] Using HTTP API for service mode');
-          const response = await fetch('/api/music-library-stats', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ musicFolders: config.musicFolders }),
-          });
-          
-          if (response.ok) {
-            const result = await response.json();
-            if (result.success) {
-              const httpStats: MusicLibraryStats = {
-                count: result.count,
-                folders: result.folders,
-                isLoading: false,
-                lastUpdated: new Date(),
-                error: null,
-              };
-              setStats(httpStats);
-              cachedStats = httpStats;
-              cacheTimestamp = Date.now();
-              console.log(`[MUSIC-LIBRARY] HTTP API returned ${result.count} files`);
-              return;
-            }
-          }
+        const result = await Promise.race([
+          window.electronAPI.getMusicLibraryStats({
+            musicFolders: config.musicFolders,
+          }),
+          new Promise<{ success: false; error: string }>((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout: Pasta de rede não respondeu')), timeoutMs)
+          )
+        ]);
+
+        if (result.success) {
+          const newStats: MusicLibraryStats = {
+            count: result.count,
+            folders: result.folders,
+            isLoading: false,
+            lastUpdated: new Date(),
+            error: null,
+          };
+          setStats(newStats);
+          cachedStats = newStats;
+          cacheTimestamp = Date.now();
+        } else {
+          throw new Error('Erro ao obter estatísticas');
         }
-      } catch (httpError) {
-        console.warn('[MUSIC-LIBRARY] HTTP API failed:', httpError);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Erro ao acessar pasta';
+        console.warn('[MUSIC-LIBRARY] Error (using cache if available):', errorMessage);
+        
+        if (cachedStats) {
+          setStats({ ...cachedStats, isLoading: false, error: null });
+        } else {
+          setStats(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        }
+      } finally {
+        isLoadingRef.current = false;
       }
-      
-      // Fallback for web mode
-      const webStats: MusicLibraryStats = {
-        count: 0,
-        folders: config.musicFolders.length,
-        isLoading: false,
-        lastUpdated: new Date(),
-        error: null,
-      };
-      setStats(webStats);
-      cachedStats = webStats;
-      cacheTimestamp = now;
       return;
     }
 
-    isLoadingRef.current = true;
-    setStats(prev => ({ ...prev, isLoading: true, error: null }));
-    
-    // Create abort controller for timeout
-    abortControllerRef.current = new AbortController();
-
-    try {
-      // Wrap the call with a timeout for network folders
-      const timeoutMs = 30000; // 30 second timeout for network folders
+    // Try HTTP API for Service Mode
+    if (isServiceMode() && config.musicFolders.length > 0) {
+      isLoadingRef.current = true;
+      setStats(prev => ({ ...prev, isLoading: true, error: null }));
       
-      const result = await Promise.race([
-        window.electronAPI.getMusicLibraryStats({
-          musicFolders: config.musicFolders,
-        }),
-        new Promise<{ success: false; error: string }>((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout: Pasta de rede não respondeu')), timeoutMs)
-        )
-      ]);
-
-      if (result.success) {
-        const newStats: MusicLibraryStats = {
-          count: result.count,
-          folders: result.folders,
-          isLoading: false,
-          lastUpdated: new Date(),
-          error: null,
-        };
-        setStats(newStats);
-        cachedStats = newStats;
-        cacheTimestamp = Date.now();
-      } else {
-        setStats(prev => ({
-          ...prev,
-          isLoading: false,
-          lastUpdated: new Date(),
-          error: 'Erro ao obter estatísticas',
-        }));
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro ao acessar pasta';
-      console.warn('[MUSIC-LIBRARY] Error (using cache if available):', errorMessage);
+      console.log('[MUSIC-LIBRARY] Using HTTP API for service mode');
       
-      // If we have cached stats, use them instead of showing error
-      if (cachedStats) {
-        setStats({
-          ...cachedStats,
-          isLoading: false,
-          error: null, // Don't show error if we have cached data
-        });
-      } else {
-        setStats(prev => ({
-          ...prev,
-          isLoading: false,
-          error: errorMessage,
-        }));
+      try {
+        const result = await getMusicLibraryStatsViaAPI(config.musicFolders);
+        
+        if (result.success) {
+          const httpStats: MusicLibraryStats = {
+            count: result.count,
+            folders: result.folders,
+            isLoading: false,
+            lastUpdated: new Date(),
+            error: null,
+          };
+          setStats(httpStats);
+          cachedStats = httpStats;
+          cacheTimestamp = Date.now();
+          console.log(`[MUSIC-LIBRARY] HTTP API returned ${result.count} files`);
+        } else {
+          throw new Error(result.error || 'API error');
+        }
+      } catch (httpError) {
+        console.warn('[MUSIC-LIBRARY] HTTP API failed:', httpError);
+        if (cachedStats) {
+          setStats({ ...cachedStats, isLoading: false, error: null });
+        } else {
+          setStats(prev => ({ ...prev, isLoading: false, error: 'Erro na API HTTP' }));
+        }
+      } finally {
+        isLoadingRef.current = false;
       }
-    } finally {
-      isLoadingRef.current = false;
+      return;
     }
+
+    // Web mode fallback
+    const webStats: MusicLibraryStats = {
+      count: 0,
+      folders: config.musicFolders.length,
+      isLoading: false,
+      lastUpdated: new Date(),
+      error: null,
+    };
+    setStats(webStats);
+    cachedStats = webStats;
+    cacheTimestamp = now;
   }, [config.musicFolders]);
 
   useEffect(() => {
