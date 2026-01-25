@@ -302,6 +302,31 @@ export function Header() {
           </Button>
         )}
 
+        {/* Open Desktop Button (only in browser/web mode) */}
+        {mounted && !isElectron && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // Try to open desktop app via protocol
+                    window.open('pgmr://open', '_blank');
+                  }}
+                  className="gap-2 bg-primary/10 border-primary/30 text-primary hover:bg-primary/20 transition-all"
+                >
+                  <Monitor className="w-4 h-4" />
+                  <span className="hidden md:inline">Desktop</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Abrir versão Desktop do aplicativo
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
         {/* Theme Toggle */}
         {mounted && (
           <Button
