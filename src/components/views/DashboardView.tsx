@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive } from 'lucide-react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
@@ -16,9 +16,11 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { GradePreviewCard } from '@/components/dashboard/GradePreviewCard';
 import { GradeScheduleCard } from '@/components/dashboard/GradeScheduleCard';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { toast } from 'sonner';
 
 export function DashboardView() {
-  const { stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs } = useRadioStore();
+  const { stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs, resetAllCounts } = useRadioStore();
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
   const { stats: realtimeStats, refresh: refreshStats } = useRealtimeStats();
   const { stats: libraryStats } = useMusicLibraryStats();
@@ -55,6 +57,12 @@ export function DashboardView() {
     setIsRefreshing(true);
     await refreshStats();
     setIsRefreshing(false);
+  };
+
+  // Handle reset all counts
+  const handleResetAll = () => {
+    resetAllCounts();
+    toast.success('Todas as contagens foram zeradas!');
   };
 
   const localStats = {
@@ -237,6 +245,59 @@ export function DashboardView() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Reset All Counts Button */}
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Card className="glass-card border-destructive/20 bg-gradient-to-br from-destructive/10 to-destructive/5 cursor-pointer hover:border-destructive/40 transition-colors">
+              <CardContent className="p-3 md:p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] md:text-xs text-muted-foreground truncate">Zerar Tudo</p>
+                    <p className="text-sm md:text-base font-medium text-destructive">Reset Total</p>
+                    <p className="text-[10px] md:text-xs text-destructive/70 flex items-center gap-1">
+                      <RotateCcw className="w-3 h-3" />
+                      <span className="hidden sm:inline">Limpar</span>
+                    </p>
+                  </div>
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-destructive/20 flex items-center justify-center shrink-0">
+                    <RotateCcw className="w-4 h-4 md:w-5 md:h-5 text-destructive" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-destructive" />
+                Zerar Todas as Contagens?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2">
+                <p>Esta ação irá zerar completamente:</p>
+                <ul className="list-disc list-inside text-sm space-y-1 mt-2">
+                  <li>Músicas capturadas locais</li>
+                  <li>Lista de músicas faltando</li>
+                  <li>Histórico de downloads</li>
+                  <li>Histórico de grade</li>
+                  <li>Ranking TOP50</li>
+                  <li>Blocos montados</li>
+                </ul>
+                <p className="text-destructive font-medium mt-3">Esta ação não pode ser desfeita!</p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleResetAll}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Zerar Tudo
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {/* Station Distribution - Filled grid without gaps */}
