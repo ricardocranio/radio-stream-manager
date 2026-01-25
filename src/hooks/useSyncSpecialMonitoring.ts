@@ -92,7 +92,18 @@ export async function addSpecialMonitoringToCloud(schedule: {
       }),
     });
 
-    const result = await response.json();
+    // Validate response before parsing JSON
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}: ${errorText || 'Server error'}`);
+    }
+
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      throw new Error('Invalid JSON response from server');
+    }
     
     if (!result.success) {
       throw new Error(result.error || 'Failed to add schedule');
@@ -147,7 +158,18 @@ export async function updateSpecialMonitoringInCloud(
       }),
     });
 
-    const result = await response.json();
+    // Validate response before parsing JSON
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}: ${errorText || 'Server error'}`);
+    }
+
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      throw new Error('Invalid JSON response from server');
+    }
     
     if (!result.success) {
       throw new Error(result.error || 'Failed to update schedule');
@@ -177,7 +199,18 @@ export async function deleteSpecialMonitoringFromCloud(id: string): Promise<{ su
       }),
     });
 
-    const result = await response.json();
+    // Validate response before parsing JSON
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}: ${errorText || 'Server error'}`);
+    }
+
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      throw new Error('Invalid JSON response from server');
+    }
     
     if (!result.success) {
       throw new Error(result.error || 'Failed to delete schedule');
