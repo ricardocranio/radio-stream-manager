@@ -15,23 +15,19 @@ import {
 import { Button } from '@/components/ui/button';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { isElectron, checkElectronBackend, isServiceMode } from '@/lib/serviceMode';
 
-// Check if running in Electron
-const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
-// Removed duplicate isElectron declaration - now at top
-
-// Check if Electron backend is available (service mode)
-async function checkServiceMode(): Promise<boolean> {
-  try {
-    const response = await fetch('/api/health', { method: 'GET' });
-    if (response.ok) {
-      const data = await response.json();
-      return data.electron === true;
-    }
-    return false;
-  } catch {
-    return false;
+// Use centralized service mode check with proper timeout and JSON validation
+async function checkServiceModeStatus(): Promise<boolean> {
+  // If in native Electron, no need to check
+  if (isElectron) return false;
+  
+  // If on localhost, check if backend is available
+  if (isServiceMode()) {
+    return await checkElectronBackend();
   }
+  
+  return false;
 }
 
 interface FeatureStatus {
@@ -96,7 +92,7 @@ export function BrowserModeBanner() {
 
   // Check for service mode on mount
   useEffect(() => {
-    checkServiceMode().then(setServiceMode);
+    checkServiceModeStatus().then(setServiceMode);
   }, []);
 
   // Don't show in Electron
@@ -252,7 +248,7 @@ export function DesktopOnlyBadge({ className }: { className?: string }) {
   
   useEffect(() => {
     if (!isElectron) {
-      checkServiceMode().then(setServiceMode);
+      checkServiceModeStatus().then(setServiceMode);
     }
   }, []);
   

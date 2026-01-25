@@ -311,23 +311,30 @@ export function Header() {
                   variant="outline"
                   size="sm"
                   onClick={async () => {
-                    try {
-                      // First, check if backend is available via health check
-                      const healthResponse = await fetch('/api/health', {
-                        method: 'GET',
-                        signal: AbortSignal.timeout(3000),
+                    // Use cached backend status from GlobalServices instead of re-checking
+                    const { getBackendAvailable, resetBackendCache } = await import('@/lib/serviceMode');
+                    
+                    // Check cached status first
+                    let backendAvailable = getBackendAvailable();
+                    
+                    // If never checked or false, try a fresh check
+                    if (backendAvailable !== true) {
+                      resetBackendCache();
+                      const { checkElectronBackend } = await import('@/lib/serviceMode');
+                      backendAvailable = await checkElectronBackend();
+                    }
+                    
+                    if (!backendAvailable) {
+                      toast({
+                        title: '⚠️ Desktop não disponível',
+                        description: 'O servidor Electron não está respondendo. Verifique se o app está rodando na bandeja do sistema.',
+                        variant: 'destructive',
                       });
-                      
-                      if (!healthResponse.ok) {
-                        throw new Error('Backend não detectado');
-                      }
-                      
-                      const healthData = await healthResponse.json();
-                      if (!healthData.electron) {
-                        throw new Error('Não é ambiente Electron');
-                      }
-                      
-                      // Now try to show the window
+                      return;
+                    }
+                    
+                    try {
+                      // Backend is available, try to show the window
                       const response = await fetch('/api/show-window', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -345,8 +352,8 @@ export function Header() {
                     } catch (error) {
                       console.error('Error opening desktop:', error);
                       toast({
-                        title: '⚠️ Desktop não disponível',
-                        description: 'Inicie o aplicativo Electron para usar este recurso. O app deve estar rodando na bandeja do sistema.',
+                        title: '⚠️ Erro ao abrir Desktop',
+                        description: 'O comando foi enviado mas a janela não respondeu. Tente clicar no ícone na bandeja do sistema.',
                         variant: 'destructive',
                       });
                     }
