@@ -188,6 +188,34 @@ function createLocalhostServer(attemptPort = null) {
       });
     });
 
+    // =============== SHOW DESKTOP WINDOW API ===============
+    // Allows browser to request opening the desktop window
+    expressApp.post('/api/show-window', (req, res) => {
+      console.log('[API] Show window request received');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+        serviceMode = 'window';
+        updateTrayMenu();
+        res.json({ success: true, message: 'Janela desktop aberta' });
+      } else {
+        res.status(500).json({ success: false, error: 'Janela não disponível' });
+      }
+    });
+
+    expressApp.get('/api/show-window', (req, res) => {
+      console.log('[API] Show window GET request received');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+        serviceMode = 'window';
+        updateTrayMenu();
+        res.json({ success: true, message: 'Janela desktop aberta' });
+      } else {
+        res.status(500).json({ success: false, error: 'Janela não disponível' });
+      }
+    });
+
     // =============== MUSIC LIBRARY API ENDPOINTS (for browser Service Mode) ===============
     
     // Get music library stats
