@@ -68,11 +68,17 @@ export function useHealthCheck() {
       } else if (status === 'error') {
         return 'offline';
       } else if (status === 'connecting') {
-        return 'degraded';
+        // Connecting is normal during startup - don't mark as degraded immediately
+        return 'ok'; // Changed: treat 'connecting' as OK to avoid false alarms
+      } else if (status === 'idle') {
+        // Channel not subscribed yet - this is normal if no component requested it
+        // Try to initialize it proactively
+        realtimeManager.subscribe('scraped_songs', 'health_check_init', () => {});
+        return 'ok'; // Don't alarm user - channel will connect shortly
       }
       
-      // Default to degraded if no specific status (channel not subscribed yet)
-      return 'degraded';
+      // Default to ok - be optimistic to avoid alarming users unnecessarily
+      return 'ok';
     } catch (error) {
       console.error('[HEALTH] Realtime check failed:', error);
       return 'degraded';

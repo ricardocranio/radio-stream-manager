@@ -535,6 +535,17 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
+    // PROACTIVE: Initialize realtime channel early to prevent "degraded" status
+    import('@/lib/realtimeManager').then(({ realtimeManager }) => {
+      realtimeManager.subscribe('scraped_songs', 'global_services_init', () => {
+        // This callback will receive realtime inserts - just log for debugging
+        console.log('[GLOBAL-SVC] 🔔 Realtime insert received');
+      });
+      console.log('[GLOBAL-SVC] 🔄 Realtime channel initialized');
+    }).catch(err => {
+      console.warn('[GLOBAL-SVC] Failed to initialize realtime:', err);
+    });
+
     // 1. Download check every 30 seconds (was 10s - reduced for performance)
     downloadIntervalRef.current = setInterval(() => {
       checkNewMissingSongs();
