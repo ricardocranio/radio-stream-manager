@@ -42,9 +42,111 @@ let backendCheckPromise: Promise<boolean> | null = null;
 let lastBackendCheck = 0;
 const BACKEND_CHECK_INTERVAL = 30000; // 30 seconds
 
+// Auto-reconnect state
+let failureCount = 0;
+let reconnectIntervalId: ReturnType<typeof setInterval> | null = null;
+let reconnectListeners: Set<(connected: boolean) => void> = new Set();
+const MAX_RECONNECT_ATTEMPTS = 10;
+const RECONNECT_INTERVAL_BASE = 3000; // Start with 3 seconds
+const RECONNECT_INTERVAL_MAX = 30000; // Max 30 seconds between attempts
+
+/**
+ * Subscribe to reconnection events
+ */
+export function onBackendReconnect(listener: (connected: boolean) => void): () => void {
+  reconnectListeners.add(listener);
+  return () => reconnectListeners.delete(listener);
+}
+
+/**
+ * Notify all listeners of connection status change
+ */
+function notifyReconnectListeners(connected: boolean): void {
+  reconnectListeners.forEach(listener => {
+    try {
+      listener(connected);
+    } catch (e) {
+      console.error('[SERVICE-MODE] Error in reconnect listener:', e);
+    }
+  });
+}
+
+/**
+ * Start automatic reconnection attempts
+ */
+function startAutoReconnect(): void {
+  // Don't start if already reconnecting or if we're in Lovable preview
+  if (reconnectIntervalId || !isServiceMode()) return;
+  
+  console.log('[SERVICE-MODE] 🔄 Starting auto-reconnect...');
+  
+  const attemptReconnect = async () => {
+    if (failureCount >= MAX_RECONNECT_ATTEMPTS) {
+      console.log('[SERVICE-MODE] ⚠️ Max reconnect attempts reached, stopping auto-reconnect');
+      stopAutoReconnect();
+      return;
+    }
+    
+    failureCount++;
+    const delay = Math.min(RECONNECT_INTERVAL_BASE * Math.pow(1.5, failureCount - 1), RECONNECT_INTERVAL_MAX);
+    
+    console.log(`[SERVICE-MODE] 🔄 Reconnect attempt ${failureCount}/${MAX_RECONNECT_ATTEMPTS}...`);
+    
+    try {
+      const response = await fetch('/api/health', { 
+        method: 'GET',
+        signal: AbortSignal.timeout(5000),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.electron === true) {
+          console.log('[SERVICE-MODE] ✅ Auto-reconnect SUCCESS!');
+          backendAvailableCache = true;
+          lastBackendCheck = Date.now();
+          failureCount = 0;
+          stopAutoReconnect();
+          notifyReconnectListeners(true);
+          return;
+        }
+      }
+    } catch (error) {
+      console.log(`[SERVICE-MODE] Reconnect attempt failed, next in ${Math.round(delay / 1000)}s`);
+    }
+    
+    // Schedule next attempt with exponential backoff
+    if (reconnectIntervalId) {
+      clearInterval(reconnectIntervalId);
+    }
+    reconnectIntervalId = setInterval(attemptReconnect, delay);
+  };
+  
+  // Start first attempt immediately
+  attemptReconnect();
+}
+
+/**
+ * Stop automatic reconnection
+ */
+function stopAutoReconnect(): void {
+  if (reconnectIntervalId) {
+    clearInterval(reconnectIntervalId);
+    reconnectIntervalId = null;
+  }
+}
+
+/**
+ * Reset failure count (call when connection is manually restored)
+ */
+export function resetReconnectState(): void {
+  failureCount = 0;
+  stopAutoReconnect();
+}
+
 /**
  * Check if Electron backend is available (for service mode)
  * Caches the result for 30 seconds to avoid repeated checks
+ * Automatically triggers reconnection on failure
  */
 export async function checkElectronBackend(): Promise<boolean> {
   const now = Date.now();
@@ -76,17 +178,40 @@ export async function checkElectronBackend(): Promise<boolean> {
         const available = data.electron === true;
         backendAvailableCache = available;
         lastBackendCheck = now;
-        console.log(`[SERVICE-MODE] Backend check result: ${available ? '✅ CONNECTED' : '❌ NOT ELECTRON'}`);
+        
+        if (available) {
+          // Connection restored - reset reconnect state
+          resetReconnectState();
+          notifyReconnectListeners(true);
+          console.log(`[SERVICE-MODE] Backend check result: ✅ CONNECTED`);
+        } else {
+          console.log(`[SERVICE-MODE] Backend check result: ❌ NOT ELECTRON`);
+        }
+        
         return available;
       }
       console.log(`[SERVICE-MODE] Backend check failed: HTTP ${response.status}`);
       backendAvailableCache = false;
       lastBackendCheck = now;
+      
+      // Start auto-reconnect on failure
+      if (isServiceMode()) {
+        startAutoReconnect();
+        notifyReconnectListeners(false);
+      }
+      
       return false;
     } catch (error) {
       console.log(`[SERVICE-MODE] Backend check error:`, error);
       backendAvailableCache = false;
       lastBackendCheck = now;
+      
+      // Start auto-reconnect on failure
+      if (isServiceMode()) {
+        startAutoReconnect();
+        notifyReconnectListeners(false);
+      }
+      
       return false;
     } finally {
       backendCheckPromise = null;
