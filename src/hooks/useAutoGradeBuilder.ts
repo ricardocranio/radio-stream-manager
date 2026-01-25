@@ -563,14 +563,44 @@ export function useAutoGradeBuilder() {
     const usedInBlock = new Set<string>();
     
     // Build mappings for ID -> Name AND Name -> Name (for flexibility)
+    // CRITICAL: Map both UUID IDs AND short IDs (bh, band, clube) to station names
     const stationIdToName: Record<string, string> = {};
     const stationNameToName: Record<string, string> = {};
     
+    // Hard-coded mapping of short IDs to station names (from radioStore defaults)
+    const shortIdToName: Record<string, string> = {
+      'bh': 'BH FM',
+      'band': 'Band FM',
+      'clube': 'Clube FM',
+      'showfm': 'Show FM 101.1',
+      'globo': 'Rádio Globo RJ',
+      'blink': 'Blink 102 FM',
+      'positiva': 'Positiva FM',
+      'liberdade': 'Liberdade FM',
+      'mix': 'Mix FM',
+      '89fm': '89 FM',
+      'alpha': 'Alpha FM',
+      'jovempan': 'Jovem Pan',
+      'kiss': 'Kiss FM',
+      'nativa': 'Nativa FM',
+      'transamerica': 'Transamérica',
+    };
+    
     stations.forEach(s => {
+      // Map UUID to name
       stationIdToName[s.id] = s.name;
+      // Map name variations
       stationNameToName[s.name] = s.name;
       stationNameToName[s.name.toLowerCase()] = s.name;
     });
+    
+    // Also add short ID mappings
+    Object.entries(shortIdToName).forEach(([shortId, name]) => {
+      stationIdToName[shortId] = name;
+      stationIdToName[shortId.toLowerCase()] = name;
+    });
+    
+    console.log('[GRADE] 🗺️ Station ID mappings:', Object.keys(stationIdToName).length, 'entries');
 
     // Create a flattened pool of all songs for fallback
     const allSongsPool: SongEntry[] = [];
