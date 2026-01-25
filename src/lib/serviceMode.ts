@@ -264,6 +264,15 @@ export async function saveGradeFileViaAPI(
   content: string
 ): Promise<SaveGradeResult> {
   try {
+    // Check backend connectivity before attempting save
+    const backendAvailable = getBackendAvailable();
+    if (backendAvailable === false) {
+      return { 
+        success: false, 
+        error: 'Backend desconectado. Verifique se o Electron está em execução.' 
+      };
+    }
+
     const response = await fetch('/api/save-grade-file', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -275,10 +284,40 @@ export async function saveGradeFileViaAPI(
       return await response.json();
     }
     
-    return { success: false, error: `HTTP ${response.status}` };
+    // Try to get more details from error response
+    let errorDetail = `HTTP ${response.status}`;
+    try {
+      const errorBody = await response.json();
+      if (errorBody.error) {
+        errorDetail = errorBody.error;
+      }
+    } catch {
+      // Ignore JSON parse error
+    }
+    
+    return { success: false, error: errorDetail };
   } catch (error) {
+    // Provide more specific error messages
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    if (errorMessage.includes('Failed to fetch')) {
+      console.error('[SERVICE-API] saveGradeFile: Backend não acessível');
+      return { 
+        success: false, 
+        error: 'Falha na conexão com backend. Verifique se o Electron está em execução em localhost:8080.' 
+      };
+    }
+    
+    if (errorMessage.includes('timeout') || errorMessage.includes('aborted')) {
+      console.error('[SERVICE-API] saveGradeFile: Timeout');
+      return { 
+        success: false, 
+        error: 'Tempo esgotado ao salvar. Tente novamente.' 
+      };
+    }
+    
     console.error('[SERVICE-API] saveGradeFile error:', error);
-    return { success: false, error: String(error) };
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -297,6 +336,15 @@ export async function readGradeFileViaAPI(
   filename: string
 ): Promise<ReadGradeResult> {
   try {
+    // Check backend connectivity before attempting read
+    const backendAvailable = getBackendAvailable();
+    if (backendAvailable === false) {
+      return { 
+        success: false, 
+        error: 'Backend desconectado. Verifique se o Electron está em execução.' 
+      };
+    }
+
     const response = await fetch('/api/read-grade-file', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -308,9 +356,39 @@ export async function readGradeFileViaAPI(
       return await response.json();
     }
     
-    return { success: false, error: `HTTP ${response.status}` };
+    // Try to get more details from error response
+    let errorDetail = `HTTP ${response.status}`;
+    try {
+      const errorBody = await response.json();
+      if (errorBody.error) {
+        errorDetail = errorBody.error;
+      }
+    } catch {
+      // Ignore JSON parse error
+    }
+    
+    return { success: false, error: errorDetail };
   } catch (error) {
+    // Provide more specific error messages
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    if (errorMessage.includes('Failed to fetch')) {
+      console.error('[SERVICE-API] readGradeFile: Backend não acessível');
+      return { 
+        success: false, 
+        error: 'Falha na conexão com backend. Verifique se o Electron está em execução.' 
+      };
+    }
+    
+    if (errorMessage.includes('timeout') || errorMessage.includes('aborted')) {
+      console.error('[SERVICE-API] readGradeFile: Timeout');
+      return { 
+        success: false, 
+        error: 'Tempo esgotado ao ler arquivo. Tente novamente.' 
+      };
+    }
+    
     console.error('[SERVICE-API] readGradeFile error:', error);
-    return { success: false, error: String(error) };
+    return { success: false, error: errorMessage };
   }
 }
