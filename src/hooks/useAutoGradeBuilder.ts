@@ -146,10 +146,10 @@ export function useAutoGradeBuilder() {
   }, [stations]);
 
   // Check if song/artist was used recently
-  // For full day generation, use shorter window (30 min) to allow more variety
+  // Uses a sliding window based on configured repetition minutes
+  // ALSO checks if the EXACT song title was used anywhere today (to prevent same song in multiple blocks)
   const isRecentlyUsed = useCallback((title: string, artist: string, currentBlockTime: string, isFullDay: boolean = false): boolean => {
-    // Use shorter repetition time for full day generation
-    const artistRepetitionMinutes = isFullDay ? 30 : (config.artistRepetitionMinutes || ARTIST_REPETITION_MINUTES);
+    const artistRepetitionMinutes = isFullDay ? 60 : (config.artistRepetitionMinutes || ARTIST_REPETITION_MINUTES);
     const normalizedTitle = title.toLowerCase().trim();
     const normalizedArtist = artist.toLowerCase().trim();
 
@@ -160,14 +160,20 @@ export function useAutoGradeBuilder() {
       const [usedHour, usedMinute] = used.blockTime.split(':').map(Number);
       const usedTotalMinutes = usedHour * 60 + usedMinute;
 
+      // CRITICAL: Same EXACT song title should NEVER repeat in the same day
+      // This prevents the same song appearing in multiple blocks
+      if (used.title.toLowerCase().trim() === normalizedTitle) {
+        console.log(`[REPETITION] ❌ Música "${title}" já usada no bloco ${used.blockTime}, pulando...`);
+        return true;
+      }
+
+      // For artist repetition, use the time-based sliding window
       let diffMinutes = currentTotalMinutes - usedTotalMinutes;
       if (diffMinutes < 0) diffMinutes += 24 * 60;
 
       if (diffMinutes < artistRepetitionMinutes) {
-        if (used.title.toLowerCase().trim() === normalizedTitle) {
-          return true;
-        }
         if (used.artist.toLowerCase().trim() === normalizedArtist) {
+          console.log(`[REPETITION] ⚠️ Artista "${artist}" tocou há ${diffMinutes} min, pulando...`);
           return true;
         }
       }
@@ -175,16 +181,24 @@ export function useAutoGradeBuilder() {
     return false;
   }, [config.artistRepetitionMinutes]);
 
-  // Mark song as used
+  // Mark song as used - keep ALL songs for the entire day to prevent repetition
   const markSongAsUsed = useCallback((title: string, artist: string, blockTime: string) => {
-    usedSongsRef.current.push({
-      title,
-      artist,
-      usedAt: new Date(),
-      blockTime,
-    });
-    if (usedSongsRef.current.length > 100) {
-      usedSongsRef.current = usedSongsRef.current.slice(-100);
+    // Check if already exists to avoid duplicates in tracking
+    const exists = usedSongsRef.current.some(
+      u => u.title.toLowerCase().trim() === title.toLowerCase().trim() &&
+           u.blockTime === blockTime
+    );
+    if (!exists) {
+      usedSongsRef.current.push({
+        title,
+        artist,
+        usedAt: new Date(),
+        blockTime,
+      });
+    }
+    // Keep up to 500 entries for full day support (48 blocks * 10 songs = 480)
+    if (usedSongsRef.current.length > 500) {
+      usedSongsRef.current = usedSongsRef.current.slice(-500);
     }
   }, []);
 
@@ -1165,6 +1179,54 @@ export function useAutoGradeBuilder() {
     getDayCode, config.gradeFolder, addGradeHistory, sequence.length, toast, addBlockLogs
   ]);
 
+  // Parse existing file to extract already-used songs (prevents repetition after restart)
+  const loadUsedSongsFromFile = useCallback(async (content: string) => {
+    const lines = content.split('\n').filter(l => l.trim());
+    let loadedCount = 0;
+    
+    for (const line of lines) {
+      // Match format: HH:MM (ID=...) "Song1.mp3",vht,"Song2.mp3",...
+      const timeMatch = line.match(/^(\d{2}:\d{2})/);
+      if (!timeMatch) continue;
+      
+      const blockTime = timeMatch[1];
+      
+      // Extract all quoted song filenames
+      const songMatches = line.match(/"([^"]+\.mp3)"/g);
+      if (!songMatches) continue;
+      
+      for (const songMatch of songMatches) {
+        const filename = songMatch.replace(/"/g, '').replace('.mp3', '');
+        // Parse "Artist - Title" format
+        const dashIndex = filename.indexOf(' - ');
+        if (dashIndex > 0) {
+          const artist = filename.substring(0, dashIndex).trim();
+          const title = filename.substring(dashIndex + 3).trim();
+          
+          // Check if already tracked
+          const exists = usedSongsRef.current.some(
+            u => u.title.toLowerCase() === title.toLowerCase() && 
+                 u.blockTime === blockTime
+          );
+          
+          if (!exists && title && artist) {
+            usedSongsRef.current.push({
+              title,
+              artist,
+              usedAt: new Date(),
+              blockTime,
+            });
+            loadedCount++;
+          }
+        }
+      }
+    }
+    
+    if (loadedCount > 0) {
+      console.log(`[AUTO-GRADE] 📂 Carregadas ${loadedCount} músicas do arquivo existente para evitar repetição`);
+    }
+  }, []);
+
   // Build current and next blocks (incremental update to existing file)
   // ALWAYS saves to destination folder - ensuring current time slot is updated
   const buildGrade = useCallback(async () => {
@@ -1182,6 +1244,25 @@ export function useAutoGradeBuilder() {
 
       console.log(`[AUTO-GRADE] 🔄 Atualizando blocos: ${currentTimeKey}, ${nextTimeKey} -> salvando na pasta destino`);
 
+      // Read existing file FIRST to load already-used songs
+      const dayCode = getDayCode();
+      const filename = `${dayCode}.txt`;
+      let existingContent = '';
+
+      try {
+        const readResult = await window.electronAPI.readGradeFile({
+          folder: config.gradeFolder,
+          filename,
+        });
+        if (readResult.success && readResult.content) {
+          existingContent = readResult.content;
+          // Load used songs from file to prevent repetition
+          await loadUsedSongsFromFile(existingContent);
+        }
+      } catch {
+        console.log('[AUTO-GRADE] No existing file, creating new');
+      }
+
       const songsByStation = await fetchRecentSongs();
       const stats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: Parameters<typeof addBlockLogs>[0] = [];
@@ -1196,23 +1277,6 @@ export function useAutoGradeBuilder() {
       
       allLogs.push(...currentResult.logs, ...nextResult.logs);
       addBlockLogs(allLogs);
-
-      // Read existing file and update only the relevant lines
-      const dayCode = getDayCode();
-      const filename = `${dayCode}.txt`;
-      let existingContent = '';
-
-      try {
-        const readResult = await window.electronAPI.readGradeFile({
-          folder: config.gradeFolder,
-          filename,
-        });
-        if (readResult.success) {
-          existingContent = readResult.content || '';
-        }
-      } catch {
-        console.log('[AUTO-GRADE] No existing file, creating new');
-      }
 
       // Parse existing lines into a map by time
       const lineMap = new Map<string, string>();
@@ -1281,7 +1345,7 @@ export function useAutoGradeBuilder() {
       });
     }
   }, [
-    getBlockTimes, fetchRecentSongs, generateBlockLine,
+    getBlockTimes, fetchRecentSongs, generateBlockLine, loadUsedSongsFromFile,
     getDayCode, config.gradeFolder, addGradeHistory, sequence.length,
     getProgramForHour, toast, addBlockLogs
   ]);
