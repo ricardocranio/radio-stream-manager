@@ -108,13 +108,19 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     if (isElectron && window.electronAPI) {
       setDownloadState(prev => ({ ...prev, backendConnected: true }));
       electronBackendRef.current = true;
+      console.log('[GLOBAL-SVC] Native Electron detected - backend connected');
+      return;
     }
     
+    // In Service Mode, check backend availability immediately and periodically
     if (isServiceMode()) {
+      console.log('[GLOBAL-SVC] Service Mode detected - checking backend availability...');
+      
+      // Immediate check on mount
       checkElectronBackend().then(available => {
         electronBackendRef.current = available;
         setDownloadState(prev => ({ ...prev, backendConnected: available }));
-        console.log(`[GLOBAL-SVC] Service mode backend: ${available ? 'CONNECTED' : 'NOT AVAILABLE'}`);
+        console.log(`[GLOBAL-SVC] Service mode backend: ${available ? '✅ CONNECTED' : '❌ NOT AVAILABLE'}`);
       });
       
       // Re-check periodically in case backend becomes available later
@@ -123,13 +129,16 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
           if (available !== electronBackendRef.current) {
             electronBackendRef.current = available;
             setDownloadState(prev => ({ ...prev, backendConnected: available }));
-            console.log(`[GLOBAL-SVC] Service mode backend status changed: ${available ? 'CONNECTED' : 'DISCONNECTED'}`);
+            console.log(`[GLOBAL-SVC] Service mode backend status changed: ${available ? '✅ CONNECTED' : '❌ DISCONNECTED'}`);
           }
         });
-      }, 30000); // Check every 30 seconds
+      }, 15000); // Check every 15 seconds (was 30)
       
       return () => clearInterval(intervalId);
     }
+    
+    // Neither Electron nor Service Mode - likely Lovable preview
+    console.log('[GLOBAL-SVC] Web-only mode detected (no local backend)');
   }, []);
   
   const downloadSong = useCallback(async (song: MissingSong): Promise<boolean> => {
