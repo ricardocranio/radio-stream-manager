@@ -52,9 +52,20 @@ const RECONNECT_INTERVAL_MAX = 30000; // Max 30 seconds between attempts
 
 /**
  * Subscribe to reconnection events
+ * Immediately notifies the listener with current status if already known
  */
 export function onBackendReconnect(listener: (connected: boolean) => void): () => void {
   reconnectListeners.add(listener);
+  
+  // Immediately notify with current status if we already know it
+  if (backendAvailableCache !== null) {
+    try {
+      listener(backendAvailableCache);
+    } catch (e) {
+      console.error('[SERVICE-MODE] Error in immediate listener notification:', e);
+    }
+  }
+  
   return () => reconnectListeners.delete(listener);
 }
 
