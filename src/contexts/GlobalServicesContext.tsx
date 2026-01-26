@@ -464,7 +464,26 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         config.similarityThreshold || 0.75
       );
       
-      // Increment verified counter
+      // If verification failed (no backend), don't add to missing list
+      // This prevents flooding the missing list when backend is unavailable
+      if (libraryCheck.verificationFailed) {
+        console.log(`[GLOBAL-SVC] ⚠️ Verificação não disponível para: ${artist} - ${title} (backend offline)`);
+        // Still add to captured songs but with 'unknown' status
+        addCapturedSong({
+          id: songId,
+          title: title,
+          artist: artist,
+          station: stationName,
+          timestamp: songData.timestamp ? new Date(songData.timestamp) : new Date(),
+          status: 'unknown', // Mark as unknown, not missing
+          source: scrapeUrl,
+        });
+        // Update ranking even if we can't verify library
+        addOrUpdateRankingSong(title, artist, stationStyle);
+        return true;
+      }
+      
+      // Increment verified counter only for actual verifications
       songsVerifiedRef.current++;
       setDownloadState(prev => ({ ...prev, songsVerified: songsVerifiedRef.current }));
       
