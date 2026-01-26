@@ -18,7 +18,7 @@ import { radioScraperApi } from '@/lib/api/radioScraper';
 import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
 import { cleanAndValidateSong } from '@/lib/cleanSongMetadata';
-import { isElectron, isServiceMode, checkElectronBackend, downloadViaAPI, onBackendReconnect, resetReconnectState } from '@/lib/serviceMode';
+import { isElectron, isServiceMode, checkElectronBackend, downloadViaAPI, onBackendReconnect, resetReconnectState, getBackendAvailable } from '@/lib/serviceMode';
 import { logSystemError } from '@/store/gradeLogStore';
 
 // ============= TYPES =============
@@ -92,15 +92,30 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     failedStations: [],
   });
 
-  const [downloadState, setDownloadState] = useState({
-    queueLength: 0,
-    isProcessing: false,
-    backendConnected: false,
-    songsVerified: 0,
+  // Initialize with current cache value if available
+  const [downloadState, setDownloadState] = useState(() => {
+    // Calculate initial backend status synchronously
+    let initialBackendStatus = false;
+    
+    // If native Electron, always connected
+    if (isElectron && typeof window !== 'undefined' && window.electronAPI) {
+      initialBackendStatus = true;
+    } else {
+      // Use cached value from serviceMode if available
+      const cached = getBackendAvailable();
+      initialBackendStatus = cached === true;
+    }
+    
+    return {
+      queueLength: 0,
+      isProcessing: false,
+      backendConnected: initialBackendStatus,
+      songsVerified: 0,
+    };
   });
 
   // ============= DOWNLOAD SERVICE =============
-  const electronBackendRef = useRef<boolean | null>(null);
+  const electronBackendRef = useRef<boolean | null>(getBackendAvailable());
   const songsVerifiedRef = useRef<number>(0);
   
   // Check backend availability on mount for Service Mode
@@ -117,23 +132,32 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     if (isServiceMode()) {
       console.log('[GLOBAL-SVC] Service Mode detected - checking backend availability...');
       
-      // Subscribe to auto-reconnect events
+      // Track if this is the first notification (to avoid "reconnected" log on initial check)
+      let isFirstNotification = true;
+      
+      // Subscribe to auto-reconnect events - this will also notify immediately if status is known
       const unsubscribe = onBackendReconnect((connected) => {
+        const previousStatus = electronBackendRef.current;
         electronBackendRef.current = connected;
         setDownloadState(prev => ({ ...prev, backendConnected: connected }));
         
-        if (connected) {
-          logSystemError('SYSTEM', 'info', 'Backend reconectado automaticamente', 
-            'Conexão com o Electron foi restaurada.');
-          console.log('[GLOBAL-SVC] 🔄 Backend auto-reconnected!');
-        } else {
-          logSystemError('SYSTEM', 'warning', 'Backend desconectado - tentando reconectar...', 
-            'O sistema tentará reconectar automaticamente.');
-          console.log('[GLOBAL-SVC] ⚠️ Backend disconnected, auto-reconnect started');
+        // Only log status changes, not the initial notification
+        if (!isFirstNotification && previousStatus !== connected) {
+          if (connected) {
+            logSystemError('SYSTEM', 'info', 'Backend reconectado automaticamente', 
+              'Conexão com o Electron foi restaurada.');
+            console.log('[GLOBAL-SVC] 🔄 Backend auto-reconnected!');
+          } else {
+            logSystemError('SYSTEM', 'warning', 'Backend desconectado - tentando reconectar...', 
+              'O sistema tentará reconectar automaticamente.');
+            console.log('[GLOBAL-SVC] ⚠️ Backend disconnected, auto-reconnect started');
+          }
         }
+        
+        isFirstNotification = false;
       });
       
-      // Immediate check on mount
+      // Also do an explicit check in case cache isn't populated yet
       checkElectronBackend().then(available => {
         electronBackendRef.current = available;
         setDownloadState(prev => ({ ...prev, backendConnected: available }));
@@ -169,15 +193,21 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   const downloadSong = useCallback(async (song: MissingSong): Promise<boolean> => {
     const canUseElectronDirect = isElectron && window.electronAPI?.downloadFromDeezer;
     
-    // For service mode, check backend availability dynamically if not yet confirmed
-    let canUseServiceMode = isServiceMode() && electronBackendRef.current === true;
+    // For service mode, check backend availability dynamically
+    let canUseServiceMode = false;
     
-    // If in service mode but backend not confirmed, try checking now
-    if (isServiceMode() && electronBackendRef.current === null) {
-      const available = await checkElectronBackend();
-      electronBackendRef.current = available;
-      canUseServiceMode = available;
-      console.log(`[GLOBAL-SVC] On-demand backend check: ${available ? 'CONNECTED' : 'NOT AVAILABLE'}`);
+    if (isServiceMode()) {
+      // If backend confirmed connected, use it
+      if (electronBackendRef.current === true) {
+        canUseServiceMode = true;
+      } else {
+        // Otherwise, do a fresh check (handles both null and false cases)
+        const available = await checkElectronBackend();
+        electronBackendRef.current = available;
+        setDownloadState(prev => ({ ...prev, backendConnected: available }));
+        canUseServiceMode = available;
+        console.log(`[GLOBAL-SVC] On-demand backend check: ${available ? 'CONNECTED' : 'NOT AVAILABLE'}`);
+      }
     }
     
     if (!canUseElectronDirect && !canUseServiceMode) {

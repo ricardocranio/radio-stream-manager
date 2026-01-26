@@ -7,7 +7,8 @@ import {
   isServiceMode, 
   checkElectronBackend, 
   downloadViaAPI,
-  getBackendAvailable 
+  getBackendAvailable,
+  onBackendReconnect 
 } from '@/lib/serviceMode';
 
 // Constants
@@ -49,26 +50,35 @@ export function useAutoDownload() {
     }
   }, [resetCounter]);
 
-  // Check for Electron backend availability on mount and periodically (for service mode)
+  // Check for Electron backend availability on mount and subscribe to changes (for service mode)
   useEffect(() => {
-    const checkBackend = async () => {
-      if (isServiceMode()) {
-        const available = await checkElectronBackend();
+    // If native Electron, always available
+    if (isElectron && window.electronAPI) {
+      electronBackendAvailableRef.current = true;
+      console.log('[AUTO-DL] Native Electron detected - backend always available');
+      return;
+    }
+    
+    // For service mode, use the centralized backend check with auto-reconnect
+    if (isServiceMode()) {
+      // Subscribe to backend status changes - this also notifies immediately with current status
+      const unsubscribe = onBackendReconnect((connected: boolean) => {
+        electronBackendAvailableRef.current = connected;
+        console.log(`[AUTO-DL] Backend status updated: ${connected ? 'CONNECTED ✓' : 'DISCONNECTED'}`);
+      });
+      
+      // Also do explicit check on mount
+      checkElectronBackend().then(available => {
         electronBackendAvailableRef.current = available;
-        console.log(`[AUTO-DL] Service mode backend: ${available ? 'CONNECTED ✓' : 'NOT AVAILABLE'}`);
-      }
-    };
+        console.log(`[AUTO-DL] Initial backend check: ${available ? 'CONNECTED ✓' : 'NOT AVAILABLE'}`);
+      });
+      
+      return () => {
+        unsubscribe();
+      };
+    }
     
-    checkBackend();
-    
-    // Re-check every 30 seconds in service mode
-    const interval = setInterval(() => {
-      if (isServiceMode()) {
-        checkBackend();
-      }
-    }, 30000);
-    
-    return () => clearInterval(interval);
+    console.log('[AUTO-DL] Web-only mode - no backend available');
   }, []);
 
   // Download a single song
