@@ -35,7 +35,7 @@ export interface CapturedSong {
   artist: string;
   station: string;
   timestamp: Date;
-  status: 'found' | 'missing' | 'curated';
+  status: 'found' | 'missing' | 'curated' | 'unknown'; // 'unknown' when backend unavailable
   source?: string; // URL from where the song was captured
 }
 

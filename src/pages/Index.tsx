@@ -184,6 +184,7 @@ const Index = () => {
     // Check if song exists in local music library using Electron IPC (or fallback)
     const libraryCheck = await checkSongExists(song.artist, song.title);
     const existsInLibrary = libraryCheck.exists;
+    const verificationFailed = (libraryCheck as any).verificationFailed === true;
     const alreadyMissing = isSongAlreadyMissing(song.artist, song.title);
     
     const capturedSong: CapturedSong = {
@@ -192,7 +193,7 @@ const Index = () => {
       artist: song.artist,
       station: randomStation,
       timestamp: new Date(),
-      status: existsInLibrary ? 'found' : 'missing',
+      status: verificationFailed ? 'unknown' : (existsInLibrary ? 'found' : 'missing'),
     };
     
     addCapturedSong(capturedSong);
@@ -202,8 +203,11 @@ const Index = () => {
     addOrUpdateRankingSong(song.title, song.artist, stationStyle);
     console.log(`[RANKING] Música adicionada ao ranking: ${song.artist} - ${song.title} (${stationStyle})`);
     
-    // If song is missing AND not already in missing list, add to missing songs for auto-download
-    if (!existsInLibrary && !alreadyMissing) {
+    // CRITICAL: Don't add to missing if verification failed (backend offline)
+    // This prevents flooding the missing list when backend is unavailable
+    if (verificationFailed) {
+      console.log(`[CAPTURE] ⚠️ Verificação não disponível (backend offline): ${song.artist} - ${song.title}`);
+    } else if (!existsInLibrary && !alreadyMissing) {
       const missingSong: MissingSong = {
         id: capturedSong.id,
         title: song.title,

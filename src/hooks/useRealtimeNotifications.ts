@@ -172,6 +172,13 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
               threshold
             );
             
+            // CRITICAL: Don't add to missing if verification failed (backend offline)
+            // This prevents flooding the missing list when backend is unavailable
+            if (libraryCheck.verificationFailed) {
+              console.log(`[REALTIME] ⚠️ Verificação não disponível para: ${artist} - ${title} (backend offline)`);
+              return;
+            }
+            
             // If not found in library AND not already in missing list, add to missing
             if (!libraryCheck.exists && !isSongAlreadyMissing(artist, title)) {
               const missingSongEntry: MissingSong = {

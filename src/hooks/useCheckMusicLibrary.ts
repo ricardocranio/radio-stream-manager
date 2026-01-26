@@ -9,6 +9,7 @@ interface CheckResult {
   filename?: string;
   baseName?: string;
   similarity?: number;
+  verificationFailed?: boolean; // True if we couldn't verify (backend unavailable)
 }
 
 // Cache for song checks to avoid repeated network folder access
@@ -187,9 +188,9 @@ export function useCheckMusicLibrary() {
         }
       }
 
-      // Fallback for web: simulate check (always returns false in web mode)
-      console.log(`[WEB] Would check: ${artist} - ${title} in ${config.musicFolders.join(', ')}`);
-      return { exists: false };
+      // Fallback for web or no backend: mark as verification failed, not missing
+      console.log(`[WEB] Cannot verify (no backend): ${artist} - ${title} in ${config.musicFolders.join(', ')}`);
+      return { exists: false, verificationFailed: true };
     })();
     
     // Store pending promise
@@ -347,6 +348,7 @@ export async function checkSongInLibrary(
     }
   }
 
-  // Web mode: always returns false
-  return { exists: false };
+  // Web mode or no backend available: mark as verification failed, not missing
+  console.log(`[LIBRARY] ⚠️ Cannot verify (no backend): ${artist} - ${title}`);
+  return { exists: false, verificationFailed: true };
 }

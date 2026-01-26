@@ -329,7 +329,7 @@ export function useAutoGradeBuilder() {
   }, []);
 
   // Check if song exists in music library and get the correct filename
-  const findSongInLibrary = useCallback(async (artist: string, title: string): Promise<{ exists: boolean; filename?: string }> => {
+  const findSongInLibrary = useCallback(async (artist: string, title: string): Promise<{ exists: boolean; filename?: string; verificationFailed?: boolean }> => {
     // Try native Electron API first
     if (window.electronAPI?.findSongMatch) {
       try {
@@ -361,16 +361,15 @@ export function useAutoGradeBuilder() {
         return { exists: result.exists };
       } catch (error) {
         console.error('[GRADE] HTTP API error finding song match:', error);
-        // For Service Mode, if API fails, assume NOT exists to trigger download
-        return { exists: false };
+        // For Service Mode, if API fails, mark as verification failed (don't add to missing)
+        return { exists: false, verificationFailed: true };
       }
     }
     
-    // Web-only mode (Lovable Preview or no backend): assume exists
+    // Web-only mode (Lovable Preview or no backend): mark as verification failed
     // In preview environments, we can't check the user's actual library
-    // This allows preview to show "as if" songs exist
-    console.log('[GRADE] Web-only mode: assuming song exists (no backend available)');
-    return { exists: true };
+    console.log('[GRADE] Web-only mode: cannot verify (no backend available)');
+    return { exists: false, verificationFailed: true };
   }, [config.musicFolders, config.similarityThreshold]);
 
   // Fallback check if song exists (for backwards compatibility)
@@ -931,8 +930,9 @@ export function useAutoGradeBuilder() {
               selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
               stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
               break;
-            } else {
-              // Mark as missing for download AND add to carry-over for next block
+            } else if (!libraryResult.verificationFailed) {
+              // Only add to missing if verification actually happened (backend was available)
+              // This prevents flooding the missing list when backend is offline
               if (!isSongAlreadyMissing(candidate.artist, candidate.title)) {
                 addMissingSong({
                   id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -953,6 +953,9 @@ export function useAutoGradeBuilder() {
                 style: stationStyle,
                 targetBlock: timeStr,
               });
+            } else {
+              // Backend offline - skip this song without adding to missing
+              console.log(`[GRADE] ⚠️ Cannot verify (backend offline): ${candidate.artist} - ${candidate.title}`);
             }
           }
           checkedCount++;
