@@ -221,7 +221,9 @@ export function DashboardView() {
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-[10px] md:text-xs text-muted-foreground truncate">Faltando</p>
-                <p className="text-lg md:text-2xl font-bold text-foreground">{missingSongs.length}</p>
+                <p className="text-lg md:text-2xl font-bold text-foreground">
+                  {missingSongs.filter(s => s.status === 'missing').length}
+                </p>
                 <p className="text-[10px] md:text-xs text-red-500 flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3" />
                   <span className="hidden sm:inline">No Banco</span>
@@ -235,45 +237,7 @@ export function DashboardView() {
         </Card>
       </div>
 
-      {/* Station Distribution - Filled grid without gaps */}
-      {Object.keys(uniqueStationCounts).length > 0 && (
-        <Card className="glass-card">
-          <CardHeader className="pb-2 md:pb-3">
-            <CardTitle className="text-sm md:text-base flex items-center gap-2">
-              <Radio className="w-4 h-4 text-primary" />
-              Distribuição por Emissora (24h)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {(() => {
-              const stationEntries = Object.entries(uniqueStationCounts).sort((a, b) => b[1] - a[1]);
-              const maxCount = Math.max(...Object.values(uniqueStationCounts));
-              
-              return (
-                <div className="flex flex-wrap gap-2">
-                  {stationEntries.map(([station, count], index) => (
-                    <div
-                      key={station}
-                      className={`flex-1 min-w-[100px] max-w-[180px] p-2 md:p-3 rounded-lg ${colorPalette[index % colorPalette.length].bg} ${colorPalette[index % colorPalette.length].border} border`}
-                    >
-                      <p className={`text-[10px] md:text-xs ${colorPalette[index % colorPalette.length].text} truncate font-medium`} title={station}>
-                        {station}
-                      </p>
-                      <p className="text-lg md:text-xl font-bold text-foreground">{count}</p>
-                      <div className="h-1 bg-background/50 rounded-full mt-1 overflow-hidden">
-                        <div
-                          className={`h-full transition-all ${colorPalette[index % colorPalette.length].text.replace('text-', 'bg-')}`}
-                          style={{ width: `${(count / maxCount) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </CardContent>
-        </Card>
-      )}
+      {/* Station Distribution removed for cleaner UI */}
 
       {/* Auto Grade Builder Status */}
       {gradeBuilder.isElectron && (
