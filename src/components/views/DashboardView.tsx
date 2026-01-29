@@ -115,7 +115,7 @@ export function DashboardView() {
         { id: '4', timestamp: new Date(Date.now() - 120 * 60000), blockTime: '19:30', songsProcessed: 10, songsFound: 10, songsMissing: 0, programName: 'TOP10' },
       ];
 
-  // Dynamic color palette for stations
+  // Dynamic color palette for station cards
   const colorPalette = [
     { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' },
     { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400' },
@@ -124,18 +124,6 @@ export function DashboardView() {
     { bg: 'bg-pink-500/10', border: 'border-pink-500/30', text: 'text-pink-400' },
     { bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', text: 'text-cyan-400' },
   ];
-
-  // Get unique stations from stationCounts (deduplicated)
-  const uniqueStationCounts = Object.entries(realtimeStats.stationCounts)
-    .reduce((acc, [station, count]) => {
-      // Normalize station name to prevent duplicates
-      const normalizedName = station.trim();
-      if (!acc[normalizedName]) {
-        acc[normalizedName] = 0;
-      }
-      acc[normalizedName] += count;
-      return acc;
-    }, {} as Record<string, number>);
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6 animate-fade-in">
@@ -268,7 +256,9 @@ export function DashboardView() {
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] md:text-xs text-muted-foreground">Faltando</p>
-                <p className="text-lg md:text-2xl font-bold text-foreground">{missingSongs.length}</p>
+                <p className="text-lg md:text-2xl font-bold text-foreground">
+                  {missingSongs.filter(s => s.status === 'missing').length}
+                </p>
                 <p className="text-[10px] md:text-xs text-red-500 flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                   <span>No Banco</span>
@@ -384,45 +374,7 @@ export function DashboardView() {
         </Card>
       </div>
 
-      {/* Station Distribution - Filled grid without gaps */}
-      {Object.keys(uniqueStationCounts).length > 0 && (
-        <Card className="glass-card">
-          <CardHeader className="pb-2 md:pb-3">
-            <CardTitle className="text-sm md:text-base flex items-center gap-2">
-              <Radio className="w-4 h-4 text-primary" />
-              Distribuição por Emissora (24h)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {(() => {
-              const stationEntries = Object.entries(uniqueStationCounts).sort((a, b) => b[1] - a[1]);
-              const maxCount = Math.max(...Object.values(uniqueStationCounts));
-              
-              return (
-                <div className="flex flex-wrap gap-2">
-                  {stationEntries.map(([station, count], index) => (
-                    <div
-                      key={station}
-                      className={`flex-1 min-w-[100px] max-w-[180px] p-2 md:p-3 rounded-lg ${colorPalette[index % colorPalette.length].bg} ${colorPalette[index % colorPalette.length].border} border`}
-                    >
-                      <p className={`text-[10px] md:text-xs ${colorPalette[index % colorPalette.length].text} truncate font-medium`} title={station}>
-                        {station}
-                      </p>
-                      <p className="text-lg md:text-xl font-bold text-foreground">{count}</p>
-                      <div className="h-1 bg-background/50 rounded-full mt-1 overflow-hidden">
-                        <div
-                          className={`h-full transition-all ${colorPalette[index % colorPalette.length].text.replace('text-', 'bg-')}`}
-                          style={{ width: `${(count / maxCount) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </CardContent>
-        </Card>
-      )}
+      {/* Station Distribution removed - keeping interface clean */}
 
       {/* Auto Grade Builder Status - Show in both Electron and Service Mode */}
       {(gradeBuilder.isElectron || downloads.backendConnected) && (
