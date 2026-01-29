@@ -61,19 +61,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Platform detection
   platform: process.platform,
   isElectron: true,
-  
-  // Service Mode (Tray + Localhost)
-  setServiceMode: (mode) => ipcRenderer.invoke('set-service-mode', mode),
-  getServiceMode: () => ipcRenderer.invoke('get-service-mode'),
-  openInBrowser: () => ipcRenderer.invoke('open-in-browser'),
-  getLocalhostUrl: () => ipcRenderer.invoke('get-localhost-url'),
-  setLocalhostPort: (port) => ipcRenderer.invoke('set-localhost-port', port),
-  setAutoStartServiceMode: (enabled) => ipcRenderer.invoke('set-auto-start-service-mode', enabled),
-  getAutoStartServiceMode: () => ipcRenderer.invoke('get-auto-start-service-mode'),
-  onServerStatus: (callback) => ipcRenderer.on('server-status', (_, status) => callback(status)),
-  onServiceModeChanged: (callback) => ipcRenderer.on('service-mode-changed', (_, mode) => callback(mode)),
-  
-  // App lifecycle controls
-  quitApp: () => ipcRenderer.send('quit-app'),
-  minimizeToTray: () => ipcRenderer.send('minimize-to-tray'),
 });

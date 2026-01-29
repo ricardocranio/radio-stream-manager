@@ -287,18 +287,15 @@ Deno.serve(async (req) => {
     const scrapeResult = await tryFallbackSources(apiKey, safeName, formattedUrl);
 
     if (!scrapeResult.success || !scrapeResult.data) {
-      console.error('All scrape attempts failed for:', safeName);
-      // Return 200 with error info instead of 500 to avoid frontend error handling issues
+      console.error('All scrape attempts failed');
       return new Response(
         JSON.stringify({ 
           success: false, 
           stationName: safeName,
-          error: 'Unable to retrieve station data - station may have anti-scraping protection',
-          nowPlaying: null,
-          recentSongs: [],
+          error: 'Failed to retrieve station data',
           scrapedAt: new Date().toISOString(),
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -313,17 +310,10 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Error scraping radio:', error);
-    // Return 200 with error info for graceful degradation
+    console.error('Error scraping radio');
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: 'An error occurred during scraping', 
-        nowPlaying: null,
-        recentSongs: [],
-        scrapedAt: new Date().toISOString() 
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ success: false, error: 'An error occurred', scrapedAt: new Date().toISOString() }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
@@ -391,53 +381,66 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
   let nowPlaying: ScrapedSong | undefined;
 
   console.log('Parsing content for:', stationName);
-  console.log('HTML length:', html.length, 'Markdown length:', markdown.length);
 
   // Try to parse mytuner-radio.com format
   if (url.includes('mytuner-radio.com')) {
     console.log('Using mytuner-radio.com parser');
     
-    // Method 1: Parse HTML for song elements with various class patterns
+    // Method 1: Parse HTML for #now-playing / .latest-song and #song-history elements
     if (html) {
-      // Try multiple patterns for now playing
-      const nowPlayingPatterns = [
-        // Pattern: latest-song class with nested spans
-        /<div[^>]*class="[^"]*latest-song[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-        // Pattern: song-info or song-metadata
-        /<div[^>]*class="[^"]*(?:song-info|song-metadata|track-info)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-        // Pattern: now-playing section
-        /<section[^>]*(?:id|class)="[^"]*now-playing[^"]*"[^>]*>([\s\S]*?)<\/section>/gi,
-        // Pattern: current-song
-        /<div[^>]*class="[^"]*current-song[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-      ];
+      // Extract "Tocando agora" / now playing section
+      const nowPlayingSection = html.match(/id="now-playing"[^>]*>[\s\S]*?<\/div>\s*<div[^>]*class="[^"]*latest-song[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+      if (nowPlayingSection) {
+        const songHtml = nowPlayingSection[1];
+        const extracted = extractSongFromHtml(songHtml);
+        if (extracted) {
+          nowPlaying = {
+            title: extracted.title,
+            artist: extracted.artist,
+            timestamp: new Date().toISOString(),
+          };
+        }
+      }
       
-      for (const pattern of nowPlayingPatterns) {
-        if (nowPlaying) break;
-        const matches = html.matchAll(pattern);
-        for (const match of matches) {
-          const extracted = extractSongFromHtml(match[1] || match[0]);
+      // Also try looking for latest-song directly
+      if (!nowPlaying) {
+        const latestSongMatch = html.match(/<div[^>]*class="[^"]*latest-song[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+        if (latestSongMatch) {
+          const extracted = extractSongFromHtml(latestSongMatch[1]);
           if (extracted) {
             nowPlaying = {
               title: extracted.title,
               artist: extracted.artist,
               timestamp: new Date().toISOString(),
             };
-            console.log('Found now playing via HTML pattern:', nowPlaying.artist, '-', nowPlaying.title);
-            break;
           }
         }
       }
       
-      // Extract song history entries
-      const historyPatterns = [
-        /<div[^>]*class="[^"]*song(?:-entry|-item)?[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-        /<li[^>]*class="[^"]*(?:song|track|playlist-item)[^"]*"[^>]*>([\s\S]*?)<\/li>/gi,
-      ];
+      // Extract "As últimas tocadas" / song history
+      const historySection = html.match(/id="song-history"[^>]*>([\s\S]*?)<\/div>\s*(?:<\/div>|<div[^>]*class="(?!song))/i);
+      if (historySection) {
+        const historyHtml = historySection[1];
+        const songEntries = historyHtml.match(/<div[^>]*class="[^"]*song[^"]*"[^>]*>[\s\S]*?<\/div>/gi) || [];
+        
+        for (const entry of songEntries.slice(0, 5)) {
+          const extracted = extractSongFromHtml(entry);
+          if (extracted && !songs.some(s => s.title === extracted.title && s.artist === extracted.artist)) {
+            songs.push({
+              title: extracted.title,
+              artist: extracted.artist,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        }
+      }
       
-      for (const pattern of historyPatterns) {
-        const matches = html.matchAll(pattern);
-        for (const match of matches) {
-          const extracted = extractSongFromHtml(match[1] || match[0]);
+      // Method 2: Look for any song divs with title/artist classes
+      if (songs.length < 3) {
+        const songDivs = html.match(/<div[^>]*class="[^"]*song[^"]*"[^>]*>[\s\S]*?<\/div>/gi) || [];
+        
+        for (const div of songDivs.slice(0, 10)) {
+          const extracted = extractSongFromHtml(div);
           if (extracted && 
               !songs.some(s => s.title === extracted.title && s.artist === extracted.artist) &&
               (!nowPlaying || (nowPlaying.title !== extracted.title || nowPlaying.artist !== extracted.artist))) {
@@ -447,63 +450,41 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
               timestamp: new Date().toISOString(),
             });
           }
-          if (songs.length >= 5) break;
         }
-        if (songs.length >= 3) break;
       }
     }
     
-    // Method 2: Enhanced markdown parsing with multiple patterns
-    if (!nowPlaying || songs.length === 0) {
-      console.log('Trying markdown patterns...');
-      
-      // Pattern: Bold title followed by artist
-      const boldPatterns = markdown.matchAll(/\*\*([^*\n]+)\*\*\s*[\n\r]+([^\n\r*]+)/g);
-      for (const match of boldPatterns) {
-        const title = cleanText(match[1]);
-        const artist = cleanText(match[2]);
-        if (isValidSongPart(title) && isValidSongPart(artist)) {
-          if (!nowPlaying) {
-            nowPlaying = { title, artist, timestamp: new Date().toISOString() };
-            console.log('Found now playing via markdown bold:', artist, '-', title);
-          } else if (!songs.some(s => s.title === title && s.artist === artist) &&
-                     (nowPlaying.title !== title || nowPlaying.artist !== artist)) {
-            songs.push({ title, artist, timestamp: new Date().toISOString() });
-          }
-          if (songs.length >= 5) break;
-        }
-      }
-      
-      // Pattern: "Artist - Title" lines
-      const dashLines = markdown.match(/^([A-Za-zÀ-ÿ][^-–\n]+)\s*[-–]\s*([^\n]+)$/gm) || [];
-      for (const line of dashLines.slice(0, 10)) {
-        const match = line.match(/^([^-–]+)\s*[-–]\s*(.+)$/);
-        if (match) {
-          const artist = cleanText(match[1]);
-          const title = cleanText(match[2]);
-          if (isValidSongPart(artist) && isValidSongPart(title)) {
-            if (!nowPlaying) {
-              nowPlaying = { title, artist, timestamp: new Date().toISOString() };
-            } else if (!songs.some(s => s.title === title && s.artist === artist) &&
-                       (nowPlaying.title !== title || nowPlaying.artist !== artist)) {
-              songs.push({ title, artist, timestamp: new Date().toISOString() });
-            }
-          }
-        }
-      }
-      
-      // Pattern: Lines after "Tocando agora" header
-      const tocandoMatch = markdown.match(/(?:Tocando agora|Now Playing|Agora)[\s:]*\n+([\s\S]{10,200}?)(?:\n\n|As últimas|Playlist|Histórico)/i);
-      if (tocandoMatch && !nowPlaying) {
-        const section = tocandoMatch[1];
-        // Try to extract from the text section
-        const boldMatch = section.match(/\*\*([^*]+)\*\*\s*\n*([^\n*]+)/);
-        if (boldMatch) {
-          const title = cleanText(boldMatch[1]);
-          const artist = cleanText(boldMatch[2]);
+    // Method 3: Fallback to markdown parsing
+    if (!nowPlaying && songs.length === 0) {
+      // Look for patterns after "Tocando agora" text
+      const afterNowPlaying = markdown.match(/Tocando agora:?\s*\n+([\s\S]*?)(?:\n\s*\n|As últimas|Playlist)/i);
+      if (afterNowPlaying) {
+        const section = afterNowPlaying[1];
+        const songMatch = section.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/);
+        if (songMatch) {
+          const title = cleanText(songMatch[1]);
+          const artist = cleanText(songMatch[2]);
           if (isValidSongPart(title) && isValidSongPart(artist)) {
             nowPlaying = { title, artist, timestamp: new Date().toISOString() };
-            console.log('Found now playing via Tocando agora section:', artist, '-', title);
+          }
+        }
+      }
+      
+      // Look for patterns after "As últimas tocadas"
+      const afterHistory = markdown.match(/As últimas tocadas:?\s*\n+([\s\S]*?)(?:\n\s*\n\s*\n|$)/i);
+      if (afterHistory) {
+        const section = afterHistory[1];
+        const songPatterns = section.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/g) || [];
+        
+        for (const pattern of songPatterns.slice(0, 5)) {
+          const match = pattern.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/);
+          if (match) {
+            const title = cleanText(match[1]);
+            const artist = cleanText(match[2]);
+            if (isValidSongPart(title) && isValidSongPart(artist) && 
+                !songs.some(s => s.title === title && s.artist === artist)) {
+              songs.push({ title, artist, timestamp: new Date().toISOString() });
+            }
           }
         }
       }

@@ -1,8 +1,7 @@
-import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic, Music, Database, Calendar, Zap } from 'lucide-react';
+import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic, Music, Database, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useRadioStore } from '@/store/radioStore';
-import { useUIModeStore } from '@/store/uiModeStore';
 import logo from '@/assets/logo.png';
 
 interface NavItem {
@@ -11,17 +10,10 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   badge?: string | number;
   badgeType?: 'static' | 'dynamic';
-  simplifiedOnly?: boolean; // Show only in simplified mode
-  completeOnly?: boolean;   // Show only in complete mode
 }
 
-// Items that appear in BOTH modes
-const coreNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
+const staticNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'dashboard', label: 'Dashboard', icon: Activity },
-];
-
-// Items only for complete mode
-const completeOnlyNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'stations', label: 'Emissoras', icon: Radio },
   { id: 'specialmonitoring', label: 'Monitoramento Especial', icon: Calendar },
   { id: 'captured', label: 'Músicas Capturadas', icon: Database },
@@ -35,10 +27,6 @@ const completeOnlyNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'logs', label: 'Logs', icon: Terminal },
   { id: 'export', label: 'Exportar Config', icon: Download },
   { id: 'folders', label: 'Pastas', icon: FolderOpen },
-];
-
-// Items available in both but with badge (missing songs)
-const sharedNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'missing', label: 'Faltando', icon: AlertTriangle },
   { id: 'settings', label: 'Configurações', icon: Settings },
 ];
@@ -51,37 +39,25 @@ interface SidebarProps {
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { queueLength, isProcessing } = useAutoDownloadStore();
   const missingSongs = useRadioStore((state) => state.missingSongs);
-  const { mode } = useUIModeStore();
   
   // Count missing songs (status = 'missing')
   const missingSongsCount = missingSongs.filter(s => s.status === 'missing').length;
   
-  // Build nav items based on current mode
-  const buildNavItems = (): NavItem[] => {
-    let items: Omit<NavItem, 'badge' | 'badgeType'>[] = [];
-    
-    if (mode === 'simplified') {
-      // Simplified mode: core + shared items only
-      items = [...coreNavItems, ...sharedNavItems];
-    } else {
-      // Complete mode: all items
-      items = [...coreNavItems, ...completeOnlyNavItems, ...sharedNavItems];
-    }
-    
-    // Add badges to relevant items - always show missing count (what's not in library)
-    return items.map(item => {
-      if (item.id === 'missing' && missingSongsCount > 0) {
+  // Build nav items with dynamic badges
+  const navItems: NavItem[] = staticNavItems.map(item => {
+    if (item.id === 'missing') {
+      // Show either queue length (if downloading) or missing songs count
+      const badgeCount = queueLength > 0 ? queueLength : missingSongsCount;
+      if (badgeCount > 0) {
         return {
           ...item,
-          badge: missingSongsCount,
+          badge: badgeCount,
           badgeType: 'dynamic' as const,
         };
       }
-      return item;
-    });
-  };
-  
-  const navItems = buildNavItems();
+    }
+    return item;
+  });
 
   return (
     <aside className="w-64 min-h-screen bg-card border-r border-border flex flex-col">
@@ -95,19 +71,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           </div>
         </div>
       </div>
-
-      {/* Mode indicator */}
-      {mode === 'simplified' && (
-        <div className="mx-4 mt-4 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-          <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-emerald-500" />
-            <span className="text-xs font-medium text-emerald-500">Modo Leve</span>
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-1">
-            Sistema operando em segundo plano
-          </p>
-        </div>
-      )}
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">

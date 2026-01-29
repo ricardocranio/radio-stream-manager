@@ -237,14 +237,10 @@ export const radioScraperApi = {
 
       const result = data as RadioScrapeResult;
       
-      // Handle both success:true with data and success:false gracefully
       if (result.success && result.nowPlaying) {
         console.log(`[RadioScraper] ✓ ${stationName}: ${result.nowPlaying.artist} - ${result.nowPlaying.title}`);
-      } else if (!result.success) {
-        // Silently handle - this station just didn't return data (anti-scraping protection, etc.)
-        console.log(`[RadioScraper] ⚠ ${stationName}: ${result.error || 'No data available'}`);
       } else {
-        console.log(`[RadioScraper] ⚠ ${stationName}: No song data`);
+        console.warn(`[RadioScraper] ✗ ${stationName}: No song data`);
       }
 
       return result;

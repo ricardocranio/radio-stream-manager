@@ -2,14 +2,9 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { withRetry, createError, ErrorCodes } from '@/lib/errorHandler';
-import { 
-  isElectron, 
-  isServiceMode, 
-  checkElectronBackend, 
-  downloadViaAPI,
-  getBackendAvailable,
-  onBackendReconnect 
-} from '@/lib/serviceMode';
+
+// Check if running in Electron
+const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
 // Constants
 const MAX_RETRIES = 3;
@@ -36,7 +31,6 @@ export function useAutoDownload() {
   const processedSongsRef = useRef<Set<string>>(new Set());
   const lastCheckRef = useRef<string[]>([]);
   const lastResetCounterRef = useRef(0);
-  const electronBackendAvailableRef = useRef<boolean | null>(null);
 
   // Watch for reset signal and clear internal refs
   useEffect(() => {
@@ -50,83 +44,32 @@ export function useAutoDownload() {
     }
   }, [resetCounter]);
 
-  // Check for Electron backend availability on mount and subscribe to changes (for service mode)
-  useEffect(() => {
-    // If native Electron, always available
-    if (isElectron && window.electronAPI) {
-      electronBackendAvailableRef.current = true;
-      console.log('[AUTO-DL] Native Electron detected - backend always available');
-      return;
-    }
-    
-    // For service mode, use the centralized backend check with auto-reconnect
-    if (isServiceMode()) {
-      // Subscribe to backend status changes - this also notifies immediately with current status
-      const unsubscribe = onBackendReconnect((connected: boolean) => {
-        electronBackendAvailableRef.current = connected;
-        console.log(`[AUTO-DL] Backend status updated: ${connected ? 'CONNECTED ✓' : 'DISCONNECTED'}`);
-      });
-      
-      // Also do explicit check on mount
-      checkElectronBackend().then(available => {
-        electronBackendAvailableRef.current = available;
-        console.log(`[AUTO-DL] Initial backend check: ${available ? 'CONNECTED ✓' : 'NOT AVAILABLE'}`);
-      });
-      
-      return () => {
-        unsubscribe();
-      };
-    }
-    
-    console.log('[AUTO-DL] Web-only mode - no backend available');
-  }, []);
-
   // Download a single song
   const downloadSong = useCallback(async (song: MissingSong): Promise<boolean> => {
-    const canUseElectronDirect = isElectron && window.electronAPI?.downloadFromDeezer;
-    const canUseServiceMode = isServiceMode() && electronBackendAvailableRef.current;
-    
-    if (!canUseElectronDirect && !canUseServiceMode) {
-      console.log('[AUTO-DL] ❌ Skipping - not in Electron environment and no service mode backend');
+    if (!isElectron || !window.electronAPI?.downloadFromDeezer) {
+      console.log('[AUTO-DL] Skipping - not in Electron');
       return false;
     }
 
     const state = useRadioStore.getState();
-    if (!state.deezerConfig.enabled) {
-      console.log('[AUTO-DL] ❌ Skipping - Deezer not enabled in config');
-      return false;
-    }
-    if (!state.deezerConfig.arl) {
-      console.log('[AUTO-DL] ❌ Skipping - No ARL token configured');
-      return false;
-    }
-    if (!state.deezerConfig.downloadFolder) {
-      console.log('[AUTO-DL] ❌ Skipping - No download folder configured');
+    if (!state.deezerConfig.enabled || !state.deezerConfig.arl) {
+      console.log('[AUTO-DL] Skipping - Deezer not configured');
       return false;
     }
 
-    console.log(`[AUTO-DL] Downloading: ${song.artist} - ${song.title} (mode: ${canUseElectronDirect ? 'IPC' : 'API'})`);
+    console.log(`[AUTO-DL] Downloading: ${song.artist} - ${song.title}`);
     updateMissingSong(song.id, { status: 'downloading' });
 
     const startTime = Date.now();
 
     try {
-      const downloadParams = {
+      const result = await window.electronAPI.downloadFromDeezer({
         artist: song.artist,
         title: song.title,
         arl: state.deezerConfig.arl,
         outputFolder: state.deezerConfig.downloadFolder,
-        outputFolder2: state.deezerConfig.downloadFolder2 || undefined,
         quality: state.deezerConfig.quality,
-      };
-      
-      // Use IPC if in Electron, otherwise use HTTP API (service mode)
-      let result;
-      if (canUseElectronDirect) {
-        result = await window.electronAPI.downloadFromDeezer(downloadParams);
-      } else {
-        result = await downloadViaAPI(downloadParams);
-      }
+      });
 
       const duration = Date.now() - startTime;
 
@@ -174,23 +117,12 @@ export function useAutoDownload() {
 
   // Process the download queue
   const processQueue = useCallback(async () => {
-    if (isProcessingRef.current) {
-      console.log('[AUTO-DL] ⏳ Already processing queue, skipping');
-      return;
-    }
-    
-    if (downloadQueueRef.current.length === 0) {
-      console.log('[AUTO-DL] 📭 Queue is empty, nothing to process');
+    if (isProcessingRef.current || downloadQueueRef.current.length === 0) {
       return;
     }
 
     const state = useRadioStore.getState();
-    if (!state.deezerConfig.autoDownload) {
-      console.log('[AUTO-DL] ⏸️ Auto-download is disabled');
-      return;
-    }
-    if (!state.deezerConfig.enabled) {
-      console.log('[AUTO-DL] ⏸️ Deezer integration is disabled');
+    if (!state.deezerConfig.autoDownload || !state.deezerConfig.enabled) {
       return;
     }
 
@@ -232,40 +164,7 @@ export function useAutoDownload() {
 
   // Watch for new missing songs
   useEffect(() => {
-    const inServiceMode = isServiceMode();
-    const canDownload = isElectron || (inServiceMode && electronBackendAvailableRef.current);
-    
-    // Log current config status for debugging
-    console.log('[AUTO-DL] 📊 Config status:', {
-      autoDownload: deezerConfig.autoDownload,
-      enabled: deezerConfig.enabled,
-      hasArl: !!deezerConfig.arl,
-      hasDownloadFolder: !!deezerConfig.downloadFolder,
-      missingSongsCount: missingSongs.filter(s => s.status === 'missing').length,
-      isElectron,
-      isServiceMode: inServiceMode,
-      electronBackendAvailable: electronBackendAvailableRef.current,
-      canDownload,
-    });
-
-    if (!canDownload) {
-      console.log('[AUTO-DL] ⏸️ Cannot download - no Electron or service mode backend');
-      return;
-    }
-    if (!deezerConfig.autoDownload) {
-      console.log('[AUTO-DL] ⏸️ Auto-download is OFF');
-      return;
-    }
-    if (!deezerConfig.enabled) {
-      console.log('[AUTO-DL] ⏸️ Deezer integration is OFF');
-      return;
-    }
-    if (!deezerConfig.arl) {
-      console.log('[AUTO-DL] ⚠️ No ARL token configured - go to Settings → Deezer');
-      return;
-    }
-    if (!deezerConfig.downloadFolder) {
-      console.log('[AUTO-DL] ⚠️ No download folder configured - go to Settings → Deezer');
+    if (!deezerConfig.autoDownload || !deezerConfig.enabled || !deezerConfig.arl) {
       return;
     }
 
@@ -282,13 +181,9 @@ export function useAutoDownload() {
         !processedSongsRef.current.has(song.id)
     );
 
-    if (newSongs.length > 0) {
-      console.log(`[AUTO-DL] 🎵 Found ${newSongs.length} new missing song(s) to download`);
-    }
-
     // Add new songs to queue
     for (const song of newSongs) {
-      console.log(`[AUTO-DL] ➕ Queuing: ${song.artist} - ${song.title}`);
+      console.log(`[AUTO-DL] New missing song detected: ${song.artist} - ${song.title}`);
       processedSongsRef.current.add(song.id);
       downloadQueueRef.current.push({
         song,
@@ -304,8 +199,7 @@ export function useAutoDownload() {
 
     // Start processing if not already
     if (downloadQueueRef.current.length > 0 && !isProcessingRef.current) {
-      console.log(`[AUTO-DL] 🚀 Starting queue processing (${downloadQueueRef.current.length} items)`);
       processQueue();
     }
-  }, [missingSongs, deezerConfig.autoDownload, deezerConfig.enabled, deezerConfig.arl, deezerConfig.downloadFolder, processQueue, setQueueLength]);
+  }, [missingSongs, deezerConfig.autoDownload, deezerConfig.enabled, deezerConfig.arl, processQueue, setQueueLength]);
 }

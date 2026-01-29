@@ -16,10 +16,9 @@ import { useRadioStore, MissingSong, DownloadHistoryEntry } from '@/store/radioS
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { radioScraperApi } from '@/lib/api/radioScraper';
 import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
-import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
-import { cleanAndValidateSong } from '@/lib/cleanSongMetadata';
-import { isElectron, isServiceMode, checkElectronBackend, downloadViaAPI, onBackendReconnect, resetReconnectState, getBackendAvailable } from '@/lib/serviceMode';
-import { logSystemError } from '@/store/gradeLogStore';
+
+// Check if running in Electron
+const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
 // ============= TYPES =============
 
@@ -54,8 +53,6 @@ interface GlobalServicesContextType {
   downloads: {
     queueLength: number;
     isProcessing: boolean;
-    backendConnected: boolean;
-    songsVerified: number;
   };
 }
 
@@ -92,126 +89,14 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     failedStations: [],
   });
 
-  // Initialize with current cache value if available
-  const [downloadState, setDownloadState] = useState(() => {
-    // Calculate initial backend status synchronously
-    let initialBackendStatus = false;
-    
-    // If native Electron, always connected
-    if (isElectron && typeof window !== 'undefined' && window.electronAPI) {
-      initialBackendStatus = true;
-    } else {
-      // Use cached value from serviceMode if available
-      const cached = getBackendAvailable();
-      initialBackendStatus = cached === true;
-    }
-    
-    return {
-      queueLength: 0,
-      isProcessing: false,
-      backendConnected: initialBackendStatus,
-      songsVerified: 0,
-    };
+  const [downloadState, setDownloadState] = useState({
+    queueLength: 0,
+    isProcessing: false,
   });
 
   // ============= DOWNLOAD SERVICE =============
-  const electronBackendRef = useRef<boolean | null>(getBackendAvailable());
-  const songsVerifiedRef = useRef<number>(0);
-  
-  // Check backend availability on mount for Service Mode
-  useEffect(() => {
-    // Check Electron direct
-    if (isElectron && window.electronAPI) {
-      setDownloadState(prev => ({ ...prev, backendConnected: true }));
-      electronBackendRef.current = true;
-      console.log('[GLOBAL-SVC] Native Electron detected - backend connected');
-      return;
-    }
-    
-    // In Service Mode, check backend availability immediately and periodically
-    if (isServiceMode()) {
-      console.log('[GLOBAL-SVC] Service Mode detected - checking backend availability...');
-      
-      // Track if this is the first notification (to avoid "reconnected" log on initial check)
-      let isFirstNotification = true;
-      
-      // Subscribe to auto-reconnect events - this will also notify immediately if status is known
-      const unsubscribe = onBackendReconnect((connected) => {
-        const previousStatus = electronBackendRef.current;
-        electronBackendRef.current = connected;
-        setDownloadState(prev => ({ ...prev, backendConnected: connected }));
-        
-        // Only log status changes, not the initial notification
-        if (!isFirstNotification && previousStatus !== connected) {
-          if (connected) {
-            logSystemError('SYSTEM', 'info', 'Backend reconectado automaticamente', 
-              'Conexão com o Electron foi restaurada.');
-            console.log('[GLOBAL-SVC] 🔄 Backend auto-reconnected!');
-          } else {
-            logSystemError('SYSTEM', 'warning', 'Backend desconectado - tentando reconectar...', 
-              'O sistema tentará reconectar automaticamente.');
-            console.log('[GLOBAL-SVC] ⚠️ Backend disconnected, auto-reconnect started');
-          }
-        }
-        
-        isFirstNotification = false;
-      });
-      
-      // Also do an explicit check in case cache isn't populated yet
-      checkElectronBackend().then(available => {
-        electronBackendRef.current = available;
-        setDownloadState(prev => ({ ...prev, backendConnected: available }));
-        console.log(`[GLOBAL-SVC] Service mode backend: ${available ? '✅ CONNECTED' : '❌ NOT AVAILABLE'}`);
-        
-        if (!available) {
-          logSystemError('SYSTEM', 'warning', 'Backend não disponível ao iniciar', 
-            'O sistema tentará reconectar automaticamente.');
-        }
-      });
-      
-      // Re-check periodically in case backend becomes available later
-      const intervalId = setInterval(() => {
-        checkElectronBackend().then(available => {
-          if (available !== electronBackendRef.current) {
-            electronBackendRef.current = available;
-            setDownloadState(prev => ({ ...prev, backendConnected: available }));
-            console.log(`[GLOBAL-SVC] Service mode backend status changed: ${available ? '✅ CONNECTED' : '❌ DISCONNECTED'}`);
-          }
-        });
-      }, 15000); // Check every 15 seconds
-      
-      return () => {
-        clearInterval(intervalId);
-        unsubscribe();
-      };
-    }
-    
-    // Neither Electron nor Service Mode - likely Lovable preview
-    console.log('[GLOBAL-SVC] Web-only mode detected (no local backend)');
-  }, []);
-  
   const downloadSong = useCallback(async (song: MissingSong): Promise<boolean> => {
-    const canUseElectronDirect = isElectron && window.electronAPI?.downloadFromDeezer;
-    
-    // For service mode, check backend availability dynamically
-    let canUseServiceMode = false;
-    
-    if (isServiceMode()) {
-      // If backend confirmed connected, use it
-      if (electronBackendRef.current === true) {
-        canUseServiceMode = true;
-      } else {
-        // Otherwise, do a fresh check (handles both null and false cases)
-        const available = await checkElectronBackend();
-        electronBackendRef.current = available;
-        setDownloadState(prev => ({ ...prev, backendConnected: available }));
-        canUseServiceMode = available;
-        console.log(`[GLOBAL-SVC] On-demand backend check: ${available ? 'CONNECTED' : 'NOT AVAILABLE'}`);
-      }
-    }
-    
-    if (!canUseElectronDirect && !canUseServiceMode) {
-      console.log('[GLOBAL-SVC] ❌ Skipping download - no backend available');
+    if (!isElectron || !window.electronAPI?.downloadFromDeezer) {
       return false;
     }
 
@@ -220,28 +105,19 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       return false;
     }
 
-    console.log(`[GLOBAL-SVC] 🎵 Downloading: ${song.artist} - ${song.title} (mode: ${canUseElectronDirect ? 'IPC' : 'API'})`);
+    console.log(`[GLOBAL-SVC] 🎵 Downloading: ${song.artist} - ${song.title}`);
     useRadioStore.getState().updateMissingSong(song.id, { status: 'downloading' });
 
     const startTime = Date.now();
 
     try {
-      const downloadParams = {
+      const result = await window.electronAPI.downloadFromDeezer({
         artist: song.artist,
         title: song.title,
         arl: state.deezerConfig.arl,
         outputFolder: state.deezerConfig.downloadFolder,
-        outputFolder2: state.deezerConfig.downloadFolder2 || undefined,
         quality: state.deezerConfig.quality,
-      };
-      
-      // Use IPC if in Electron, otherwise use HTTP API (service mode)
-      let result;
-      if (canUseElectronDirect) {
-        result = await window.electronAPI.downloadFromDeezer(downloadParams);
-      } else {
-        result = await downloadViaAPI(downloadParams);
-      }
+      });
 
       const duration = Date.now() - startTime;
 
@@ -332,50 +208,53 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     useAutoDownloadStore.getState().setIsProcessing(false);
   }, [downloadSong]);
 
-  // Throttle logging to avoid spam
-  const lastLogTimeRef = useRef<number>(0);
-  
   const checkNewMissingSongs = useCallback(() => {
     const state = useRadioStore.getState();
     const { deezerConfig, missingSongs } = state;
 
     // Count songs with 'missing' status (verified as not in music library)
     const pendingMissing = missingSongs.filter(s => s.status === 'missing');
+    const alreadyQueued = pendingMissing.filter(s => processedSongsRef.current.has(s.id)).length;
     const newToQueue = pendingMissing.filter(s => !processedSongsRef.current.has(s.id));
 
-    // Throttled status log - only log every 60 seconds to reduce spam
-    const now = Date.now();
-    const shouldLog = now - lastLogTimeRef.current > 60000;
-    
-    if (shouldLog && pendingMissing.length > 0) {
-      lastLogTimeRef.current = now;
-      console.log(`[GLOBAL-SVC] 📊 Status: ${pendingMissing.length} músicas faltando | ${newToQueue.length} novas`);
+    // Periodic status log
+    if (pendingMissing.length > 0) {
+      console.log(`[GLOBAL-SVC] 🎵 Fila: ${pendingMissing.length} músicas faltando no banco | ${alreadyQueued} já na fila | ${newToQueue.length} novas`);
     }
 
-    // Check if auto-download is configured - silent if no new songs
-    if (!deezerConfig.autoDownload || !deezerConfig.enabled || !deezerConfig.arl) {
+    // Check if auto-download is configured
+    if (!deezerConfig.autoDownload) {
+      if (newToQueue.length > 0) {
+        console.log(`[GLOBAL-SVC] ⏸️ Download automático DESATIVADO - ${newToQueue.length} músicas aguardando`);
+      }
       return;
     }
-
-    // Only process if there are NEW songs to add
-    if (newToQueue.length === 0) {
+    
+    if (!deezerConfig.enabled || !deezerConfig.arl) {
+      if (newToQueue.length > 0) {
+        console.log(`[GLOBAL-SVC] ⚠️ Deezer não configurado (enabled: ${deezerConfig.enabled}, hasARL: ${!!deezerConfig.arl})`);
+      }
       return;
     }
 
     // Add new songs to queue (only songs verified as missing from music library)
     for (const song of newToQueue) {
+      console.log(`[GLOBAL-SVC] 📥 Adicionando à fila: ${song.artist} - ${song.title} (não encontrado no banco musical)`);
       processedSongsRef.current.add(song.id);
       downloadQueueRef.current.push({ song, retryCount: 0 });
     }
     
     // Update queue length in state and store
-    console.log(`[GLOBAL-SVC] 📥 +${newToQueue.length} músicas adicionadas à fila`);
-    setDownloadState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
-    useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
-    
-    // IMMEDIATELY start processing - don't wait for next interval
-    if (!isProcessingRef.current) {
-      processDownloadQueue();
+    if (newToQueue.length > 0) {
+      console.log(`[GLOBAL-SVC] 📊 Fila atualizada: ${downloadQueueRef.current.length} músicas pendentes para download`);
+      setDownloadState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
+      useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
+      
+      // IMMEDIATELY start processing - don't wait for next interval
+      if (!isProcessingRef.current) {
+        console.log(`[GLOBAL-SVC] 🚀 Iniciando downloads IMEDIATAMENTE...`);
+        processDownloadQueue();
+      }
     }
   }, [processDownloadQueue]);
 
@@ -405,7 +284,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   }, []);
 
   const scrapeAllStations = useCallback(async (_forceRefresh = false) => {
-    const { stations, addCapturedSong, addOrUpdateRankingSong, addMissingSong, missingSongs, config } = useRadioStore.getState();
+    const { stations, addCapturedSong, addOrUpdateRankingSong } = useRadioStore.getState();
     const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl);
     
     if (enabledStations.length === 0) {
@@ -426,100 +305,6 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     let errorCount = 0;
     let newSongsCount = 0;
     const failedStations: string[] = [];
-    
-    // Helper to check if song is already in missing list
-    const isSongAlreadyMissing = (artist: string, title: string) => {
-      const normalizedArtist = artist.toLowerCase().trim();
-      const normalizedTitle = title.toLowerCase().trim();
-      return missingSongs.some(s => 
-        s.artist.toLowerCase().trim() === normalizedArtist && 
-        s.title.toLowerCase().trim() === normalizedTitle
-      );
-    };
-    
-    // Helper to process a captured song with library check
-    const processCapturedSong = async (
-      songData: { title: string; artist: string; timestamp?: string },
-      stationName: string,
-      stationStyle: string,
-      scrapeUrl: string
-    ) => {
-      // CRITICAL: Clean and validate song data before processing
-      const cleanedSong = cleanAndValidateSong(songData.artist, songData.title);
-      
-      // Skip invalid entries (addresses, station info, etc.)
-      if (!cleanedSong) {
-        console.log(`[GLOBAL-SVC] ⚠️ Dados inválidos ignorados: "${songData.artist} - ${songData.title}"`);
-        return false;
-      }
-      
-      const { artist, title } = cleanedSong;
-      const songId = `${stationName}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-      
-      // Check if song exists in music library
-      const libraryCheck = await checkSongInLibrary(
-        artist, 
-        title, 
-        config.musicFolders || [],
-        config.similarityThreshold || 0.75
-      );
-      
-      // If verification failed (no backend), don't add to missing list
-      // This prevents flooding the missing list when backend is unavailable
-      if (libraryCheck.verificationFailed) {
-        console.log(`[GLOBAL-SVC] ⚠️ Verificação não disponível para: ${artist} - ${title} (backend offline)`);
-        // Still add to captured songs but with 'unknown' status
-        addCapturedSong({
-          id: songId,
-          title: title,
-          artist: artist,
-          station: stationName,
-          timestamp: songData.timestamp ? new Date(songData.timestamp) : new Date(),
-          status: 'unknown', // Mark as unknown, not missing
-          source: scrapeUrl,
-        });
-        // Update ranking even if we can't verify library
-        addOrUpdateRankingSong(title, artist, stationStyle);
-        return true;
-      }
-      
-      // Increment verified counter only for actual verifications
-      songsVerifiedRef.current++;
-      setDownloadState(prev => ({ ...prev, songsVerified: songsVerifiedRef.current }));
-      
-      const existsInLibrary = libraryCheck.exists;
-      const songStatus = existsInLibrary ? 'found' : 'missing';
-      
-      // Add to captured songs with CLEANED data
-      addCapturedSong({
-        id: songId,
-        title: title,
-        artist: artist,
-        station: stationName,
-        timestamp: songData.timestamp ? new Date(songData.timestamp) : new Date(),
-        status: songStatus,
-        source: scrapeUrl,
-      });
-      
-      // Update ranking with cleaned data
-      addOrUpdateRankingSong(title, artist, stationStyle);
-      
-      // If not in library AND not already in missing list, add to missing
-      if (!existsInLibrary && !isSongAlreadyMissing(artist, title)) {
-        addMissingSong({
-          id: `missing-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-          title: title,
-          artist: artist,
-          station: stationName,
-          timestamp: new Date(),
-          status: 'missing',
-          dna: stationStyle,
-        });
-        console.log(`[GLOBAL-SVC] 📥 Nova música faltando: ${artist} - ${title}`);
-      }
-      
-      return true;
-    };
 
     const batchSize = 3;
     for (let i = 0; i < enabledStations.length; i += batchSize) {
@@ -538,15 +323,33 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
           const { stationName, nowPlaying, recentSongs, scrapeUrl } = result.value;
           const stationStyle = station.styles?.[0] || 'POP/VARIADO';
           
-          // Process nowPlaying with library check
           if (nowPlaying) {
-            await processCapturedSong(nowPlaying, stationName, stationStyle, scrapeUrl);
+            addCapturedSong({
+              id: `${stationName}-${Date.now()}`,
+              title: nowPlaying.title,
+              artist: nowPlaying.artist,
+              station: stationName,
+              timestamp: new Date(),
+              status: 'found',
+              source: scrapeUrl,
+            });
+            
+            addOrUpdateRankingSong(nowPlaying.title, nowPlaying.artist, stationStyle);
             newSongsCount++;
           }
 
-          // Process recent songs with library check
           for (const song of (recentSongs || []).slice(0, 3)) {
-            await processCapturedSong(song, stationName, stationStyle, scrapeUrl);
+            addCapturedSong({
+              id: `${stationName}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+              title: song.title,
+              artist: song.artist,
+              station: stationName,
+              timestamp: new Date(song.timestamp),
+              status: 'found',
+              source: scrapeUrl,
+            });
+            
+            addOrUpdateRankingSong(song.title, song.artist, stationStyle);
             newSongsCount++;
           }
         } else {
@@ -609,21 +412,10 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
-    // PROACTIVE: Initialize realtime channel early to prevent "degraded" status
-    import('@/lib/realtimeManager').then(({ realtimeManager }) => {
-      realtimeManager.subscribe('scraped_songs', 'global_services_init', () => {
-        // This callback will receive realtime inserts - just log for debugging
-        console.log('[GLOBAL-SVC] 🔔 Realtime insert received');
-      });
-      console.log('[GLOBAL-SVC] 🔄 Realtime channel initialized');
-    }).catch(err => {
-      console.warn('[GLOBAL-SVC] Failed to initialize realtime:', err);
-    });
-
-    // 1. Download check every 30 seconds (was 10s - reduced for performance)
+    // 1. Download check every 10 seconds - IMMEDIATE processing when songs arrive
     downloadIntervalRef.current = setInterval(() => {
       checkNewMissingSongs();
-    }, 30000);
+    }, 10000);
     checkNewMissingSongs(); // Initial check immediately
 
     // 2. Scraping every 5 minutes (was 3 min - optimized for performance)
@@ -662,8 +454,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         downloadQueueRef.current = [];
         processedSongsRef.current.clear();
         isProcessingRef.current = false;
-        songsVerifiedRef.current = 0;
-        setDownloadState(prev => ({ ...prev, queueLength: 0, isProcessing: false, songsVerified: 0 }));
+        setDownloadState({ queueLength: 0, isProcessing: false });
       }
     });
 
@@ -687,48 +478,10 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   );
 }
 
-// Default values for when context is not available (defensive programming)
-const defaultGradeBuilderValues = {
-  isBuilding: false,
-  currentProgress: { processed: 0, total: 0, currentArtist: '', currentTitle: '' },
-  lastBuildResult: null,
-  lastSaveTime: null,
-  minutesBeforeBlock: 10,
-  setMinutesBeforeBlock: () => {},
-  buildCurrentBlock: async () => ({}),
-  isEnabled: true,
-  setIsEnabled: () => {},
-};
-
-const defaultContextValue: GlobalServicesContextType = {
-  gradeBuilder: defaultGradeBuilderValues as any,
-  scraping: {
-    stats: {
-      lastScrape: null,
-      successCount: 0,
-      errorCount: 0,
-      totalSongs: 0,
-      isRunning: false,
-      currentStation: null,
-      failedStations: [],
-    },
-    scrapeAllStations: async () => ({ successCount: 0, errorCount: 0, newSongsCount: 0 }),
-    isRunning: false,
-  },
-  downloads: {
-    queueLength: 0,
-    isProcessing: false,
-    backendConnected: false,
-    songsVerified: 0,
-  },
-};
-
 export function useGlobalServices() {
   const context = useContext(GlobalServicesContext);
-  // Return default values if context is not available (defensive - prevents app crash)
   if (!context) {
-    console.warn('[useGlobalServices] Context not available, using defaults');
-    return defaultContextValue;
+    throw new Error('useGlobalServices must be used within a GlobalServicesProvider');
   }
   return context;
 }

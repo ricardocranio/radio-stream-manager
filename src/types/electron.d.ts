@@ -3,8 +3,6 @@ interface DeezerDownloadParams {
   title: string;
   arl: string;
   outputFolder: string;
-  /** Segunda pasta de download (opcional) - arquivo será copiado para esta pasta também */
-  outputFolder2?: string;
   quality: 'MP3_128' | 'MP3_320' | 'FLAC';
 }
 
@@ -138,23 +136,6 @@ interface StationConfig {
   enabled: boolean;
 }
 
-interface ServiceModeStatus {
-  running: boolean;
-  port: number;
-  url: string;
-  error?: boolean;
-  errorType?: string;
-  details?: string;
-}
-
-interface OpenBrowserResult {
-  success: boolean;
-  port?: number;
-  url?: string;
-  error?: string;
-  message?: string;
-}
-
 interface ElectronAPI {
   // App info
   getAppVersion: () => Promise<string>;
@@ -234,21 +215,6 @@ interface ElectronAPI {
   onPythonStatus: (callback: (status: { available: boolean; message: string; downloadUrl: string }) => void) => void;
   onDeemixStatus: (callback: (status: { installed: boolean; command: string | null }) => void) => void;
   getDeemixCommand: () => Promise<string | null>;
-  
-  // Service Mode (Tray + Localhost)
-  setServiceMode: (mode: 'window' | 'service') => Promise<void>;
-  getServiceMode: () => Promise<'window' | 'service'>;
-  openInBrowser: () => Promise<OpenBrowserResult>;
-  getLocalhostUrl: () => Promise<string>;
-  setLocalhostPort: (port: number) => Promise<void>;
-  setAutoStartServiceMode: (enabled: boolean) => Promise<void>;
-  getAutoStartServiceMode: () => Promise<boolean>;
-  onServerStatus: (callback: (status: ServiceModeStatus) => void) => void;
-  onServiceModeChanged: (callback: (mode: 'window' | 'service') => void) => void;
-  
-  // App lifecycle controls
-  quitApp: () => void;
-  minimizeToTray: () => void;
   
   // Platform detection
   platform: string;

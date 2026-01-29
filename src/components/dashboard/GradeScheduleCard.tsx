@@ -1,12 +1,11 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Clock, Eye, Save, X, Music, Newspaper, Edit2, FileText, Loader2, Copy, Check, FolderOpen, Calendar, HardDrive } from 'lucide-react';
+import { Clock, Eye, Save, X, Music, Newspaper, Edit2, FileText, Loader2, Copy, Check, FolderOpen, Calendar } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore, BlockSong, FixedContent } from '@/store/radioStore';
 import { supabase } from '@/integrations/supabase/client';
-import { isElectron, isServiceMode, readGradeFileViaAPI, saveGradeFileViaAPI } from '@/lib/serviceMode';
 import {
   Dialog,
   DialogContent,
@@ -17,9 +16,8 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useGlobalServices } from '@/contexts/GlobalServicesContext';
 
 interface BlockInfo {
   time: string;
@@ -38,7 +36,6 @@ interface CapturedSong {
 
 export function GradeScheduleCard() {
   const { blockSongs, programs, fixedContent, setBlockSongs, stations, config } = useRadioStore();
-  const { gradeBuilder } = useGlobalServices();
   const { toast } = useToast();
   const [selectedBlock, setSelectedBlock] = useState<BlockInfo | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -48,14 +45,10 @@ export function GradeScheduleCard() {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'songs' | 'preview'>('songs');
 
-  // Last save info from gradeBuilder
-  const lastSaveTime = gradeBuilder.lastBuildTime;
-  const lastSavedFile = gradeBuilder.lastSavedFile;
-
   // Get current day info
   const dayInfo = useMemo(() => {
     const now = new Date();
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
     const dayName = days[now.getDay()];
     const dateFormatted = format(now, "EEEE, dd 'de' MMMM", { locale: ptBR });
     return { dayName, dateFormatted };
@@ -244,25 +237,17 @@ export function GradeScheduleCard() {
       setIsEditing(false);
 
       // Also save to physical file in destination folder
-      const canSaveFile = window.electronAPI?.saveGradeFile || isServiceMode();
-      if (canSaveFile) {
+      if (window.electronAPI?.saveGradeFile && window.electronAPI?.readGradeFile) {
         try {
           const filename = `${dayInfo.dayName}.txt`;
           
           // Read existing file
           let existingContent = '';
           try {
-            let readResult: { success: boolean; content?: string };
-            if (window.electronAPI?.readGradeFile) {
-              readResult = await window.electronAPI.readGradeFile({
-                folder: config.gradeFolder,
-                filename,
-              });
-            } else if (isServiceMode()) {
-              readResult = await readGradeFileViaAPI(config.gradeFolder, filename);
-            } else {
-              readResult = { success: false };
-            }
+            const readResult = await window.electronAPI.readGradeFile({
+              folder: config.gradeFolder,
+              filename,
+            });
             if (readResult.success && readResult.content) {
               existingContent = readResult.content;
             }
@@ -291,18 +276,11 @@ export function GradeScheduleCard() {
             .map(t => lineMap.get(t))
             .join('\n');
 
-          let result: { success: boolean; filePath?: string; error?: string };
-          if (window.electronAPI?.saveGradeFile) {
-            result = await window.electronAPI.saveGradeFile({
-              folder: config.gradeFolder,
-              filename,
-              content: sortedContent,
-            });
-          } else if (isServiceMode()) {
-            result = await saveGradeFileViaAPI(config.gradeFolder, filename, sortedContent);
-          } else {
-            result = { success: false, error: 'Nenhum backend disponível' };
-          }
+          const result = await window.electronAPI.saveGradeFile({
+            folder: config.gradeFolder,
+            filename,
+            content: sortedContent,
+          });
 
           if (result.success) {
             console.log(`[GRADE-CARD] ✅ Bloco ${selectedBlock.time} exportado para ${result.filePath}`);
@@ -404,17 +382,7 @@ export function GradeScheduleCard() {
               </Button>
             </div>
           </div>
-          <div className="flex items-center justify-between mt-1">
-            <p className="text-xs text-muted-foreground capitalize">{dayInfo.dateFormatted}</p>
-            {/* Last save indicator */}
-            {lastSaveTime && (
-              <div className="flex items-center gap-1.5 text-[10px] text-emerald-500" title={`Último salvamento: ${format(lastSaveTime, 'HH:mm:ss')}`}>
-                <HardDrive className="w-3 h-3" />
-                <span>Salvo {formatDistanceToNow(lastSaveTime, { locale: ptBR, addSuffix: true })}</span>
-                {lastSavedFile && <span className="text-muted-foreground">({lastSavedFile})</span>}
-              </div>
-            )}
-          </div>
+          <p className="text-xs text-muted-foreground capitalize mt-1">{dayInfo.dateFormatted}</p>
         </CardHeader>
         <CardContent className="p-3 flex-1 min-h-0">
           {isLoading ? (

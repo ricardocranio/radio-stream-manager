@@ -4,7 +4,6 @@ import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { isElectron as isElectronNative, isServiceMode, findSongMatchViaAPI, saveGradeFileViaAPI, readGradeFileViaAPI, checkElectronBackend, isLovablePreview, getBackendAvailable, onBackendReconnect } from '@/lib/serviceMode';
 
 interface SongEntry {
   title: string;
@@ -55,66 +54,9 @@ interface AutoGradeState {
   lastSaveProgress: number;
 }
 
-// Verify backend is available before operations
-// Uses the GLOBAL cache from serviceMode.ts - no separate cache here!
-async function verifyBackendAvailable(): Promise<boolean> {
-  // Native Electron always available
-  if (isElectronNative && window.electronAPI?.findSongMatch) {
-    return true;
-  }
-  
-  // Service Mode - use global cache first, then check if needed
-  if (isServiceMode()) {
-    const cachedStatus = getBackendAvailable();
-    
-    // If we have a recent positive cache, trust it
-    if (cachedStatus === true) {
-      return true;
-    }
-    
-    // If cache is null or false, perform a fresh check
-    const available = await checkElectronBackend();
-    console.log(`[GRADE] Backend availability: ${available ? '✅ CONNECTED' : '❌ NOT AVAILABLE'}`);
-    return available;
-  }
-  
-  // Lovable preview - no backend
-  return false;
-}
-
-// Helper function to save grade file (works in both Electron native and Service Mode)
-async function saveGradeFile(folder: string, filename: string, content: string): Promise<{ success: boolean; filePath?: string; error?: string }> {
-  // Try native Electron API first
-  if (window.electronAPI?.saveGradeFile) {
-    return window.electronAPI.saveGradeFile({ folder, filename, content });
-  }
-  // Fall back to HTTP API for Service Mode
-  if (isServiceMode()) {
-    console.log(`[GRADE] Saving via HTTP API: ${filename}`);
-    return saveGradeFileViaAPI(folder, filename, content);
-  }
-  console.warn('[GRADE] No backend available for saving file');
-  return { success: false, error: 'Nenhum backend disponível' };
-}
-
-// Helper function to read grade file (works in both Electron native and Service Mode)
-async function readGradeFile(folder: string, filename: string): Promise<{ success: boolean; content?: string; error?: string }> {
-  // Try native Electron API first
-  if (window.electronAPI?.readGradeFile) {
-    return window.electronAPI.readGradeFile({ folder, filename });
-  }
-  // Fall back to HTTP API for Service Mode
-  if (isServiceMode()) {
-    return readGradeFileViaAPI(folder, filename);
-  }
-  return { success: false, error: 'Nenhum backend disponível' };
-}
-
+const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
 const ARTIST_REPETITION_MINUTES = 60;
-const DEFAULT_MINUTES_BEFORE_BLOCK = 10;
-
-// Helper to check if we're in an environment that can use local operations
-const isElectronEnv = isElectronNative || isServiceMode();
+const DEFAULT_MINUTES_BEFORE_BLOCK = 10; // Build 10 minutes before each block
 
 export function useAutoGradeBuilder() {
   const { toast } = useToast();
@@ -159,36 +101,10 @@ export function useAutoGradeBuilder() {
   // Carry-over: songs that were missing but queued for download
   // These will be prioritized in the next block since downloads are fast (~1 min)
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
-  
-  // Track backend status and clear errors on reconnect
-  const backendConnectedRef = useRef<boolean | null>(null);
-  
-  // Subscribe to backend reconnection events to clear error state
-  useEffect(() => {
-    if (!isServiceMode()) return;
-    
-    const unsubscribe = onBackendReconnect((connected) => {
-      console.log(`[GRADE] Backend reconnect event: ${connected ? '✅ CONNECTED' : '❌ DISCONNECTED'}`);
-      backendConnectedRef.current = connected;
-      
-      if (connected) {
-        // Clear any existing error when backend reconnects
-        setState(prev => {
-          if (prev.error?.includes('Backend desconectado') || prev.error?.includes('desconectado')) {
-            console.log('[GRADE] ✅ Clearing backend error after reconnection');
-            return { ...prev, error: null };
-          }
-          return prev;
-        });
-      }
-    });
-    
-    return unsubscribe;
-  }, []);
 
   // Get day code for filename
   const getDayCode = useCallback(() => {
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
     return days[new Date().getDay()];
   }, []);
 
@@ -230,10 +146,10 @@ export function useAutoGradeBuilder() {
   }, [stations]);
 
   // Check if song/artist was used recently
-  // Uses a sliding window based on configured repetition minutes
-  // ALSO checks if the EXACT song title was used anywhere today (to prevent same song in multiple blocks)
+  // For full day generation, use shorter window (30 min) to allow more variety
   const isRecentlyUsed = useCallback((title: string, artist: string, currentBlockTime: string, isFullDay: boolean = false): boolean => {
-    const artistRepetitionMinutes = isFullDay ? 60 : (config.artistRepetitionMinutes || ARTIST_REPETITION_MINUTES);
+    // Use shorter repetition time for full day generation
+    const artistRepetitionMinutes = isFullDay ? 30 : (config.artistRepetitionMinutes || ARTIST_REPETITION_MINUTES);
     const normalizedTitle = title.toLowerCase().trim();
     const normalizedArtist = artist.toLowerCase().trim();
 
@@ -244,20 +160,14 @@ export function useAutoGradeBuilder() {
       const [usedHour, usedMinute] = used.blockTime.split(':').map(Number);
       const usedTotalMinutes = usedHour * 60 + usedMinute;
 
-      // CRITICAL: Same EXACT song title should NEVER repeat in the same day
-      // This prevents the same song appearing in multiple blocks
-      if (used.title.toLowerCase().trim() === normalizedTitle) {
-        console.log(`[REPETITION] ❌ Música "${title}" já usada no bloco ${used.blockTime}, pulando...`);
-        return true;
-      }
-
-      // For artist repetition, use the time-based sliding window
       let diffMinutes = currentTotalMinutes - usedTotalMinutes;
       if (diffMinutes < 0) diffMinutes += 24 * 60;
 
       if (diffMinutes < artistRepetitionMinutes) {
+        if (used.title.toLowerCase().trim() === normalizedTitle) {
+          return true;
+        }
         if (used.artist.toLowerCase().trim() === normalizedArtist) {
-          console.log(`[REPETITION] ⚠️ Artista "${artist}" tocou há ${diffMinutes} min, pulando...`);
           return true;
         }
       }
@@ -265,24 +175,16 @@ export function useAutoGradeBuilder() {
     return false;
   }, [config.artistRepetitionMinutes]);
 
-  // Mark song as used - keep ALL songs for the entire day to prevent repetition
+  // Mark song as used
   const markSongAsUsed = useCallback((title: string, artist: string, blockTime: string) => {
-    // Check if already exists to avoid duplicates in tracking
-    const exists = usedSongsRef.current.some(
-      u => u.title.toLowerCase().trim() === title.toLowerCase().trim() &&
-           u.blockTime === blockTime
-    );
-    if (!exists) {
-      usedSongsRef.current.push({
-        title,
-        artist,
-        usedAt: new Date(),
-        blockTime,
-      });
-    }
-    // Keep up to 500 entries for full day support (48 blocks * 10 songs = 480)
-    if (usedSongsRef.current.length > 500) {
-      usedSongsRef.current = usedSongsRef.current.slice(-500);
+    usedSongsRef.current.push({
+      title,
+      artist,
+      usedAt: new Date(),
+      blockTime,
+    });
+    if (usedSongsRef.current.length > 100) {
+      usedSongsRef.current = usedSongsRef.current.slice(-100);
     }
   }, []);
 
@@ -329,48 +231,26 @@ export function useAutoGradeBuilder() {
   }, []);
 
   // Check if song exists in music library and get the correct filename
-  const findSongInLibrary = useCallback(async (artist: string, title: string): Promise<{ exists: boolean; filename?: string; verificationFailed?: boolean }> => {
-    // Try native Electron API first
-    if (window.electronAPI?.findSongMatch) {
-      try {
-        const result = await window.electronAPI.findSongMatch({
-          artist,
-          title,
-          musicFolders: config.musicFolders,
-        });
-        if (result.exists && result.baseName) {
-          return { exists: true, filename: `${result.baseName}.mp3` };
-        }
-        return { exists: result.exists };
-      } catch (error) {
-        console.error('[GRADE] Error finding song match via IPC:', error);
-        // Continue to try HTTP API
-      }
+  const findSongInLibrary = useCallback(async (artist: string, title: string): Promise<{ exists: boolean; filename?: string }> => {
+    if (!isElectronEnv || !window.electronAPI?.findSongMatch) {
+      return { exists: true }; // Web mode: assume exists
     }
-    
-    // Try HTTP API for Service Mode (localhost)
-    if (isServiceMode() && config.musicFolders.length > 0) {
-      try {
-        console.log(`[GRADE] Checking library via API: ${artist} - ${title}`);
-        const result = await findSongMatchViaAPI(artist, title, config.musicFolders, config.similarityThreshold || 0.75);
-        if (result.exists && result.baseName) {
-          console.log(`[GRADE] ✓ Found in library: ${result.baseName}`);
-          return { exists: true, filename: `${result.baseName}.mp3` };
-        }
-        console.log(`[GRADE] ✗ Not in library: ${artist} - ${title}`);
-        return { exists: result.exists };
-      } catch (error) {
-        console.error('[GRADE] HTTP API error finding song match:', error);
-        // For Service Mode, if API fails, mark as verification failed (don't add to missing)
-        return { exists: false, verificationFailed: true };
+    try {
+      const result = await window.electronAPI.findSongMatch({
+        artist,
+        title,
+        musicFolders: config.musicFolders,
+      });
+      if (result.exists && result.baseName) {
+        // Return the actual filename from the library (without extension, we add .mp3)
+        return { exists: true, filename: `${result.baseName}.mp3` };
       }
+      return { exists: result.exists };
+    } catch (error) {
+      console.error('[GRADE] Error finding song match:', error);
+      return { exists: true }; // On error, assume exists to avoid blocking
     }
-    
-    // Web-only mode (Lovable Preview or no backend): mark as verification failed
-    // In preview environments, we can't check the user's actual library
-    console.log('[GRADE] Web-only mode: cannot verify (no backend available)');
-    return { exists: false, verificationFailed: true };
-  }, [config.musicFolders, config.similarityThreshold]);
+  }, [config.musicFolders]);
 
   // Fallback check if song exists (for backwards compatibility)
   const checkSongInLibrary = useCallback(async (artist: string, title: string): Promise<boolean> => {
@@ -588,46 +468,11 @@ export function useAutoGradeBuilder() {
     // Normal block with 10 songs following the configured SEQUENCE
     const songs: string[] = [];
     const usedInBlock = new Set<string>();
-    
-    // Build mappings for ID -> Name AND Name -> Name (for flexibility)
-    // CRITICAL: Map both UUID IDs AND short IDs (bh, band, clube) to station names
     const stationIdToName: Record<string, string> = {};
-    const stationNameToName: Record<string, string> = {};
-    
-    // Hard-coded mapping of short IDs to station names (from radioStore defaults)
-    const shortIdToName: Record<string, string> = {
-      'bh': 'BH FM',
-      'band': 'Band FM',
-      'clube': 'Clube FM',
-      'showfm': 'Show FM 101.1',
-      'globo': 'Rádio Globo RJ',
-      'blink': 'Blink 102 FM',
-      'positiva': 'Positiva FM',
-      'liberdade': 'Liberdade FM',
-      'mix': 'Mix FM',
-      '89fm': '89 FM',
-      'alpha': 'Alpha FM',
-      'jovempan': 'Jovem Pan',
-      'kiss': 'Kiss FM',
-      'nativa': 'Nativa FM',
-      'transamerica': 'Transamérica',
-    };
     
     stations.forEach(s => {
-      // Map UUID to name
       stationIdToName[s.id] = s.name;
-      // Map name variations
-      stationNameToName[s.name] = s.name;
-      stationNameToName[s.name.toLowerCase()] = s.name;
     });
-    
-    // Also add short ID mappings
-    Object.entries(shortIdToName).forEach(([shortId, name]) => {
-      stationIdToName[shortId] = name;
-      stationIdToName[shortId.toLowerCase()] = name;
-    });
-    
-    console.log('[GRADE] 🗺️ Station ID mappings:', Object.keys(stationIdToName).length, 'entries');
 
     // Create a flattened pool of all songs for fallback
     const allSongsPool: SongEntry[] = [];
@@ -721,11 +566,6 @@ export function useAutoGradeBuilder() {
       }
       return null;
     };
-
-    // Log sequence configuration for debugging
-    console.log(`[GRADE] 📋 Generating block ${timeStr} with ${sequence.length} positions`);
-    console.log(`[GRADE] 📋 Sequence:`, sequence.map(s => `${s.position}: ${s.radioSource}`).join(', '));
-    console.log(`[GRADE] 📋 Available songs by station:`, Object.keys(songsByStation).map(k => `${k}: ${songsByStation[k].length}`).join(', '));
 
     // Follow the user-configured SEQUENCE (position 1 = Band FM, position 2 = Clube FM, etc.)
     for (const seq of sequence) {
@@ -856,32 +696,10 @@ export function useAutoGradeBuilder() {
         continue;
       }
 
-      // Normal station logic - try ID first, then try by name
-      let stationName = stationIdToName[seq.radioSource];
-      
-      // If not found by ID, try by name (in case radioSource is the station name)
-      if (!stationName) {
-        stationName = stationNameToName[seq.radioSource] || stationNameToName[seq.radioSource.toLowerCase()];
-      }
-      
-      // Still not found? Log warning and skip
-      if (!stationName) {
-        console.warn(`[GRADE] ⚠️ Station not found for radioSource: ${seq.radioSource}`);
-        const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
-        songs.push(coringaCode);
-        blockLogs.push({
-          blockTime: timeStr,
-          type: 'substituted',
-          title: seq.radioSource,
-          artist: 'CORINGA',
-          station: 'FALLBACK',
-          reason: `Emissora "${seq.radioSource}" não encontrada - verificar configuração da Sequência`,
-        });
-        continue;
-      }
-      
+      // Normal station logic
+      const stationName = stationIdToName[seq.radioSource];
       const stationStyle = getStationStyle(seq.radioSource);
-      const stationSongs = songsByStation[stationName] || [];
+      const stationSongs = stationName ? songsByStation[stationName] : [];
       
       // Initialize index for this station
       if (stationSongIndex[stationName] === undefined) {
@@ -930,9 +748,8 @@ export function useAutoGradeBuilder() {
               selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
               stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
               break;
-            } else if (!libraryResult.verificationFailed) {
-              // Only add to missing if verification actually happened (backend was available)
-              // This prevents flooding the missing list when backend is offline
+            } else {
+              // Mark as missing for download AND add to carry-over for next block
               if (!isSongAlreadyMissing(candidate.artist, candidate.title)) {
                 addMissingSong({
                   id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -953,9 +770,6 @@ export function useAutoGradeBuilder() {
                 style: stationStyle,
                 targetBlock: timeStr,
               });
-            } else {
-              // Backend offline - skip this song without adding to missing
-              console.log(`[GRADE] ⚠️ Cannot verify (backend offline): ${candidate.artist} - ${candidate.title}`);
             }
           }
           checkedCount++;
@@ -1105,9 +919,6 @@ export function useAutoGradeBuilder() {
         usedInBlock.add(`${selectedSong.title.toLowerCase()}-${selectedSong.artist.toLowerCase()}`);
         markSongAsUsed(selectedSong.title, selectedSong.artist, timeStr);
         
-        // Log successful selection for this sequence position
-        console.log(`[GRADE] ✅ Pos ${seq.position} (${seq.radioSource}): ${selectedSong.artist} - ${selectedSong.title} [${selectedSong.station}]`);
-        
         blockLogs.push({
           blockTime: timeStr,
           type: 'used',
@@ -1121,17 +932,13 @@ export function useAutoGradeBuilder() {
         const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
         songs.push(coringaCode);
         stats.missing++;
-        
-        // Log fallback for this sequence position
-        console.log(`[GRADE] ❌ Pos ${seq.position} (${seq.radioSource}): CORINGA - nenhuma música encontrada`);
-        
         blockLogs.push({
           blockTime: timeStr,
           type: 'substituted',
           title: coringaCode,
           artist: 'CORINGA',
           station: 'FALLBACK',
-          reason: `Posição ${seq.position}: Nenhuma música válida da emissora "${seq.radioSource}"`,
+          reason: 'Nenhuma música válida encontrada, usando coringa para curadoria manual',
         });
       }
     }
@@ -1187,10 +994,10 @@ export function useAutoGradeBuilder() {
 
   // Generate complete day's grade (48 blocks from 00:00 to 23:30) with PROGRESSIVE SAVING
   const buildFullDayGrade = useCallback(async () => {
-    if (!isElectronEnv) {
+    if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
       toast({
         title: '⚠️ Modo Web',
-        description: 'Geração de grade disponível apenas no aplicativo desktop ou modo serviço.',
+        description: 'Geração de grade disponível apenas no aplicativo desktop.',
       });
       return;
     }
@@ -1263,11 +1070,11 @@ export function useAutoGradeBuilder() {
             const content = lines.join('\n');
             
             try {
-              const saveResult = await saveGradeFile(
-                config.gradeFolder,
+              const saveResult = await window.electronAPI.saveGradeFile({
+                folder: config.gradeFolder,
                 filename,
                 content,
-              );
+              });
               
               if (saveResult.success) {
                 console.log(`[AUTO-GRADE] 💾 Progressive save: ${blockCount}/48 blocos`);
@@ -1292,11 +1099,11 @@ export function useAutoGradeBuilder() {
 
       // Final save (redundant but ensures complete save)
       const finalContent = lines.join('\n');
-      const result = await saveGradeFile(
-        config.gradeFolder,
+      const result = await window.electronAPI.saveGradeFile({
+        folder: config.gradeFolder,
         filename,
-        finalContent,
-      );
+        content: finalContent,
+      });
 
       if (result.success) {
         console.log(`[AUTO-GRADE] ✅ Full day grade saved: ${result.filePath}`);
@@ -1358,59 +1165,11 @@ export function useAutoGradeBuilder() {
     getDayCode, config.gradeFolder, addGradeHistory, sequence.length, toast, addBlockLogs
   ]);
 
-  // Parse existing file to extract already-used songs (prevents repetition after restart)
-  const loadUsedSongsFromFile = useCallback(async (content: string) => {
-    const lines = content.split('\n').filter(l => l.trim());
-    let loadedCount = 0;
-    
-    for (const line of lines) {
-      // Match format: HH:MM (ID=...) "Song1.mp3",vht,"Song2.mp3",...
-      const timeMatch = line.match(/^(\d{2}:\d{2})/);
-      if (!timeMatch) continue;
-      
-      const blockTime = timeMatch[1];
-      
-      // Extract all quoted song filenames
-      const songMatches = line.match(/"([^"]+\.mp3)"/g);
-      if (!songMatches) continue;
-      
-      for (const songMatch of songMatches) {
-        const filename = songMatch.replace(/"/g, '').replace('.mp3', '');
-        // Parse "Artist - Title" format
-        const dashIndex = filename.indexOf(' - ');
-        if (dashIndex > 0) {
-          const artist = filename.substring(0, dashIndex).trim();
-          const title = filename.substring(dashIndex + 3).trim();
-          
-          // Check if already tracked
-          const exists = usedSongsRef.current.some(
-            u => u.title.toLowerCase() === title.toLowerCase() && 
-                 u.blockTime === blockTime
-          );
-          
-          if (!exists && title && artist) {
-            usedSongsRef.current.push({
-              title,
-              artist,
-              usedAt: new Date(),
-              blockTime,
-            });
-            loadedCount++;
-          }
-        }
-      }
-    }
-    
-    if (loadedCount > 0) {
-      console.log(`[AUTO-GRADE] 📂 Carregadas ${loadedCount} músicas do arquivo existente para evitar repetição`);
-    }
-  }, []);
-
   // Build current and next blocks (incremental update to existing file)
   // ALWAYS saves to destination folder - ensuring current time slot is updated
   const buildGrade = useCallback(async () => {
-    if (!isElectronEnv) {
-      console.log('[AUTO-GRADE] Not in Electron/Service mode, skipping');
+    if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
+      console.log('[AUTO-GRADE] Not in Electron mode, skipping');
       return;
     }
 
@@ -1422,25 +1181,6 @@ export function useAutoGradeBuilder() {
       const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
 
       console.log(`[AUTO-GRADE] 🔄 Atualizando blocos: ${currentTimeKey}, ${nextTimeKey} -> salvando na pasta destino`);
-
-      // Read existing file FIRST to load already-used songs
-      const dayCode = getDayCode();
-      const filename = `${dayCode}.txt`;
-      let existingContent = '';
-
-      try {
-        const readResult = await readGradeFile(
-          config.gradeFolder,
-          filename,
-        );
-        if (readResult.success && readResult.content) {
-          existingContent = readResult.content;
-          // Load used songs from file to prevent repetition
-          await loadUsedSongsFromFile(existingContent);
-        }
-      } catch {
-        console.log('[AUTO-GRADE] No existing file, creating new');
-      }
 
       const songsByStation = await fetchRecentSongs();
       const stats = { skipped: 0, substituted: 0, missing: 0 };
@@ -1456,6 +1196,23 @@ export function useAutoGradeBuilder() {
       
       allLogs.push(...currentResult.logs, ...nextResult.logs);
       addBlockLogs(allLogs);
+
+      // Read existing file and update only the relevant lines
+      const dayCode = getDayCode();
+      const filename = `${dayCode}.txt`;
+      let existingContent = '';
+
+      try {
+        const readResult = await window.electronAPI.readGradeFile({
+          folder: config.gradeFolder,
+          filename,
+        });
+        if (readResult.success) {
+          existingContent = readResult.content || '';
+        }
+      } catch {
+        console.log('[AUTO-GRADE] No existing file, creating new');
+      }
 
       // Parse existing lines into a map by time
       const lineMap = new Map<string, string>();
@@ -1474,11 +1231,11 @@ export function useAutoGradeBuilder() {
         .map(t => lineMap.get(t))
         .join('\n');
 
-      const result = await saveGradeFile(
-        config.gradeFolder,
+      const result = await window.electronAPI.saveGradeFile({
+        folder: config.gradeFolder,
         filename,
-        sortedContent,
-      );
+        content: sortedContent,
+      });
 
       if (result.success) {
         console.log(`[AUTO-GRADE] ✅ Grade salva na pasta destino: ${result.filePath}`);
@@ -1524,7 +1281,7 @@ export function useAutoGradeBuilder() {
       });
     }
   }, [
-    getBlockTimes, fetchRecentSongs, generateBlockLine, loadUsedSongsFromFile,
+    getBlockTimes, fetchRecentSongs, generateBlockLine,
     getDayCode, config.gradeFolder, addGradeHistory, sequence.length,
     getProgramForHour, toast, addBlockLogs
   ]);

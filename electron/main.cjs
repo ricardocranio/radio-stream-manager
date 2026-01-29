@@ -4,7 +4,6 @@ const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
-const express = require('express');
 
 // Auto-updater (only in packaged app)
 let autoUpdater = null;
@@ -21,560 +20,6 @@ let scrapedSongsCache = new Map();
 
 let mainWindow;
 let tray = null;
-
-// =============== SERVICE MODE (TRAY + LOCALHOST) ===============
-let serviceMode = 'window'; // 'window' or 'service'
-let localhostServer = null;
-let localhostPort = 8080; // Configurable port
-let autoStartServiceMode = true; // DEFAULT: Start in service mode on launch
-
-// Load service mode settings from file (simple JSON persistence)
-const settingsPath = path.join(app.getPath('userData'), 'service-settings.json');
-
-function loadServiceSettings() {
-  try {
-    if (fs.existsSync(settingsPath)) {
-      const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-      localhostPort = data.localhostPort || 8080;
-      // Default to TRUE if not explicitly set to false
-      autoStartServiceMode = data.autoStartServiceMode !== false;
-      console.log(`[SERVICE] Loaded settings: port=${localhostPort}, autoStart=${autoStartServiceMode}`);
-    } else {
-      // No settings file = first run, default to service mode
-      autoStartServiceMode = true;
-      console.log('[SERVICE] First run - defaulting to service mode');
-    }
-  } catch (error) {
-    console.error('[SERVICE] Failed to load settings:', error);
-    autoStartServiceMode = true; // Default to service mode on error
-  }
-}
-
-function saveServiceSettings() {
-  try {
-    fs.writeFileSync(settingsPath, JSON.stringify({
-      localhostPort,
-      autoStartServiceMode
-    }, null, 2));
-    console.log('[SERVICE] Settings saved');
-  } catch (error) {
-    console.error('[SERVICE] Failed to save settings:', error);
-  }
-}
-
-// Available fallback ports to try
-const FALLBACK_PORTS = [8080, 3000, 5173, 8000, 9000, 8888, 9090];
-let serverStartAttempts = 0;
-const MAX_SERVER_ATTEMPTS = FALLBACK_PORTS.length;
-
-// Notify renderer about server errors
-function notifyServerError(errorType, details) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('server-status', {
-      running: false,
-      error: true,
-      errorType,
-      details,
-      port: localhostPort
-    });
-  }
-}
-
-// Show friendly error notification
-function showServerErrorNotification(title, message) {
-  showNotification(title, message);
-  console.error(`[SERVICE] ${title}: ${message}`);
-}
-
-// Create Express server for localhost access with robust error handling
-function createLocalhostServer(attemptPort = null) {
-  if (localhostServer) {
-    console.log('[SERVICE] Server already running');
-    return Promise.resolve({ success: true, port: localhostPort });
-  }
-
-  const portToTry = attemptPort || localhostPort;
-  
-  return new Promise((resolve) => {
-    const expressApp = express();
-    const appPath = app.getAppPath();
-    const distPath = app.isPackaged ? path.join(appPath, 'dist') : path.join(__dirname, '../dist');
-
-    // Check if dist folder exists
-    if (!fs.existsSync(distPath)) {
-      const errorMsg = `Pasta de distribuição não encontrada: ${distPath}`;
-      console.error(`[SERVICE] ${errorMsg}`);
-      showServerErrorNotification('❌ Erro de Inicialização', errorMsg);
-      notifyServerError('DIST_NOT_FOUND', errorMsg);
-      resolve({ success: false, error: 'DIST_NOT_FOUND', message: errorMsg });
-      return;
-    }
-
-    // Check if index.html exists
-    const indexPath = path.join(distPath, 'index.html');
-    if (!fs.existsSync(indexPath)) {
-      const errorMsg = 'Arquivo index.html não encontrado. Execute o build primeiro.';
-      console.error(`[SERVICE] ${errorMsg}`);
-      showServerErrorNotification('❌ Erro de Build', errorMsg);
-      notifyServerError('INDEX_NOT_FOUND', errorMsg);
-      resolve({ success: false, error: 'INDEX_NOT_FOUND', message: errorMsg });
-      return;
-    }
-
-    // Parse JSON bodies
-    expressApp.use(express.json());
-
-    // Serve static files from dist folder
-    expressApp.use(express.static(distPath));
-
-    // Health check endpoint
-    expressApp.get('/api/health', (req, res) => {
-      res.json({ 
-        status: 'ok', 
-        port: portToTry, 
-        uptime: process.uptime(),
-        memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
-        electron: true
-      });
-    });
-
-    // =============== API ENDPOINTS FOR SERVICE MODE ===============
-    
-    // Download from Deezer via API (for browser access in service mode)
-    expressApp.post('/api/download', async (req, res) => {
-      const { artist, title, arl, outputFolder, outputFolder2, quality } = req.body;
-      
-      console.log(`[API] Download request: ${artist} - ${title}`);
-      console.log(`[API] Output 1: ${outputFolder}`);
-      console.log(`[API] Output 2: ${outputFolder2 || '(não configurado)'}`);
-      
-      if (!artist || !title || !arl || !outputFolder) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Parâmetros obrigatórios faltando: artist, title, arl, outputFolder' 
-        });
-      }
-      
-      try {
-        // Use the same download logic as IPC handler
-        const result = await performDeezerDownload({ artist, title, arl, outputFolder, outputFolder2, quality });
-        res.json(result);
-      } catch (error) {
-        console.error('[API] Download error:', error);
-        res.status(500).json({ success: false, error: error.message });
-      }
-    });
-
-    // Check if deemix is installed
-    expressApp.get('/api/deemix/status', async (req, res) => {
-      try {
-        const installed = await checkDeemixInstalled();
-        res.json({ 
-          installed, 
-          command: deemixCommand || null 
-        });
-      } catch (error) {
-        res.json({ installed: false, error: error.message });
-      }
-    });
-
-    // Get deezer config status
-    expressApp.get('/api/status', (req, res) => {
-      res.json({
-        electron: true,
-        serviceMode: serviceMode,
-        serverRunning: !!localhostServer,
-        port: portToTry
-      });
-    });
-
-    // =============== SHOW DESKTOP WINDOW API ===============
-    // Allows browser to request opening the desktop window
-    expressApp.post('/api/show-window', (req, res) => {
-      console.log('[API] Show window request received');
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.show();
-        mainWindow.focus();
-        serviceMode = 'window';
-        updateTrayMenu();
-        res.json({ success: true, message: 'Janela desktop aberta' });
-      } else {
-        res.status(500).json({ success: false, error: 'Janela não disponível' });
-      }
-    });
-
-    expressApp.get('/api/show-window', (req, res) => {
-      console.log('[API] Show window GET request received');
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.show();
-        mainWindow.focus();
-        serviceMode = 'window';
-        updateTrayMenu();
-        res.json({ success: true, message: 'Janela desktop aberta' });
-      } else {
-        res.status(500).json({ success: false, error: 'Janela não disponível' });
-      }
-    });
-
-    // =============== MUSIC LIBRARY API ENDPOINTS (for browser Service Mode) ===============
-    
-    // Get music library stats
-    expressApp.post('/api/music-library-stats', (req, res) => {
-      const { musicFolders } = req.body;
-      
-      console.log(`[API] Music library stats request for ${musicFolders?.length || 0} folders`);
-      
-      if (!musicFolders || !Array.isArray(musicFolders)) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'musicFolders array required' 
-        });
-      }
-      
-      try {
-        const files = scanMusicLibrary(musicFolders);
-        console.log(`[API] Found ${files.length} files in library`);
-        res.json({ 
-          success: true, 
-          count: files.length,
-          folders: musicFolders.length 
-        });
-      } catch (error) {
-        console.error('[API] Music library stats error:', error);
-        res.status(500).json({ success: false, count: 0, folders: 0, error: error.message });
-      }
-    });
-
-    // Check if song exists in library (similarity matching)
-    expressApp.post('/api/check-song', (req, res) => {
-      const { artist, title, musicFolders, threshold } = req.body;
-      
-      if (!artist || !title || !musicFolders) {
-        return res.status(400).json({ 
-          exists: false, 
-          error: 'artist, title, and musicFolders required' 
-        });
-      }
-      
-      try {
-        const result = findSongMatch(artist, title, musicFolders, threshold || 0.75);
-        res.json(result);
-      } catch (error) {
-        console.error('[API] Check song error:', error);
-        res.json({ exists: false, error: error.message });
-      }
-    });
-
-    // Find best song match in library
-    expressApp.post('/api/find-song-match', (req, res) => {
-      const { artist, title, musicFolders, threshold } = req.body;
-      
-      if (!artist || !title || !musicFolders) {
-        return res.status(400).json({ 
-          exists: false, 
-          error: 'artist, title, and musicFolders required' 
-        });
-      }
-      
-      try {
-        const result = findSongMatch(artist, title, musicFolders, threshold || 0.75);
-        res.json(result);
-      } catch (error) {
-        console.error('[API] Find match error:', error);
-        res.json({ exists: false, error: error.message });
-      }
-    });
-
-    // =============== GRADE FILE API ENDPOINTS (for browser Service Mode) ===============
-
-    // Save grade file via API
-    expressApp.post('/api/save-grade-file', (req, res) => {
-      const { folder, filename, content } = req.body;
-      
-      console.log(`[API] Save grade request: ${filename} to ${folder}`);
-      
-      if (!folder || !filename || content === undefined) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'folder, filename, and content are required' 
-        });
-      }
-      
-      try {
-        // Ensure folder exists
-        if (!fs.existsSync(folder)) {
-          fs.mkdirSync(folder, { recursive: true });
-          console.log(`[API] Created folder: ${folder}`);
-        }
-        
-        const filePath = path.join(folder, filename);
-        fs.writeFileSync(filePath, content, 'utf-8');
-        
-        console.log(`[API] Grade file saved: ${filePath}`);
-        
-        res.json({
-          success: true,
-          filePath,
-        });
-      } catch (error) {
-        console.error('[API] Save grade error:', error);
-        res.status(500).json({ success: false, error: error.message });
-      }
-    });
-
-    // Read grade file via API
-    expressApp.post('/api/read-grade-file', (req, res) => {
-      const { folder, filename } = req.body;
-      
-      console.log(`[API] Read grade request: ${filename} from ${folder}`);
-      
-      if (!folder || !filename) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'folder and filename are required' 
-        });
-      }
-      
-      try {
-        const filePath = path.join(folder, filename);
-        
-        if (!fs.existsSync(filePath)) {
-          return res.json({ success: false, error: 'Arquivo não encontrado' });
-        }
-        
-        const content = fs.readFileSync(filePath, 'utf-8');
-        res.json({ success: true, content, filePath });
-      } catch (error) {
-        console.error('[API] Read grade error:', error);
-        res.status(500).json({ success: false, error: error.message });
-      }
-    });
-
-    // SPA fallback - serve index.html for all routes (Express 5 syntax)
-    // Must be AFTER all API routes
-    expressApp.get('/{*splat}', (req, res) => {
-      res.sendFile(indexPath);
-    });
-
-    // Error handling middleware
-    expressApp.use((err, req, res, next) => {
-      console.error('[SERVICE] Express error:', err);
-      res.status(500).json({ 
-        error: 'Erro interno do servidor',
-        message: err.message 
-      });
-    });
-
-    const server = expressApp.listen(portToTry, '127.0.0.1', () => {
-      console.log(`[SERVICE] ✓ Localhost server running at http://127.0.0.1:${portToTry}`);
-      localhostServer = server;
-      localhostPort = portToTry;
-      serverStartAttempts = 0; // Reset attempts on success
-      
-      // Save the successful port
-      saveServiceSettings();
-      
-      // Notify renderer about server status
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('server-status', {
-          running: true,
-          port: portToTry,
-          url: `http://127.0.0.1:${portToTry}`
-        });
-      }
-      
-      // Update tray tooltip
-      if (tray) {
-        tray.setToolTip(`Programador Rádio - Serviço ativo em localhost:${portToTry}`);
-      }
-      
-      resolve({ success: true, port: portToTry });
-    });
-
-    server.on('error', (error) => {
-      console.error(`[SERVICE] Server error on port ${portToTry}:`, error.code);
-      
-      if (error.code === 'EADDRINUSE') {
-        serverStartAttempts++;
-        console.log(`[SERVICE] Port ${portToTry} is in use (attempt ${serverStartAttempts}/${MAX_SERVER_ATTEMPTS})`);
-        
-        if (serverStartAttempts < MAX_SERVER_ATTEMPTS) {
-          // Find next available port to try
-          const currentIndex = FALLBACK_PORTS.indexOf(portToTry);
-          const nextPort = FALLBACK_PORTS[(currentIndex + 1) % FALLBACK_PORTS.length];
-          
-          console.log(`[SERVICE] Trying fallback port: ${nextPort}`);
-          showNotification(
-            '⚠️ Porta em Uso',
-            `Porta ${portToTry} ocupada. Tentando ${nextPort}...`
-          );
-          
-          // Try next port
-          createLocalhostServer(nextPort).then(resolve);
-        } else {
-          // All ports failed
-          const errorMsg = `Todas as portas estão em uso: ${FALLBACK_PORTS.join(', ')}`;
-          showServerErrorNotification('❌ Erro de Conexão', errorMsg);
-          notifyServerError('ALL_PORTS_IN_USE', errorMsg);
-          serverStartAttempts = 0;
-          resolve({ success: false, error: 'ALL_PORTS_IN_USE', message: errorMsg });
-        }
-      } else if (error.code === 'EACCES') {
-        const errorMsg = `Sem permissão para usar porta ${portToTry}. Tente executar como administrador.`;
-        showServerErrorNotification('❌ Erro de Permissão', errorMsg);
-        notifyServerError('PERMISSION_DENIED', errorMsg);
-        resolve({ success: false, error: 'PERMISSION_DENIED', message: errorMsg });
-      } else {
-        const errorMsg = `Erro ao iniciar servidor: ${error.message}`;
-        showServerErrorNotification('❌ Erro do Servidor', errorMsg);
-        notifyServerError('SERVER_ERROR', errorMsg);
-        resolve({ success: false, error: 'SERVER_ERROR', message: errorMsg });
-      }
-    });
-
-    // Handle server close
-    server.on('close', () => {
-      console.log('[SERVICE] Server closed');
-      localhostServer = null;
-    });
-  });
-}
-
-function stopLocalhostServer() {
-  return new Promise((resolve) => {
-    if (localhostServer) {
-      localhostServer.close((err) => {
-        if (err) {
-          console.error('[SERVICE] Error stopping server:', err);
-        } else {
-          console.log('[SERVICE] Localhost server stopped');
-        }
-        localhostServer = null;
-        resolve();
-      });
-      
-      // Force close after timeout
-      setTimeout(() => {
-        if (localhostServer) {
-          console.log('[SERVICE] Force closing server...');
-          localhostServer = null;
-          resolve();
-        }
-      }, 3000);
-    } else {
-      resolve();
-    }
-  });
-}
-
-// Switch to service mode (minimize to tray + open browser)
-async function activateServiceMode() {
-  serviceMode = 'service';
-  console.log('[SERVICE] Activating service mode...');
-  
-  // Start localhost server with fallback ports
-  const result = await createLocalhostServer();
-  
-  if (result.success) {
-    // Open browser and hide window
-    shell.openExternal(`http://127.0.0.1:${result.port}`);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.hide();
-    }
-    
-    // Show success notification
-    showNotification(
-      '🔧 Modo Serviço Ativado',
-      `Acesse via http://localhost:${result.port} - App minimizado na bandeja`
-    );
-    
-    // Update tray menu
-    updateTrayMenu();
-  } else {
-    // Server failed to start, revert to window mode
-    serviceMode = 'window';
-    console.error('[SERVICE] Failed to start server, staying in window mode');
-    
-    showNotification(
-      '❌ Erro ao Ativar Modo Serviço',
-      result.message || 'Não foi possível iniciar o servidor local'
-    );
-    
-    // Keep window visible
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-    }
-    
-    updateTrayMenu();
-  }
-}
-
-// Switch back to window mode
-function activateWindowMode() {
-  serviceMode = 'window';
-  console.log('[SERVICE] Activating window mode...');
-  
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show();
-    mainWindow.focus();
-  }
-  
-  // Update tray menu
-  updateTrayMenu();
-  
-  // Note: We keep the server running so users can still access via browser if they want
-}
-
-// Update tray context menu based on current mode
-function updateTrayMenu() {
-  if (!tray) return;
-  
-  const isService = serviceMode === 'service';
-  
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: isService ? '🌐 Abrir no Navegador' : 'Abrir Programador',
-      click: () => {
-        if (isService) {
-          shell.openExternal(`http://127.0.0.1:${localhostPort}`);
-        } else {
-          mainWindow.show();
-        }
-      },
-    },
-    {
-      label: isService ? '🖥️ Voltar para Janela' : '🔧 Modo Serviço',
-      click: () => {
-        if (isService) {
-          activateWindowMode();
-        } else {
-          activateServiceMode();
-        }
-      },
-    },
-    { type: 'separator' },
-    {
-      label: isService ? `Status: Serviço (porta ${localhostPort})` : 'Status: Janela',
-      enabled: false,
-    },
-    {
-      label: `RAM: ~${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`,
-      enabled: false,
-    },
-    { type: 'separator' },
-    {
-      label: 'Sair',
-      click: () => {
-        stopLocalhostServer();
-        app.isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
-
-  tray.setContextMenu(contextMenu);
-  tray.setToolTip(`Programador Rádio - ${isService ? 'Serviço' : 'Janela'} v${app.getVersion()}`);
-}
 
 // Prevent multiple instances
 const gotTheLock = app.requestSingleInstanceLock();
@@ -799,11 +244,9 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   }
 
-  // Show window when ready (only if NOT starting in service mode)
+  // Show window when ready
   mainWindow.once('ready-to-show', () => {
-    if (!autoStartServiceMode) {
-      mainWindow.show();
-    }
+    mainWindow.show();
   });
 
   // Minimize to tray instead of closing
@@ -929,65 +372,35 @@ function createWindow() {
 }
 
 function createTray() {
-  // Try multiple icon paths for packaged vs development
-  const iconPaths = [
-    path.join(__dirname, '../public/favicon.ico'),
-    path.join(__dirname, '../dist/favicon.ico'),
-    path.join(app.getAppPath(), 'public/favicon.ico'),
-    path.join(app.getAppPath(), 'dist/favicon.ico'),
-  ];
+  const iconPath = path.join(__dirname, '../public/favicon.ico');
+  tray = new Tray(iconPath);
   
-  let iconPath = iconPaths[0];
-  for (const p of iconPaths) {
-    if (fs.existsSync(p)) {
-      iconPath = p;
-      console.log('[TRAY] Using icon:', p);
-      break;
-    }
-  }
-  
-  try {
-    tray = new Tray(iconPath);
-    console.log('[TRAY] Created successfully');
-  } catch (error) {
-    console.error('[TRAY] Failed to create tray:', error);
-    // Create with default icon as fallback
-    try {
-      const { nativeImage } = require('electron');
-      const emptyIcon = nativeImage.createEmpty();
-      tray = new Tray(emptyIcon);
-      console.log('[TRAY] Created with empty icon fallback');
-    } catch (e2) {
-      console.error('[TRAY] Complete failure:', e2);
-      return;
-    }
-  }
-  
-  // Use updateTrayMenu for consistent menu across modes
-  updateTrayMenu();
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Abrir Programador',
+      click: () => {
+        mainWindow.show();
+      },
+    },
+    {
+      label: 'Status: Ativo',
+      enabled: false,
+    },
+    { type: 'separator' },
+    {
+      label: 'Sair',
+      click: () => {
+        app.isQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
 
-  // Double-click: open browser in service mode, show window in window mode
-  tray.on('double-click', () => {
-    if (serviceMode === 'service') {
-      shell.openExternal(`http://127.0.0.1:${localhostPort}`);
-    } else if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-    }
-  });
-  
-  // Right-click: show context menu (explicit for Windows)
-  tray.on('right-click', () => {
-    if (tray) {
-      updateTrayMenu(); // Refresh menu before showing
-      tray.popUpContextMenu();
-    }
-  });
-  
-  // Single click: show window in window mode
+  tray.setToolTip(`Programador Rádio - v${app.getVersion()}`);
+  tray.setContextMenu(contextMenu);
+
   tray.on('click', () => {
-    if (serviceMode === 'window' && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-    }
+    mainWindow.show();
   });
 }
 
@@ -1117,29 +530,12 @@ function ensureDefaultFolders() {
 
 // App ready
 app.whenReady().then(async () => {
-  // Load service mode settings first
-  loadServiceSettings();
-  
   // Ensure default folders exist
   ensureDefaultFolders();
   
   createWindow();
   createTray();
   setupAutoUpdater();
-  
-  // Check if auto-start service mode is enabled (DEFAULT: TRUE)
-  if (autoStartServiceMode) {
-    console.log('[INIT] 🚀 Starting in SERVICE MODE (default)...');
-    // Activate service mode immediately and open browser
-    setTimeout(async () => {
-      await activateServiceMode();
-      // Open browser automatically
-      shell.openExternal(`http://127.0.0.1:${localhostPort}`);
-      console.log(`[INIT] 🌐 Opened browser at http://127.0.0.1:${localhostPort}`);
-    }, 1500);
-  } else {
-    console.log('[INIT] Starting in WINDOW mode (user preference)');
-  }
   
   // Check Python/pip availability on startup and notify if missing
   const pythonStatus = await checkPythonAvailable();
@@ -1252,92 +648,7 @@ app.on('window-all-closed', () => {
 
 // Before quit
 app.on('before-quit', () => {
-  stopLocalhostServer();
   app.isQuitting = true;
-});
-
-// =============== SERVICE MODE IPC HANDLERS ===============
-
-// Set service mode
-ipcMain.handle('set-service-mode', async (event, mode) => {
-  if (mode === 'service') {
-    await activateServiceMode();
-  } else {
-    activateWindowMode();
-  }
-  
-  // Notify renderer about mode change
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('service-mode-changed', mode);
-  }
-});
-
-// Get current service mode
-ipcMain.handle('get-service-mode', () => {
-  return serviceMode;
-});
-
-// Open in browser (localhost) with robust error handling
-ipcMain.handle('open-in-browser', async () => {
-  try {
-    // Ensure server is running
-    if (!localhostServer) {
-      const result = await createLocalhostServer();
-      if (!result.success) {
-        return { success: false, error: result.error, message: result.message };
-      }
-    }
-    
-    // Open in default browser
-    await shell.openExternal(`http://127.0.0.1:${localhostPort}`);
-    return { success: true, port: localhostPort, url: `http://127.0.0.1:${localhostPort}` };
-  } catch (error) {
-    console.error('[SERVICE] Error opening browser:', error);
-    showNotification('❌ Erro', `Não foi possível abrir o navegador: ${error.message}`);
-    return { success: false, error: 'BROWSER_ERROR', message: error.message };
-  }
-});
-
-// Get localhost URL
-ipcMain.handle('get-localhost-url', () => {
-  return `http://127.0.0.1:${localhostPort}`;
-});
-
-// Set localhost port
-ipcMain.handle('set-localhost-port', (event, port) => {
-  localhostPort = port;
-  saveServiceSettings();
-  console.log(`[SERVICE] Port changed to ${port}`);
-});
-
-// Set auto-start service mode
-ipcMain.handle('set-auto-start-service-mode', (event, enabled) => {
-  autoStartServiceMode = enabled;
-  saveServiceSettings();
-  console.log(`[SERVICE] Auto-start service mode: ${enabled}`);
-});
-
-// Get auto-start service mode
-ipcMain.handle('get-auto-start-service-mode', () => {
-  return autoStartServiceMode;
-});
-
-// =============== APP LIFECYCLE IPC HANDLERS ===============
-
-// Quit the application completely
-ipcMain.on('quit-app', () => {
-  console.log('[APP] Quit requested by user');
-  app.isQuitting = true;
-  app.quit();
-});
-
-// Minimize to system tray (service mode)
-ipcMain.on('minimize-to-tray', async () => {
-  console.log('[APP] Minimize to tray requested');
-  await activateServiceMode();
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('service-mode-changed', 'service');
-  }
 });
 
 // IPC Handlers for communication with renderer
@@ -1572,14 +883,13 @@ function saveArlToDeemixConfig(arl) {
   }
 }
 
-// Shared download logic - used by both IPC and HTTP API
-async function performDeezerDownload(params) {
-  const { artist, title, arl, outputFolder, outputFolder2, quality } = params;
+// Deezer Download Handler using deemix CLI
+ipcMain.handle('download-from-deezer', async (event, params) => {
+  const { artist, title, arl, outputFolder, quality } = params;
   
   console.log(`[DEEMIX] === Starting download ===`);
   console.log(`[DEEMIX] Track: ${artist} - ${title}`);
-  console.log(`[DEEMIX] Output 1: ${outputFolder}`);
-  console.log(`[DEEMIX] Output 2: ${outputFolder2 || '(não configurado)'}`);
+  console.log(`[DEEMIX] Output: ${outputFolder}`);
   console.log(`[DEEMIX] Quality: ${quality}`);
   
   try {
@@ -1690,54 +1000,18 @@ async function performDeezerDownload(params) {
 
         console.log('[DEEMIX] Success output:', stdout);
         
-        // Find the downloaded file
-        let downloadedFile = null;
+        // Verify the file was created
         try {
           const files = fs.readdirSync(outputFolder);
           console.log(`[DEEMIX] Files in output folder: ${files.join(', ')}`);
-          
-          // Find the most recently modified file (likely the one just downloaded)
-          const recentFiles = files
-            .map(f => ({
-              name: f,
-              path: path.join(outputFolder, f),
-              stat: fs.statSync(path.join(outputFolder, f))
-            }))
-            .filter(f => f.stat.isFile() && (f.name.endsWith('.mp3') || f.name.endsWith('.flac')))
-            .sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs);
-          
-          if (recentFiles.length > 0) {
-            downloadedFile = recentFiles[0].path;
-            console.log(`[DEEMIX] Downloaded file: ${downloadedFile}`);
-          }
         } catch (e) {
           console.log('[DEEMIX] Could not list output folder:', e.message);
-        }
-        
-        // Copy to secondary folder if configured
-        if (outputFolder2 && downloadedFile) {
-          try {
-            // Ensure second folder exists
-            if (!fs.existsSync(outputFolder2)) {
-              fs.mkdirSync(outputFolder2, { recursive: true });
-              console.log(`[DEEMIX] Created secondary folder: ${outputFolder2}`);
-            }
-            
-            const fileName = path.basename(downloadedFile);
-            const destPath = path.join(outputFolder2, fileName);
-            
-            fs.copyFileSync(downloadedFile, destPath);
-            console.log(`[DEEMIX] ✓ Copied to secondary folder: ${destPath}`);
-          } catch (copyError) {
-            console.error(`[DEEMIX] ⚠ Failed to copy to secondary folder: ${copyError.message}`);
-            // Don't fail the download, just log the error
-          }
         }
         
         // Show Windows notification
         showNotification(
           '✅ Download Concluído',
-          `${track.artist.name} - ${track.title}${outputFolder2 ? ' (2 pastas)' : ''}`,
+          `${track.artist.name} - ${track.title}`,
           () => {
             shell.openPath(outputFolder);
           }
@@ -1754,8 +1028,7 @@ async function performDeezerDownload(params) {
           },
           output: stdout,
           outputFolder: outputFolder,
-          outputFolder2: outputFolder2 || null,
-          message: `Download concluído: ${track.artist.name} - ${track.title}${outputFolder2 ? ' (salvo em 2 pastas)' : ''}`
+          message: `Download concluído: ${track.artist.name} - ${track.title}`
         });
       });
     });
@@ -1764,12 +1037,6 @@ async function performDeezerDownload(params) {
     console.error('[DEEMIX] Download error:', error);
     return { success: false, error: error.message || 'Erro ao baixar do Deezer' };
   }
-}
-
-// Deezer Download Handler using deemix CLI (IPC version - uses shared function)
-ipcMain.handle('download-from-deezer', async (event, params) => {
-  console.log(`[DEEMIX-IPC] Received download request via IPC`);
-  return performDeezerDownload(params);
 });
 
 // Batch download notification

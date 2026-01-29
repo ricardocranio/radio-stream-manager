@@ -5,7 +5,6 @@ import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConf
 export interface DeezerConfig {
   arl: string;
   downloadFolder: string;
-  downloadFolder2: string; // Segunda pasta de download (opcional)
   quality: 'MP3_128' | 'MP3_320' | 'FLAC';
   enabled: boolean;
   autoDownload: boolean;
@@ -169,9 +168,6 @@ interface RadioState {
   applyRankingBatch: (updates: Array<{ title: string; artist: string; style: string; count: number }>) => void;
   clearRanking: () => void;
 
-  // Reset all counts at once
-  resetAllCounts: () => void;
-
   // Auto Scrape Setting (persisted)
   autoScrapeEnabled: boolean;
   setAutoScrapeEnabled: (enabled: boolean) => void;
@@ -311,7 +307,6 @@ const defaultConfig: SystemConfig = {
 const defaultDeezerConfig: DeezerConfig = {
   arl: '', // User must provide their own ARL token via Settings
   downloadFolder: 'C:\\Playlist\\Downloads',
-  downloadFolder2: '', // Segunda pasta vazia por padrão
   quality: 'MP3_320',
   enabled: true,
   autoDownload: true, // ENABLED by default - downloads start immediately when songs are missing
@@ -581,16 +576,6 @@ export const useRadioStore = create<RadioState>()(
           return { rankingSongs: updatedSongs.slice(0, 100) };
         }),
       clearRanking: () => set({ rankingSongs: [] }),
-
-      // Reset all counts at once
-      resetAllCounts: () => set({
-        capturedSongs: [],
-        missingSongs: [],
-        downloadHistory: [],
-        gradeHistory: [],
-        rankingSongs: [],
-        blockSongs: {},
-      }),
 
       // Auto Scrape Setting
       autoScrapeEnabled: false,

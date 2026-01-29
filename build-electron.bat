@@ -5,23 +5,17 @@ echo   (Instalador + Versao Portatil)
 echo ========================================
 echo.
 
-echo [1/6] Limpando pasta release anterior...
+echo [1/5] Limpando pasta release anterior...
 if exist release rmdir /s /q release
 echo OK!
 echo.
 
-echo [2/6] Instalando dependencias...
+echo [2/5] Instalando dependencias...
 call npm install
 echo OK!
 echo.
 
-echo [3/6] Instalando Electron (dev dependency)...
-call npm install electron --save-dev
-call npm install electron-builder --save-dev
-echo OK!
-echo.
-
-echo [4/6] Gerando build do Vite...
+echo [3/5] Gerando build do Vite...
 call npm run build
 if errorlevel 1 (
     echo ERRO: Falha no build do Vite!
@@ -31,7 +25,7 @@ if errorlevel 1 (
 echo OK!
 echo.
 
-echo [5/6] Empacotando com Electron Builder...
+echo [4/5] Empacotando com Electron Builder...
 call npx electron-builder --win --x64
 if errorlevel 1 (
     echo ERRO: Falha no Electron Builder!
@@ -41,7 +35,7 @@ if errorlevel 1 (
 echo OK!
 echo.
 
-echo [6/6] Criando arquivo ZIP para distribuicao...
+echo [5/5] Criando arquivo ZIP para distribuicao...
 if exist "release\Programador-Radio-Portable.zip" del "release\Programador-Radio-Portable.zip"
 powershell -Command "Compress-Archive -Path 'release\win-unpacked\*' -DestinationPath 'release\Programador-Radio-Portable.zip' -Force"
 if errorlevel 1 (

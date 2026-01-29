@@ -1,36 +1,19 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Eye, TrendingUp, Radio, Clock, Sparkles, FileText, RefreshCw } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Eye, Music, TrendingUp, Radio, Clock, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
 import { useRadioStore } from '@/store/radioStore';
-import { isElectron, isServiceMode, readGradeFileViaAPI } from '@/lib/serviceMode';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface GradePreviewProps {
   recentSongsByStation: Record<string, { title: string; artist: string; timestamp: string }[]>;
 }
 
-interface ParsedBlock {
-  time: string;
-  programId: string;
-  songs: string[];
-}
-
-const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
-
 export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
-  const { rankingSongs, config } = useRadioStore();
-  const [fileContent, setFileContent] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const { sequence, stations, rankingSongs, gradeHistory } = useRadioStore();
   
-  // Get day code for filename
-  const getDayCode = () => {
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
-    return days[new Date().getDay()];
-  };
-
   // Calculate next block time
   const getNextBlockTime = () => {
     const now = new Date();
@@ -46,94 +29,61 @@ export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
   
   const nextBlock = getNextBlockTime();
   const nextBlockTime = `${nextBlock.hour.toString().padStart(2, '0')}:${nextBlock.minute.toString().padStart(2, '0')}`;
-
-  // Read physical file content
-  const readGradeFile = async () => {
-    if (!isElectronEnv || !window.electronAPI?.readGradeFile) {
-      return;
-    }
+  
+  // Generate preview based on sequence and captured songs
+  const previewSongs = useMemo(() => {
+    const songs: { position: number; title: string; artist: string; source: string; isFromRanking: boolean }[] = [];
     
-    setIsLoading(true);
-    try {
-      const dayCode = getDayCode();
-      const filename = `${dayCode}.txt`;
+    // Map station IDs to names
+    const stationIdToName: Record<string, string> = {};
+    stations.forEach(s => {
+      stationIdToName[s.id] = s.name;
+    });
+    
+    sequence.forEach((seq, index) => {
+      const stationName = stationIdToName[seq.radioSource];
+      const stationSongs = stationName ? recentSongsByStation[stationName] : [];
       
-      let result: { success: boolean; content?: string };
-      
-      // Try native Electron API first
-      if (window.electronAPI?.readGradeFile) {
-        result = await window.electronAPI.readGradeFile({
-          folder: config.gradeFolder,
-          filename,
+      if (stationSongs && stationSongs.length > 0) {
+        const songIndex = index % stationSongs.length;
+        const song = stationSongs[songIndex];
+        songs.push({
+          position: seq.position,
+          title: song.title,
+          artist: song.artist,
+          source: stationName || seq.radioSource,
+          isFromRanking: rankingSongs.some(
+            r => r.title.toLowerCase() === song.title.toLowerCase() && 
+                 r.artist.toLowerCase() === song.artist.toLowerCase()
+          ),
         });
-      } else if (isServiceMode()) {
-        // Fall back to HTTP API for Service Mode
-        result = await readGradeFileViaAPI(config.gradeFolder, filename);
       } else {
-        result = { success: false };
+        songs.push({
+          position: seq.position,
+          title: '(Aguardando captura)',
+          artist: stationName || seq.radioSource,
+          source: stationName || seq.radioSource,
+          isFromRanking: false,
+        });
       }
-      
-      if (result.success && result.content) {
-        setFileContent(result.content);
-        setLastRefresh(new Date());
-      }
-    } catch (error) {
-      console.error('[GRADE-PREVIEW] Error reading file:', error);
-    } finally {
-      setIsLoading(false);
+    });
+    
+    return songs;
+  }, [sequence, stations, recentSongsByStation, rankingSongs]);
+  
+  // Count songs from ranking
+  const songsFromRanking = previewSongs.filter(s => s.isFromRanking).length;
+  
+  // Last grade TOP50 usage
+  const lastGradeTop50Count = useMemo(() => {
+    if (gradeHistory.length === 0) return 0;
+    // Estimate: for TOP50 blocks at 19:00 and 19:30, count is based on fixedContent config
+    const top50Blocks = gradeHistory.filter(g => g.programName.includes('TOP'));
+    if (top50Blocks.length > 0) {
+      return top50Blocks[0].songsFound || 0;
     }
-  };
-
-  // Read file on mount and periodically
-  useEffect(() => {
-    readGradeFile();
-    const interval = setInterval(readGradeFile, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
-  }, [config.gradeFolder]);
-
-  // Parse file content into blocks
-  const parsedBlocks = useMemo((): ParsedBlock[] => {
-    if (!fileContent) return [];
-    
-    const blocks: ParsedBlock[] = [];
-    const lines = fileContent.split('\n').filter(l => l.trim());
-    
-    for (const line of lines) {
-      // Match format: HH:MM (ID=PROGRAM) "song1.mp3",vht,"song2.mp3",...
-      const match = line.match(/^(\d{2}:\d{2})\s*(?:\d{2}:\d{2}\s*)?\((?:ID=|FIXO ID=)?([^)]+)\)\s*(.*)$/);
-      if (match) {
-        const [, time, programId, songsStr] = match;
-        
-        // Extract song names from the quoted strings
-        const songMatches = songsStr.match(/"([^"]+)"/g);
-        const songs = songMatches 
-          ? songMatches.map(s => s.replace(/"/g, '').replace('.mp3', ''))
-          : [];
-        
-        blocks.push({ time, programId: programId.trim(), songs });
-      }
-    }
-    
-    return blocks.sort((a, b) => a.time.localeCompare(b.time));
-  }, [fileContent]);
-
-  // Find next block from parsed content
-  const nextBlockData = useMemo(() => {
-    return parsedBlocks.find(b => b.time === nextBlockTime) || null;
-  }, [parsedBlocks, nextBlockTime]);
-
-  // Count songs from ranking in all blocks
-  const songsFromRanking = useMemo(() => {
-    const allSongs = parsedBlocks.flatMap(b => b.songs);
-    return allSongs.filter(song => {
-      const [artist, title] = song.split(' - ');
-      if (!artist || !title) return false;
-      return rankingSongs.some(
-        r => r.title.toLowerCase().includes(title.toLowerCase()) || 
-             r.artist.toLowerCase().includes(artist.toLowerCase())
-      );
-    }).length;
-  }, [parsedBlocks, rankingSongs]);
+    return Math.min(rankingSongs.length, 20);
+  }, [gradeHistory, rankingSongs]);
 
   return (
     <Card className="glass-card border-amber-500/20">
@@ -144,15 +94,6 @@ export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
             Preview da Próxima Grade
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={readGradeFile}
-              disabled={isLoading}
-            >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-            </Button>
             <Badge variant="outline" className="border-amber-500/50 text-amber-500">
               <Clock className="w-3 h-3 mr-1" />
               {nextBlockTime}
@@ -169,86 +110,59 @@ export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
             </div>
             <div>
               <p className="text-sm font-medium text-foreground">Músicas do TOP50 na Grade</p>
-              <p className="text-xs text-muted-foreground">
-                {parsedBlocks.length} blocos montados • {getDayCode()}.txt
-              </p>
+              <p className="text-xs text-muted-foreground">Última grade usou músicas do ranking</p>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-2xl font-bold text-purple-500">{songsFromRanking}</p>
-            <p className="text-xs text-muted-foreground">no ranking</p>
+            <p className="text-2xl font-bold text-purple-500">{lastGradeTop50Count}</p>
+            <p className="text-xs text-muted-foreground">de {Math.min(rankingSongs.length, 50)}</p>
           </div>
         </div>
 
-        {/* Songs Preview - from actual file */}
+        {/* Songs Preview */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
               Músicas que serão usadas:
             </p>
-            {nextBlockData && (
-              <Badge variant="secondary" className="text-xs">
-                <FileText className="w-3 h-3 mr-1" />
-                {nextBlockData.programId}
-              </Badge>
-            )}
+            <Badge variant="secondary" className="text-xs">
+              {songsFromRanking} no ranking
+            </Badge>
           </div>
           
           <ScrollArea className="h-[200px]">
-            {!isElectronEnv ? (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                <p>Preview disponível apenas no modo desktop</p>
-              </div>
-            ) : !nextBlockData ? (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                <p>Bloco {nextBlockTime} ainda não foi gerado</p>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {nextBlockData.songs.map((song, index) => {
-                  const [artist, ...titleParts] = song.split(' - ');
-                  const title = titleParts.join(' - ') || song;
-                  const isFromRanking = rankingSongs.some(
-                    r => r.title.toLowerCase().includes(title.toLowerCase()) || 
-                         r.artist.toLowerCase().includes(artist.toLowerCase())
-                  );
-                  
-                  return (
-                    <div
-                      key={index}
-                      className={`p-2 rounded-lg flex items-center gap-3 ${
-                        isFromRanking 
-                          ? 'bg-purple-500/10 border border-purple-500/20' 
-                          : 'bg-secondary/50'
-                      }`}
-                    >
-                      <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                        {index + 1}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {title}
-                          {isFromRanking && (
-                            <TrendingUp className="w-3 h-3 inline ml-1 text-purple-500" />
-                          )}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">{artist}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <div className="space-y-1">
+              {previewSongs.map((song, index) => (
+                <div
+                  key={index}
+                  className={`p-2 rounded-lg flex items-center gap-3 ${
+                    song.isFromRanking 
+                      ? 'bg-purple-500/10 border border-purple-500/20' 
+                      : 'bg-secondary/50'
+                  }`}
+                >
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                    {song.position}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {song.title}
+                      {song.isFromRanking && (
+                        <TrendingUp className="w-3 h-3 inline ml-1 text-purple-500" />
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                  </div>
+                  <Badge variant="outline" className="text-xs shrink-0">
+                    <Radio className="w-3 h-3 mr-1" />
+                    {song.source}
+                  </Badge>
+                </div>
+              ))}
+            </div>
           </ScrollArea>
         </div>
-
-        {/* Last refresh indicator */}
-        {lastRefresh && (
-          <p className="text-xs text-muted-foreground text-center">
-            Atualizado: {lastRefresh.toLocaleTimeString('pt-BR')}
-          </p>
-        )}
       </CardContent>
     </Card>
   );

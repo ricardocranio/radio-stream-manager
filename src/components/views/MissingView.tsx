@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle, History, RotateCcw, TrendingUp, Clock, FlaskConical, Wrench, RotateCw, Zap, Pause, FileDown, Monitor } from 'lucide-react';
+import { AlertTriangle, Download, Trash2, RefreshCw, Music, Search, ExternalLink, Loader2, CheckCircle, XCircle, PlayCircle, StopCircle, FolderOpen, AlertCircle, History, RotateCcw, TrendingUp, Clock, FlaskConical, Wrench, RotateCw, Zap, Pause, FileDown } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry, getDownloadStats } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
@@ -12,13 +12,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { DesktopOnlyBadge } from '@/components/layout/BrowserModeBanner';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -764,16 +757,12 @@ export function MissingView() {
     : 0;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="p-6 space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold text-foreground">Músicas Faltando</h2>
-            {!isElectron && <DesktopOnlyBadge />}
-          </div>
+          <h2 className="text-2xl font-bold text-foreground">Músicas Faltando</h2>
           <p className="text-muted-foreground">
             Músicas detectadas nas rádios que não foram encontradas no acervo local
-            {!isElectron && <span className="text-amber-500 ml-1">(downloads requerem app desktop)</span>}
           </p>
         </div>
         <div className="flex gap-2">

@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
-import { BrowserModeBanner } from '@/components/layout/BrowserModeBanner';
 import { DashboardView } from '@/components/views/DashboardView';
-import { SimplifiedDashboardView } from '@/components/views/SimplifiedDashboardView';
 import { StationsView } from '@/components/views/StationsView';
 import { CapturedSongsView } from '@/components/views/CapturedSongsView';
 import { SequenceView } from '@/components/views/SequenceView';
@@ -20,7 +18,6 @@ import { BlockEditorView } from '@/components/views/BlockEditorView';
 import { VozBrasilView } from '@/components/views/VozBrasilView';
 import { SpecialMonitoringView } from '@/components/views/SpecialMonitoringView';
 import { useRadioStore, MissingSong } from '@/store/radioStore';
-import { useUIModeStore } from '@/store/uiModeStore';
 import { CapturedSong } from '@/types/radio';
 import { useAutoDownload } from '@/hooks/useAutoDownload';
 import { useCheckMusicLibrary } from '@/hooks/useCheckMusicLibrary';
@@ -94,7 +91,6 @@ const simulatedSongsDatabase = {
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const { mode } = useUIModeStore();
   const { 
     addCapturedSong, 
     setIsRunning, 
@@ -184,7 +180,6 @@ const Index = () => {
     // Check if song exists in local music library using Electron IPC (or fallback)
     const libraryCheck = await checkSongExists(song.artist, song.title);
     const existsInLibrary = libraryCheck.exists;
-    const verificationFailed = (libraryCheck as any).verificationFailed === true;
     const alreadyMissing = isSongAlreadyMissing(song.artist, song.title);
     
     const capturedSong: CapturedSong = {
@@ -193,7 +188,7 @@ const Index = () => {
       artist: song.artist,
       station: randomStation,
       timestamp: new Date(),
-      status: verificationFailed ? 'unknown' : (existsInLibrary ? 'found' : 'missing'),
+      status: existsInLibrary ? 'found' : 'missing',
     };
     
     addCapturedSong(capturedSong);
@@ -203,11 +198,8 @@ const Index = () => {
     addOrUpdateRankingSong(song.title, song.artist, stationStyle);
     console.log(`[RANKING] Música adicionada ao ranking: ${song.artist} - ${song.title} (${stationStyle})`);
     
-    // CRITICAL: Don't add to missing if verification failed (backend offline)
-    // This prevents flooding the missing list when backend is unavailable
-    if (verificationFailed) {
-      console.log(`[CAPTURE] ⚠️ Verificação não disponível (backend offline): ${song.artist} - ${song.title}`);
-    } else if (!existsInLibrary && !alreadyMissing) {
+    // If song is missing AND not already in missing list, add to missing songs for auto-download
+    if (!existsInLibrary && !alreadyMissing) {
       const missingSong: MissingSong = {
         id: capturedSong.id,
         title: song.title,
@@ -281,20 +273,6 @@ const Index = () => {
   }, []);
 
   const renderView = () => {
-    // If in simplified mode, show simplified dashboard regardless of active tab
-    // (except for settings and missing which are still available)
-    if (mode === 'simplified') {
-      switch (activeTab) {
-        case 'missing':
-          return <MissingView />;
-        case 'settings':
-          return <SettingsView />;
-        default:
-          return <SimplifiedDashboardView />;
-      }
-    }
-    
-    // Complete mode - show all views
     switch (activeTab) {
       case 'dashboard':
         return <DashboardView />;
@@ -338,10 +316,7 @@ const Index = () => {
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex-1 flex flex-col">
         <Header />
-        <main className="flex-1 overflow-auto p-4 md:p-6">
-          <BrowserModeBanner />
-          {renderView()}
-        </main>
+        <main className="flex-1 overflow-auto">{renderView()}</main>
         <footer className="border-t border-border bg-secondary/30 px-4 py-2 flex items-center justify-center gap-3 text-xs text-muted-foreground">
           <img src={logo} alt="AudioSolutions" className="h-6 w-6 rounded" />
           <a href="https://audiosolutions.tech/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">audiosolutions.tech</a>

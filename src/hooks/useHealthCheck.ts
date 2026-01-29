@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface HealthStatus {
   supabase: 'ok' | 'degraded' | 'offline';
@@ -9,7 +10,7 @@ export interface HealthStatus {
   issues: string[];
 }
 
-const CHECK_INTERVAL = 120000; // 2 minutes (increased from 1 minute to reduce overhead)
+const CHECK_INTERVAL = 60000; // 1 minute
 
 export function useHealthCheck() {
   const [status, setStatus] = useState<HealthStatus>({
@@ -21,14 +22,10 @@ export function useHealthCheck() {
     issues: [],
   });
   
-  const checkingRef = useRef(false);
-  const mountedRef = useRef(true);
+  const realtimeCheckRef = useRef<boolean>(false);
 
   const checkSupabase = useCallback(async (): Promise<'ok' | 'degraded' | 'offline'> => {
     try {
-      // Dynamic import to avoid circular dependencies
-      const { supabase } = await import('@/integrations/supabase/client');
-      
       const startTime = Date.now();
       const { error } = await supabase
         .from('radio_stations')
@@ -58,97 +55,92 @@ export function useHealthCheck() {
   }, []);
 
   const checkRealtime = useCallback(async (): Promise<'ok' | 'degraded' | 'offline'> => {
-    try {
-      // Use the centralized manager status - NO test channels
-      const { realtimeManager } = await import('@/lib/realtimeManager');
-      const status = realtimeManager.getStatus('scraped_songs');
-      
-      if (status === 'connected') {
-        return 'ok';
-      } else if (status === 'error') {
-        return 'offline';
-      } else if (status === 'connecting') {
-        // Connecting is normal during startup - don't mark as degraded immediately
-        return 'ok'; // Changed: treat 'connecting' as OK to avoid false alarms
-      } else if (status === 'idle') {
-        // Channel not subscribed yet - this is normal if no component requested it
-        // Try to initialize it proactively
-        realtimeManager.subscribe('scraped_songs', 'health_check_init', () => {});
-        return 'ok'; // Don't alarm user - channel will connect shortly
-      }
-      
-      // Default to ok - be optimistic to avoid alarming users unnecessarily
+    // Use the centralized manager status instead of creating new channels
+    const { realtimeManager } = await import('@/lib/realtimeManager');
+    const status = realtimeManager.getStatus('scraped_songs');
+    
+    if (status === 'connected') {
+      realtimeCheckRef.current = true;
       return 'ok';
-    } catch (error) {
-      console.error('[HEALTH] Realtime check failed:', error);
+    } else if (status === 'error') {
+      return 'offline';
+    } else if (status === 'connecting') {
       return 'degraded';
     }
+    
+    // Fallback: quick ping test
+    return new Promise((resolve) => {
+      const testChannel = supabase.channel('health_check_' + Date.now());
+      const timeout = setTimeout(() => {
+        try { supabase.removeChannel(testChannel); } catch (e) {}
+        resolve('degraded');
+      }, 3000);
+
+      testChannel
+        .subscribe((status) => {
+          clearTimeout(timeout);
+          try { supabase.removeChannel(testChannel); } catch (e) {}
+          
+          if (status === 'SUBSCRIBED') {
+            realtimeCheckRef.current = true;
+            resolve('ok');
+          } else if (status === 'CHANNEL_ERROR') {
+            resolve('offline');
+          } else {
+            resolve('degraded');
+          }
+        });
+    });
   }, []);
 
   const runHealthCheck = useCallback(async () => {
-    // Prevent concurrent checks
-    if (checkingRef.current || !mountedRef.current) return;
-    checkingRef.current = true;
+    const issues: string[] = [];
     
-    try {
-      const issues: string[] = [];
-      
-      // Check network
-      const networkStatus = navigator.onLine ? 'online' : 'offline';
-      if (networkStatus === 'offline') {
-        issues.push('Sem conexão com a internet');
-      }
-      
-      // Check Supabase
-      const supabaseStatus = await checkSupabase();
-      if (supabaseStatus === 'offline') {
-        issues.push('Banco de dados indisponível');
-      } else if (supabaseStatus === 'degraded') {
-        issues.push('Banco de dados com alta latência');
-      }
-      
-      // Check Realtime (simplified - no test channels)
-      const realtimeStatus = await checkRealtime();
-      if (realtimeStatus === 'offline') {
-        issues.push('Conexão em tempo real indisponível');
-      } else if (realtimeStatus === 'degraded') {
-        issues.push('Conexão em tempo real degradada');
-      }
-      
-      // Check Electron
-      const electronStatus = typeof window !== 'undefined' && window.electronAPI ? 'ok' : 'unavailable';
-      
-      if (mountedRef.current) {
-        setStatus({
-          supabase: supabaseStatus,
-          realtime: realtimeStatus,
-          electron: electronStatus,
-          network: networkStatus,
-          lastCheck: new Date(),
-          issues,
-        });
-      }
-      
-      // Log health status (less verbose)
-      if (issues.length > 0) {
-        console.warn('[HEALTH] Issues detected:', issues);
-      }
-    } finally {
-      checkingRef.current = false;
+    // Check network
+    const networkStatus = navigator.onLine ? 'online' : 'offline';
+    if (networkStatus === 'offline') {
+      issues.push('Sem conexão com a internet');
+    }
+    
+    // Check Supabase
+    const supabaseStatus = await checkSupabase();
+    if (supabaseStatus === 'offline') {
+      issues.push('Banco de dados indisponível');
+    } else if (supabaseStatus === 'degraded') {
+      issues.push('Banco de dados com alta latência');
+    }
+    
+    // Check Realtime
+    const realtimeStatus = await checkRealtime();
+    if (realtimeStatus === 'offline') {
+      issues.push('Conexão em tempo real indisponível');
+    } else if (realtimeStatus === 'degraded') {
+      issues.push('Conexão em tempo real degradada');
+    }
+    
+    // Check Electron
+    const electronStatus = typeof window !== 'undefined' && window.electronAPI ? 'ok' : 'unavailable';
+    
+    setStatus({
+      supabase: supabaseStatus,
+      realtime: realtimeStatus,
+      electron: electronStatus,
+      network: networkStatus,
+      lastCheck: new Date(),
+      issues,
+    });
+    
+    // Log health status
+    if (issues.length > 0) {
+      console.warn('[HEALTH] Issues detected:', issues);
+    } else {
+      console.log('[HEALTH] All systems operational');
     }
   }, [checkSupabase, checkRealtime]);
 
-  // Initial check and cleanup
+  // Initial check
   useEffect(() => {
-    mountedRef.current = true;
-    
-    // Delay initial check to avoid startup overhead
-    const initialTimeout = setTimeout(runHealthCheck, 5000);
-    
-    return () => {
-      mountedRef.current = false;
-      clearTimeout(initialTimeout);
-    };
+    runHealthCheck();
   }, [runHealthCheck]);
 
   // Periodic checks
@@ -161,22 +153,17 @@ export function useHealthCheck() {
   useEffect(() => {
     const handleOnline = () => {
       console.log('[HEALTH] Network online');
-      if (mountedRef.current) {
-        setStatus(prev => ({ ...prev, network: 'online' }));
-        // Delay health check to let connections stabilize
-        setTimeout(runHealthCheck, 2000);
-      }
+      setStatus(prev => ({ ...prev, network: 'online' }));
+      runHealthCheck();
     };
     
     const handleOffline = () => {
       console.log('[HEALTH] Network offline');
-      if (mountedRef.current) {
-        setStatus(prev => ({ 
-          ...prev, 
-          network: 'offline',
-          issues: [...prev.issues.filter(i => i !== 'Sem conexão com a internet'), 'Sem conexão com a internet']
-        }));
-      }
+      setStatus(prev => ({ 
+        ...prev, 
+        network: 'offline',
+        issues: [...prev.issues.filter(i => i !== 'Sem conexão com a internet'), 'Sem conexão com a internet']
+      }));
     };
 
     window.addEventListener('online', handleOnline);

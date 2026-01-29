@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Wifi, WifiOff, CheckCheck, Cloud } from 'lucide-react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
@@ -16,13 +16,9 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { GradePreviewCard } from '@/components/dashboard/GradePreviewCard';
 import { GradeScheduleCard } from '@/components/dashboard/GradeScheduleCard';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
-import { Checkbox } from '@/components/ui/checkbox';
 
 export function DashboardView() {
-  const { stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs, resetAllCounts } = useRadioStore();
+  const { stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs } = useRadioStore();
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
   const { stats: realtimeStats, refresh: refreshStats } = useRealtimeStats();
   const { stats: libraryStats } = useMusicLibraryStats();
@@ -30,8 +26,6 @@ export function DashboardView() {
   const { gradeBuilder, downloads, scraping } = useGlobalServices();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [includeSupabase, setIncludeSupabase] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
   
   // Realtime notifications hook
   const { requestPermission } = useRealtimeNotifications({
@@ -63,43 +57,6 @@ export function DashboardView() {
     setIsRefreshing(false);
   };
 
-  // Handle reset all counts
-  const handleResetAll = async () => {
-    setIsResetting(true);
-    
-    try {
-      // Always reset local data
-      resetAllCounts();
-      
-      // If includeSupabase is true, also clear remote data
-      if (includeSupabase) {
-        const { data, error } = await supabase.functions.invoke('manage-special-monitoring', {
-          body: { action: 'clear-scraped-songs' }
-        });
-        
-        if (error) {
-          console.error('[RESET] Error clearing Supabase:', error);
-          toast.error('Erro ao limpar dados remotos. Dados locais foram zerados.');
-        } else if (data?.success) {
-          toast.success(`Todos os dados foram zerados! (${data.deleted || 'todas'} músicas remotas removidas)`);
-        } else {
-          toast.warning('Dados locais zerados. Supabase pode não ter sido limpo completamente.');
-        }
-      } else {
-        toast.success('Todas as contagens locais foram zeradas!');
-      }
-      
-      // Refresh stats
-      await refreshStats();
-    } catch (error) {
-      console.error('[RESET] Error:', error);
-      toast.error('Erro ao zerar dados');
-    } finally {
-      setIsResetting(false);
-      setIncludeSupabase(false);
-    }
-  };
-
   const localStats = {
     activeStations: stations.filter((s) => s.enabled).length,
     rankingTotal: rankingSongs.length,
@@ -115,7 +72,7 @@ export function DashboardView() {
         { id: '4', timestamp: new Date(Date.now() - 120 * 60000), blockTime: '19:30', songsProcessed: 10, songsFound: 10, songsMissing: 0, programName: 'TOP10' },
       ];
 
-  // Dynamic color palette for station cards
+  // Dynamic color palette for stations
   const colorPalette = [
     { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' },
     { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400' },
@@ -125,24 +82,36 @@ export function DashboardView() {
     { bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', text: 'text-cyan-400' },
   ];
 
+  // Get unique stations from stationCounts (deduplicated)
+  const uniqueStationCounts = Object.entries(realtimeStats.stationCounts)
+    .reduce((acc, [station, count]) => {
+      // Normalize station name to prevent duplicates
+      const normalizedName = station.trim();
+      if (!acc[normalizedName]) {
+        acc[normalizedName] = 0;
+      }
+      acc[normalizedName] += count;
+      return acc;
+    }, {} as Record<string, number>);
+
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6 animate-fade-in">
       {/* Realtime Stats from Supabase */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
         <Card className="glass-card border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] md:text-xs text-muted-foreground">Total</p>
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Total Capturadas</p>
                 <p className="text-lg md:text-2xl font-bold text-foreground">
                   {realtimeStats.isLoading ? '...' : realtimeStats.totalSongs.toLocaleString()}
                 </p>
                 <p className="text-[10px] md:text-xs text-primary flex items-center gap-1">
-                  <Database className="w-3 h-3 flex-shrink-0" />
-                  <span>Supabase</span>
+                  <Database className="w-3 h-3" />
+                  <span className="hidden sm:inline">Supabase</span>
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
                 <Music className="w-4 h-4 md:w-5 md:h-5 text-primary" />
               </div>
             </div>
@@ -152,17 +121,17 @@ export function DashboardView() {
         <Card className="glass-card border-green-500/20 bg-gradient-to-br from-green-500/10 to-green-500/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] md:text-xs text-muted-foreground">24h</p>
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Últimas 24h</p>
                 <p className="text-lg md:text-2xl font-bold text-foreground">
                   {realtimeStats.isLoading ? '...' : realtimeStats.songsLast24h.toLocaleString()}
                 </p>
                 <p className="text-[10px] md:text-xs text-green-500 flex items-center gap-1">
-                  <Clock className="w-3 h-3 flex-shrink-0" />
-                  <span>Tempo real</span>
+                  <Clock className="w-3 h-3" />
+                  <span className="hidden sm:inline">Tempo real</span>
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-green-500/20 flex items-center justify-center shrink-0">
                 <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-green-500" />
               </div>
             </div>
@@ -172,17 +141,17 @@ export function DashboardView() {
         <Card className="glass-card border-orange-500/20 bg-gradient-to-br from-orange-500/10 to-orange-500/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] md:text-xs text-muted-foreground">1 Hora</p>
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Última Hora</p>
                 <p className="text-lg md:text-2xl font-bold text-foreground">
                   {realtimeStats.isLoading ? '...' : realtimeStats.songsLastHour.toLocaleString()}
                 </p>
                 <p className="text-[10px] md:text-xs text-orange-500 flex items-center gap-1">
-                  <Zap className="w-3 h-3 flex-shrink-0" />
-                  <span>Ativo</span>
+                  <Zap className="w-3 h-3" />
+                  <span className="hidden sm:inline">Ativo</span>
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-orange-500/20 flex items-center justify-center shrink-0">
                 <Radio className="w-4 h-4 md:w-5 md:h-5 text-orange-500" />
               </div>
             </div>
@@ -192,15 +161,15 @@ export function DashboardView() {
         <Card className="glass-card border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-purple-500/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] md:text-xs text-muted-foreground">Ranking</p>
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">No Ranking</p>
                 <p className="text-lg md:text-2xl font-bold text-foreground">{localStats.rankingTotal}</p>
                 <p className="text-[10px] md:text-xs text-purple-500 flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3 flex-shrink-0" />
+                  <TrendingUp className="w-3 h-3" />
                   TOP50
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
                 <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-purple-500" />
               </div>
             </div>
@@ -210,41 +179,37 @@ export function DashboardView() {
         <Card className="glass-card border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-cyan-500/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] md:text-xs text-muted-foreground">Emissoras</p>
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Emissoras</p>
                 <p className="text-lg md:text-2xl font-bold text-foreground">
                   {realtimeStats.isLoading ? '...' : realtimeStats.activeStations}
                 </p>
                 <p className="text-[10px] md:text-xs text-cyan-500 flex items-center gap-1">
-                  <Radio className="w-3 h-3 flex-shrink-0" />
-                  <span>Monitorando</span>
+                  <Radio className="w-3 h-3" />
+                  <span className="hidden sm:inline">Monitorando</span>
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center shrink-0">
                 <Radio className="w-4 h-4 md:w-5 md:h-5 text-cyan-500" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className={`glass-card border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5 ${libraryStats.unavailable ? 'opacity-60' : ''}`}>
+        <Card className="glass-card border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] md:text-xs text-muted-foreground">Banco</p>
-                {libraryStats.unavailable ? (
-                  <p className="text-xs md:text-sm font-medium text-amber-500">N/A</p>
-                ) : (
-                  <p className="text-lg md:text-2xl font-bold text-foreground">
-                    {libraryStats.isLoading ? '...' : libraryStats.count.toLocaleString()}
-                  </p>
-                )}
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Banco Musical</p>
+                <p className="text-lg md:text-2xl font-bold text-foreground">
+                  {libraryStats.isLoading ? '...' : libraryStats.count.toLocaleString()}
+                </p>
                 <p className="text-[10px] md:text-xs text-amber-500 flex items-center gap-1">
-                  <HardDrive className="w-3 h-3 flex-shrink-0" />
-                  <span>{libraryStats.unavailable ? 'Indisp.' : 'Local'}</span>
+                  <HardDrive className="w-3 h-3" />
+                  <span className="hidden sm:inline">Local</span>
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
                 <HardDrive className="w-4 h-4 md:w-5 md:h-5 text-amber-500" />
               </div>
             </div>
@@ -254,130 +219,64 @@ export function DashboardView() {
         <Card className="glass-card border-red-500/20 bg-gradient-to-br from-red-500/10 to-red-500/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] md:text-xs text-muted-foreground">Faltando</p>
-                <p className="text-lg md:text-2xl font-bold text-foreground">
-                  {missingSongs.filter(s => s.status === 'missing').length}
-                </p>
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Faltando</p>
+                <p className="text-lg md:text-2xl font-bold text-foreground">{missingSongs.length}</p>
                 <p className="text-[10px] md:text-xs text-red-500 flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                  <span>No Banco</span>
+                  <AlertTriangle className="w-3 h-3" />
+                  <span className="hidden sm:inline">No Banco</span>
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-red-500/20 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-4 h-4 md:w-5 md:h-5 text-red-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Reset All Counts Button */}
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Card className="glass-card border-destructive/20 bg-gradient-to-br from-destructive/10 to-destructive/5 cursor-pointer hover:border-destructive/40 transition-colors">
-              <CardContent className="p-3 md:p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] md:text-xs text-muted-foreground">Zerar</p>
-                    <p className="text-sm md:text-base font-medium text-destructive">Reset</p>
-                    <p className="text-[10px] md:text-xs text-destructive/70 flex items-center gap-1">
-                      <RotateCcw className="w-3 h-3 flex-shrink-0" />
-                      <span>Limpar</span>
-                    </p>
-                  </div>
-                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-destructive/20 flex items-center justify-center flex-shrink-0">
-                    <RotateCcw className="w-4 h-4 md:w-5 md:h-5 text-destructive" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-destructive" />
-                Zerar Todas as Contagens?
-              </AlertDialogTitle>
-              <AlertDialogDescription asChild>
-                <div className="space-y-2">
-                  <p>Esta ação irá zerar completamente:</p>
-                  <ul className="list-disc list-inside text-sm space-y-1 mt-2">
-                    <li>Músicas capturadas locais</li>
-                    <li>Lista de músicas faltando</li>
-                    <li>Histórico de downloads</li>
-                    <li>Histórico de grade</li>
-                    <li>Ranking TOP50</li>
-                    <li>Blocos montados</li>
-                  </ul>
-                  
-                  {/* Option to include Supabase */}
-                  <div className="flex items-center space-x-2 mt-4 p-3 rounded-lg bg-muted/50 border border-border">
-                    <Checkbox 
-                      id="includeSupabase" 
-                      checked={includeSupabase}
-                      onCheckedChange={(checked) => setIncludeSupabase(checked === true)}
-                    />
-                    <label
-                      htmlFor="includeSupabase"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
-                    >
-                      <Cloud className="w-4 h-4 text-primary" />
-                      Incluir dados do Supabase (músicas capturadas remotas)
-                    </label>
-                  </div>
-                  
-                  <p className="text-destructive font-medium mt-3">Esta ação não pode ser desfeita!</p>
-                </div>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={isResetting}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction 
-                onClick={handleResetAll}
-                disabled={isResetting}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                {isResetting ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <RotateCcw className="w-4 h-4 mr-2" />
-                )}
-                Zerar Tudo
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Backend Status Card */}
-        <Card className={`glass-card ${downloads.backendConnected ? 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5' : 'border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-yellow-500/5'}`}>
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] md:text-xs text-muted-foreground">Backend</p>
-                <p className={`text-sm md:text-base font-medium ${downloads.backendConnected ? 'text-emerald-500' : 'text-yellow-500'}`}>
-                  {downloads.backendConnected ? 'OK' : 'Off'}
-                </p>
-                <p className={`text-[10px] md:text-xs ${downloads.backendConnected ? 'text-emerald-500/70' : 'text-yellow-500/70'} flex items-center gap-1`}>
-                  <CheckCheck className="w-3 h-3 flex-shrink-0" />
-                  <span>{downloads.songsVerified} verif.</span>
-                </p>
-              </div>
-              <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg ${downloads.backendConnected ? 'bg-emerald-500/20' : 'bg-yellow-500/20'} flex items-center justify-center flex-shrink-0`}>
-                {downloads.backendConnected ? (
-                  <Wifi className="w-4 h-4 md:w-5 md:h-5 text-emerald-500" />
-                ) : (
-                  <WifiOff className="w-4 h-4 md:w-5 md:h-5 text-yellow-500" />
-                )}
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Station Distribution removed - keeping interface clean */}
+      {/* Station Distribution - Filled grid without gaps */}
+      {Object.keys(uniqueStationCounts).length > 0 && (
+        <Card className="glass-card">
+          <CardHeader className="pb-2 md:pb-3">
+            <CardTitle className="text-sm md:text-base flex items-center gap-2">
+              <Radio className="w-4 h-4 text-primary" />
+              Distribuição por Emissora (24h)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {(() => {
+              const stationEntries = Object.entries(uniqueStationCounts).sort((a, b) => b[1] - a[1]);
+              const maxCount = Math.max(...Object.values(uniqueStationCounts));
+              
+              return (
+                <div className="flex flex-wrap gap-2">
+                  {stationEntries.map(([station, count], index) => (
+                    <div
+                      key={station}
+                      className={`flex-1 min-w-[100px] max-w-[180px] p-2 md:p-3 rounded-lg ${colorPalette[index % colorPalette.length].bg} ${colorPalette[index % colorPalette.length].border} border`}
+                    >
+                      <p className={`text-[10px] md:text-xs ${colorPalette[index % colorPalette.length].text} truncate font-medium`} title={station}>
+                        {station}
+                      </p>
+                      <p className="text-lg md:text-xl font-bold text-foreground">{count}</p>
+                      <div className="h-1 bg-background/50 rounded-full mt-1 overflow-hidden">
+                        <div
+                          className={`h-full transition-all ${colorPalette[index % colorPalette.length].text.replace('text-', 'bg-')}`}
+                          style={{ width: `${(count / maxCount) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Auto Grade Builder Status - Show in both Electron and Service Mode */}
-      {(gradeBuilder.isElectron || downloads.backendConnected) && (
+      {/* Auto Grade Builder Status */}
+      {gradeBuilder.isElectron && (
         <Card className="glass-card border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 to-transparent">
           <CardContent className="p-4 space-y-4">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
