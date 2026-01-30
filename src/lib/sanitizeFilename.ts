@@ -5,6 +5,7 @@
  * - Removes parentheses but keeps content (ao vivo)→ao vivo
  * - Removes other special characters
  * - Normalizes spaces
+ * - Supports dynamic placeholders: {HH} for hour, {DIA} for weekday
  */
 
 // Map of accented characters to their non-accented equivalents
@@ -25,6 +26,9 @@ const accentMap: Record<string, string> = {
   'Ñ': 'N',
 };
 
+// Weekday names for {DIA} placeholder
+const weekdayNames = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
+
 /**
  * Remove accents from a string
  */
@@ -33,14 +37,43 @@ function removeAccents(str: string): string {
 }
 
 /**
- * Sanitize a filename for playlist generation
- * @param filename - Original filename (e.g., "Propaganda - Jorge & Mateus.mp3")
- * @returns Sanitized filename (e.g., "Propaganda - Jorge e Mateus.mp3")
+ * Replace dynamic placeholders in filename
+ * @param filename - Original filename with placeholders
+ * @param hour - Hour for {HH} placeholder (optional, uses current hour if not provided)
+ * @returns Filename with placeholders replaced
  */
-export function sanitizeFilename(filename: string): string {
+export function replacePlaceholders(filename: string, hour?: number): string {
   if (!filename) return '';
   
   let result = filename;
+  
+  // Get current date/time
+  const now = new Date();
+  const currentHour = hour !== undefined ? hour : now.getHours();
+  const currentDay = now.getDay();
+  
+  // Replace {HH} with hour (2 digits)
+  result = result.replace(/\{HH\}/gi, currentHour.toString().padStart(2, '0'));
+  
+  // Replace {DIA} with weekday name
+  result = result.replace(/\{DIA\}/gi, weekdayNames[currentDay]);
+  
+  return result;
+}
+
+/**
+ * Sanitize a filename for playlist generation
+ * @param filename - Original filename (e.g., "Propaganda - Jorge & Mateus.mp3")
+ * @param hour - Optional hour for {HH} placeholder
+ * @returns Sanitized filename (e.g., "Propaganda - Jorge e Mateus.mp3")
+ */
+export function sanitizeFilename(filename: string, hour?: number): string {
+  if (!filename) return '';
+  
+  let result = filename;
+  
+  // First, replace dynamic placeholders
+  result = replacePlaceholders(result, hour);
   
   // Replace & with "e"
   result = result.replace(/&/g, 'e');
@@ -58,9 +91,9 @@ export function sanitizeFilename(filename: string): string {
   // Remove accents
   result = removeAccents(result);
   
-  // Remove remaining special characters except: letters, numbers, spaces, dash, dot
+  // Remove remaining special characters except: letters, numbers, spaces, dash, dot, underscore
   // Specifically remove: ´ ` ~ ' " , ; : ! ? @ # $ % ^ * + = | \ / < >
-  result = result.replace(/[^a-zA-Z0-9\s\-.]/g, '');
+  result = result.replace(/[^a-zA-Z0-9\s\-._]/g, '');
   
   // Ensure proper "Artist - Title" format (single dash with spaces)
   result = result.replace(/\s*-\s*/g, ' - ');
@@ -69,6 +102,18 @@ export function sanitizeFilename(filename: string): string {
   result = result.replace(/\s+/g, ' ').trim();
   
   return result;
+}
+
+/**
+ * Sanitize a filename for fixed content with dynamic placeholders
+ * This preserves placeholders until generation time
+ * @param filename - Original filename with placeholders
+ * @param hour - Hour for the block
+ * @returns Sanitized filename with placeholders replaced
+ */
+export function sanitizeFixedContentFilename(filename: string, hour: number): string {
+  // Replace placeholders first, then sanitize
+  return sanitizeFilename(filename, hour);
 }
 
 /**
@@ -119,4 +164,16 @@ export function sanitizeSongTitle(title: string): string {
   result = result.replace(/\s+/g, ' ').trim();
   
   return result;
+}
+
+/**
+ * Normalize song info for comparison and deduplication
+ * @param artist - Artist name
+ * @param title - Song title
+ * @returns Normalized key for comparison
+ */
+export function normalizeSongKey(artist: string, title: string): string {
+  const normalizedArtist = sanitizeArtistName(artist).toLowerCase();
+  const normalizedTitle = sanitizeSongTitle(title).toLowerCase();
+  return `${normalizedArtist}-${normalizedTitle}`;
 }

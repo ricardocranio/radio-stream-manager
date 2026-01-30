@@ -161,13 +161,28 @@ export function VozBrasilView() {
     };
   }, [config.scheduleTime, config.cleanupTime, config.enabled]);
 
-  // Generate download URL with current date
-  const getDownloadUrl = () => {
+  // Generate download URLs with current date (primary and alternative)
+  const getDownloadUrls = () => {
     const now = new Date();
     const day = now.getDate().toString().padStart(2, '0');
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const year = now.getFullYear();
-    return `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`;
+    
+    // Primary URL - EBC official download page
+    const primaryUrl = `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`;
+    
+    // Alternative URL - Direct audio file format
+    const altUrl = `https://conteudo.ebc.com.br/audios/radioagencianacional/voz_do_brasil/VozDoBrasil_${day}${month}${year}.mp3`;
+    
+    // Another alternative - older format
+    const altUrl2 = `https://radiogov.ebc.com.br/sites/default/files/audios/voz_do_brasil/VozDoBrasil_${year}${month}${day}.mp3`;
+    
+    return [primaryUrl, altUrl, altUrl2];
+  };
+
+  // Generate download URL with current date (uses first available)
+  const getDownloadUrl = () => {
+    return getDownloadUrls()[0];
   };
 
   // Generate filename with current date
@@ -193,8 +208,12 @@ export function VozBrasilView() {
   }, []);
 
   // Perform real download (Electron) or simulated (web)
-  const performDownload = async (isRetry: boolean = false) => {
+  // Tries multiple URLs if the first one fails
+  const performDownload = async (isRetry: boolean = false, urlIndex: number = 0) => {
     const currentAttempts = isRetry ? downloadStatus.attempts + 1 : 1;
+    const urls = getDownloadUrls();
+    const url = urls[urlIndex];
+    const filename = getFilename();
     
     setDownloadStatus({
       status: isRetry ? 'retrying' : 'downloading',
@@ -203,13 +222,10 @@ export function VozBrasilView() {
       progress: 0,
     });
 
-    const url = getDownloadUrl();
-    const filename = getFilename();
-
     try {
       // Check if running in Electron
       if (window.electronAPI?.downloadVozBrasil) {
-        console.log('[VOZ] Starting Electron download...');
+        console.log(`[VOZ] Starting Electron download (URL ${urlIndex + 1}/${urls.length})...`);
         console.log('[VOZ] URL:', url);
         console.log('[VOZ] Folder:', config.downloadFolder);
         console.log('[VOZ] Filename:', filename);
@@ -222,7 +238,7 @@ export function VozBrasilView() {
 
         console.log('[VOZ] Download result:', result);
 
-        if (result.success) {
+        if (result.success && result.fileSize && result.fileSize > 10000) { // File should be at least 10KB
           setDownloadStatus({
             status: 'success',
             lastAttempt: new Date(),
@@ -243,7 +259,17 @@ export function VozBrasilView() {
             description: `A Voz do Brasil foi salva em ${config.downloadFolder}`,
           });
         } else {
-          throw new Error(result.error || 'Erro desconhecido no download');
+          // Try next URL if available
+          if (urlIndex < urls.length - 1) {
+            console.log(`[VOZ] URL ${urlIndex + 1} falhou, tentando URL ${urlIndex + 2}...`);
+            toast({
+              title: '⚠️ Tentando URL alternativa...',
+              description: `URL ${urlIndex + 1} falhou, tentando próxima...`,
+            });
+            await performDownload(false, urlIndex + 1);
+            return;
+          }
+          throw new Error(result.error || 'Arquivo inválido ou muito pequeno');
         }
       } else {
         // Web simulation fallback
