@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule, ScheduledSequence } from '@/types/radio';
+import { normalizeSongKey, sanitizeArtistName, sanitizeSongTitle } from '@/lib/sanitizeFilename';
 
 export interface DeezerConfig {
   arl: string;
@@ -404,7 +405,28 @@ export const useRadioStore = create<RadioState>()(
       missingSongs: [],
       setMissingSongs: (missingSongs) => set({ missingSongs }),
       addMissingSong: (song) =>
-        set((state) => ({ missingSongs: [...state.missingSongs, song] })),
+        set((state) => {
+          // Normalize the song key to prevent duplicates with different spellings
+          const normalizedKey = normalizeSongKey(song.artist, song.title);
+          
+          // Check if this song already exists (with normalized comparison)
+          const exists = state.missingSongs.some(s => 
+            normalizeSongKey(s.artist, s.title) === normalizedKey
+          );
+          
+          if (exists) {
+            return state; // Don't add duplicate
+          }
+          
+          // Sanitize the artist and title for the new song
+          const sanitizedSong = {
+            ...song,
+            artist: sanitizeArtistName(song.artist) || song.artist,
+            title: sanitizeSongTitle(song.title) || song.title,
+          };
+          
+          return { missingSongs: [...state.missingSongs, sanitizedSong] };
+        }),
       updateMissingSong: (id, updates) =>
         set((state) => ({
           missingSongs: state.missingSongs.map((s) =>

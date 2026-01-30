@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRadioStore } from '@/store/radioStore';
 import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
-import { sanitizeFilename } from '@/lib/sanitizeFilename';
+import { sanitizeFilename, sanitizeFixedContentFilename, normalizeSongKey } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -451,7 +451,8 @@ export function useAutoGradeBuilder() {
     
     if (fixedItem) {
       // Add fixed content file with quotes (always include regardless of existence)
-      const fixedFileName = sanitizeFilename(fixedItem.fileName);
+      // Use sanitizeFixedContentFilename to handle {HH} and {DIA} placeholders
+      const fixedFileName = sanitizeFixedContentFilename(fixedItem.fileName, hour);
       fixedContentFile = `"${fixedFileName}"`;
       fixedPosition = fixedItem.position || 'start';
       
@@ -459,7 +460,7 @@ export function useAutoGradeBuilder() {
         blockTime: timeStr,
         type: 'fixed',
         title: fixedItem.name,
-        artist: fixedItem.fileName,
+        artist: fixedFileName, // Show resolved filename
         station: 'FIXO',
         reason: `Conteúdo fixo (posição: ${typeof fixedPosition === 'number' ? fixedPosition : fixedPosition})`,
       });
@@ -525,12 +526,13 @@ export function useAutoGradeBuilder() {
       const selectedFixed = availableFixed[fixoIndexUsed % availableFixed.length];
       fixoIndexUsed++;
       
-      const fixedFileName = sanitizeFilename(selectedFixed.fileName);
+      // Use sanitizeFixedContentFilename to handle {HH} and {DIA} placeholders
+      const fixedFileName = sanitizeFixedContentFilename(selectedFixed.fileName, hour);
       blockLogs.push({
         blockTime: timeStr,
         type: 'fixed',
         title: selectedFixed.name,
-        artist: selectedFixed.fileName,
+        artist: fixedFileName, // Show resolved filename
         station: 'FIXO',
         reason: `Conteúdo fixo da sequência`,
       });
@@ -580,12 +582,13 @@ export function useAutoGradeBuilder() {
         if (specificContent) {
           // Use customFileName if set, otherwise use the default from the content
           const fileNameToUse = seq.customFileName || specificContent.fileName;
-          const fixedFileName = sanitizeFilename(fileNameToUse);
+          // Use sanitizeFixedContentFilename to handle {HH} and {DIA} placeholders
+          const fixedFileName = sanitizeFixedContentFilename(fileNameToUse, hour);
           blockLogs.push({
             blockTime: timeStr,
             type: 'fixed',
             title: specificContent.name,
-            artist: fileNameToUse,
+            artist: fixedFileName, // Show resolved filename
             station: 'FIXO',
             reason: seq.customFileName 
               ? `Conteúdo fixo com nome personalizado` 
@@ -1166,8 +1169,9 @@ export function useAutoGradeBuilder() {
   ]);
 
   // Build current and next blocks (incremental update to existing file)
-  // ALWAYS saves to destination folder - ensuring current time slot is updated
-  const buildGrade = useCallback(async () => {
+  // IMPORTANT: Does NOT update the current block (that's already playing)
+  // Only updates NEXT and FUTURE blocks to avoid changing what's on air
+  const buildGrade = useCallback(async (forceUpdateCurrent: boolean = false) => {
     if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
       console.log('[AUTO-GRADE] Not in Electron mode, skipping');
       return;
@@ -1180,24 +1184,24 @@ export function useAutoGradeBuilder() {
       const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
 
-      console.log(`[AUTO-GRADE] 🔄 Atualizando blocos: ${currentTimeKey}, ${nextTimeKey} -> salvando na pasta destino`);
+      // Calculate the block after next for additional pre-generation
+      const afterNextBlock = {
+        hour: blocks.next.hour,
+        minute: blocks.next.minute + 30,
+      };
+      if (afterNextBlock.minute >= 60) {
+        afterNextBlock.minute -= 60;
+        afterNextBlock.hour = (afterNextBlock.hour + 1) % 24;
+      }
+      const afterNextTimeKey = `${afterNextBlock.hour.toString().padStart(2, '0')}:${afterNextBlock.minute.toString().padStart(2, '0')}`;
+
+      console.log(`[AUTO-GRADE] 🔄 Atualizando blocos: ${forceUpdateCurrent ? currentTimeKey + ', ' : ''}${nextTimeKey}, ${afterNextTimeKey} -> (bloco atual ${currentTimeKey} ${forceUpdateCurrent ? 'incluído' : 'preservado'})`);
 
       const songsByStation = await fetchRecentSongs();
       const stats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: Parameters<typeof addBlockLogs>[0] = [];
 
-      // Generate current and next blocks (isFullDay=false for normal repetition rules)
-      const currentResult = await generateBlockLine(
-        blocks.current.hour, blocks.current.minute, songsByStation, stats, false
-      );
-      const nextResult = await generateBlockLine(
-        blocks.next.hour, blocks.next.minute, songsByStation, stats, false
-      );
-      
-      allLogs.push(...currentResult.logs, ...nextResult.logs);
-      addBlockLogs(allLogs);
-
-      // Read existing file and update only the relevant lines
+      // Read existing file first to preserve current block
       const dayCode = getDayCode();
       const filename = `${dayCode}.txt`;
       let existingContent = '';
@@ -1221,9 +1225,28 @@ export function useAutoGradeBuilder() {
         if (match) lineMap.set(match[1], line);
       });
 
-      // Update the lines for current and next blocks
-      lineMap.set(currentTimeKey, currentResult.line);
+      // Only generate current block if forced (initial boot) or it doesn't exist
+      if (forceUpdateCurrent || !lineMap.has(currentTimeKey)) {
+        const currentResult = await generateBlockLine(
+          blocks.current.hour, blocks.current.minute, songsByStation, stats, false
+        );
+        lineMap.set(currentTimeKey, currentResult.line);
+        allLogs.push(...currentResult.logs);
+      }
+
+      // Always generate next and after-next blocks
+      const nextResult = await generateBlockLine(
+        blocks.next.hour, blocks.next.minute, songsByStation, stats, false
+      );
+      const afterNextResult = await generateBlockLine(
+        afterNextBlock.hour, afterNextBlock.minute, songsByStation, stats, false
+      );
+      
       lineMap.set(nextTimeKey, nextResult.line);
+      lineMap.set(afterNextTimeKey, afterNextResult.line);
+      
+      allLogs.push(...nextResult.logs, ...afterNextResult.logs);
+      addBlockLogs(allLogs);
 
       // Sort all lines by time and join
       const sortedContent = Array.from(lineMap.keys())
@@ -1376,27 +1399,31 @@ export function useAutoGradeBuilder() {
       if (shouldBuild) {
         console.log(`[AUTO-GRADE] 🔄 Atualizando grade para bloco ${blockKey} (faltam ${minutesUntilBlock} min)`);
         lastBuiltBlock = blockKey;
-        buildGrade();
+        // Don't force update current - preserve what's playing
+        buildGrade(false);
         lastPeriodicSave = Date.now();
+        lastQuarterHour = -1; // Reset for new block cycle
       } else {
-        // PERIODIC SAVE: Also save every 5 minutes to ensure file is always current
-        const timeSinceLastSave = Date.now() - lastPeriodicSave;
-        if (timeSinceLastSave >= 5 * 60 * 1000) {
-          console.log(`[AUTO-GRADE] 📁 Salvamento periódico (5 min) - garantindo arquivo atualizado`);
-          buildGrade();
+        // SYNCHRONIZED UPDATE: Update at 15-minute intervals (:00, :15, :30, :45)
+        // This ensures "Captura em Tempo Real" and "Ranking TOP50 Integrado" are synced
+        const quarterHour = Math.floor(currentMinute / 15);
+        
+        if (quarterHour !== lastQuarterHour) {
+          console.log(`[AUTO-GRADE] ⏱️ Atualização sincronizada (${currentMinute < 10 ? '0' : ''}${currentMinute} min) - sincronizando capturas e ranking`);
+          lastQuarterHour = quarterHour;
+          // Don't force update current block - preserve what's playing
+          buildGrade(false);
           lastPeriodicSave = Date.now();
         }
       }
     }, 30 * 1000); // Check every 30 seconds for better responsiveness
 
-    // Also run immediately on mount to catch current block
-    const now = new Date();
-    const currentMinute = now.getMinutes();
-    const minutesBefore = state.minutesBeforeBlock;
+    // Track last quarter hour for synchronized updates
+    let lastQuarterHour = -1;
     
-    // ALWAYS build immediately on mount to ensure file exists
-    console.log(`[AUTO-GRADE] 🚀 Build inicial - salvando grade na pasta destino`);
-    buildGrade();
+    // ALWAYS build immediately on mount with forceUpdateCurrent=true to ensure file exists
+    console.log(`[AUTO-GRADE] 🚀 Build inicial - criando grade completa`);
+    buildGrade(true); // Force update current on initial boot
 
     return () => {
       if (buildIntervalRef.current) clearInterval(buildIntervalRef.current);
