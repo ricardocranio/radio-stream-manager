@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power, PlusCircle, MinusCircle, Pencil, X, Check } from 'lucide-react';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -56,8 +56,6 @@ export function SequenceView() {
   const [localSequence, setLocalSequence] = useState(sequence);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<ScheduledSequence | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // State for editing custom filename
   const [editingPosition, setEditingPosition] = useState<number | null>(null);
@@ -74,28 +72,6 @@ export function SequenceView() {
   const [formWeekDays, setFormWeekDays] = useState<WeekDay[]>([]);
   const [formPriority, setFormPriority] = useState(1);
   const [formSequence, setFormSequence] = useState<SequenceConfig[]>(sequence);
-
-  // Autosave debounced function
-  const autoSave = useCallback((newSequence: SequenceConfig[]) => {
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
-    }
-    setIsSaving(true);
-    autoSaveTimeoutRef.current = setTimeout(() => {
-      setSequence(newSequence);
-      setIsSaving(false);
-      console.log('[SEQUENCE] ✅ Autosave completed');
-    }, 800); // 800ms debounce
-  }, [setSequence]);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-    };
-  }, []);
 
   // Build radio options with stations first, then special options, then each fixed content
   const stationOptions = stations
@@ -119,13 +95,9 @@ export function SequenceView() {
   ];
 
   const handleChange = (position: number, value: string) => {
-    const newSequence = localSequence.map((item) => 
-      item.position === position ? { ...item, radioSource: value, customFileName: undefined } : item
+    setLocalSequence((prev) =>
+      prev.map((item) => (item.position === position ? { ...item, radioSource: value, customFileName: undefined } : item))
     );
-    setLocalSequence(newSequence);
-    // Trigger autosave
-    autoSave(newSequence);
-  };
   };
 
   const handleFormSequenceChange = (position: number, value: string) => {
@@ -211,9 +183,7 @@ export function SequenceView() {
 
   const handleAddPosition = () => {
     const newPosition = localSequence.length + 1;
-    const newSequence = [...localSequence, { position: newPosition, radioSource: 'bh' }];
-    setLocalSequence(newSequence);
-    autoSave(newSequence);
+    setLocalSequence([...localSequence, { position: newPosition, radioSource: 'bh' }]);
     toast({
       title: 'Posição adicionada',
       description: `Posição ${newPosition} foi criada.`,
@@ -229,9 +199,7 @@ export function SequenceView() {
       });
       return;
     }
-    const newSequence = localSequence.slice(0, -1);
-    setLocalSequence(newSequence);
-    autoSave(newSequence);
+    setLocalSequence(localSequence.slice(0, -1));
     toast({
       title: 'Posição removida',
       description: `Última posição foi removida.`,
@@ -253,7 +221,6 @@ export function SequenceView() {
       .map((item, index) => ({ ...item, position: index + 1 }));
     
     setLocalSequence(newSequence);
-    autoSave(newSequence);
     toast({
       title: 'Posição removida',
       description: `Posição ${positionToRemove} foi excluída.`,
@@ -460,19 +427,10 @@ export function SequenceView() {
             <RotateCcw className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Resetar</span>
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={isSaving}>
-            {isSaving ? (
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-                Salvando...
-              </span>
-            ) : (
-              <>
-                <Save className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">Salvar Padrão</span>
-                <span className="sm:hidden">Salvar</span>
-              </>
-            )}
+          <Button size="sm" onClick={handleSave}>
+            <Save className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Salvar Padrão</span>
+            <span className="sm:hidden">Salvar</span>
           </Button>
         </div>
       </div>
