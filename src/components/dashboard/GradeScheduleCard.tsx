@@ -45,10 +45,10 @@ export function GradeScheduleCard() {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'songs' | 'preview'>('songs');
 
-  // Get current day info
+  // Get current day info (SÁB with accent for compatibility)
   const dayInfo = useMemo(() => {
     const now = new Date();
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
     const dayName = days[now.getDay()];
     const dateFormatted = format(now, "EEEE, dd 'de' MMMM", { locale: ptBR });
     return { dayName, dateFormatted };

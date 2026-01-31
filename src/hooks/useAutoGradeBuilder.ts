@@ -102,9 +102,9 @@ export function useAutoGradeBuilder() {
   // These will be prioritized in the next block since downloads are fast (~1 min)
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
 
-  // Get day code for filename
+  // Get day code for filename (SÁB with accent for compatibility)
   const getDayCode = useCallback(() => {
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
     return days[new Date().getDay()];
   }, []);
 
