@@ -469,11 +469,47 @@ export function useAutoGradeBuilder() {
     // Normal block with 10 songs following the configured SEQUENCE
     const songs: string[] = [];
     const usedInBlock = new Set<string>();
-    const stationIdToName: Record<string, string> = {};
     
+    // Build flexible station ID to name mapping
+    // This handles cases where the store name differs slightly from Supabase station_name
+    const stationIdToName: Record<string, string> = {};
+    const normalizeStationName = (name: string): string => 
+      name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    // First, map IDs to store names
     stations.forEach(s => {
       stationIdToName[s.id] = s.name;
     });
+    
+    // Build a lookup from normalized names to actual Supabase station_name
+    const normalizedToActual: Record<string, string> = {};
+    Object.keys(songsByStation).forEach(actualName => {
+      normalizedToActual[normalizeStationName(actualName)] = actualName;
+    });
+    
+    // Helper to get actual station name from songs data
+    const getActualStationName = (storeStationName: string | undefined): string | undefined => {
+      if (!storeStationName) return undefined;
+      
+      // Direct match
+      if (songsByStation[storeStationName]) return storeStationName;
+      
+      // Normalized match (handles "Show FM 101.1" vs "Show FM" etc)
+      const normalizedStore = normalizeStationName(storeStationName);
+      
+      // Try to find a matching station in Supabase data
+      for (const actualName of Object.keys(songsByStation)) {
+        const normalizedActual = normalizeStationName(actualName);
+        if (normalizedActual.includes(normalizedStore) || normalizedStore.includes(normalizedActual)) {
+          console.log(`[SEQUENCE] Station name mapping: "${storeStationName}" → "${actualName}"`);
+          return actualName;
+        }
+      }
+      
+      // Log when no match found
+      console.warn(`[SEQUENCE] ⚠️ No songs found for station "${storeStationName}" - check if monitoring is active`);
+      return undefined;
+    };
 
     // Create a flattened pool of all songs for fallback
     const allSongsPool: SongEntry[] = [];
@@ -724,22 +760,29 @@ export function useAutoGradeBuilder() {
         continue;
       }
 
-      // Normal station logic
-      const stationName = stationIdToName[seq.radioSource];
+      // Normal station logic - use flexible name matching
+      const storeStationName = stationIdToName[seq.radioSource];
+      const actualStationName = getActualStationName(storeStationName);
       const stationStyle = getStationStyle(seq.radioSource);
-      const stationSongs = stationName ? songsByStation[stationName] : [];
+      const stationSongs = actualStationName ? songsByStation[actualStationName] : [];
       
-      // Initialize index for this station
-      if (stationSongIndex[stationName] === undefined) {
-        stationSongIndex[stationName] = 0;
+      // Log when station has no songs (helps debugging sequence issues)
+      if (!stationSongs || stationSongs.length === 0) {
+        console.warn(`[SEQUENCE] ⚠️ Position ${seq.position}: Station "${storeStationName}" (ID: ${seq.radioSource}) has no captured songs`);
+      }
+      
+      // Initialize index for this station (use actualStationName for tracking)
+      const stationKey = actualStationName || storeStationName || seq.radioSource;
+      if (stationSongIndex[stationKey] === undefined) {
+        stationSongIndex[stationKey] = 0;
       }
 
       let selectedSong: SongEntry | null = null;
-      let startIndex = stationSongIndex[stationName] || 0;
+      let startIndex = stationSongIndex[stationKey] || 0;
       let checkedCount = 0;
 
       // PRIORITY 0: Check carry-over songs for this station first (already downloaded!)
-      const carryOverForStation = carryOverByStation[stationName] || [];
+      const carryOverForStation = carryOverByStation[stationKey] || [];
       for (const carryOverSong of carryOverForStation) {
         const key = `${carryOverSong.title.toLowerCase()}-${carryOverSong.artist.toLowerCase()}`;
         if (!usedInBlock.has(key) && !isRecentlyUsed(carryOverSong.title, carryOverSong.artist, timeStr, isFullDay)) {
@@ -775,7 +818,7 @@ export function useAutoGradeBuilder() {
               const rawFilename = libraryResult.filename || `${candidate.artist} - ${candidate.title}.mp3`;
               const correctFilename = sanitizeFilename(rawFilename);
               selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-              stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
+              stationSongIndex[stationKey] = (songIdx + 1) % stationSongs.length;
               break;
             } else {
               // Mark as missing for download AND add to carry-over for next block
@@ -784,7 +827,7 @@ export function useAutoGradeBuilder() {
                   id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                   title: candidate.title,
                   artist: candidate.artist,
-                  station: stationName || 'UNKNOWN',
+                  station: stationKey,
                   timestamp: new Date(),
                   status: 'missing',
                   dna: stationStyle,
@@ -795,7 +838,7 @@ export function useAutoGradeBuilder() {
               addCarryOverSong({
                 title: candidate.title,
                 artist: candidate.artist,
-                station: stationName || 'UNKNOWN',
+                station: stationKey,
                 style: stationStyle,
                 targetBlock: timeStr,
               });
@@ -836,7 +879,7 @@ export function useAutoGradeBuilder() {
                 station: 'TOP50',
                 style: rankSong.style,
                 reason: `TOP50 substituto (posição ${sortedRanking.indexOf(rankSong) + 1})`,
-                substituteFor: stationName || 'UNKNOWN',
+                substituteFor: stationKey,
               });
               break;
             }
@@ -848,7 +891,7 @@ export function useAutoGradeBuilder() {
       if (!selectedSong) {
         // Try songs from other stations with same style
         for (const [otherStation, songs] of Object.entries(songsByStation)) {
-          if (otherStation === stationName) continue; // Skip same station
+          if (otherStation === stationKey) continue; // Skip same station
           
           for (const candidate of songs) {
             if (candidate.style !== stationStyle) continue; // Must match DNA
@@ -872,7 +915,7 @@ export function useAutoGradeBuilder() {
                   station: candidate.station,
                   style: candidate.style,
                   reason: `DNA similar: ${stationStyle}`,
-                  substituteFor: stationName || 'UNKNOWN',
+                  substituteFor: stationKey,
                 });
                 break;
               }
