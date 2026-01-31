@@ -34,15 +34,40 @@ export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
   const previewSongs = useMemo(() => {
     const songs: { position: number; title: string; artist: string; source: string; isFromRanking: boolean }[] = [];
     
+    // Normalize station name for flexible matching
+    const normalizeStationName = (name: string): string => 
+      name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
     // Map station IDs to names
     const stationIdToName: Record<string, string> = {};
     stations.forEach(s => {
       stationIdToName[s.id] = s.name;
     });
     
+    // Get actual station name from recentSongsByStation keys
+    const getActualStationName = (storeStationName: string | undefined): string | undefined => {
+      if (!storeStationName) return undefined;
+      
+      // Direct match
+      if (recentSongsByStation[storeStationName]) return storeStationName;
+      
+      // Normalized match (handles "Show FM 101.1" vs "Show FM" etc)
+      const normalizedStore = normalizeStationName(storeStationName);
+      
+      for (const actualName of Object.keys(recentSongsByStation)) {
+        const normalizedActual = normalizeStationName(actualName);
+        if (normalizedActual.includes(normalizedStore) || normalizedStore.includes(normalizedActual)) {
+          return actualName;
+        }
+      }
+      
+      return undefined;
+    };
+    
     sequence.forEach((seq, index) => {
-      const stationName = stationIdToName[seq.radioSource];
-      const stationSongs = stationName ? recentSongsByStation[stationName] : [];
+      const storeStationName = stationIdToName[seq.radioSource];
+      const actualStationName = getActualStationName(storeStationName);
+      const stationSongs = actualStationName ? recentSongsByStation[actualStationName] : [];
       
       if (stationSongs && stationSongs.length > 0) {
         const songIndex = index % stationSongs.length;
@@ -51,7 +76,7 @@ export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
           position: seq.position,
           title: song.title,
           artist: song.artist,
-          source: stationName || seq.radioSource,
+          source: actualStationName || storeStationName || seq.radioSource,
           isFromRanking: rankingSongs.some(
             r => r.title.toLowerCase() === song.title.toLowerCase() && 
                  r.artist.toLowerCase() === song.artist.toLowerCase()
@@ -61,8 +86,8 @@ export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
         songs.push({
           position: seq.position,
           title: '(Aguardando captura)',
-          artist: stationName || seq.radioSource,
-          source: stationName || seq.radioSource,
+          artist: storeStationName || seq.radioSource,
+          source: storeStationName || seq.radioSource,
           isFromRanking: false,
         });
       }
