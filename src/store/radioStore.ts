@@ -648,17 +648,20 @@ export const getDownloadStats = () => {
 };
 
 // Helper function to get active sequence based on current time and scheduled sequences
-export const getActiveSequence = (): SequenceConfig[] => {
+// Can accept optional hour/minute to check for a specific time (useful for grade building)
+export const getActiveSequence = (targetHour?: number, targetMinute?: number): SequenceConfig[] => {
   const state = useRadioStore.getState();
   const now = new Date();
-  const currentHour = now.getHours();
-  const currentMinute = now.getMinutes();
+  
+  // Use provided time or current time
+  const currentHour = targetHour !== undefined ? targetHour : now.getHours();
+  const currentMinute = targetMinute !== undefined ? targetMinute : now.getMinutes();
   const currentTimeMinutes = currentHour * 60 + currentMinute;
   
   const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
   const currentDay = dayMap[now.getDay()];
   
-  // Find active scheduled sequence
+  // Find active scheduled sequence for the given time
   const activeScheduled = state.scheduledSequences
     .filter((s) => s.enabled)
     .filter((s) => s.weekDays.length === 0 || s.weekDays.includes(currentDay))
@@ -675,6 +678,7 @@ export const getActiveSequence = (): SequenceConfig[] => {
     .sort((a, b) => b.priority - a.priority);
   
   if (activeScheduled.length > 0) {
+    console.log(`[SEQUENCE] Using scheduled sequence "${activeScheduled[0].name}" for ${currentHour}:${currentMinute.toString().padStart(2, '0')}`);
     return activeScheduled[0].sequence;
   }
   
