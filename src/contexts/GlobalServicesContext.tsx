@@ -122,7 +122,8 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       const duration = Date.now() - startTime;
 
       if (result?.success) {
-        useRadioStore.getState().updateMissingSong(song.id, { status: 'downloaded' });
+        // Remove from missing list (download completed successfully)
+        useRadioStore.getState().removeMissingSong(song.id);
         
         const historyEntry: DownloadHistoryEntry = {
           id: crypto.randomUUID(),
@@ -142,7 +143,10 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       }
     } catch (error) {
       const duration = Date.now() - startTime;
-      useRadioStore.getState().updateMissingSong(song.id, { status: 'error' });
+      
+      // Remove from missing list (don't keep failed downloads visible)
+      // Only keep in download history for logging purposes
+      useRadioStore.getState().removeMissingSong(song.id);
       
       const historyEntry: DownloadHistoryEntry = {
         id: crypto.randomUUID(),
