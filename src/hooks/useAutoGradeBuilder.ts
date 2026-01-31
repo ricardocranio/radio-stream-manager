@@ -491,7 +491,9 @@ export function useAutoGradeBuilder() {
       // Verify that carry-over song now exists in library
       const libraryResult = await findSongInLibrary(carryOver.artist, carryOver.title);
       if (libraryResult.exists) {
-        const correctFilename = libraryResult.filename || sanitizeFilename(`${carryOver.artist} - ${carryOver.title}.mp3`);
+        // ALWAYS sanitize the filename for the grade TXT
+        const rawFilename = libraryResult.filename || `${carryOver.artist} - ${carryOver.title}.mp3`;
+        const correctFilename = sanitizeFilename(rawFilename);
         const songEntry: SongEntry = {
           title: carryOver.title,
           artist: carryOver.artist,
@@ -743,8 +745,9 @@ export function useAutoGradeBuilder() {
             const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
             
             if (libraryResult.exists) {
-              // Found a song that EXISTS - use the filename from library for correct spelling
-              const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              // Found a song that EXISTS - ALWAYS sanitize the filename for the grade TXT
+              const rawFilename = libraryResult.filename || `${candidate.artist} - ${candidate.title}.mp3`;
+              const correctFilename = sanitizeFilename(rawFilename);
               selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
               stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
               break;
@@ -787,7 +790,9 @@ export function useAutoGradeBuilder() {
             const libraryResult = await findSongInLibrary(rankSong.artist, rankSong.title);
             
             if (libraryResult.exists) {
-              const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
+              // ALWAYS sanitize the filename for the grade TXT
+              const rawFilename = libraryResult.filename || `${rankSong.artist} - ${rankSong.title}.mp3`;
+              const correctFilename = sanitizeFilename(rawFilename);
               selectedSong = {
                 title: rankSong.title,
                 artist: rankSong.artist,
@@ -828,7 +833,9 @@ export function useAutoGradeBuilder() {
               const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
               
               if (libraryResult.exists) {
-                const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+                // ALWAYS sanitize the filename for the grade TXT
+                const rawFilename = libraryResult.filename || `${candidate.artist} - ${candidate.title}.mp3`;
+                const correctFilename = sanitizeFilename(rawFilename);
                 selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
                 stats.substituted++;
                 blockLogs.push({
@@ -858,7 +865,9 @@ export function useAutoGradeBuilder() {
             const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
             
             if (libraryResult.exists) {
-              const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              // ALWAYS sanitize the filename for the grade TXT
+              const rawFilename = libraryResult.filename || `${candidate.artist} - ${candidate.title}.mp3`;
+              const correctFilename = sanitizeFilename(rawFilename);
               selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
               stats.substituted++;
               blockLogs.push({
@@ -888,7 +897,9 @@ export function useAutoGradeBuilder() {
             const libraryResult = await findSongInLibrary(rankSong.artist, rankSong.title);
             
             if (libraryResult.exists) {
-              const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
+              // ALWAYS sanitize the filename for the grade TXT
+              const rawFilename = libraryResult.filename || `${rankSong.artist} - ${rankSong.title}.mp3`;
+              const correctFilename = sanitizeFilename(rawFilename);
               selectedSong = {
                 title: rankSong.title,
                 artist: rankSong.artist,
