@@ -18,9 +18,9 @@ export function useBackgroundMode() {
     reducedRefreshInterval: 1, // 1x = normal, 3x = 3 times slower
   });
 
-  // Get power saving setting from store
+  // Get power saving setting from store (enabled by default for lighter resource usage)
   const config = useRadioStore((s) => s.config);
-  const powerSavingEnabled = (config as any).powerSavingMode ?? false;
+  const powerSavingEnabled = (config as any).powerSavingMode ?? true;
 
   // Detect visibility change
   useEffect(() => {
