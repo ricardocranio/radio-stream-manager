@@ -15,8 +15,8 @@ class RankingBatcher {
   private lastFlush: number = Date.now();
   private flushIntervalId: NodeJS.Timeout | null = null;
   
-  // Flush interval in ms (6 hours = 21600000ms, but we'll use 30 min for practical testing)
-  private readonly FLUSH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+  // Flush interval in ms - 2 hours for lighter resource usage
+  private readonly FLUSH_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
   private readonly MAX_PENDING = 500; // Max pending updates before force flush
   
   private flushCallback: ((updates: PendingUpdate[]) => void) | null = null;
