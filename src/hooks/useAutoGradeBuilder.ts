@@ -1444,7 +1444,7 @@ export function useAutoGradeBuilder() {
           lastPeriodicSave = Date.now();
         }
       }
-    }, 60 * 1000); // Check every 1 minute (enough for 10 min updates)
+    }, 3 * 60 * 1000); // Check every 3 minutes (light on resources)
 
     // Also run immediately on mount to catch current block
     const now = new Date();
