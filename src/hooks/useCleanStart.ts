@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useRadioStore } from '@/store/radioStore';
 import { useGradeLogStore } from '@/store/gradeLogStore';
+import { useRealtimeStatsStore } from '@/store/realtimeStatsStore';
 
 /**
  * Hook that performs a clean start when the app launches
@@ -19,6 +20,7 @@ export function useCleanStart() {
   } = useRadioStore();
   
   const { clearBlockLogs, clearSystemErrors } = useGradeLogStore();
+  const { resetStats } = useRealtimeStatsStore();
 
   useEffect(() => {
     // Only run once per app session
@@ -53,6 +55,9 @@ export function useCleanStart() {
     clearBlockLogs();
     clearSystemErrors();
     
+    // Reset realtime stats
+    resetStats();
+    
     console.log('[CLEAN START] ✅ Clean start completed');
   }, [
     clearMissingSongs,
@@ -62,5 +67,6 @@ export function useCleanStart() {
     clearGradeHistory,
     clearBlockLogs,
     clearSystemErrors,
+    resetStats,
   ]);
 }
