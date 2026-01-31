@@ -540,9 +540,9 @@ export function useAutoGradeBuilder() {
       return `"${fixedFileName}"`;
     };
 
-    // Helper to get TOP50 song for sequence position
+    // Helper to get TOP50 song for sequence position (verifica biblioteca)
     let top50IndexUsed = 0;
-    const getNextTop50Song = (): string | null => {
+    const getNextTop50Song = async (): Promise<string | null> => {
       const sortedRanking = [...rankingSongs].sort((a, b) => b.plays - a.plays);
       
       while (top50IndexUsed < sortedRanking.length) {
@@ -551,20 +551,42 @@ export function useAutoGradeBuilder() {
         top50IndexUsed++;
         
         if (!usedInBlock.has(key) && !isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
-          usedInBlock.add(key);
-          markSongAsUsed(rankSong.title, rankSong.artist, timeStr);
+          // Verificar se existe na biblioteca antes de usar
+          const libraryResult = await findSongInLibrary(rankSong.artist, rankSong.title);
           
-          blockLogs.push({
-            blockTime: timeStr,
-            type: 'used',
-            title: rankSong.title,
-            artist: rankSong.artist,
-            station: 'TOP50',
-            style: rankSong.style,
-            reason: `TOP50 posição ${top50IndexUsed}`,
-          });
-          
-          return `"${sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`)}"`;
+          if (libraryResult.exists) {
+            usedInBlock.add(key);
+            markSongAsUsed(rankSong.title, rankSong.artist, timeStr);
+            
+            const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
+            
+            blockLogs.push({
+              blockTime: timeStr,
+              type: 'used',
+              title: rankSong.title,
+              artist: rankSong.artist,
+              station: 'TOP50',
+              style: rankSong.style,
+              reason: `TOP50 Ranking posição ${top50IndexUsed}`,
+            });
+            
+            console.log(`[TOP50] ✅ Usando do Ranking: ${rankSong.artist} - ${rankSong.title} (pos ${top50IndexUsed})`);
+            return `"${correctFilename}"`;
+          } else {
+            // Música do ranking não está na biblioteca - adicionar para download
+            if (!isSongAlreadyMissing(rankSong.artist, rankSong.title)) {
+              addMissingSong({
+                id: `missing-top50-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                title: rankSong.title,
+                artist: rankSong.artist,
+                station: 'TOP50',
+                timestamp: new Date(),
+                status: 'missing',
+                dna: rankSong.style,
+              });
+            }
+            // Continua procurando próxima música do ranking
+          }
         }
       }
       return null;
@@ -637,8 +659,8 @@ export function useAutoGradeBuilder() {
       }
 
       if (seq.radioSource === 'top50') {
-        // TOP50 in sequence - insert top ranked song
-        const top50Song = getNextTop50Song();
+        // TOP50 in sequence - insert top ranked song from Ranking integrado
+        const top50Song = await getNextTop50Song();
         if (top50Song) {
           songs.push(top50Song);
         } else {
@@ -651,7 +673,7 @@ export function useAutoGradeBuilder() {
             title: 'TOP50',
             artist: 'CORINGA',
             station: 'FALLBACK',
-            reason: 'Ranking TOP50 vazio',
+            reason: 'Ranking TOP50 vazio ou músicas não encontradas na biblioteca',
           });
         }
         continue;
