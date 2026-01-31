@@ -1298,6 +1298,9 @@ ipcMain.handle('scrape-station', async (event, station) => {
 function normalizeText(text) {
   return text
     .toLowerCase()
+    // Remove common markers like "(Ao Vivo)", "[Live]", "(Remix)" etc. for better matching
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\s*\[[^\]]*\]\s*/g, ' ')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // Remove accents
     .replace(/[^a-z0-9\s]/g, '') // Remove special chars
