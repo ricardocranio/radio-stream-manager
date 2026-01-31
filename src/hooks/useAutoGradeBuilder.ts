@@ -36,6 +36,7 @@ interface AutoGradeState {
   lastBuildTime: Date | null;
   currentBlock: string;
   nextBlock: string;
+  bufferBlock: string; // 2º bloco à frente (buffer de 2)
   lastSavedFile: string | null;
   error: string | null;
   blocksGenerated: number;
@@ -78,6 +79,7 @@ export function useAutoGradeBuilder() {
     lastBuildTime: null,
     currentBlock: '--:--',
     nextBlock: '--:--',
+    bufferBlock: '--:--', // 2º bloco à frente
     lastSavedFile: null,
     error: null,
     blocksGenerated: 0,
@@ -987,7 +989,7 @@ export function useAutoGradeBuilder() {
     addMissingSong, addCarryOverSong, getCarryOverSongs, findSongInLibrary
   ]);
 
-  // Calculate current and next block times
+  // Calculate current and next 2 block times (buffer de 2 blocos)
   const getBlockTimes = useCallback(() => {
     const now = new Date();
     const currentHour = now.getHours();
@@ -996,12 +998,25 @@ export function useAutoGradeBuilder() {
     const currentBlockHour = currentHour;
     const currentBlockMinute = currentMinute < 30 ? 0 : 30;
 
+    // Next block (+30 min)
     let nextBlockHour = currentBlockMinute === 30 ? (currentHour + 1) % 24 : currentHour;
     const nextBlockMinute = currentBlockMinute === 30 ? 0 : 30;
+
+    // Buffer block (+60 min from current = +30 min from next)
+    let bufferBlockHour: number;
+    let bufferBlockMinute: number;
+    if (nextBlockMinute === 30) {
+      bufferBlockHour = (nextBlockHour + 1) % 24;
+      bufferBlockMinute = 0;
+    } else {
+      bufferBlockHour = nextBlockHour;
+      bufferBlockMinute = 30;
+    }
 
     return {
       current: { hour: currentBlockHour, minute: currentBlockMinute },
       next: { hour: nextBlockHour, minute: nextBlockMinute },
+      buffer: { hour: bufferBlockHour, minute: bufferBlockMinute }, // 2º bloco à frente
     };
   }, []);
 
@@ -1192,22 +1207,27 @@ export function useAutoGradeBuilder() {
       const blocks = getBlockTimes();
       const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
+      const bufferTimeKey = `${blocks.buffer.hour.toString().padStart(2, '0')}:${blocks.buffer.minute.toString().padStart(2, '0')}`;
 
-      console.log(`[AUTO-GRADE] 🔄 Atualizando blocos: ${currentTimeKey}, ${nextTimeKey} -> salvando na pasta destino`);
+      console.log(`[AUTO-GRADE] 🔄 Buffer de 2 blocos: ${currentTimeKey} (protegido), ${nextTimeKey}, ${bufferTimeKey} -> salvando na pasta destino`);
 
       const songsByStation = await fetchRecentSongs();
       const stats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: Parameters<typeof addBlockLogs>[0] = [];
 
-      // Generate current and next blocks (isFullDay=false for normal repetition rules)
+      // Generate current block (protegido, mas mantemos atualizado) and next 2 blocks (buffer)
+      // BUFFER DE 2 BLOCOS: sempre monta próximo + próximo+1 com músicas capturadas
       const currentResult = await generateBlockLine(
         blocks.current.hour, blocks.current.minute, songsByStation, stats, false
       );
       const nextResult = await generateBlockLine(
         blocks.next.hour, blocks.next.minute, songsByStation, stats, false
       );
+      const bufferResult = await generateBlockLine(
+        blocks.buffer.hour, blocks.buffer.minute, songsByStation, stats, false
+      );
       
-      allLogs.push(...currentResult.logs, ...nextResult.logs);
+      allLogs.push(...currentResult.logs, ...nextResult.logs, ...bufferResult.logs);
       addBlockLogs(allLogs);
 
       // Read existing file and update only the relevant lines
@@ -1234,9 +1254,10 @@ export function useAutoGradeBuilder() {
         if (match) lineMap.set(match[1], line);
       });
 
-      // Update the lines for current and next blocks
+      // Update the lines for current, next, and buffer blocks (BUFFER DE 2)
       lineMap.set(currentTimeKey, currentResult.line);
       lineMap.set(nextTimeKey, nextResult.line);
+      lineMap.set(bufferTimeKey, bufferResult.line);
 
       // Sort all lines by time and join
       const sortedContent = Array.from(lineMap.keys())
@@ -1251,14 +1272,14 @@ export function useAutoGradeBuilder() {
       });
 
       if (result.success) {
-        console.log(`[AUTO-GRADE] ✅ Grade salva na pasta destino: ${result.filePath}`);
+        console.log(`[AUTO-GRADE] ✅ Grade salva com buffer de 2 blocos: ${result.filePath}`);
 
         addGradeHistory({
           id: `grade-${Date.now()}`,
           timestamp: new Date(),
           blockTime: currentTimeKey,
-          songsProcessed: 10 * 2, // 10 songs × 2 blocks
-          songsFound: 10 * 2 - stats.missing,
+          songsProcessed: 10 * 3, // 10 songs × 3 blocks (current + buffer de 2)
+          songsFound: 10 * 3 - stats.missing,
           songsMissing: stats.missing,
           programName: getProgramForHour(blocks.current.hour),
         });
@@ -1269,16 +1290,17 @@ export function useAutoGradeBuilder() {
           lastBuildTime: new Date(),
           currentBlock: currentTimeKey,
           nextBlock: nextTimeKey,
+          bufferBlock: bufferTimeKey, // Buffer de 2 blocos
           lastSavedFile: filename,
-          blocksGenerated: prev.blocksGenerated + 2,
+          blocksGenerated: prev.blocksGenerated + 3,
           skippedSongs: stats.skipped,
           substitutedSongs: stats.substituted,
           missingSongs: stats.missing,
         }));
 
         toast({
-          title: '✅ Grade Atualizada',
-          description: `Blocos ${currentTimeKey} e ${nextTimeKey} atualizados em ${filename}`,
+          title: '✅ Buffer de 2 Blocos Atualizado',
+          description: `Blocos ${nextTimeKey} e ${bufferTimeKey} prontos em ${filename}`,
         });
       } else {
         throw new Error(result.error || 'Erro ao salvar');
@@ -1422,11 +1444,13 @@ export function useAutoGradeBuilder() {
       const blocks = getBlockTimes();
       const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
+      const bufferTimeKey = `${blocks.buffer.hour.toString().padStart(2, '0')}:${blocks.buffer.minute.toString().padStart(2, '0')}`;
       
       setState(prev => ({
         ...prev,
         currentBlock: currentTimeKey,
         nextBlock: nextTimeKey,
+        bufferBlock: bufferTimeKey, // Buffer de 2 blocos
         nextBuildIn: getSecondsUntilNextBuild(),
       }));
     };
