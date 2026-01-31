@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRadioStore } from '@/store/radioStore';
+import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
@@ -62,7 +62,6 @@ export function useAutoGradeBuilder() {
   const { toast } = useToast();
   const {
     programs,
-    sequence,
     stations,
     config,
     fixedContent,
@@ -569,9 +568,12 @@ export function useAutoGradeBuilder() {
       return null;
     };
 
+    // Get the ACTIVE sequence for this specific block time (respects scheduled sequences)
+    const activeSequence = getActiveSequence(hour, minute);
+    
     // Follow the user-configured SEQUENCE (position 1 = Band FM, position 2 = Clube FM, etc.)
-    for (const seq of sequence) {
-      if (songs.length >= sequence.length) break; // Use sequence length as max
+    for (const seq of activeSequence) {
+      if (songs.length >= activeSequence.length) break; // Use sequence length as max
 
       // Handle special sequence types - check for specific fixed content (fixo_ID)
       if (seq.radioSource.startsWith('fixo_')) {
@@ -980,7 +982,7 @@ export function useAutoGradeBuilder() {
     };
   }, [
     getProgramForHour, getFixedContentForTime, isWeekday, getTop50Songs,
-    stations, sequence, getStationStyle, isRecentlyUsed, findSubstitute,
+    stations, getStationStyle, isRecentlyUsed, findSubstitute,
     markSongAsUsed, config.coringaCode, checkSongInLibrary, isSongAlreadyMissing,
     addMissingSong, addCarryOverSong, getCarryOverSongs, findSongInLibrary
   ]);
@@ -1124,7 +1126,7 @@ export function useAutoGradeBuilder() {
           id: `grade-fullday-${Date.now()}`,
           timestamp: new Date(),
           blockTime: 'COMPLETA',
-          songsProcessed: 48 * sequence.length,
+          songsProcessed: 48 * 10, // 48 blocks × 10 songs per block
           songsFound: lines.length,
           songsMissing: stats.missing,
           programName: 'Grade Completa',
@@ -1173,7 +1175,7 @@ export function useAutoGradeBuilder() {
     }
   }, [
     clearUsedSongs, fetchRecentSongs, generateBlockLine,
-    getDayCode, config.gradeFolder, addGradeHistory, sequence.length, toast, addBlockLogs
+    getDayCode, config.gradeFolder, addGradeHistory, toast, addBlockLogs
   ]);
 
   // Build current and next blocks (incremental update to existing file)
@@ -1255,8 +1257,8 @@ export function useAutoGradeBuilder() {
           id: `grade-${Date.now()}`,
           timestamp: new Date(),
           blockTime: currentTimeKey,
-          songsProcessed: sequence.length * 2,
-          songsFound: sequence.length * 2 - stats.missing,
+          songsProcessed: 10 * 2, // 10 songs × 2 blocks
+          songsFound: 10 * 2 - stats.missing,
           songsMissing: stats.missing,
           programName: getProgramForHour(blocks.current.hour),
         });
@@ -1293,7 +1295,7 @@ export function useAutoGradeBuilder() {
     }
   }, [
     getBlockTimes, fetchRecentSongs, generateBlockLine,
-    getDayCode, config.gradeFolder, addGradeHistory, sequence.length,
+    getDayCode, config.gradeFolder, addGradeHistory,
     getProgramForHour, toast, addBlockLogs
   ]);
 
