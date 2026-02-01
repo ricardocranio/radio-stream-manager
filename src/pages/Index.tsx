@@ -24,23 +24,15 @@ import { useCheckMusicLibrary } from '@/hooks/useCheckMusicLibrary';
 import { useInitializeFolders } from '@/hooks/useInitializeFolders';
 import logo from '@/assets/logo.png';
 
-// Style mapping for stations (for ranking integration)
-const stationStyles: Record<string, string> = {
-  'BH FM': 'SERTANEJO',
-  'Band FM': 'PAGODE',
-  'Clube FM': 'SERTANEJO',
-};
-
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
-// Extended song database for realistic simulation - Updated with real radio songs
-const simulatedSongsDatabase = {
-  'BH FM': [
+// Extended song database for realistic simulation per style - dynamically used based on station styles
+const simulatedSongsByStyle: Record<string, { title: string; artist: string }[]> = {
+  'SERTANEJO': [
     { title: 'Ciumeira', artist: 'Marilia Mendonca' },
     { title: 'Mete Um Block Nele', artist: 'Joao Gomes' },
     { title: 'Entregador de Flor', artist: 'Diego e Victor Hugo' },
-    { title: 'Depois do Prazer', artist: 'Alexandre Pires' },
     { title: 'Saudade Sua', artist: 'Joao Gomes' },
     { title: 'Facas', artist: 'Diego e Victor Hugo' },
     { title: 'Radar', artist: 'Joao Gomes' },
@@ -52,40 +44,56 @@ const simulatedSongsDatabase = {
     { title: 'Se For Amor', artist: 'Joao Gomes' },
     { title: 'Lapada Dela', artist: 'Joao Gomes' },
     { title: 'Aquelas Coisas', artist: 'Gusttavo Lima' },
+    { title: 'Termina Comigo Antes', artist: 'Marilia Mendonca' },
   ],
-  'Band FM': [
+  'PAGODE': [
     { title: 'Sorte', artist: 'Thiaguinho' },
     { title: 'Fatalmente', artist: 'Turma do Pagode' },
     { title: 'Ta Vendo Aquela Lua', artist: 'Exaltasamba' },
     { title: 'Deixa Acontecer', artist: 'Grupo Revelacao' },
     { title: 'Samba de Roda', artist: 'Sorriso Maroto' },
     { title: 'Temporal', artist: 'Dilsinho' },
-    { title: 'Vitamina', artist: 'Ludmilla' },
-    { title: 'Acelera e Pisa', artist: 'Menos e Menos' },
     { title: 'Eu Vacilei', artist: 'Tiee' },
     { title: 'A Gente Fez Amor', artist: 'Mumuzinho' },
     { title: 'Deixa Eu Te Querer', artist: 'Ferrugem' },
     { title: 'Pirata e Tesouro', artist: 'Sorriso Maroto' },
-    { title: 'Te Esperando', artist: 'Luan Santana' },
     { title: 'Onde Nasce o Sol', artist: 'Diogo Nogueira' },
-    { title: 'Dona de Mim', artist: 'IZA' },
+    { title: 'Cicatrizes', artist: 'Ferrugem' },
   ],
-  'Clube FM': [
+  'POP': [
     { title: 'Shallow', artist: 'Lady Gaga' },
     { title: 'Blinding Lights', artist: 'The Weeknd' },
     { title: 'Dance Monkey', artist: 'Tones and I' },
     { title: 'Watermelon Sugar', artist: 'Harry Styles' },
     { title: 'Hear Me Now', artist: 'Alok' },
-    { title: 'Lean On', artist: 'Major Lazer' },
     { title: 'Shape of You', artist: 'Ed Sheeran' },
+    { title: 'Perfect', artist: 'Ed Sheeran' },
+    { title: 'Dona de Mim', artist: 'IZA' },
+    { title: 'Havana', artist: 'Camila Cabello' },
+    { title: 'Vai Malandra', artist: 'Anitta' },
+  ],
+  'DANCE': [
+    { title: 'Lean On', artist: 'Major Lazer' },
     { title: 'Uptown Funk', artist: 'Bruno Mars' },
     { title: 'Bad Guy', artist: 'Billie Eilish' },
     { title: 'Happier', artist: 'Marshmello' },
     { title: 'Something Just Like This', artist: 'Coldplay' },
     { title: 'Closer', artist: 'The Chainsmokers' },
     { title: 'Despacito', artist: 'Luis Fonsi' },
-    { title: 'Perfect', artist: 'Ed Sheeran' },
-    { title: 'Havana', artist: 'Camila Cabello' },
+    { title: 'Titanium', artist: 'David Guetta' },
+    { title: 'Levels', artist: 'Avicii' },
+  ],
+  'POP/VARIADO': [
+    { title: 'Vitamina', artist: 'Ludmilla' },
+    { title: 'Acelera e Pisa', artist: 'Menos e Menos' },
+    { title: 'Te Esperando', artist: 'Luan Santana' },
+    { title: 'Cobaia', artist: 'Lauana Prado' },
+    { title: 'Canudinho', artist: 'Gusttavo Lima' },
+  ],
+  'AGRONEJO': [
+    { title: 'Boate Azul', artist: 'Bruno e Marrone' },
+    { title: 'Rionegro e Solimoes', artist: 'Frio da Madrugada' },
+    { title: 'Chora Me Liga', artist: 'Joao Bosco e Vinicius' },
   ],
 };
 
@@ -121,11 +129,8 @@ const Index = () => {
     );
   }, [missingSongs]);
   
-  const songIndexRef = useRef<Record<string, number>>({
-    'BH FM': 0,
-    'Band FM': 0,
-    'Clube FM': 0,
-  });
+  // Dynamic song index per station (no longer hardcoded - initialized empty, stations added on demand)
+  const songIndexRef = useRef<Record<string, number>>({});
   const scrapeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Real scraping function for Electron
@@ -165,17 +170,36 @@ const Index = () => {
   }, [stations, addCapturedSong, setLastUpdate]);
 
   // Capture handler - checks music library and adds to missing if needed
+  // Now uses ALL enabled stations from the store dynamically
   const performCapture = useCallback(async () => {
-    const stationNames = ['BH FM', 'Band FM', 'Clube FM'];
-    const randomStation = stationNames[Math.floor(Math.random() * stationNames.length)];
-    const stationSongs = simulatedSongsDatabase[randomStation as keyof typeof simulatedSongsDatabase];
+    // Get enabled stations from store
+    const enabledStations = stations.filter(s => s.enabled);
+    if (enabledStations.length === 0) {
+      console.warn('[CAPTURE] No enabled stations found');
+      return;
+    }
     
-    // Get next song index for this station
+    // Pick a random enabled station
+    const randomStationObj = enabledStations[Math.floor(Math.random() * enabledStations.length)];
+    const randomStation = randomStationObj.name;
+    
+    // Get the style for this station (first style in array, fallback to POP/VARIADO)
+    const stationStyle = randomStationObj.styles?.[0] || 'POP/VARIADO';
+    
+    // Get songs for this style from simulatedSongsByStyle
+    const styleSongs = simulatedSongsByStyle[stationStyle] || simulatedSongsByStyle['POP/VARIADO'] || [];
+    
+    if (styleSongs.length === 0) {
+      console.warn(`[CAPTURE] No simulated songs for style: ${stationStyle}`);
+      return;
+    }
+    
+    // Get next song index for this station (round-robin)
     const currentIndex = songIndexRef.current[randomStation] || 0;
-    const song = stationSongs[currentIndex % stationSongs.length];
+    const song = styleSongs[currentIndex % styleSongs.length];
     
     // Update index for next time
-    songIndexRef.current[randomStation] = (currentIndex + 1) % stationSongs.length;
+    songIndexRef.current[randomStation] = (currentIndex + 1) % styleSongs.length;
     
     // Check if song exists in local music library using Electron IPC (or fallback)
     const libraryCheck = await checkSongExists(song.artist, song.title);
@@ -194,7 +218,6 @@ const Index = () => {
     addCapturedSong(capturedSong);
     
     // UPDATE RANKING - Integração com TOP50
-    const stationStyle = stationStyles[randomStation] || 'POP/VARIADO';
     addOrUpdateRankingSong(song.title, song.artist, stationStyle);
     console.log(`[RANKING] Música adicionada ao ranking: ${song.artist} - ${song.title} (${stationStyle})`);
     
@@ -218,7 +241,7 @@ const Index = () => {
     }
     
     setLastUpdate(new Date());
-  }, [addCapturedSong, addMissingSong, addOrUpdateRankingSong, setLastUpdate, checkSongExists, isSongAlreadyMissing]);
+  }, [stations, addCapturedSong, addMissingSong, addOrUpdateRankingSong, setLastUpdate, checkSongExists, isSongAlreadyMissing]);
 
   // Start capture system
   useEffect(() => {
