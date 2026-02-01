@@ -648,8 +648,13 @@ export const getDownloadStats = () => {
 };
 
 // Helper function to get active sequence based on current time and scheduled sequences
-// Can accept optional hour/minute to check for a specific time (useful for grade building)
-export const getActiveSequence = (targetHour?: number, targetMinute?: number): SequenceConfig[] => {
+// Can accept optional hour/minute/day to check for a specific time (useful for grade building)
+// targetDay: 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab' - if not provided, uses current day
+export const getActiveSequence = (
+  targetHour?: number, 
+  targetMinute?: number, 
+  targetDay?: 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab'
+): SequenceConfig[] => {
   const state = useRadioStore.getState();
   const now = new Date();
   
@@ -658,10 +663,11 @@ export const getActiveSequence = (targetHour?: number, targetMinute?: number): S
   const currentMinute = targetMinute !== undefined ? targetMinute : now.getMinutes();
   const currentTimeMinutes = currentHour * 60 + currentMinute;
   
+  // Use provided day or current day
   const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
-  const currentDay = dayMap[now.getDay()];
+  const currentDay = targetDay ?? dayMap[now.getDay()];
   
-  // Find active scheduled sequence for the given time
+  // Find active scheduled sequence for the given time and day
   const activeScheduled = state.scheduledSequences
     .filter((s) => s.enabled)
     .filter((s) => s.weekDays.length === 0 || s.weekDays.includes(currentDay))
@@ -678,7 +684,7 @@ export const getActiveSequence = (targetHour?: number, targetMinute?: number): S
     .sort((a, b) => b.priority - a.priority);
   
   if (activeScheduled.length > 0) {
-    console.log(`[SEQUENCE] Using scheduled sequence "${activeScheduled[0].name}" for ${currentHour}:${currentMinute.toString().padStart(2, '0')}`);
+    console.log(`[SEQUENCE] Using scheduled sequence "${activeScheduled[0].name}" for ${currentDay.toUpperCase()} ${currentHour}:${currentMinute.toString().padStart(2, '0')}`);
     return activeScheduled[0].sequence;
   }
   
