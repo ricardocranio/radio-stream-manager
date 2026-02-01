@@ -404,7 +404,18 @@ export const useRadioStore = create<RadioState>()(
       missingSongs: [],
       setMissingSongs: (missingSongs) => set({ missingSongs }),
       addMissingSong: (song) =>
-        set((state) => ({ missingSongs: [...state.missingSongs, song] })),
+        set((state) => {
+          // Check for duplicates by artist + title (case-insensitive)
+          const isDuplicate = state.missingSongs.some(
+            existing =>
+              existing.artist.toLowerCase() === song.artist.toLowerCase() &&
+              existing.title.toLowerCase() === song.title.toLowerCase()
+          );
+          if (isDuplicate) {
+            return state; // Don't add duplicate
+          }
+          return { missingSongs: [...state.missingSongs, song] };
+        }),
       updateMissingSong: (id, updates) =>
         set((state) => ({
           missingSongs: state.missingSongs.map((s) =>
