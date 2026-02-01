@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useRadioStore, BlockSong, FixedContent } from '@/store/radioStore';
+import { useRadioStore, BlockSong, FixedContent, getActiveSequence } from '@/store/radioStore';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog,
@@ -114,29 +114,58 @@ export function GradeScheduleCard() {
     };
   }, []);
 
-  // Generate songs pool from captured songs
-  const songsPool = useMemo(() => {
-    const uniqueSongs = new Map<string, BlockSong>();
+  // Group captured songs by station for sequence-based selection
+  const songsByStation = useMemo(() => {
+    const grouped: Record<string, CapturedSong[]> = {};
     
-    capturedSongs.forEach((song, index) => {
-      const key = `${song.title}-${song.artist}`;
-      if (!uniqueSongs.has(key)) {
-        const stationAbbrev = song.station_name.split(' ').map(w => w[0]).join('').toUpperCase();
-        uniqueSongs.set(key, {
-          id: `captured-${index}-${Date.now()}`,
-          title: song.title,
-          artist: song.artist,
-          file: `${song.artist} - ${song.title}.mp3`,
-          source: stationAbbrev,
-          isFixed: false,
-        });
+    capturedSongs.forEach(song => {
+      const stationName = song.station_name;
+      if (!grouped[stationName]) {
+        grouped[stationName] = [];
+      }
+      // Avoid duplicates
+      if (!grouped[stationName].some(s => s.title === song.title && s.artist === song.artist)) {
+        grouped[stationName].push(song);
       }
     });
     
-    return Array.from(uniqueSongs.values());
+    return grouped;
   }, [capturedSongs]);
 
-  // Get current time and calculate blocks with auto-populated songs
+  // Normalize station name for flexible matching
+  const normalizeStationName = useCallback((name: string): string => 
+    name.toLowerCase().replace(/[^a-z0-9]/g, ''), []);
+
+  // Map station IDs to names
+  const stationIdToName = useMemo(() => {
+    const map: Record<string, string> = {};
+    stations.forEach(s => {
+      map[s.id] = s.name;
+    });
+    return map;
+  }, [stations]);
+
+  // Get actual station name from songsByStation keys (flexible matching)
+  const getActualStationName = useCallback((storeStationName: string | undefined): string | undefined => {
+    if (!storeStationName) return undefined;
+    
+    // Direct match
+    if (songsByStation[storeStationName]) return storeStationName;
+    
+    // Normalized match (handles "Show FM 101.1" vs "Show FM" etc)
+    const normalizedStore = normalizeStationName(storeStationName);
+    
+    for (const actualName of Object.keys(songsByStation)) {
+      const normalizedActual = normalizeStationName(actualName);
+      if (normalizedActual.includes(normalizedStore) || normalizedStore.includes(normalizedActual)) {
+        return actualName;
+      }
+    }
+    
+    return undefined;
+  }, [songsByStation, normalizeStationName]);
+
+  // Get current time and calculate blocks using the configured sequence
   const blocks = useMemo(() => {
     const now = new Date();
     const currentHour = now.getHours();
@@ -181,23 +210,46 @@ export function GradeScheduleCard() {
         fc.enabled && fc.timeSlots.some(ts => ts.hour === blockHour && ts.minute === blockMinute)
       );
       
-      // Get songs for this block - use stored or auto-generate from captured songs
+      // Get songs for this block - use stored or auto-generate using sequence
       let songs = blockSongs[timeKey] || [];
       
-      // If no songs stored, auto-populate from captured songs pool
-      if (songs.length === 0 && songsPool.length > 0) {
-        // Use different slices of the pool for different blocks to add variety
-        const startIndex = ((blockHour * 2 + (blockMinute === 30 ? 1 : 0)) * 10) % songsPool.length;
+      // If no songs stored, auto-populate using the configured sequence
+      if (songs.length === 0) {
+        // Get active sequence for this specific block time
+        const activeSequence = getActiveSequence(blockHour, blockMinute);
         const selectedSongs: BlockSong[] = [];
         
-        for (let i = 0; i < 10 && i < songsPool.length; i++) {
-          const poolIndex = (startIndex + i) % songsPool.length;
-          const song = songsPool[poolIndex];
-          selectedSongs.push({
-            ...song,
-            id: `${timeKey}-${i}-${Date.now()}`,
-          });
-        }
+        activeSequence.forEach((seq, index) => {
+          const storeStationName = stationIdToName[seq.radioSource];
+          const actualStationName = getActualStationName(storeStationName);
+          const stationSongs = actualStationName ? songsByStation[actualStationName] : [];
+          
+          if (stationSongs && stationSongs.length > 0) {
+            const songIndex = index % stationSongs.length;
+            const song = stationSongs[songIndex];
+            const stationAbbrev = (actualStationName || storeStationName || seq.radioSource)
+              .split(' ').map(w => w[0]).join('').toUpperCase();
+            
+            selectedSongs.push({
+              id: `${timeKey}-${seq.position}-${Date.now()}`,
+              title: song.title,
+              artist: song.artist,
+              file: `${song.artist} - ${song.title}.mp3`,
+              source: stationAbbrev,
+              isFixed: false,
+            });
+          } else {
+            // Placeholder for stations without captured songs
+            selectedSongs.push({
+              id: `${timeKey}-${seq.position}-empty-${Date.now()}`,
+              title: '(Aguardando captura)',
+              artist: storeStationName || seq.radioSource,
+              file: '',
+              source: (storeStationName || seq.radioSource).split(' ').map(w => w[0]).join('').toUpperCase(),
+              isFixed: false,
+            });
+          }
+        });
         
         songs = selectedSongs;
       }
@@ -212,7 +264,7 @@ export function GradeScheduleCard() {
     }
     
     return blockList;
-  }, [blockSongs, programs, fixedContent, songsPool]);
+  }, [blockSongs, programs, fixedContent, songsByStation, stationIdToName, getActualStationName]);
 
   // Handle opening block details
   const handleViewBlock = (block: BlockInfo) => {
