@@ -7,11 +7,13 @@ import { realtimeManager } from '@/lib/realtimeManager';
 
 const REFRESH_INTERVAL = 600; // Stats refresh every 10 minutes (was 2 min)
 const BACKGROUND_REFRESH_MULTIPLIER = 2; // Background = 20 minutes
+const STALE_THRESHOLD_MS = 120000; // 2 minutes - more lenient to avoid unnecessary refreshes
 
 export function useRealtimeStats() {
   const powerSavingMode = useRadioStore((s) => s.config.powerSavingMode ?? false);
   const isInBackgroundRef = useRef(false);
   const subscriberId = useId();
+  const hasInitialLoadRef = useRef(false);
   
   // Use global store instead of local state
   const { stats, setStats, updateFromNewSong, setLoading, setNextRefreshIn } = useRealtimeStatsStore();
@@ -129,6 +131,8 @@ export function useRealtimeStats() {
             stationCounts,
             isLoading: false,
           });
+          
+          hasInitialLoadRef.current = true;
         },
         {
           maxRetries: 3,
@@ -149,20 +153,37 @@ export function useRealtimeStats() {
     }
   }, [setStats, setLoading]);
 
-  // Initial load - only if data is stale or empty
+  // Initial load - only if data is truly stale or not hydrated
   useEffect(() => {
+    // Wait for hydration
+    if (!stats.isHydrated) {
+      return;
+    }
+    
+    // Calculate staleness based on lastUpdated string
+    const lastUpdatedTime = stats.lastUpdated ? new Date(stats.lastUpdated).getTime() : 0;
+    const timeSinceUpdate = Date.now() - lastUpdatedTime;
+    
     const shouldRefresh = 
-      stats.isLoading || 
-      !stats.lastUpdated || 
-      (Date.now() - new Date(stats.lastUpdated).getTime()) > 60000; // Refresh if data is older than 1 minute
+      !hasInitialLoadRef.current && (
+        stats.isLoading || 
+        !stats.lastUpdated || 
+        timeSinceUpdate > STALE_THRESHOLD_MS
+      );
     
     if (shouldRefresh) {
+      console.log('[REALTIME-STATS] Initial load triggered, stale:', timeSinceUpdate, 'ms');
       loadStats();
+    } else {
+      console.log('[REALTIME-STATS] Using cached data from:', stats.lastUpdated);
+      hasInitialLoadRef.current = true;
     }
-  }, [loadStats, stats.isLoading, stats.lastUpdated]);
+  }, [loadStats, stats.isLoading, stats.lastUpdated, stats.isHydrated]);
 
   // Auto-refresh with power saving support
   useEffect(() => {
+    if (!stats.isHydrated) return;
+    
     let refreshTimeoutId: NodeJS.Timeout;
     let countdownIntervalId: NodeJS.Timeout;
 
@@ -188,10 +209,12 @@ export function useRealtimeStats() {
       clearTimeout(refreshTimeoutId);
       clearInterval(countdownIntervalId);
     };
-  }, [loadStats, getEffectiveInterval, powerSavingMode, setNextRefreshIn]);
+  }, [loadStats, getEffectiveInterval, powerSavingMode, setNextRefreshIn, stats.isHydrated]);
 
   // Subscribe to realtime updates via centralized manager
   useEffect(() => {
+    if (!stats.isHydrated) return;
+    
     const unsubscribe = realtimeManager.subscribe(
       'scraped_songs',
       `stats_${subscriberId}`,
@@ -202,7 +225,7 @@ export function useRealtimeStats() {
     );
 
     return unsubscribe;
-  }, [subscriberId, updateFromNewSong]);
+  }, [subscriberId, updateFromNewSong, stats.isHydrated]);
 
   return { stats, refresh: loadStats };
 }

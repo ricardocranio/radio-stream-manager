@@ -29,8 +29,9 @@ export interface RealtimeStats {
   recentSongsByStation: Record<string, LastSongByStation[]>;
   stationCounts: Record<string, number>;
   isLoading: boolean;
-  lastUpdated: Date | null;
+  lastUpdated: string | null; // Changed to string for proper serialization
   nextRefreshIn: number;
+  isHydrated: boolean; // Track if store has been hydrated from localStorage
 }
 
 interface RealtimeStatsState {
@@ -40,6 +41,7 @@ interface RealtimeStatsState {
   setLoading: (isLoading: boolean) => void;
   setNextRefreshIn: (seconds: number) => void;
   resetStats: () => void;
+  setHydrated: () => void;
 }
 
 const initialStats: RealtimeStats = {
@@ -55,6 +57,7 @@ const initialStats: RealtimeStats = {
   isLoading: true,
   lastUpdated: null,
   nextRefreshIn: 600,
+  isHydrated: false,
 };
 
 export const useRealtimeStatsStore = create<RealtimeStatsState>()(
@@ -66,7 +69,8 @@ export const useRealtimeStatsStore = create<RealtimeStatsState>()(
         stats: {
           ...state.stats,
           ...newStats,
-          lastUpdated: new Date(),
+          lastUpdated: new Date().toISOString(), // Store as ISO string
+          isHydrated: true,
         },
       })),
       
@@ -115,7 +119,11 @@ export const useRealtimeStatsStore = create<RealtimeStatsState>()(
         stats: { ...state.stats, nextRefreshIn: seconds },
       })),
       
-      resetStats: () => set({ stats: initialStats }),
+      resetStats: () => set({ stats: { ...initialStats, isHydrated: true } }),
+      
+      setHydrated: () => set((state) => ({
+        stats: { ...state.stats, isHydrated: true, isLoading: false },
+      })),
     }),
     {
       name: 'realtime-stats-storage',
@@ -123,8 +131,15 @@ export const useRealtimeStatsStore = create<RealtimeStatsState>()(
         stats: {
           ...state.stats,
           isLoading: false, // Don't persist loading state
+          isHydrated: false, // Reset on each persistence, will be set true on rehydration
         },
       }),
+      onRehydrateStorage: () => (state) => {
+        // Mark as hydrated once localStorage data is loaded
+        if (state) {
+          state.setHydrated();
+        }
+      },
     }
   )
 );
