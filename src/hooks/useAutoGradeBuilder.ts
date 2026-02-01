@@ -109,6 +109,21 @@ export function useAutoGradeBuilder() {
     return days[new Date().getDay()];
   }, []);
 
+  // Convert day code to WeekDay type for getActiveSequence
+  const dayCodeToWeekDay = useCallback((dayCode: string): 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab' => {
+    const mapping: Record<string, 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab'> = {
+      'DOM': 'dom',
+      'SEG': 'seg',
+      'TER': 'ter',
+      'QUA': 'qua',
+      'QUI': 'qui',
+      'SEX': 'sex',
+      'SÁB': 'sab',
+      'SAB': 'sab',
+    };
+    return mapping[dayCode.toUpperCase()] || 'seg';
+  }, []);
+
   // Check if it's a weekday
   const isWeekday = useCallback(() => {
     const day = new Date().getDay();
@@ -390,12 +405,14 @@ export function useAutoGradeBuilder() {
 
   // Generate a single block line with format: "musica1.mp3",vht,"musica2.mp3",vht,...
   // isFullDay = true uses shorter repetition window (30 min instead of 60)
+  // targetDay = weekday for scheduled sequence matching (uses current day if not provided)
   const generateBlockLine = useCallback(async (
     hour: number,
     minute: number,
     songsByStation: Record<string, SongEntry[]>,
     stats: { skipped: number; substituted: number; missing: number },
-    isFullDay: boolean = false
+    isFullDay: boolean = false,
+    targetDay?: 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab'
   ): Promise<{ line: string; logs: Parameters<typeof addBlockLogs>[0] }> => {
     const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     const programName = getProgramForHour(hour);
@@ -628,8 +645,8 @@ export function useAutoGradeBuilder() {
       return null;
     };
 
-    // Get the ACTIVE sequence for this specific block time (respects scheduled sequences)
-    const activeSequence = getActiveSequence(hour, minute);
+    // Get the ACTIVE sequence for this specific block time and day (respects scheduled sequences)
+    const activeSequence = getActiveSequence(hour, minute, targetDay);
     
     // Follow the user-configured SEQUENCE (position 1 = Band FM, position 2 = Clube FM, etc.)
     for (const seq of activeSequence) {
@@ -1111,10 +1128,11 @@ export function useAutoGradeBuilder() {
 
     const dayCode = getDayCode();
     const filename = `${dayCode}.txt`;
+    const targetDay = dayCodeToWeekDay(dayCode); // Convert to WeekDay for scheduled sequence matching
 
     try {
-      console.log('[AUTO-GRADE] 🚀 Building full day grade with progressive saving...');
-      logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
+      console.log(`[AUTO-GRADE] 🚀 Building full day grade for ${dayCode} (${targetDay}) with progressive saving...`);
+      logSystemError('GRADE', 'info', `Iniciando geração da grade completa para ${dayCode} (salvamento progressivo)`);
       
       clearUsedSongs();
 
@@ -1137,8 +1155,8 @@ export function useAutoGradeBuilder() {
             currentProcessingSong: `Processando bloco ${blockTimeStr}...`,
           }));
 
-          // Pass isFullDay=true for shorter repetition window
-          const result = await generateBlockLine(hour, minute, songsByStation, stats, true);
+          // Pass isFullDay=true and targetDay for correct scheduled sequence matching
+          const result = await generateBlockLine(hour, minute, songsByStation, stats, true, targetDay);
           lines.push(result.line);
           allLogs.push(...result.logs);
           blockCount++;
@@ -1280,23 +1298,26 @@ export function useAutoGradeBuilder() {
       const stats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: Parameters<typeof addBlockLogs>[0] = [];
 
+      // Get current day code and convert to WeekDay for sequence matching
+      const dayCode = getDayCode();
+      const targetDay = dayCodeToWeekDay(dayCode);
+
       // Generate current block (protegido, mas mantemos atualizado) and next 2 blocks (buffer)
       // BUFFER DE 2 BLOCOS: sempre monta próximo + próximo+1 com músicas capturadas
       const currentResult = await generateBlockLine(
-        blocks.current.hour, blocks.current.minute, songsByStation, stats, false
+        blocks.current.hour, blocks.current.minute, songsByStation, stats, false, targetDay
       );
       const nextResult = await generateBlockLine(
-        blocks.next.hour, blocks.next.minute, songsByStation, stats, false
+        blocks.next.hour, blocks.next.minute, songsByStation, stats, false, targetDay
       );
       const bufferResult = await generateBlockLine(
-        blocks.buffer.hour, blocks.buffer.minute, songsByStation, stats, false
+        blocks.buffer.hour, blocks.buffer.minute, songsByStation, stats, false, targetDay
       );
       
       allLogs.push(...currentResult.logs, ...nextResult.logs, ...bufferResult.logs);
       addBlockLogs(allLogs);
 
       // Read existing file and update only the relevant lines
-      const dayCode = getDayCode();
       const filename = `${dayCode}.txt`;
       let existingContent = '';
 
