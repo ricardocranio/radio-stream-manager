@@ -3,7 +3,7 @@ import { Eye, Music, TrendingUp, Radio, Clock, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useRadioStore } from '@/store/radioStore';
+import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -12,7 +12,7 @@ interface GradePreviewProps {
 }
 
 export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
-  const { sequence, stations, rankingSongs, gradeHistory } = useRadioStore();
+  const { stations, rankingSongs, gradeHistory } = useRadioStore();
   
   // Calculate next block time
   const getNextBlockTime = () => {
@@ -30,6 +30,10 @@ export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
   const nextBlock = getNextBlockTime();
   const nextBlockTime = `${nextBlock.hour.toString().padStart(2, '0')}:${nextBlock.minute.toString().padStart(2, '0')}`;
   
+  // Get active sequence for the next block time (considers scheduled sequences)
+  const sequence = useMemo(() => {
+    return getActiveSequence(nextBlock.hour, nextBlock.minute);
+  }, [nextBlock.hour, nextBlock.minute]);
   // Generate preview based on sequence and captured songs
   const previewSongs = useMemo(() => {
     const songs: { position: number; title: string; artist: string; source: string; isFromRanking: boolean }[] = [];
