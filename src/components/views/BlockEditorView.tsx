@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { GripVertical, Music, Clock, Save, RotateCcw, Plus, Trash2, Newspaper, FileText, Copy, BookmarkPlus, Bookmark, Download, Upload, AlertTriangle, CheckCircle, Eye, Undo2, Redo2, Layers, BarChart3, Pencil } from 'lucide-react';
+import { GripVertical, Music, Clock, Save, RotateCcw, Plus, Trash2, Newspaper, FileText, Copy, BookmarkPlus, Bookmark, Download, Upload, AlertTriangle, CheckCircle, Eye, Undo2, Redo2, Layers, BarChart3, Pencil, RefreshCw } from 'lucide-react';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import {
   DndContext,
@@ -23,6 +23,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useRadioStore, BlockSong } from '@/store/radioStore';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +32,12 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+
+interface ScrapedSong {
+  title: string;
+  artist: string;
+  station_name: string;
+}
 
 interface SortableSongProps {
   song: BlockSong;
@@ -236,6 +243,39 @@ const colorPalette = [
 
 export function BlockEditorView() {
   const { blockSongs, setBlockSongs, fixedContent, addFixedContent, updateFixedContent, programs, stations, capturedSongs } = useRadioStore();
+  const { toast } = useToast();
+  
+  // State for songs fetched from Supabase
+  const [supabaseSongs, setSupabaseSongs] = useState<ScrapedSong[]>([]);
+  const [isLoadingSongs, setIsLoadingSongs] = useState(false);
+  
+  // Fetch songs from Supabase (scraped_songs table) - all stations
+  const fetchSongsFromSupabase = useCallback(async () => {
+    setIsLoadingSongs(true);
+    try {
+      const { data, error } = await supabase
+        .from('scraped_songs')
+        .select('title, artist, station_name')
+        .order('scraped_at', { ascending: false })
+        .limit(500);
+      
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        setSupabaseSongs(data);
+        console.log(`[BLOCK-EDITOR] Carregadas ${data.length} músicas do banco de dados de ${new Set(data.map(s => s.station_name)).size} estações`);
+      }
+    } catch (error) {
+      console.error('[BLOCK-EDITOR] Erro ao buscar músicas:', error);
+    } finally {
+      setIsLoadingSongs(false);
+    }
+  }, []);
+  
+  // Fetch songs on mount
+  useEffect(() => {
+    fetchSongsFromSupabase();
+  }, [fetchSongsFromSupabase]);
   
   // Generate dynamic source colors based on registered stations
   const sourceColors = useMemo(() => {
@@ -247,53 +287,79 @@ export function BlockEditorView() {
       colors[station.name] = colorPalette[index % colorPalette.length];
       colors[station.id.toUpperCase()] = colorPalette[index % colorPalette.length];
     });
-    return colors;
-  }, [stations]);
-  
-  // Generate song pool from captured songs (real data from stations)
-  const dynamicSongPool = useMemo(() => {
-    if (capturedSongs.length === 0) {
-      // Fallback to station-based demo songs if no captures yet
-      // Generate enough songs to fill 10 slots per block
-      const demoSongs: Omit<BlockSong, 'id'>[] = [];
-      let songIndex = 0;
-      
-      // Keep adding songs until we have at least 10
-      while (demoSongs.length < 12 && stations.length > 0) {
-        const station = stations[songIndex % stations.length];
-        const abbrev = station.name.split(' ').map(w => w[0]).join('').toUpperCase();
-        const songNum = Math.floor(songIndex / stations.length) + 1;
-        
-        demoSongs.push({
-          title: `Demo Song ${songNum} - ${station.name}`,
-          artist: 'Artista Demo',
-          file: `demo_${station.id}_${songNum}.mp3`,
-          source: abbrev,
-          isFixed: false,
-        });
-        songIndex++;
+    // Also add colors for Supabase station names
+    supabaseSongs.forEach((song, index) => {
+      const abbrev = song.station_name.split(' ').map(w => w[0]).join('').toUpperCase();
+      if (!colors[abbrev]) {
+        colors[abbrev] = colorPalette[index % colorPalette.length];
       }
-      
-      return demoSongs;
-    }
-    
-    // Use real captured songs - get unique songs
-    const uniqueSongs = new Map<string, Omit<BlockSong, 'id'>>();
-    capturedSongs.forEach(song => {
-      const key = `${song.title}-${song.artist}`;
-      if (!uniqueSongs.has(key)) {
-        const stationAbbrev = song.station.split(' ').map(w => w[0]).join('').toUpperCase();
-        uniqueSongs.set(key, {
-          title: song.title,
-          artist: song.artist,
-          file: `${song.artist} - ${song.title}.mp3`,
-          source: stationAbbrev,
-          isFixed: false,
-        });
+      if (!colors[song.station_name]) {
+        colors[song.station_name] = colorPalette[index % colorPalette.length];
       }
     });
-    return Array.from(uniqueSongs.values()).slice(0, 50); // Max 50 songs
-  }, [capturedSongs, stations]);
+    return colors;
+  }, [stations, supabaseSongs]);
+  
+  // Generate song pool from Supabase songs (real data from all stations)
+  const dynamicSongPool = useMemo(() => {
+    // Priority: use Supabase songs if available
+    if (supabaseSongs.length > 0) {
+      const uniqueSongs = new Map<string, Omit<BlockSong, 'id'>>();
+      supabaseSongs.forEach(song => {
+        const key = `${song.title.toLowerCase()}-${song.artist.toLowerCase()}`;
+        if (!uniqueSongs.has(key)) {
+          const stationAbbrev = song.station_name.split(' ').map(w => w[0]).join('').toUpperCase();
+          uniqueSongs.set(key, {
+            title: song.title,
+            artist: song.artist,
+            file: sanitizeFilename(`${song.artist} - ${song.title}.mp3`),
+            source: stationAbbrev,
+            isFixed: false,
+          });
+        }
+      });
+      const result = Array.from(uniqueSongs.values()).slice(0, 100); // Max 100 songs
+      console.log(`[BLOCK-EDITOR] Pool dinâmico: ${result.length} músicas únicas de ${new Set(result.map(s => s.source)).size} estações`);
+      return result;
+    }
+    
+    // Fallback: use capturedSongs from store (simulation mode)
+    if (capturedSongs.length > 0) {
+      const uniqueSongs = new Map<string, Omit<BlockSong, 'id'>>();
+      capturedSongs.forEach(song => {
+        const key = `${song.title.toLowerCase()}-${song.artist.toLowerCase()}`;
+        if (!uniqueSongs.has(key)) {
+          const stationAbbrev = song.station.split(' ').map(w => w[0]).join('').toUpperCase();
+          uniqueSongs.set(key, {
+            title: song.title,
+            artist: song.artist,
+            file: sanitizeFilename(`${song.artist} - ${song.title}.mp3`),
+            source: stationAbbrev,
+            isFixed: false,
+          });
+        }
+      });
+      return Array.from(uniqueSongs.values()).slice(0, 50);
+    }
+    
+    // Final fallback: demo songs
+    const demoSongs: Omit<BlockSong, 'id'>[] = [];
+    let songIndex = 0;
+    while (demoSongs.length < 12 && stations.length > 0) {
+      const station = stations[songIndex % stations.length];
+      const abbrev = station.name.split(' ').map(w => w[0]).join('').toUpperCase();
+      const songNum = Math.floor(songIndex / stations.length) + 1;
+      demoSongs.push({
+        title: `Demo Song ${songNum} - ${station.name}`,
+        artist: 'Artista Demo',
+        file: `demo_${station.id}_${songNum}.mp3`,
+        source: abbrev,
+        isFixed: false,
+      });
+      songIndex++;
+    }
+    return demoSongs;
+  }, [supabaseSongs, capturedSongs, stations]);
   // Generate automatic templates based on station styles
   const autoTemplates = useMemo(() => {
     const templates: BlockTemplate[] = [];
@@ -339,7 +405,7 @@ export function BlockEditorView() {
     return templates;
   }, [stations, dynamicSongPool]);
   
-  const { toast } = useToast();
+  // toast is already destructured above
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedHour, setSelectedHour] = useState(14);
   const [selectedMinute, setSelectedMinute] = useState(0);
@@ -1528,21 +1594,47 @@ export function BlockEditorView() {
             </CardContent>
           </Card>
 
-          {/* Add Music - Draggable */}
+          {/* Add Music - Draggable - Fetched from Supabase */}
           <Card className="glass-card">
             <CardHeader className="border-b border-border py-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Music className="w-4 h-4 text-primary" />
                 Músicas ({dynamicSongPool.length})
-                <Badge variant="outline" className="text-xs ml-auto">Arraste</Badge>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 ml-1"
+                  onClick={fetchSongsFromSupabase}
+                  disabled={isLoadingSongs}
+                  title="Atualizar músicas do banco"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isLoadingSongs ? 'animate-spin' : ''}`} />
+                </Button>
+                <Badge variant="outline" className="text-xs ml-auto">
+                  {new Set(dynamicSongPool.map(s => s.source)).size} fontes
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-2">
-              {dynamicSongPool.length === 0 ? (
+              {isLoadingSongs ? (
+                <div className="text-center py-4 text-muted-foreground text-sm">
+                  <RefreshCw className="w-8 h-8 mx-auto mb-2 animate-spin opacity-50" />
+                  <p>Carregando músicas...</p>
+                </div>
+              ) : dynamicSongPool.length === 0 ? (
                 <div className="text-center py-4 text-muted-foreground text-sm">
                   <Music className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p>Nenhuma música capturada</p>
                   <p className="text-xs">Ative as emissoras para capturar</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={fetchSongsFromSupabase}
+                  >
+                    <RefreshCw className="w-3 h-3 mr-1" />
+                    Atualizar
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-1 max-h-48 overflow-y-auto">
