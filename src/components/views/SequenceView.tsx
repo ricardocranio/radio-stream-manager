@@ -285,17 +285,22 @@ export function SequenceView() {
       priority: formPriority,
     };
 
+    // Log for debugging
+    const daysLabel = formWeekDays.length > 0 ? formWeekDays.join(', ') : 'todos os dias';
+    const seqRadios = formSequence.slice(0, 3).map(s => s.radioSource).join(' → ');
+    console.log(`[SEQUENCE-SAVE] ${formName}: ${formStartHour}:${formStartMinute.toString().padStart(2, '0')}-${formEndHour}:${formEndMinute.toString().padStart(2, '0')} | Dias: ${daysLabel} | Seq: ${seqRadios}...`);
+
     if (editingSchedule) {
       updateScheduledSequence(editingSchedule.id, scheduleData);
       toast({
         title: 'Sequência atualizada',
-        description: `"${formName}" foi salva com sucesso.`,
+        description: `"${formName}" salva para ${daysLabel}.`,
       });
     } else {
       addScheduledSequence(scheduleData);
       toast({
         title: 'Sequência criada',
-        description: `"${formName}" foi adicionada.`,
+        description: `"${formName}" adicionada para ${daysLabel}.`,
       });
     }
 
