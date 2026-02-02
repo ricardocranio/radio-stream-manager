@@ -119,13 +119,31 @@ export function useAutoGradeBuilder() {
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
 
   // Get day code for filename - SÁB with accent for compatibility
-  const getDayCode = useCallback(() => {
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+  // Can receive targetDay for full-day generation (e.g., 'seg', 'ter', etc.)
+  const getDayCode = useCallback((targetDay?: WeekDay) => {
+    const dayMap: Record<WeekDay, string> = {
+      'dom': 'DOM',
+      'seg': 'SEG',
+      'ter': 'TER',
+      'qua': 'QUA',
+      'qui': 'QUI',
+      'sex': 'SEX',
+      'sab': 'SAB',
+    };
+    
+    if (targetDay) {
+      return dayMap[targetDay] || 'SEG';
+    }
+    
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
     return days[new Date().getDay()];
   }, []);
 
-  // Check if it's a weekday
-  const isWeekday = useCallback(() => {
+  // Check if it's a weekday (optionally for a specific targetDay)
+  const isWeekday = useCallback((targetDay?: WeekDay) => {
+    if (targetDay) {
+      return ['seg', 'ter', 'qua', 'qui', 'sex'].includes(targetDay);
+    }
     const day = new Date().getDay();
     return day >= 1 && day <= 5;
   }, []);
@@ -503,46 +521,84 @@ export function useAutoGradeBuilder() {
     return result;
   }, [rankingSongs, isRecentlyUsed, markSongAsUsed]);
 
+  // Process fixed content filename placeholders
+  // {HH} → 2-digit hour, {DIA} → weekday code (SEG, TER, etc.), {ED} → edition number, {N} → position number
+  const processFixedContentFilename = useCallback((
+    fileName: string,
+    hour: number,
+    minute: number,
+    editionIndex: number,
+    targetDay?: WeekDay
+  ): string => {
+    const dayCode = getDayCode(targetDay);
+    const hourStr = hour.toString().padStart(2, '0');
+    const edition = (editionIndex + 1).toString().padStart(2, '0');
+    
+    let result = fileName
+      .replace(/\{HH\}/gi, hourStr)
+      .replace(/\{DIA\}/gi, dayCode)
+      .replace(/\{ED\}/gi, edition);
+    
+    // CRITICAL: Always append _{DIA} if the filename doesn't already have it
+    // This ensures all fixed content files are identified by day
+    if (!result.toLowerCase().includes('_{dia}') && !result.includes(`_${dayCode}`)) {
+      // Remove .mp3 extension if present, add day code, then re-add extension
+      if (result.toLowerCase().endsWith('.mp3')) {
+        result = result.slice(0, -4) + `_${dayCode}.mp3`;
+      } else {
+        result = result + `_${dayCode}`;
+      }
+    } else {
+      // Replace any remaining {DIA} placeholder (case insensitive)
+      result = result.replace(/\{DIA\}/gi, dayCode);
+    }
+    
+    return sanitizeFilename(result);
+  }, [getDayCode]);
+
   // Generate a single block line with format: "musica1.mp3",vht,"musica2.mp3",vht,...
   // isFullDay = true uses shorter repetition window (30 min instead of 60)
+  // targetDay allows specifying which day of the week for full-day generation
   const generateBlockLine = useCallback(async (
     hour: number,
     minute: number,
     songsByStation: Record<string, SongEntry[]>,
     stats: { skipped: number; substituted: number; missing: number },
-    isFullDay: boolean = false
+    isFullDay: boolean = false,
+    targetDay?: WeekDay
   ): Promise<{ line: string; logs: Parameters<typeof addBlockLogs>[0] }> => {
     const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     const programName = getProgramForHour(hour);
     const fixedItems = getFixedContentForTime(hour, minute);
     const blockLogs: Parameters<typeof addBlockLogs>[0] = [];
 
-    // Voz do Brasil (21:00 weekdays)
-    if (hour === 21 && minute === 0 && isWeekday()) {
+    // Voz do Brasil (21:00 weekdays) - NO SYSTEM ASSEMBLY, just the fixed block
+    if (hour === 21 && minute === 0 && isWeekday(targetDay)) {
       blockLogs.push({
         blockTime: timeStr,
         type: 'fixed',
         title: 'A Voz do Brasil',
         artist: 'Governo Federal',
         station: 'EBC',
-        reason: 'Conteúdo fixo obrigatório',
+        reason: 'Conteúdo fixo obrigatório - sem montagem do sistema',
       });
+      // Format: 21:00 19:01 (FIXO ID=VOZ DO BRASIL) - no songs, no vht, just the fixed block
       return { 
         line: `${timeStr} 19:01 (FIXO ID=VOZ DO BRASIL)`,
         logs: blockLogs,
       };
     }
 
-    // TOP50 blocks - calculate correct starting position based on time
+    // TOP50 blocks - USE REAL SONG NAMES from ranking, not position placeholders
     const top50Item = fixedItems.find(fc => fc.type === 'top50');
     if (top50Item) {
       const top50Count = top50Item.top50Count || 10;
       
-      // For 19:30 block, start from position 11; for 20:00 start from 21, etc.
-      // Each block shows 10 songs, so calculate offset based on block number
+      // For 19:00 block: positions 1-10, for 19:30: positions 11-20
       const blockIndex = (hour - 19) * 2 + (minute === 30 ? 1 : 0);
       const startPosition = Math.max(0, blockIndex * 10);
       
+      // Get REAL song names from ranking (not POSICAO01.mp3 placeholders!)
       const top50Songs = getTop50Songs(top50Count, timeStr, startPosition);
       if (top50Songs.length > 0) {
         blockLogs.push({
@@ -551,8 +607,9 @@ export function useAutoGradeBuilder() {
           title: `TOP50 - Posições ${startPosition + 1} a ${startPosition + top50Songs.length}`,
           artist: 'Ranking',
           station: 'TOP50',
-          reason: `Bloco TOP50 (posições ${startPosition + 1}-${startPosition + top50Songs.length})`,
+          reason: `Bloco TOP50 com músicas reais do ranking (posições ${startPosition + 1}-${startPosition + top50Songs.length})`,
         });
+        // Songs are already real filenames like "Shallow - Lady Gaga.mp3"
         return { 
           line: `${timeStr} (ID=TOP50) ${top50Songs.map(s => `"${s}"`).join(',vht,')}`,
           logs: blockLogs,
@@ -560,24 +617,40 @@ export function useAutoGradeBuilder() {
       }
     }
 
-    // Fixed content block (not TOP50) - ALWAYS include even if file doesn't exist
-    const fixedItem = fixedItems.find(fc => fc.type !== 'top50');
+    // Fixed content block (not TOP50 or vozbrasil) - Process placeholders and add _{DIA}
+    const fixedItem = fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil');
     let fixedContentFile: string | null = null;
     let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
     
+    // Track edition index for multiple fixed content in same time slot
+    let editionIndex = 0;
+    
     if (fixedItem) {
-      // Add fixed content file with quotes (always include regardless of existence)
-      const fixedFileName = sanitizeFilename(fixedItem.fileName);
-      fixedContentFile = `"${fixedFileName}"`;
+      // Process filename with placeholders: {HH}, {DIA}, {ED}
+      const processedFileName = processFixedContentFilename(
+        fixedItem.fileName,
+        hour,
+        minute,
+        editionIndex,
+        targetDay
+      );
+      editionIndex++;
+      
+      // Ensure it ends with .mp3
+      const finalFileName = processedFileName.endsWith('.mp3') 
+        ? processedFileName 
+        : `${processedFileName}.mp3`;
+      
+      fixedContentFile = `"${finalFileName}"`;
       fixedPosition = fixedItem.position || 'start';
       
       blockLogs.push({
         blockTime: timeStr,
         type: 'fixed',
         title: fixedItem.name,
-        artist: fixedItem.fileName,
+        artist: finalFileName,
         station: 'FIXO',
-        reason: `Conteúdo fixo (posição: ${typeof fixedPosition === 'number' ? fixedPosition : fixedPosition})`,
+        reason: `Conteúdo fixo com dia: ${getDayCode(targetDay)}`,
       });
     }
 
@@ -635,7 +708,7 @@ export function useAutoGradeBuilder() {
     // Track song index per station to avoid repeating from start
     const stationSongIndex: Record<string, number> = {};
 
-    // Helper to get the next fixed content for this block
+    // Helper to get the next fixed content for this block (with _{DIA} suffix)
     let fixoIndexUsed = 0;
     const getNextFixoContent = (): string | null => {
       const availableFixed = fixedContent.filter(fc => 
@@ -647,18 +720,31 @@ export function useAutoGradeBuilder() {
       
       // Use round-robin for multiple FIXO in sequence
       const selectedFixed = availableFixed[fixoIndexUsed % availableFixed.length];
+      
+      // Process filename with placeholders and add _{DIA}
+      const processedFileName = processFixedContentFilename(
+        selectedFixed.fileName,
+        hour,
+        minute,
+        fixoIndexUsed,
+        targetDay
+      );
       fixoIndexUsed++;
       
-      const fixedFileName = sanitizeFilename(selectedFixed.fileName);
+      // Ensure .mp3 extension
+      const finalFileName = processedFileName.endsWith('.mp3') 
+        ? processedFileName 
+        : `${processedFileName}.mp3`;
+      
       blockLogs.push({
         blockTime: timeStr,
         type: 'fixed',
         title: selectedFixed.name,
-        artist: selectedFixed.fileName,
+        artist: finalFileName,
         station: 'FIXO',
-        reason: `Conteúdo fixo da sequência`,
+        reason: `Conteúdo fixo da sequência (${getDayCode(targetDay)})`,
       });
-      return `"${fixedFileName}"`;
+      return `"${finalFileName}"`;
     };
 
     // Helper to get TOP50 song for sequence position
@@ -713,18 +799,32 @@ export function useAutoGradeBuilder() {
         if (specificContent) {
           // Use customFileName if set, otherwise use the default from the content
           const fileNameToUse = seq.customFileName || specificContent.fileName;
-          const fixedFileName = sanitizeFilename(fileNameToUse);
+          
+          // Process filename with placeholders and add _{DIA}
+          const processedFileName = processFixedContentFilename(
+            fileNameToUse,
+            hour,
+            minute,
+            0, // edition index
+            targetDay
+          );
+          
+          // Ensure .mp3 extension
+          const finalFileName = processedFileName.endsWith('.mp3') 
+            ? processedFileName 
+            : `${processedFileName}.mp3`;
+          
           blockLogs.push({
             blockTime: timeStr,
             type: 'fixed',
             title: specificContent.name,
-            artist: fileNameToUse,
+            artist: finalFileName,
             station: 'FIXO',
             reason: seq.customFileName 
-              ? `Conteúdo fixo com nome personalizado` 
-              : `Conteúdo fixo específico da sequência`,
+              ? `Conteúdo fixo personalizado (${getDayCode(targetDay)})` 
+              : `Conteúdo fixo da sequência (${getDayCode(targetDay)})`,
           });
-          songs.push(`"${fixedFileName}"`);
+          songs.push(`"${finalFileName}"`);
         } else {
           // Specific content not found or disabled, use coringa
           const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
@@ -1155,7 +1255,8 @@ export function useAutoGradeBuilder() {
     getProgramForHour, getFixedContentForTime, isWeekday, getTop50Songs,
     stations, getActiveSequenceForBlock, getStationStyle, isRecentlyUsed, findSubstitute,
     markSongAsUsed, config.coringaCode, checkSongInLibrary, isSongAlreadyMissing,
-    addMissingSong, addCarryOverSong, getCarryOverSongs, findSongInLibrary
+    addMissingSong, addCarryOverSong, getCarryOverSongs, findSongInLibrary,
+    processFixedContentFilename, getDayCode, fixedContent, rankingSongs
   ]);
 
   // Calculate current and next block times
@@ -1200,7 +1301,10 @@ export function useAutoGradeBuilder() {
       lastSaveProgress: 0,
     }));
 
-    const dayCode = getDayCode();
+    // Calculate target day for fixed content naming
+    const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
+    const targetDay = dayMap[new Date().getDay()];
+    const dayCode = getDayCode(targetDay);
     const filename = `${dayCode}.txt`;
 
     try {
@@ -1229,8 +1333,8 @@ export function useAutoGradeBuilder() {
             currentProcessingSong: `Processando bloco ${blockTimeStr}...`,
           }));
 
-          // Pass isFullDay=true for shorter repetition window
-          const result = await generateBlockLine(hour, minute, songsByStation, stats, true);
+          // Pass isFullDay=true for shorter repetition window, and targetDay for _{DIA} suffix
+          const result = await generateBlockLine(hour, minute, songsByStation, stats, true, targetDay);
           lines.push(result.line);
           allLogs.push(...result.logs);
           blockCount++;
@@ -1382,19 +1486,23 @@ export function useAutoGradeBuilder() {
       const stats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: Parameters<typeof addBlockLogs>[0] = [];
 
+      // Calculate target day for fixed content naming
+      const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
+      const targetDay = dayMap[new Date().getDay()];
+
       // Generate current and next blocks using their specific 30-min window
       const currentResult = await generateBlockLine(
-        blocks.current.hour, blocks.current.minute, currentPool, stats, false
+        blocks.current.hour, blocks.current.minute, currentPool, stats, false, targetDay
       );
       const nextResult = await generateBlockLine(
-        blocks.next.hour, blocks.next.minute, nextPool, stats, false
+        blocks.next.hour, blocks.next.minute, nextPool, stats, false, targetDay
       );
       
       allLogs.push(...currentResult.logs, ...nextResult.logs);
       addBlockLogs(allLogs);
 
       // Read existing file and update only the relevant lines
-      const dayCode = getDayCode();
+      const dayCode = getDayCode(targetDay);
       const filename = `${dayCode}.txt`;
       let existingContent = '';
 
