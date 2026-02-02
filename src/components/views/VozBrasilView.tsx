@@ -246,24 +246,26 @@ export function VozBrasilView() {
           throw new Error(result.error || 'Erro desconhecido no download');
         }
       } else {
-        // Web mode - not supported, show informative message immediately
-        console.log('[VOZ] Web mode - download not available');
-        
+        // Web simulation fallback
+        console.log('[VOZ] Web mode - simulating download...');
+        for (let i = 0; i <= 100; i += 10) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          setDownloadStatus(prev => ({ ...prev, progress: i }));
+        }
+
         toast({
-          title: '📻 Modo Desktop Necessário',
-          description: 'O download da Voz do Brasil só funciona no aplicativo desktop. Abra o Programador Rádio diretamente.',
+          title: '⚠️ Modo Web',
+          description: 'Download real disponível apenas no aplicativo desktop.',
           variant: 'destructive',
         });
         
         setDownloadStatus({
           status: 'error',
           lastAttempt: new Date(),
-          attempts: 0,
-          errorMessage: 'Funcionalidade exclusiva do modo desktop',
+          attempts: currentAttempts,
+          errorMessage: 'Use o aplicativo desktop para download real',
           progress: 0,
         });
-        
-        return; // Don't retry in web mode
       }
     } catch (error) {
       console.error('[VOZ] Download error:', error);

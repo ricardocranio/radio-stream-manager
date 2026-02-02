@@ -122,8 +122,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       const duration = Date.now() - startTime;
 
       if (result?.success) {
-        // Remove from missing list (download completed successfully)
-        useRadioStore.getState().removeMissingSong(song.id);
+        useRadioStore.getState().updateMissingSong(song.id, { status: 'downloaded' });
         
         const historyEntry: DownloadHistoryEntry = {
           id: crypto.randomUUID(),
@@ -143,10 +142,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       }
     } catch (error) {
       const duration = Date.now() - startTime;
-      
-      // Remove from missing list (don't keep failed downloads visible)
-      // Only keep in download history for logging purposes
-      useRadioStore.getState().removeMissingSong(song.id);
+      useRadioStore.getState().updateMissingSong(song.id, { status: 'error' });
       
       const historyEntry: DownloadHistoryEntry = {
         id: crypto.randomUUID(),
@@ -404,36 +400,32 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     const { deezerConfig, stations, config } = state;
     const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl).length;
     
-    // Use configurable intervals from config (with defaults)
-    const scrapeIntervalSec = config.scrapeIntervalSeconds ?? 300; // 5 min default
-    const missingDetectionSec = config.missingDetectionIntervalSeconds ?? 30; // 30s default
-    
     console.log('╔══════════════════════════════════════════════════════════════╗');
     console.log('║     🚀 SISTEMA AUTOMATIZADO - INICIANDO TODOS OS SERVIÇOS    ║');
     console.log('╠══════════════════════════════════════════════════════════════╣');
-    console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras) - ${Math.floor(scrapeIntervalSec / 60)} min` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
+    console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras) - 5 min` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
     console.log(`║ 🎵 Grade Builder: ✅ ATIVO (${gradeBuilder.minutesBeforeBlock || 10} min antes de cada bloco)`.padEnd(65) + '║');
     console.log(`║ 📥 Downloads:     ${deezerConfig.autoDownload ? '✅ IMEDIATO (5s entre cada)' : '⏸️ MANUAL (ativar em Config)'}`.padEnd(65) + '║');
     console.log(`║ 💾 Banco Musical: ${config.musicFolders?.length > 0 ? `✅ ${config.musicFolders.length} pastas` : '⚠️ Configurar pastas'}`.padEnd(65) + '║');
-    console.log(`║ 📊 Detecção:      ✅ ATIVO - a cada ${missingDetectionSec}s`.padEnd(65) + '║');
+    console.log(`║ 📊 Stats:         ✅ ATIVO - refresh 10 min`.padEnd(65) + '║');
     console.log(`║ 🔄 Sync Cloud:    ✅ ATIVO (Realtime)`.padEnd(65) + '║');
     console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
-    // 1. Download check using configurable interval (default 30s)
+    // 1. Download check every 10 seconds - IMMEDIATE processing when songs arrive
     downloadIntervalRef.current = setInterval(() => {
       checkNewMissingSongs();
-    }, missingDetectionSec * 1000);
+    }, 10000);
     checkNewMissingSongs(); // Initial check immediately
 
-    // 2. Scraping using configurable interval (default 5 minutes)
+    // 2. Scraping every 5 minutes (was 3 min - optimized for performance)
     scrapeIntervalRef.current = setInterval(() => {
       const currentState = useRadioStore.getState();
       const hasEnabledStations = currentState.stations.some(s => s.enabled && s.scrapeUrl);
       if (hasEnabledStations) {
         scrapeAllStations();
       }
-    }, scrapeIntervalSec * 1000);
+    }, 5 * 60 * 1000);
 
     // Initial scrape
     if (enabledStations > 0) {

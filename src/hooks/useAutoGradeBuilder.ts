@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRadioStore, getActiveSequence } from '@/store/radioStore';
+import { useRadioStore } from '@/store/radioStore';
 import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
@@ -36,7 +36,6 @@ interface AutoGradeState {
   lastBuildTime: Date | null;
   currentBlock: string;
   nextBlock: string;
-  bufferBlock: string; // 2º bloco à frente (buffer de 2)
   lastSavedFile: string | null;
   error: string | null;
   blocksGenerated: number;
@@ -63,6 +62,7 @@ export function useAutoGradeBuilder() {
   const { toast } = useToast();
   const {
     programs,
+    sequence,
     stations,
     config,
     fixedContent,
@@ -79,7 +79,6 @@ export function useAutoGradeBuilder() {
     lastBuildTime: null,
     currentBlock: '--:--',
     nextBlock: '--:--',
-    bufferBlock: '--:--', // 2º bloco à frente
     lastSavedFile: null,
     error: null,
     blocksGenerated: 0,
@@ -103,25 +102,10 @@ export function useAutoGradeBuilder() {
   // These will be prioritized in the next block since downloads are fast (~1 min)
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
 
-  // Get day code for filename (SÁB with accent for compatibility)
+  // Get day code for filename
   const getDayCode = useCallback(() => {
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
     return days[new Date().getDay()];
-  }, []);
-
-  // Convert day code to WeekDay type for getActiveSequence
-  const dayCodeToWeekDay = useCallback((dayCode: string): 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab' => {
-    const mapping: Record<string, 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab'> = {
-      'DOM': 'dom',
-      'SEG': 'seg',
-      'TER': 'ter',
-      'QUA': 'qua',
-      'QUI': 'qui',
-      'SEX': 'sex',
-      'SÁB': 'sab',
-      'SAB': 'sab',
-    };
-    return mapping[dayCode.toUpperCase()] || 'seg';
   }, []);
 
   // Check if it's a weekday
@@ -192,7 +176,6 @@ export function useAutoGradeBuilder() {
   }, [config.artistRepetitionMinutes]);
 
   // Mark song as used
-  // Mark song as used
   const markSongAsUsed = useCallback((title: string, artist: string, blockTime: string) => {
     usedSongsRef.current.push({
       title,
@@ -200,9 +183,8 @@ export function useAutoGradeBuilder() {
       usedAt: new Date(),
       blockTime,
     });
-    // Keep last 500 entries (enough for full day + overlap)
-    if (usedSongsRef.current.length > 500) {
-      usedSongsRef.current = usedSongsRef.current.slice(-500);
+    if (usedSongsRef.current.length > 100) {
+      usedSongsRef.current = usedSongsRef.current.slice(-100);
     }
   }, []);
 
@@ -211,78 +193,6 @@ export function useAutoGradeBuilder() {
     usedSongsRef.current = [];
     carryOverSongsRef.current = []; // Also clear carry-over for new day
   }, []);
-
-  // Reconstruct used songs history from existing TXT file
-  // This ensures artist/song repetition rules work correctly when updating individual blocks
-  const reconstructHistoryFromFile = useCallback(async (dayCode: string): Promise<void> => {
-    if (!isElectronEnv || !window.electronAPI?.readGradeFile) {
-      console.log('[HISTORY] Skipping history reconstruction - not in Electron');
-      return;
-    }
-
-    try {
-      const filename = `${dayCode}.txt`;
-      const result = await window.electronAPI.readGradeFile({
-        folder: config.gradeFolder,
-        filename,
-      });
-
-      if (!result.success || !result.content) {
-        console.log('[HISTORY] No existing file to reconstruct history from');
-        return;
-      }
-
-      const lines = result.content.split('\n').filter(l => l.trim());
-      let songsAdded = 0;
-
-      for (const line of lines) {
-        // Parse time from line: "HH:MM (ID=...) ..."
-        const timeMatch = line.match(/^(\d{2}:\d{2})/);
-        if (!timeMatch) continue;
-        const blockTime = timeMatch[1];
-
-        // Extract all quoted filenames: "Artist - Title.mp3"
-        const songMatches = line.matchAll(/"([^"]+\.mp3)"/g);
-        
-        for (const match of songMatches) {
-          const filename = match[1];
-          
-          // Parse "Artist - Title.mp3" format
-          const songMatch = filename.match(/^(.+?)\s*-\s*(.+?)\.mp3$/i);
-          if (songMatch) {
-            const artist = songMatch[1].trim();
-            const title = songMatch[2].trim();
-            
-            // Check if already in history to avoid duplicates
-            const alreadyExists = usedSongsRef.current.some(
-              s => s.title.toLowerCase() === title.toLowerCase() &&
-                   s.artist.toLowerCase() === artist.toLowerCase() &&
-                   s.blockTime === blockTime
-            );
-            
-            if (!alreadyExists) {
-              usedSongsRef.current.push({
-                title,
-                artist,
-                usedAt: new Date(),
-                blockTime,
-              });
-              songsAdded++;
-            }
-          }
-        }
-      }
-
-      // Keep last 500 entries (increased for full day support)
-      if (usedSongsRef.current.length > 500) {
-        usedSongsRef.current = usedSongsRef.current.slice(-500);
-      }
-
-      console.log(`[HISTORY] ✅ Reconstruído histórico: ${songsAdded} músicas de ${lines.length} blocos`);
-    } catch (error) {
-      console.error('[HISTORY] Error reconstructing history:', error);
-    }
-  }, [config.gradeFolder]);
 
   // Add song to carry-over queue (will be used in next block after download)
   const addCarryOverSong = useCallback((song: Omit<CarryOverSong, 'addedAt'>) => {
@@ -403,12 +313,8 @@ export function useAutoGradeBuilder() {
 
       return songsByStation;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 
-        (typeof error === 'object' && error !== null && 'message' in error) 
-          ? String((error as { message: unknown }).message) 
-          : 'Erro desconhecido';
-      console.error('[AUTO-GRADE] Error fetching songs:', errorMessage);
-      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', errorMessage);
+      console.error('[AUTO-GRADE] Error fetching songs:', error);
+      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
       return {};
     }
   }, [stations]);
@@ -483,14 +389,12 @@ export function useAutoGradeBuilder() {
 
   // Generate a single block line with format: "musica1.mp3",vht,"musica2.mp3",vht,...
   // isFullDay = true uses shorter repetition window (30 min instead of 60)
-  // targetDay = weekday for scheduled sequence matching (uses current day if not provided)
   const generateBlockLine = useCallback(async (
     hour: number,
     minute: number,
     songsByStation: Record<string, SongEntry[]>,
     stats: { skipped: number; substituted: number; missing: number },
-    isFullDay: boolean = false,
-    targetDay?: 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab'
+    isFullDay: boolean = false
   ): Promise<{ line: string; logs: Parameters<typeof addBlockLogs>[0] }> => {
     const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     const programName = getProgramForHour(hour);
@@ -564,47 +468,11 @@ export function useAutoGradeBuilder() {
     // Normal block with 10 songs following the configured SEQUENCE
     const songs: string[] = [];
     const usedInBlock = new Set<string>();
-    
-    // Build flexible station ID to name mapping
-    // This handles cases where the store name differs slightly from Supabase station_name
     const stationIdToName: Record<string, string> = {};
-    const normalizeStationName = (name: string): string => 
-      name.toLowerCase().replace(/[^a-z0-9]/g, '');
     
-    // First, map IDs to store names
     stations.forEach(s => {
       stationIdToName[s.id] = s.name;
     });
-    
-    // Build a lookup from normalized names to actual Supabase station_name
-    const normalizedToActual: Record<string, string> = {};
-    Object.keys(songsByStation).forEach(actualName => {
-      normalizedToActual[normalizeStationName(actualName)] = actualName;
-    });
-    
-    // Helper to get actual station name from songs data
-    const getActualStationName = (storeStationName: string | undefined): string | undefined => {
-      if (!storeStationName) return undefined;
-      
-      // Direct match
-      if (songsByStation[storeStationName]) return storeStationName;
-      
-      // Normalized match (handles "Show FM 101.1" vs "Show FM" etc)
-      const normalizedStore = normalizeStationName(storeStationName);
-      
-      // Try to find a matching station in Supabase data
-      for (const actualName of Object.keys(songsByStation)) {
-        const normalizedActual = normalizeStationName(actualName);
-        if (normalizedActual.includes(normalizedStore) || normalizedStore.includes(normalizedActual)) {
-          console.log(`[SEQUENCE] Station name mapping: "${storeStationName}" → "${actualName}"`);
-          return actualName;
-        }
-      }
-      
-      // Log when no match found
-      console.warn(`[SEQUENCE] ⚠️ No songs found for station "${storeStationName}" - check if monitoring is active`);
-      return undefined;
-    };
 
     // Create a flattened pool of all songs for fallback
     const allSongsPool: SongEntry[] = [];
@@ -623,9 +491,7 @@ export function useAutoGradeBuilder() {
       // Verify that carry-over song now exists in library
       const libraryResult = await findSongInLibrary(carryOver.artist, carryOver.title);
       if (libraryResult.exists) {
-        // ALWAYS sanitize the filename for the grade TXT
-        const rawFilename = libraryResult.filename || `${carryOver.artist} - ${carryOver.title}.mp3`;
-        const correctFilename = sanitizeFilename(rawFilename);
+        const correctFilename = libraryResult.filename || sanitizeFilename(`${carryOver.artist} - ${carryOver.title}.mp3`);
         const songEntry: SongEntry = {
           title: carryOver.title,
           artist: carryOver.artist,
@@ -671,9 +537,9 @@ export function useAutoGradeBuilder() {
       return `"${fixedFileName}"`;
     };
 
-    // Helper to get TOP50 song for sequence position (verifica biblioteca)
+    // Helper to get TOP50 song for sequence position
     let top50IndexUsed = 0;
-    const getNextTop50Song = async (): Promise<string | null> => {
+    const getNextTop50Song = (): string | null => {
       const sortedRanking = [...rankingSongs].sort((a, b) => b.plays - a.plays);
       
       while (top50IndexUsed < sortedRanking.length) {
@@ -682,53 +548,28 @@ export function useAutoGradeBuilder() {
         top50IndexUsed++;
         
         if (!usedInBlock.has(key) && !isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
-          // Verificar se existe na biblioteca antes de usar
-          const libraryResult = await findSongInLibrary(rankSong.artist, rankSong.title);
+          usedInBlock.add(key);
+          markSongAsUsed(rankSong.title, rankSong.artist, timeStr);
           
-          if (libraryResult.exists) {
-            usedInBlock.add(key);
-            markSongAsUsed(rankSong.title, rankSong.artist, timeStr);
-            
-            const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
-            
-            blockLogs.push({
-              blockTime: timeStr,
-              type: 'used',
-              title: rankSong.title,
-              artist: rankSong.artist,
-              station: 'TOP50',
-              style: rankSong.style,
-              reason: `TOP50 Ranking posição ${top50IndexUsed}`,
-            });
-            
-            console.log(`[TOP50] ✅ Usando do Ranking: ${rankSong.artist} - ${rankSong.title} (pos ${top50IndexUsed})`);
-            return `"${correctFilename}"`;
-          } else {
-            // Música do ranking não está na biblioteca - adicionar para download
-            if (!isSongAlreadyMissing(rankSong.artist, rankSong.title)) {
-              addMissingSong({
-                id: `missing-top50-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                title: rankSong.title,
-                artist: rankSong.artist,
-                station: 'TOP50',
-                timestamp: new Date(),
-                status: 'missing',
-                dna: rankSong.style,
-              });
-            }
-            // Continua procurando próxima música do ranking
-          }
+          blockLogs.push({
+            blockTime: timeStr,
+            type: 'used',
+            title: rankSong.title,
+            artist: rankSong.artist,
+            station: 'TOP50',
+            style: rankSong.style,
+            reason: `TOP50 posição ${top50IndexUsed}`,
+          });
+          
+          return `"${sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`)}"`;
         }
       }
       return null;
     };
 
-    // Get the ACTIVE sequence for this specific block time and day (respects scheduled sequences)
-    const activeSequence = getActiveSequence(hour, minute, targetDay);
-    
     // Follow the user-configured SEQUENCE (position 1 = Band FM, position 2 = Clube FM, etc.)
-    for (const seq of activeSequence) {
-      if (songs.length >= activeSequence.length) break; // Use sequence length as max
+    for (const seq of sequence) {
+      if (songs.length >= sequence.length) break; // Use sequence length as max
 
       // Handle special sequence types - check for specific fixed content (fixo_ID)
       if (seq.radioSource.startsWith('fixo_')) {
@@ -790,8 +631,8 @@ export function useAutoGradeBuilder() {
       }
 
       if (seq.radioSource === 'top50') {
-        // TOP50 in sequence - insert top ranked song from Ranking integrado
-        const top50Song = await getNextTop50Song();
+        // TOP50 in sequence - insert top ranked song
+        const top50Song = getNextTop50Song();
         if (top50Song) {
           songs.push(top50Song);
         } else {
@@ -804,7 +645,7 @@ export function useAutoGradeBuilder() {
             title: 'TOP50',
             artist: 'CORINGA',
             station: 'FALLBACK',
-            reason: 'Ranking TOP50 vazio ou músicas não encontradas na biblioteca',
+            reason: 'Ranking TOP50 vazio',
           });
         }
         continue;
@@ -855,29 +696,22 @@ export function useAutoGradeBuilder() {
         continue;
       }
 
-      // Normal station logic - use flexible name matching
-      const storeStationName = stationIdToName[seq.radioSource];
-      const actualStationName = getActualStationName(storeStationName);
+      // Normal station logic
+      const stationName = stationIdToName[seq.radioSource];
       const stationStyle = getStationStyle(seq.radioSource);
-      const stationSongs = actualStationName ? songsByStation[actualStationName] : [];
+      const stationSongs = stationName ? songsByStation[stationName] : [];
       
-      // Log when station has no songs (helps debugging sequence issues)
-      if (!stationSongs || stationSongs.length === 0) {
-        console.warn(`[SEQUENCE] ⚠️ Position ${seq.position}: Station "${storeStationName}" (ID: ${seq.radioSource}) has no captured songs`);
-      }
-      
-      // Initialize index for this station (use actualStationName for tracking)
-      const stationKey = actualStationName || storeStationName || seq.radioSource;
-      if (stationSongIndex[stationKey] === undefined) {
-        stationSongIndex[stationKey] = 0;
+      // Initialize index for this station
+      if (stationSongIndex[stationName] === undefined) {
+        stationSongIndex[stationName] = 0;
       }
 
       let selectedSong: SongEntry | null = null;
-      let startIndex = stationSongIndex[stationKey] || 0;
+      let startIndex = stationSongIndex[stationName] || 0;
       let checkedCount = 0;
 
       // PRIORITY 0: Check carry-over songs for this station first (already downloaded!)
-      const carryOverForStation = carryOverByStation[stationKey] || [];
+      const carryOverForStation = carryOverByStation[stationName] || [];
       for (const carryOverSong of carryOverForStation) {
         const key = `${carryOverSong.title.toLowerCase()}-${carryOverSong.artist.toLowerCase()}`;
         if (!usedInBlock.has(key) && !isRecentlyUsed(carryOverSong.title, carryOverSong.artist, timeStr, isFullDay)) {
@@ -909,11 +743,10 @@ export function useAutoGradeBuilder() {
             const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
             
             if (libraryResult.exists) {
-              // Found a song that EXISTS - ALWAYS sanitize the filename for the grade TXT
-              const rawFilename = libraryResult.filename || `${candidate.artist} - ${candidate.title}.mp3`;
-              const correctFilename = sanitizeFilename(rawFilename);
+              // Found a song that EXISTS - use the filename from library for correct spelling
+              const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
               selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-              stationSongIndex[stationKey] = (songIdx + 1) % stationSongs.length;
+              stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
               break;
             } else {
               // Mark as missing for download AND add to carry-over for next block
@@ -922,7 +755,7 @@ export function useAutoGradeBuilder() {
                   id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                   title: candidate.title,
                   artist: candidate.artist,
-                  station: stationKey,
+                  station: stationName || 'UNKNOWN',
                   timestamp: new Date(),
                   status: 'missing',
                   dna: stationStyle,
@@ -933,7 +766,7 @@ export function useAutoGradeBuilder() {
               addCarryOverSong({
                 title: candidate.title,
                 artist: candidate.artist,
-                station: stationKey,
+                station: stationName || 'UNKNOWN',
                 style: stationStyle,
                 targetBlock: timeStr,
               });
@@ -954,9 +787,7 @@ export function useAutoGradeBuilder() {
             const libraryResult = await findSongInLibrary(rankSong.artist, rankSong.title);
             
             if (libraryResult.exists) {
-              // ALWAYS sanitize the filename for the grade TXT
-              const rawFilename = libraryResult.filename || `${rankSong.artist} - ${rankSong.title}.mp3`;
-              const correctFilename = sanitizeFilename(rawFilename);
+              const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
               selectedSong = {
                 title: rankSong.title,
                 artist: rankSong.artist,
@@ -974,7 +805,7 @@ export function useAutoGradeBuilder() {
                 station: 'TOP50',
                 style: rankSong.style,
                 reason: `TOP50 substituto (posição ${sortedRanking.indexOf(rankSong) + 1})`,
-                substituteFor: stationKey,
+                substituteFor: stationName || 'UNKNOWN',
               });
               break;
             }
@@ -986,7 +817,7 @@ export function useAutoGradeBuilder() {
       if (!selectedSong) {
         // Try songs from other stations with same style
         for (const [otherStation, songs] of Object.entries(songsByStation)) {
-          if (otherStation === stationKey) continue; // Skip same station
+          if (otherStation === stationName) continue; // Skip same station
           
           for (const candidate of songs) {
             if (candidate.style !== stationStyle) continue; // Must match DNA
@@ -997,9 +828,7 @@ export function useAutoGradeBuilder() {
               const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
               
               if (libraryResult.exists) {
-                // ALWAYS sanitize the filename for the grade TXT
-                const rawFilename = libraryResult.filename || `${candidate.artist} - ${candidate.title}.mp3`;
-                const correctFilename = sanitizeFilename(rawFilename);
+                const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
                 selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
                 stats.substituted++;
                 blockLogs.push({
@@ -1010,7 +839,7 @@ export function useAutoGradeBuilder() {
                   station: candidate.station,
                   style: candidate.style,
                   reason: `DNA similar: ${stationStyle}`,
-                  substituteFor: stationKey,
+                  substituteFor: stationName || 'UNKNOWN',
                 });
                 break;
               }
@@ -1029,9 +858,7 @@ export function useAutoGradeBuilder() {
             const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
             
             if (libraryResult.exists) {
-              // ALWAYS sanitize the filename for the grade TXT
-              const rawFilename = libraryResult.filename || `${candidate.artist} - ${candidate.title}.mp3`;
-              const correctFilename = sanitizeFilename(rawFilename);
+              const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
               selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
               stats.substituted++;
               blockLogs.push({
@@ -1061,9 +888,7 @@ export function useAutoGradeBuilder() {
             const libraryResult = await findSongInLibrary(rankSong.artist, rankSong.title);
             
             if (libraryResult.exists) {
-              // ALWAYS sanitize the filename for the grade TXT
-              const rawFilename = libraryResult.filename || `${rankSong.artist} - ${rankSong.title}.mp3`;
-              const correctFilename = sanitizeFilename(rawFilename);
+              const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
               selectedSong = {
                 title: rankSong.title,
                 artist: rankSong.artist,
@@ -1144,12 +969,12 @@ export function useAutoGradeBuilder() {
     };
   }, [
     getProgramForHour, getFixedContentForTime, isWeekday, getTop50Songs,
-    stations, getStationStyle, isRecentlyUsed, findSubstitute,
+    stations, sequence, getStationStyle, isRecentlyUsed, findSubstitute,
     markSongAsUsed, config.coringaCode, checkSongInLibrary, isSongAlreadyMissing,
     addMissingSong, addCarryOverSong, getCarryOverSongs, findSongInLibrary
   ]);
 
-  // Calculate current and next 2 block times (buffer de 2 blocos)
+  // Calculate current and next block times
   const getBlockTimes = useCallback(() => {
     const now = new Date();
     const currentHour = now.getHours();
@@ -1158,25 +983,12 @@ export function useAutoGradeBuilder() {
     const currentBlockHour = currentHour;
     const currentBlockMinute = currentMinute < 30 ? 0 : 30;
 
-    // Next block (+30 min)
     let nextBlockHour = currentBlockMinute === 30 ? (currentHour + 1) % 24 : currentHour;
     const nextBlockMinute = currentBlockMinute === 30 ? 0 : 30;
-
-    // Buffer block (+60 min from current = +30 min from next)
-    let bufferBlockHour: number;
-    let bufferBlockMinute: number;
-    if (nextBlockMinute === 30) {
-      bufferBlockHour = (nextBlockHour + 1) % 24;
-      bufferBlockMinute = 0;
-    } else {
-      bufferBlockHour = nextBlockHour;
-      bufferBlockMinute = 30;
-    }
 
     return {
       current: { hour: currentBlockHour, minute: currentBlockMinute },
       next: { hour: nextBlockHour, minute: nextBlockMinute },
-      buffer: { hour: bufferBlockHour, minute: bufferBlockMinute }, // 2º bloco à frente
     };
   }, []);
 
@@ -1206,11 +1018,10 @@ export function useAutoGradeBuilder() {
 
     const dayCode = getDayCode();
     const filename = `${dayCode}.txt`;
-    const targetDay = dayCodeToWeekDay(dayCode); // Convert to WeekDay for scheduled sequence matching
 
     try {
-      console.log(`[AUTO-GRADE] 🚀 Building full day grade for ${dayCode} (${targetDay}) with progressive saving...`);
-      logSystemError('GRADE', 'info', `Iniciando geração da grade completa para ${dayCode} (salvamento progressivo)`);
+      console.log('[AUTO-GRADE] 🚀 Building full day grade with progressive saving...');
+      logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
       
       clearUsedSongs();
 
@@ -1233,8 +1044,8 @@ export function useAutoGradeBuilder() {
             currentProcessingSong: `Processando bloco ${blockTimeStr}...`,
           }));
 
-          // Pass isFullDay=true and targetDay for correct scheduled sequence matching
-          const result = await generateBlockLine(hour, minute, songsByStation, stats, true, targetDay);
+          // Pass isFullDay=true for shorter repetition window
+          const result = await generateBlockLine(hour, minute, songsByStation, stats, true);
           lines.push(result.line);
           allLogs.push(...result.logs);
           blockCount++;
@@ -1302,7 +1113,7 @@ export function useAutoGradeBuilder() {
           id: `grade-fullday-${Date.now()}`,
           timestamp: new Date(),
           blockTime: 'COMPLETA',
-          songsProcessed: 48 * 10, // 48 blocks × 10 songs per block
+          songsProcessed: 48 * sequence.length,
           songsFound: lines.length,
           songsMissing: stats.missing,
           programName: 'Grade Completa',
@@ -1351,7 +1162,7 @@ export function useAutoGradeBuilder() {
     }
   }, [
     clearUsedSongs, fetchRecentSongs, generateBlockLine,
-    getDayCode, config.gradeFolder, addGradeHistory, toast, addBlockLogs
+    getDayCode, config.gradeFolder, addGradeHistory, sequence.length, toast, addBlockLogs
   ]);
 
   // Build current and next blocks (incremental update to existing file)
@@ -1368,38 +1179,26 @@ export function useAutoGradeBuilder() {
       const blocks = getBlockTimes();
       const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
-      const bufferTimeKey = `${blocks.buffer.hour.toString().padStart(2, '0')}:${blocks.buffer.minute.toString().padStart(2, '0')}`;
 
-      // Get current day code and convert to WeekDay for sequence matching
-      const dayCode = getDayCode();
-      const targetDay = dayCodeToWeekDay(dayCode);
-
-      // CRITICAL: Reconstruct history from existing TXT file before generating new blocks
-      // This ensures artist/song repetition rules work correctly
-      await reconstructHistoryFromFile(dayCode);
-
-      console.log(`[AUTO-GRADE] 🔄 Buffer de 2 blocos: ${currentTimeKey} (protegido), ${nextTimeKey}, ${bufferTimeKey} -> salvando na pasta destino`);
+      console.log(`[AUTO-GRADE] 🔄 Atualizando blocos: ${currentTimeKey}, ${nextTimeKey} -> salvando na pasta destino`);
 
       const songsByStation = await fetchRecentSongs();
       const stats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: Parameters<typeof addBlockLogs>[0] = [];
 
-      // Generate current block (protegido, mas mantemos atualizado) and next 2 blocks (buffer)
-      // BUFFER DE 2 BLOCOS: sempre monta próximo + próximo+1 com músicas capturadas
+      // Generate current and next blocks (isFullDay=false for normal repetition rules)
       const currentResult = await generateBlockLine(
-        blocks.current.hour, blocks.current.minute, songsByStation, stats, false, targetDay
+        blocks.current.hour, blocks.current.minute, songsByStation, stats, false
       );
       const nextResult = await generateBlockLine(
-        blocks.next.hour, blocks.next.minute, songsByStation, stats, false, targetDay
-      );
-      const bufferResult = await generateBlockLine(
-        blocks.buffer.hour, blocks.buffer.minute, songsByStation, stats, false, targetDay
+        blocks.next.hour, blocks.next.minute, songsByStation, stats, false
       );
       
-      allLogs.push(...currentResult.logs, ...nextResult.logs, ...bufferResult.logs);
+      allLogs.push(...currentResult.logs, ...nextResult.logs);
       addBlockLogs(allLogs);
 
       // Read existing file and update only the relevant lines
+      const dayCode = getDayCode();
       const filename = `${dayCode}.txt`;
       let existingContent = '';
 
@@ -1422,10 +1221,9 @@ export function useAutoGradeBuilder() {
         if (match) lineMap.set(match[1], line);
       });
 
-      // Update the lines for current, next, and buffer blocks (BUFFER DE 2)
+      // Update the lines for current and next blocks
       lineMap.set(currentTimeKey, currentResult.line);
       lineMap.set(nextTimeKey, nextResult.line);
-      lineMap.set(bufferTimeKey, bufferResult.line);
 
       // Sort all lines by time and join
       const sortedContent = Array.from(lineMap.keys())
@@ -1440,14 +1238,14 @@ export function useAutoGradeBuilder() {
       });
 
       if (result.success) {
-        console.log(`[AUTO-GRADE] ✅ Grade salva com buffer de 2 blocos: ${result.filePath}`);
+        console.log(`[AUTO-GRADE] ✅ Grade salva na pasta destino: ${result.filePath}`);
 
         addGradeHistory({
           id: `grade-${Date.now()}`,
           timestamp: new Date(),
           blockTime: currentTimeKey,
-          songsProcessed: 10 * 3, // 10 songs × 3 blocks (current + buffer de 2)
-          songsFound: 10 * 3 - stats.missing,
+          songsProcessed: sequence.length * 2,
+          songsFound: sequence.length * 2 - stats.missing,
           songsMissing: stats.missing,
           programName: getProgramForHour(blocks.current.hour),
         });
@@ -1458,17 +1256,16 @@ export function useAutoGradeBuilder() {
           lastBuildTime: new Date(),
           currentBlock: currentTimeKey,
           nextBlock: nextTimeKey,
-          bufferBlock: bufferTimeKey, // Buffer de 2 blocos
           lastSavedFile: filename,
-          blocksGenerated: prev.blocksGenerated + 3,
+          blocksGenerated: prev.blocksGenerated + 2,
           skippedSongs: stats.skipped,
           substitutedSongs: stats.substituted,
           missingSongs: stats.missing,
         }));
 
         toast({
-          title: '✅ Buffer de 2 Blocos Atualizado',
-          description: `Blocos ${nextTimeKey} e ${bufferTimeKey} prontos em ${filename}`,
+          title: '✅ Grade Atualizada',
+          description: `Blocos ${currentTimeKey} e ${nextTimeKey} atualizados em ${filename}`,
         });
       } else {
         throw new Error(result.error || 'Erro ao salvar');
@@ -1485,8 +1282,8 @@ export function useAutoGradeBuilder() {
     }
   }, [
     getBlockTimes, fetchRecentSongs, generateBlockLine,
-    getDayCode, dayCodeToWeekDay, config.gradeFolder, addGradeHistory,
-    getProgramForHour, toast, addBlockLogs, reconstructHistoryFromFile
+    getDayCode, config.gradeFolder, addGradeHistory, sequence.length,
+    getProgramForHour, toast, addBlockLogs
   ]);
 
   // Calculate seconds until next build based on minutesBeforeBlock setting
@@ -1582,15 +1379,15 @@ export function useAutoGradeBuilder() {
         buildGrade();
         lastPeriodicSave = Date.now();
       } else {
-        // PERIODIC SAVE: Buffer update every 10 minutes to refresh with new captures
+        // PERIODIC SAVE: Also save every 5 minutes to ensure file is always current
         const timeSinceLastSave = Date.now() - lastPeriodicSave;
-        if (timeSinceLastSave >= 10 * 60 * 1000) { // 10 minutos
-          console.log(`[AUTO-GRADE] 📁 Atualização do buffer (10 min) - preenchendo com novas capturas`);
+        if (timeSinceLastSave >= 5 * 60 * 1000) {
+          console.log(`[AUTO-GRADE] 📁 Salvamento periódico (5 min) - garantindo arquivo atualizado`);
           buildGrade();
           lastPeriodicSave = Date.now();
         }
       }
-    }, 3 * 60 * 1000); // Check every 3 minutes (light on resources)
+    }, 30 * 1000); // Check every 30 seconds for better responsiveness
 
     // Also run immediately on mount to catch current block
     const now = new Date();
@@ -1612,13 +1409,11 @@ export function useAutoGradeBuilder() {
       const blocks = getBlockTimes();
       const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
-      const bufferTimeKey = `${blocks.buffer.hour.toString().padStart(2, '0')}:${blocks.buffer.minute.toString().padStart(2, '0')}`;
       
       setState(prev => ({
         ...prev,
         currentBlock: currentTimeKey,
         nextBlock: nextTimeKey,
-        bufferBlock: bufferTimeKey, // Buffer de 2 blocos
         nextBuildIn: getSecondsUntilNextBuild(),
       }));
     };

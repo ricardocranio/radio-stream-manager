@@ -372,28 +372,14 @@ function createWindow() {
 }
 
 function createTray() {
-  // Try multiple icon paths for reliability
-  let iconPath = path.join(__dirname, '../public/favicon.ico');
-  if (!fs.existsSync(iconPath)) {
-    iconPath = path.join(__dirname, 'favicon.ico');
-  }
-  if (!fs.existsSync(iconPath)) {
-    iconPath = path.join(app.getAppPath(), 'dist', 'favicon.ico');
-  }
-  
-  try {
-    tray = new Tray(iconPath);
-  } catch (error) {
-    console.error('Error creating tray with icon:', error);
-    // Fallback: create tray without custom icon (uses default)
-    tray = new Tray(path.join(__dirname, '../public/favicon.ico'));
-  }
+  const iconPath = path.join(__dirname, '../public/favicon.ico');
+  tray = new Tray(iconPath);
   
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Abrir Programador',
       click: () => {
-        showMainWindow();
+        mainWindow.show();
       },
     },
     {
@@ -413,50 +399,9 @@ function createTray() {
   tray.setToolTip(`Programador Rádio - v${app.getVersion()}`);
   tray.setContextMenu(contextMenu);
 
-  // Handle single click - show window
   tray.on('click', () => {
-    showMainWindow();
+    mainWindow.show();
   });
-
-  // Handle double click - show window (Windows specific)
-  tray.on('double-click', () => {
-    showMainWindow();
-  });
-
-  // On Windows, right-click should show context menu (it's automatic, but ensure it works)
-  if (process.platform === 'win32') {
-    tray.on('right-click', () => {
-      tray.popUpContextMenu(contextMenu);
-    });
-  }
-}
-
-// Helper function to safely show main window
-function showMainWindow() {
-  if (!mainWindow) {
-    console.log('[TRAY] Window was destroyed, recreating...');
-    createWindow();
-    return;
-  }
-
-  if (mainWindow.isDestroyed()) {
-    console.log('[TRAY] Window is destroyed, recreating...');
-    createWindow();
-    return;
-  }
-
-  // If window is minimized, restore it
-  if (mainWindow.isMinimized()) {
-    mainWindow.restore();
-  }
-
-  // Show the window
-  mainWindow.show();
-
-  // Focus the window
-  mainWindow.focus();
-
-  console.log('[TRAY] Window shown and focused');
 }
 
 // Configure auto-updater
@@ -1353,9 +1298,6 @@ ipcMain.handle('scrape-station', async (event, station) => {
 function normalizeText(text) {
   return text
     .toLowerCase()
-    // Remove common markers like "(Ao Vivo)", "[Live]", "(Remix)" etc. for better matching
-    .replace(/\s*\([^)]*\)\s*/g, ' ')
-    .replace(/\s*\[[^\]]*\]\s*/g, ' ')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // Remove accents
     .replace(/[^a-z0-9\s]/g, '') // Remove special chars

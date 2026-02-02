@@ -2,7 +2,6 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useRadioStore } from '@/store/radioStore';
 import { useGradeLogStore } from '@/store/gradeLogStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
-import { useRealtimeStatsStore } from '@/store/realtimeStatsStore';
 
 const RESET_HOUR = 20; // 20:00
 const RESET_STORAGE_KEY = 'pgm-last-daily-reset';
@@ -24,7 +23,6 @@ export function useDailyReset() {
   
   const { clearBlockLogs, clearSystemErrors } = useGradeLogStore();
   const { resetQueue } = useAutoDownloadStore();
-  const { resetStats } = useRealtimeStatsStore();
 
   const getLastResetDate = useCallback((): string | null => {
     return localStorage.getItem(RESET_STORAGE_KEY);
@@ -49,9 +47,6 @@ export function useDailyReset() {
     // Signal auto-download to reset its queue
     resetQueue();
     
-    // Reset realtime stats
-    resetStats();
-    
     // Mark today as reset
     const today = new Date().toISOString().split('T')[0];
     setLastResetDate(today);
@@ -74,7 +69,6 @@ export function useDailyReset() {
     clearBlockLogs,
     clearSystemErrors,
     resetQueue,
-    resetStats,
     setLastResetDate,
   ]);
 

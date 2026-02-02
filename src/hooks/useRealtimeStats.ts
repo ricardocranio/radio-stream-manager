@@ -1,30 +1,65 @@
-import { useEffect, useCallback, useRef, useId } from 'react';
+import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { withRetry, ErrorCodes, createError } from '@/lib/errorHandler';
 import { useRadioStore } from '@/store/radioStore';
-import { useRealtimeStatsStore } from '@/store/realtimeStatsStore';
 import { realtimeManager } from '@/lib/realtimeManager';
 
-// Default intervals (can be overridden by config)
-const DEFAULT_REFRESH_INTERVAL = 600; // 10 minutes
-const BACKGROUND_REFRESH_MULTIPLIER = 2; // Background = 2x slower
-const STALE_THRESHOLD_MS = 120000; // 2 minutes
+interface LastSongByStation {
+  title: string;
+  artist: string;
+  station: string;
+  timestamp: string;
+}
+
+interface RadioStation {
+  name: string;
+  enabled: boolean;
+}
+
+interface RealtimeStats {
+  totalSongs: number;
+  songsLast24h: number;
+  songsLastHour: number;
+  activeStations: number;
+  allStations: RadioStation[];
+  lastSong: {
+    title: string;
+    artist: string;
+    station: string;
+    timestamp: string;
+  } | null;
+  lastSongsByStation: LastSongByStation[];
+  recentSongsByStation: Record<string, LastSongByStation[]>;
+  stationCounts: Record<string, number>;
+  isLoading: boolean;
+  lastUpdated: Date | null;
+  nextRefreshIn: number;
+}
+
+const REFRESH_INTERVAL = 600; // Stats refresh every 10 minutes (was 2 min)
+const BACKGROUND_REFRESH_MULTIPLIER = 2; // Background = 20 minutes
 
 export function useRealtimeStats() {
-  const config = useRadioStore((s) => s.config);
-  const powerSavingMode = config.powerSavingMode ?? false;
-  
-  // Use configurable interval from config
-  const baseRefreshInterval = (config.dashboardRefreshIntervalSeconds ?? DEFAULT_REFRESH_INTERVAL);
-  
+  const powerSavingMode = useRadioStore((s) => s.config.powerSavingMode ?? false);
   const isInBackgroundRef = useRef(false);
   const subscriberId = useId();
-  const hasInitialLoadRef = useRef(false);
   
-  // Use global store instead of local state
-  const { stats, setStats, updateFromNewSong, setLoading, setNextRefreshIn } = useRealtimeStatsStore();
+  const [stats, setStats] = useState<RealtimeStats>({
+    totalSongs: 0,
+    songsLast24h: 0,
+    songsLastHour: 0,
+    activeStations: 0,
+    allStations: [],
+    lastSong: null,
+    lastSongsByStation: [],
+    recentSongsByStation: {},
+    stationCounts: {},
+    isLoading: true,
+    lastUpdated: null,
+    nextRefreshIn: REFRESH_INTERVAL,
+  });
   
-  const countdownRef = useRef<number>(baseRefreshInterval);
+  const countdownRef = useRef<number>(REFRESH_INTERVAL);
 
   // Track background state
   useEffect(() => {
@@ -37,10 +72,10 @@ export function useRealtimeStats() {
 
   const getEffectiveInterval = useCallback(() => {
     if (powerSavingMode && isInBackgroundRef.current) {
-      return baseRefreshInterval * BACKGROUND_REFRESH_MULTIPLIER;
+      return REFRESH_INTERVAL * BACKGROUND_REFRESH_MULTIPLIER;
     }
-    return baseRefreshInterval;
-  }, [powerSavingMode, baseRefreshInterval]);
+    return REFRESH_INTERVAL;
+  }, [powerSavingMode]);
 
   const loadStats = useCallback(async () => {
     const context = { component: 'useRealtimeStats', action: 'loadStats' };
@@ -75,13 +110,6 @@ export function useRealtimeStats() {
             stationCounts[song.station_name] = (stationCounts[song.station_name] || 0) + 1;
           });
 
-          interface LastSongByStation {
-            title: string;
-            artist: string;
-            station: string;
-            timestamp: string;
-          }
-
           const lastSongsByStation: LastSongByStation[] = [];
           const recentSongsByStation: Record<string, LastSongByStation[]> = {};
           const seenStations = new Set<string>();
@@ -108,11 +136,6 @@ export function useRealtimeStats() {
             }
           });
 
-          interface RadioStation {
-            name: string;
-            enabled: boolean;
-          }
-
           const allStationsList: RadioStation[] = stationsResult.data?.map(s => ({ name: s.name, enabled: s.enabled ?? true })) || [];
           allStationsList.forEach(station => {
             if (!recentSongsByStation[station.name]) {
@@ -120,7 +143,7 @@ export function useRealtimeStats() {
             }
           });
 
-          setStats({
+          setStats(prev => ({
             totalSongs: totalResult.count || 0,
             songsLast24h: last24hResult.count || 0,
             songsLastHour: lastHourResult.count || 0,
@@ -136,9 +159,9 @@ export function useRealtimeStats() {
             recentSongsByStation,
             stationCounts,
             isLoading: false,
-          });
-          
-          hasInitialLoadRef.current = true;
+            lastUpdated: new Date(),
+            nextRefreshIn: prev.nextRefreshIn,
+          }));
         },
         {
           maxRetries: 3,
@@ -155,41 +178,17 @@ export function useRealtimeStats() {
         ErrorCodes.SUPABASE_QUERY,
         context
       );
-      setLoading(false);
+      setStats(prev => ({ ...prev, isLoading: false }));
     }
-  }, [setStats, setLoading]);
+  }, []);
 
-  // Initial load - only if data is truly stale or not hydrated
+  // Initial load
   useEffect(() => {
-    // Wait for hydration
-    if (!stats.isHydrated) {
-      return;
-    }
-    
-    // Calculate staleness based on lastUpdated string
-    const lastUpdatedTime = stats.lastUpdated ? new Date(stats.lastUpdated).getTime() : 0;
-    const timeSinceUpdate = Date.now() - lastUpdatedTime;
-    
-    const shouldRefresh = 
-      !hasInitialLoadRef.current && (
-        stats.isLoading || 
-        !stats.lastUpdated || 
-        timeSinceUpdate > STALE_THRESHOLD_MS
-      );
-    
-    if (shouldRefresh) {
-      console.log('[REALTIME-STATS] Initial load triggered, stale:', timeSinceUpdate, 'ms');
-      loadStats();
-    } else {
-      console.log('[REALTIME-STATS] Using cached data from:', stats.lastUpdated);
-      hasInitialLoadRef.current = true;
-    }
-  }, [loadStats, stats.isLoading, stats.lastUpdated, stats.isHydrated]);
+    loadStats();
+  }, [loadStats]);
 
   // Auto-refresh with power saving support
   useEffect(() => {
-    if (!stats.isHydrated) return;
-    
     let refreshTimeoutId: NodeJS.Timeout;
     let countdownIntervalId: NodeJS.Timeout;
 
@@ -208,30 +207,65 @@ export function useRealtimeStats() {
     // Update countdown display every 40 seconds
     countdownIntervalId = setInterval(() => {
       countdownRef.current = Math.max(0, countdownRef.current - 40);
-      setNextRefreshIn(countdownRef.current);
+      setStats(prev => {
+        if (prev.nextRefreshIn === countdownRef.current) return prev;
+        return { ...prev, nextRefreshIn: countdownRef.current };
+      });
     }, 40000);
 
     return () => {
       clearTimeout(refreshTimeoutId);
       clearInterval(countdownIntervalId);
     };
-  }, [loadStats, getEffectiveInterval, powerSavingMode, setNextRefreshIn, stats.isHydrated]);
+  }, [loadStats, getEffectiveInterval, powerSavingMode]);
 
   // Subscribe to realtime updates via centralized manager
   useEffect(() => {
-    if (!stats.isHydrated) return;
-    
     const unsubscribe = realtimeManager.subscribe(
       'scraped_songs',
       `stats_${subscriberId}`,
       (payload) => {
         const newSong = payload.new as { title: string; artist: string; station_name: string; scraped_at: string };
-        updateFromNewSong(newSong);
+        
+        setStats(prev => {
+          const newSongData = {
+            title: newSong.title,
+            artist: newSong.artist,
+            station: newSong.station_name,
+            timestamp: newSong.scraped_at,
+          };
+
+          const updatedLastSongsByStation = [...prev.lastSongsByStation];
+          const existingIndex = updatedLastSongsByStation.findIndex(s => s.station === newSong.station_name);
+          if (existingIndex >= 0) {
+            updatedLastSongsByStation[existingIndex] = newSongData;
+          } else {
+            updatedLastSongsByStation.unshift(newSongData);
+          }
+
+          const updatedRecentSongsByStation = { ...prev.recentSongsByStation };
+          const stationSongs = updatedRecentSongsByStation[newSong.station_name] || [];
+          updatedRecentSongsByStation[newSong.station_name] = [newSongData, ...stationSongs].slice(0, 5);
+
+          return {
+            ...prev,
+            totalSongs: prev.totalSongs + 1,
+            songsLast24h: prev.songsLast24h + 1,
+            songsLastHour: prev.songsLastHour + 1,
+            lastSong: newSongData,
+            lastSongsByStation: updatedLastSongsByStation,
+            recentSongsByStation: updatedRecentSongsByStation,
+            stationCounts: {
+              ...prev.stationCounts,
+              [newSong.station_name]: (prev.stationCounts[newSong.station_name] || 0) + 1,
+            },
+          };
+        });
       }
     );
 
     return unsubscribe;
-  }, [subscriberId, updateFromNewSong, stats.isHydrated]);
+  }, [subscriberId]);
 
   return { stats, refresh: loadStats };
 }

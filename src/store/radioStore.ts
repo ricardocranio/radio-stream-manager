@@ -302,13 +302,6 @@ const defaultConfig: SystemConfig = {
   powerSavingMode: false,
   // Similarity threshold for music library matching (0.5 to 0.95)
   similarityThreshold: 0.75,
-  // Configurable performance intervals (in seconds)
-  scrapeIntervalSeconds: 300, // 5 minutes default
-  missingDetectionIntervalSeconds: 30, // 30 seconds default
-  dashboardRefreshIntervalSeconds: 600, // 10 minutes default
-  // Configurable cache/history limits
-  capturedSongsLimit: 100,
-  recentSongsCacheLimit: 5,
 };
 
 const defaultDeezerConfig: DeezerConfig = {
@@ -361,19 +354,15 @@ export const useRadioStore = create<RadioState>()(
       capturedSongs: [],
       addCapturedSong: (song) =>
         set((state) => {
-          // Use configurable limit (default 100)
-          const limit = state.config.capturedSongsLimit ?? 100;
-          const duplicateCheckLimit = Math.min(50, limit / 2);
-          
-          // Avoid duplicate songs (same title/artist in recent songs)
-          const isDuplicate = state.capturedSongs.slice(0, duplicateCheckLimit).some(
+          // Avoid duplicate songs (same title/artist in last 50)
+          const isDuplicate = state.capturedSongs.slice(0, 50).some(
             s => s.title === song.title && s.artist === song.artist
           );
           if (isDuplicate) return state;
           
           // Prepend and limit - reuse array if possible
           const newSongs = [song, ...state.capturedSongs];
-          return { capturedSongs: newSongs.length > limit ? newSongs.slice(0, limit) : newSongs };
+          return { capturedSongs: newSongs.length > 100 ? newSongs.slice(0, 100) : newSongs };
         }),
       clearCapturedSongs: () => set({ capturedSongs: [] }),
 
@@ -415,18 +404,7 @@ export const useRadioStore = create<RadioState>()(
       missingSongs: [],
       setMissingSongs: (missingSongs) => set({ missingSongs }),
       addMissingSong: (song) =>
-        set((state) => {
-          // Check for duplicates by artist + title (case-insensitive)
-          const isDuplicate = state.missingSongs.some(
-            existing =>
-              existing.artist.toLowerCase() === song.artist.toLowerCase() &&
-              existing.title.toLowerCase() === song.title.toLowerCase()
-          );
-          if (isDuplicate) {
-            return state; // Don't add duplicate
-          }
-          return { missingSongs: [...state.missingSongs, song] };
-        }),
+        set((state) => ({ missingSongs: [...state.missingSongs, song] })),
       updateMissingSong: (id, updates) =>
         set((state) => ({
           missingSongs: state.missingSongs.map((s) =>
@@ -670,26 +648,17 @@ export const getDownloadStats = () => {
 };
 
 // Helper function to get active sequence based on current time and scheduled sequences
-// Can accept optional hour/minute/day to check for a specific time (useful for grade building)
-// targetDay: 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab' - if not provided, uses current day
-export const getActiveSequence = (
-  targetHour?: number, 
-  targetMinute?: number, 
-  targetDay?: 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab'
-): SequenceConfig[] => {
+export const getActiveSequence = (): SequenceConfig[] => {
   const state = useRadioStore.getState();
   const now = new Date();
-  
-  // Use provided time or current time
-  const currentHour = targetHour !== undefined ? targetHour : now.getHours();
-  const currentMinute = targetMinute !== undefined ? targetMinute : now.getMinutes();
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
   const currentTimeMinutes = currentHour * 60 + currentMinute;
   
-  // Use provided day or current day
   const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
-  const currentDay = targetDay ?? dayMap[now.getDay()];
+  const currentDay = dayMap[now.getDay()];
   
-  // Find active scheduled sequence for the given time and day
+  // Find active scheduled sequence
   const activeScheduled = state.scheduledSequences
     .filter((s) => s.enabled)
     .filter((s) => s.weekDays.length === 0 || s.weekDays.includes(currentDay))
@@ -706,7 +675,6 @@ export const getActiveSequence = (
     .sort((a, b) => b.priority - a.priority);
   
   if (activeScheduled.length > 0) {
-    console.log(`[SEQUENCE] Using scheduled sequence "${activeScheduled[0].name}" for ${currentDay.toUpperCase()} ${currentHour}:${currentMinute.toString().padStart(2, '0')}`);
     return activeScheduled[0].sequence;
   }
   

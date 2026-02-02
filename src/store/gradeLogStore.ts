@@ -67,7 +67,7 @@ export const useGradeLogStore = create<GradeLogState>()(
           timestamp: new Date(),
         };
         set((state) => ({
-          blockLogs: [newEntry, ...state.blockLogs].slice(0, 500), // Keep last 500 (lighter)
+          blockLogs: [newEntry, ...state.blockLogs].slice(0, 1000), // Keep last 1000
         }));
       },
       
@@ -78,7 +78,7 @@ export const useGradeLogStore = create<GradeLogState>()(
           timestamp: new Date(),
         }));
         set((state) => ({
-          blockLogs: [...newEntries, ...state.blockLogs].slice(0, 500), // Keep last 500 (lighter)
+          blockLogs: [...newEntries, ...state.blockLogs].slice(0, 1000),
         }));
       },
       
@@ -97,7 +97,7 @@ export const useGradeLogStore = create<GradeLogState>()(
           timestamp: new Date(),
         };
         set((state) => ({
-          systemErrors: [newError, ...state.systemErrors].slice(0, 200), // Keep last 200 (lighter)
+          systemErrors: [newError, ...state.systemErrors].slice(0, 500), // Keep last 500
         }));
         
         // Also log to console

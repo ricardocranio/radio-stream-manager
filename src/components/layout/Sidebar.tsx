@@ -131,7 +131,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             <span className="text-xs font-medium text-success">Sistema Ativo</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Beta 03 • PGM-FM
+            Versão 5.1 • PGM-FM
           </p>
         </div>
       </div>

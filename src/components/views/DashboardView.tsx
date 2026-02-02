@@ -522,7 +522,7 @@ export function DashboardView() {
               {realtimeStats.lastUpdated && (
                 <span className="text-[10px] text-muted-foreground flex items-center gap-1 whitespace-nowrap">
                   <Clock className="w-3 h-3 shrink-0" />
-                  {format(new Date(realtimeStats.lastUpdated), 'HH:mm:ss', { locale: ptBR })}
+                  {format(realtimeStats.lastUpdated, 'HH:mm:ss', { locale: ptBR })}
                 </span>
               )}
               <Button
