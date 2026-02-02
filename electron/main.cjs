@@ -372,14 +372,28 @@ function createWindow() {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, '../public/favicon.ico');
-  tray = new Tray(iconPath);
+  // Try multiple icon paths for reliability
+  let iconPath = path.join(__dirname, '../public/favicon.ico');
+  if (!fs.existsSync(iconPath)) {
+    iconPath = path.join(__dirname, 'favicon.ico');
+  }
+  if (!fs.existsSync(iconPath)) {
+    iconPath = path.join(app.getAppPath(), 'dist', 'favicon.ico');
+  }
+  
+  try {
+    tray = new Tray(iconPath);
+  } catch (error) {
+    console.error('Error creating tray with icon:', error);
+    // Fallback: create tray without custom icon (uses default)
+    tray = new Tray(path.join(__dirname, '../public/favicon.ico'));
+  }
   
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Abrir Programador',
       click: () => {
-        mainWindow.show();
+        showMainWindow();
       },
     },
     {
@@ -399,9 +413,50 @@ function createTray() {
   tray.setToolTip(`Programador Rádio - v${app.getVersion()}`);
   tray.setContextMenu(contextMenu);
 
+  // Handle single click - show window
   tray.on('click', () => {
-    mainWindow.show();
+    showMainWindow();
   });
+
+  // Handle double click - show window (Windows specific)
+  tray.on('double-click', () => {
+    showMainWindow();
+  });
+
+  // On Windows, right-click should show context menu (it's automatic, but ensure it works)
+  if (process.platform === 'win32') {
+    tray.on('right-click', () => {
+      tray.popUpContextMenu(contextMenu);
+    });
+  }
+}
+
+// Helper function to safely show main window
+function showMainWindow() {
+  if (!mainWindow) {
+    console.log('[TRAY] Window was destroyed, recreating...');
+    createWindow();
+    return;
+  }
+
+  if (mainWindow.isDestroyed()) {
+    console.log('[TRAY] Window is destroyed, recreating...');
+    createWindow();
+    return;
+  }
+
+  // If window is minimized, restore it
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+
+  // Show the window
+  mainWindow.show();
+
+  // Focus the window
+  mainWindow.focus();
+
+  console.log('[TRAY] Window shown and focused');
 }
 
 // Configure auto-updater
