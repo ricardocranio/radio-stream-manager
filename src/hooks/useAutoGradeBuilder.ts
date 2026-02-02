@@ -501,10 +501,17 @@ export function useAutoGradeBuilder() {
     const songs: string[] = [];
     const usedInBlock = new Set<string>(); // song keys (title-artist)
     const usedArtistsInBlock = new Set<string>(); // artist names - prevent same artist in same block
+    
+    // Build station ID to name mapping - include normalized variants for flexible matching
     const stationIdToName: Record<string, string> = {};
+    const stationNameToId: Record<string, string> = {};
     
     stations.forEach(s => {
       stationIdToName[s.id] = s.name;
+      stationIdToName[s.id.toLowerCase()] = s.name;
+      // Also map normalized name back to name
+      stationNameToId[s.name.toLowerCase().replace(/[^a-z0-9]/g, '')] = s.name;
+      stationNameToId[s.name.toLowerCase()] = s.name;
     });
 
     // Create a flattened pool of all songs for fallback
@@ -604,6 +611,10 @@ export function useAutoGradeBuilder() {
 
     // Get active sequence for this specific block time
     const activeSequence = getActiveSequenceForBlock(hour, minute);
+    
+    // Log which sequence is being used (helps debug)
+    const seqSummary = activeSequence.slice(0, 3).map(s => s.radioSource).join(', ');
+    console.log(`[GRADE] Bloco ${timeStr}: usando sequência [${seqSummary}...] (${activeSequence.length} posições)`);
     
     // Follow the user-configured SEQUENCE (position 1 = Band FM, position 2 = Clube FM, etc.)
     for (const seq of activeSequence) {
@@ -736,13 +747,34 @@ export function useAutoGradeBuilder() {
         continue;
       }
 
-      // Normal station logic
-      const stationName = stationIdToName[seq.radioSource];
+      // Normal station logic - flexible station name resolution
+      let stationName = stationIdToName[seq.radioSource];
+      
+      // Try lowercase match if direct match fails
+      if (!stationName) {
+        stationName = stationIdToName[seq.radioSource.toLowerCase()];
+      }
+      
+      // Try to find station songs with flexible matching
+      let stationSongs = stationName ? songsByStation[stationName] : [];
+      
+      // If no songs found, try matching by normalized name in songsByStation keys
+      if (!stationSongs || stationSongs.length === 0) {
+        const normalizedSource = seq.radioSource.toLowerCase().replace(/[^a-z0-9]/g, '');
+        for (const [poolStationName, poolSongs] of Object.entries(songsByStation)) {
+          const normalizedPool = poolStationName.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (normalizedPool.includes(normalizedSource) || normalizedSource.includes(normalizedPool)) {
+            stationName = poolStationName;
+            stationSongs = poolSongs;
+            break;
+          }
+        }
+      }
+      
       const stationStyle = getStationStyle(seq.radioSource);
-      const stationSongs = stationName ? songsByStation[stationName] : [];
       
       // Initialize index for this station
-      if (stationSongIndex[stationName] === undefined) {
+      if (stationName && stationSongIndex[stationName] === undefined) {
         stationSongIndex[stationName] = 0;
       }
 
