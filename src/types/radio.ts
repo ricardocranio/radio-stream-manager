@@ -61,6 +61,13 @@ export interface SystemConfig {
   powerSavingMode?: boolean;
   // Similarity threshold for music library matching (0.5 to 0.95)
   similarityThreshold?: number;
+  // Configurable performance intervals (in seconds)
+  scrapeIntervalSeconds?: number; // Radio scraping interval (default 300 = 5min)
+  missingDetectionIntervalSeconds?: number; // Missing song detection (default 30)
+  dashboardRefreshIntervalSeconds?: number; // Dashboard stats refresh (default 600 = 10min)
+  // Configurable cache/history limits
+  capturedSongsLimit?: number; // Max captured songs in memory (default 100)
+  recentSongsCacheLimit?: number; // Max recent songs per station (default 5)
 }
 
 export interface SequenceConfig {

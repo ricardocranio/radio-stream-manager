@@ -5,12 +5,18 @@ import { useRadioStore } from '@/store/radioStore';
 import { useRealtimeStatsStore } from '@/store/realtimeStatsStore';
 import { realtimeManager } from '@/lib/realtimeManager';
 
-const REFRESH_INTERVAL = 600; // Stats refresh every 10 minutes (was 2 min)
-const BACKGROUND_REFRESH_MULTIPLIER = 2; // Background = 20 minutes
-const STALE_THRESHOLD_MS = 120000; // 2 minutes - more lenient to avoid unnecessary refreshes
+// Default intervals (can be overridden by config)
+const DEFAULT_REFRESH_INTERVAL = 600; // 10 minutes
+const BACKGROUND_REFRESH_MULTIPLIER = 2; // Background = 2x slower
+const STALE_THRESHOLD_MS = 120000; // 2 minutes
 
 export function useRealtimeStats() {
-  const powerSavingMode = useRadioStore((s) => s.config.powerSavingMode ?? false);
+  const config = useRadioStore((s) => s.config);
+  const powerSavingMode = config.powerSavingMode ?? false;
+  
+  // Use configurable interval from config
+  const baseRefreshInterval = (config.dashboardRefreshIntervalSeconds ?? DEFAULT_REFRESH_INTERVAL);
+  
   const isInBackgroundRef = useRef(false);
   const subscriberId = useId();
   const hasInitialLoadRef = useRef(false);
@@ -18,7 +24,7 @@ export function useRealtimeStats() {
   // Use global store instead of local state
   const { stats, setStats, updateFromNewSong, setLoading, setNextRefreshIn } = useRealtimeStatsStore();
   
-  const countdownRef = useRef<number>(REFRESH_INTERVAL);
+  const countdownRef = useRef<number>(baseRefreshInterval);
 
   // Track background state
   useEffect(() => {
@@ -31,10 +37,10 @@ export function useRealtimeStats() {
 
   const getEffectiveInterval = useCallback(() => {
     if (powerSavingMode && isInBackgroundRef.current) {
-      return REFRESH_INTERVAL * BACKGROUND_REFRESH_MULTIPLIER;
+      return baseRefreshInterval * BACKGROUND_REFRESH_MULTIPLIER;
     }
-    return REFRESH_INTERVAL;
-  }, [powerSavingMode]);
+    return baseRefreshInterval;
+  }, [powerSavingMode, baseRefreshInterval]);
 
   const loadStats = useCallback(async () => {
     const context = { component: 'useRealtimeStats', action: 'loadStats' };
