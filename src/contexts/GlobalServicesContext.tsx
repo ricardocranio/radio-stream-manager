@@ -76,6 +76,9 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   // Scraping
   const scrapeIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Voz do Brasil
+  const vozBrasilSchedulerRef = useRef<NodeJS.Timeout | null>(null);
+  
   const isInitializedRef = useRef(false);
 
   // ============= STATE =============
@@ -385,6 +388,140 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     return { successCount, errorCount, newSongsCount };
   }, [scrapeStation]);
 
+  // ============= VOZ DO BRASIL SERVICE =============
+  const downloadVozBrasil = useCallback(async (): Promise<boolean> => {
+    if (!isElectron || !window.electronAPI?.downloadVozBrasil) {
+      console.log('[VOZ-SVC] ⚠️ Electron API não disponível');
+      return false;
+    }
+
+    // Get config from localStorage
+    const savedConfig = localStorage.getItem('vozBrasilConfig');
+    const config = savedConfig ? JSON.parse(savedConfig) : {
+      enabled: true,
+      downloadFolder: 'C:\\Playlist\\A Voz do Brasil',
+    };
+
+    if (!config.enabled) {
+      console.log('[VOZ-SVC] ⚠️ Voz do Brasil desabilitada nas configurações');
+      return false;
+    }
+
+    // Generate URLs with fallback
+    const now = new Date();
+    const day = now.getDate().toString().padStart(2, '0');
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const year = now.getFullYear();
+    
+    const urls = [
+      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
+      `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/voz_${day}${month}${year}.mp3`,
+      `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/vozbrasil_${day}${month}${year}.mp3`,
+      `https://conteudo.ebcservicos.com.br/25-streaming-ebc/a-voz-do-brasil/VozDoBrasil_${day}-${month}-${year}.mp3`,
+    ];
+    
+    const filename = `VozDoBrasil_${day}-${month}-${year}.mp3`;
+
+    console.log('[VOZ-SVC] 📻 Iniciando download automático da Voz do Brasil...');
+    console.log(`[VOZ-SVC] Tentando ${urls.length} URLs de fallback`);
+
+    // Try each URL until one works
+    for (let i = 0; i < urls.length; i++) {
+      const url = urls[i];
+      console.log(`[VOZ-SVC] Tentativa ${i + 1}/${urls.length}: ${url}`);
+      
+      try {
+        const result = await window.electronAPI.downloadVozBrasil({
+          url,
+          outputFolder: config.downloadFolder,
+          filename,
+        });
+        
+        if (result.success) {
+          console.log(`[VOZ-SVC] ✅ Download concluído com sucesso! Arquivo: ${filename}`);
+          return true;
+        } else {
+          console.log(`[VOZ-SVC] URL ${i + 1} falhou: ${result.error}`);
+        }
+      } catch (err) {
+        console.log(`[VOZ-SVC] URL ${i + 1} erro: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+      }
+    }
+
+    console.log('[VOZ-SVC] ❌ Todas as URLs falharam');
+    return false;
+  }, []);
+
+  const scheduleVozBrasil = useCallback(() => {
+    if (!isElectron || !window.electronAPI?.downloadVozBrasil) {
+      return;
+    }
+
+    // Get config from localStorage
+    const savedConfig = localStorage.getItem('vozBrasilConfig');
+    const config = savedConfig ? JSON.parse(savedConfig) : {
+      enabled: true,
+      scheduleTime: '20:35',
+    };
+
+    if (!config.enabled) {
+      console.log('[VOZ-SVC] Agendamento desabilitado');
+      return;
+    }
+
+    const isWeekday = (d: Date) => d.getDay() >= 1 && d.getDay() <= 5;
+    
+    const getNextDownloadTime = () => {
+      const now = new Date();
+      const [scheduleHour, scheduleMinute] = (config.scheduleTime || '20:35').split(':').map(Number);
+      
+      const nextDl = new Date(now);
+      nextDl.setHours(scheduleHour, scheduleMinute, 0, 0);
+      
+      if (nextDl <= now || !isWeekday(nextDl)) {
+        nextDl.setDate(nextDl.getDate() + 1);
+        while (!isWeekday(nextDl)) {
+          nextDl.setDate(nextDl.getDate() + 1);
+        }
+      }
+      
+      return nextDl;
+    };
+
+    const now = new Date();
+    const nextDl = getNextDownloadTime();
+    const msUntilDownload = nextDl.getTime() - now.getTime();
+    
+    console.log(`[VOZ-SVC] 📻 Próximo download agendado para: ${nextDl.toLocaleString('pt-BR')}`);
+    console.log(`[VOZ-SVC] ⏰ Tempo restante: ${Math.round(msUntilDownload / 60000)} minutos`);
+
+    // Clear existing scheduler
+    if (vozBrasilSchedulerRef.current) {
+      clearTimeout(vozBrasilSchedulerRef.current);
+    }
+
+    // Schedule the download (only if within 24h)
+    if (msUntilDownload > 0 && msUntilDownload < 86400000) {
+      vozBrasilSchedulerRef.current = setTimeout(async () => {
+        console.log('[VOZ-SVC] ⏰ Horário de download atingido!');
+        
+        // Check again if it's a weekday and enabled
+        const currentDay = new Date().getDay();
+        const currentConfig = JSON.parse(localStorage.getItem('vozBrasilConfig') || '{"enabled":true}');
+        
+        if (currentConfig.enabled && currentDay >= 1 && currentDay <= 5) {
+          console.log('[VOZ-SVC] 📻 Executando download automático...');
+          await downloadVozBrasil();
+        } else {
+          console.log('[VOZ-SVC] Download pulado (fim de semana ou desabilitado)');
+        }
+        
+        // Schedule next download after a brief delay
+        setTimeout(scheduleVozBrasil, 60000);
+      }, msUntilDownload);
+    }
+  }, [downloadVozBrasil]);
+
   // ============= INITIALIZATION =============
   useEffect(() => {
     if (isGlobalServicesRunning || isInitializedRef.current) {
@@ -410,6 +547,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log(`║ 📊 Stats:         ✅ ATIVO - refresh 10 min`.padEnd(65) + '║');
     console.log(`║ 🔄 Sync Cloud:    ✅ ATIVO (Realtime)`.padEnd(65) + '║');
     console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
+    console.log(`║ 📻 Voz do Brasil: ✅ ATIVO (Seg-Sex 20:35)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
     // 1. Download check every 10 seconds - IMMEDIATE processing when songs arrive
@@ -434,6 +572,9 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
 
     // NOTE: Grade builder runs its own intervals via useAutoGradeBuilder hook
 
+    // 3. Voz do Brasil scheduled download (Mon-Fri 20:35)
+    scheduleVozBrasil();
+
     console.log('[GLOBAL-SVC] ✅ Todos os serviços automáticos iniciados com sucesso!');
     console.log('[GLOBAL-SVC] 💡 Sistema funcionando em segundo plano - nenhuma intervenção necessária');
 
@@ -441,10 +582,11 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       console.log('[GLOBAL-SVC] 🛑 Parando todos os serviços globais');
       if (downloadIntervalRef.current) clearInterval(downloadIntervalRef.current);
       if (scrapeIntervalRef.current) clearInterval(scrapeIntervalRef.current);
+      if (vozBrasilSchedulerRef.current) clearTimeout(vozBrasilSchedulerRef.current);
       isGlobalServicesRunning = false;
       isInitializedRef.current = false;
     };
-  }, [checkNewMissingSongs, scrapeAllStations]);
+  }, [checkNewMissingSongs, scrapeAllStations, scheduleVozBrasil]);
 
   // Watch for reset signal
   useEffect(() => {
