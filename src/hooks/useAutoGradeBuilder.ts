@@ -522,7 +522,7 @@ export function useAutoGradeBuilder() {
   }, [rankingSongs, isRecentlyUsed, markSongAsUsed]);
 
   // Process fixed content filename placeholders
-  // {HH} → 2-digit hour, {DIA} → weekday code (SEG, TER, etc.), {ED} → edition number, {N} → position number
+  // {HH} → 2-digit hour, {DIA} → weekday code (SEG, TER, etc. or FINAL_DE_SEMANA), {ED} → edition number
   const processFixedContentFilename = useCallback((
     fileName: string,
     hour: number,
@@ -530,27 +530,34 @@ export function useAutoGradeBuilder() {
     editionIndex: number,
     targetDay?: WeekDay
   ): string => {
-    const dayCode = getDayCode(targetDay);
+    // For weekdays use day code (SEG, TER, etc.), for weekend use FINAL_DE_SEMANA
+    const isWeekendDay = targetDay ? ['sab', 'dom'].includes(targetDay) : [0, 6].includes(new Date().getDay());
+    const daySuffix = isWeekendDay ? 'FINAL_DE_SEMANA' : getDayCode(targetDay);
+    
     const hourStr = hour.toString().padStart(2, '0');
     const edition = (editionIndex + 1).toString().padStart(2, '0');
     
     let result = fileName
       .replace(/\{HH\}/gi, hourStr)
-      .replace(/\{DIA\}/gi, dayCode)
+      .replace(/\{DIA\}/gi, daySuffix)
       .replace(/\{ED\}/gi, edition);
     
-    // CRITICAL: Always append _{DIA} if the filename doesn't already have it
-    // This ensures all fixed content files are identified by day
-    if (!result.toLowerCase().includes('_{dia}') && !result.includes(`_${dayCode}`)) {
-      // Remove .mp3 extension if present, add day code, then re-add extension
+    // CRITICAL: Always append day suffix if the filename doesn't already have it
+    // Weekdays: _{SEG}, _{TER}, etc. | Weekend: _{FINAL_DE_SEMANA}
+    const hasDaySuffix = result.toLowerCase().includes('_{dia}') || 
+                         result.includes(`_${daySuffix}`) ||
+                         result.includes('_FINAL_DE_SEMANA');
+    
+    if (!hasDaySuffix) {
+      // Remove .mp3 extension if present, add day suffix, then re-add extension
       if (result.toLowerCase().endsWith('.mp3')) {
-        result = result.slice(0, -4) + `_${dayCode}.mp3`;
+        result = result.slice(0, -4) + `_${daySuffix}.mp3`;
       } else {
-        result = result + `_${dayCode}`;
+        result = result + `_${daySuffix}`;
       }
     } else {
       // Replace any remaining {DIA} placeholder (case insensitive)
-      result = result.replace(/\{DIA\}/gi, dayCode);
+      result = result.replace(/\{DIA\}/gi, daySuffix);
     }
     
     return sanitizeFilename(result);
