@@ -11,6 +11,32 @@ interface CheckResult {
 }
 
 /**
+ * Remove common suffixes like (Ao Vivo), (Live), (Acústico), [Remix], etc.
+ * This allows matching "Song (Ao Vivo)" with "Song" in the library
+ */
+function normalizeTitle(title: string): string {
+  return title
+    // Remove parenthetical suffixes
+    .replace(/\s*\((?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^)]*|ft\.?[^)]*)\)/gi, '')
+    // Remove bracketed suffixes
+    .replace(/\s*\[(?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^]]*|ft\.?[^]]*)\]/gi, '')
+    // Clean up extra whitespace
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Normalize artist name for comparison
+ */
+function normalizeArtist(artist: string): string {
+  return artist
+    // Remove featuring indicators at the end
+    .replace(/\s*(?:feat\.?|ft\.?|featuring|part\.?|c\/|&|,)\s*.+$/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * Hook to check if a song exists in the local music library
  * Uses Electron IPC with SIMILARITY matching (configurable threshold) when available
  * Falls back to simulation for web
@@ -22,19 +48,41 @@ export function useCheckMusicLibrary() {
   /**
    * Check song using SIMILARITY matching with configurable threshold
    * Uses find-song-match which applies Levenshtein distance comparison
+   * 
+   * IMPORTANT: Normalizes titles to remove (Ao Vivo), (Live), etc. before matching
+   * This prevents duplicate downloads when library has base version
    */
   const checkSongExists = useCallback(async (artist: string, title: string): Promise<CheckResult> => {
     const threshold = config.similarityThreshold || 0.75;
     
+    // Normalize to match base versions (e.g., "Song (Ao Vivo)" -> "Song")
+    const normalizedArtist = normalizeArtist(artist);
+    const normalizedTitle = normalizeTitle(title);
+    
     // Use Electron API if available - IMPORTANT: use findSongMatch for similarity
     if (window.electronAPI?.findSongMatch) {
       try {
-        const result = await window.electronAPI.findSongMatch({
-          artist,
-          title,
+        // First try with normalized title (removes Ao Vivo, Live, etc.)
+        let result = await window.electronAPI.findSongMatch({
+          artist: normalizedArtist,
+          title: normalizedTitle,
           musicFolders: config.musicFolders,
           threshold,
-        } as any); // Type assertion to bypass potential stale types
+        } as any);
+        
+        // If no match with normalized, try original (in case library has the live version)
+        if (!result.exists && (normalizedTitle !== title || normalizedArtist !== artist)) {
+          const originalResult = await window.electronAPI.findSongMatch({
+            artist,
+            title,
+            musicFolders: config.musicFolders,
+            threshold,
+          } as any);
+          
+          if (originalResult.exists) {
+            result = originalResult;
+          }
+        }
         
         // Log similarity check result
         if (result.exists && result.similarity !== undefined) {
@@ -88,11 +136,21 @@ export function useCheckMusicLibrary() {
     // Fallback: try checkSongExists if findSongMatch not available
     if (window.electronAPI?.checkSongExists) {
       try {
-        const result = await window.electronAPI.checkSongExists({
-          artist,
-          title,
+        // Try normalized first, then original
+        let result = await window.electronAPI.checkSongExists({
+          artist: normalizedArtist,
+          title: normalizedTitle,
           musicFolders: config.musicFolders,
         });
+        
+        if (!result.exists && (normalizedTitle !== title || normalizedArtist !== artist)) {
+          result = await window.electronAPI.checkSongExists({
+            artist,
+            title,
+            musicFolders: config.musicFolders,
+          });
+        }
+        
         return result;
       } catch (error) {
         console.error('Error checking song in library:', error);
@@ -101,7 +159,6 @@ export function useCheckMusicLibrary() {
     }
 
     // Fallback for web: simulate check (always returns false in web mode)
-    // Reduced logging - only log every 10th check to reduce console spam
     return { exists: false };
   }, [config.musicFolders, config.similarityThreshold, addSimilarityLog]);
 
@@ -124,6 +181,7 @@ export function useCheckMusicLibrary() {
 
 /**
  * Standalone function to check a song in the library using SIMILARITY
+ * Includes normalization to match base versions (removes Ao Vivo, Live, etc.)
  * @param threshold - Similarity threshold (0.5 to 0.95), defaults to 0.75
  */
 export async function checkSongInLibrary(
@@ -132,15 +190,34 @@ export async function checkSongInLibrary(
   musicFolders: string[],
   threshold: number = 0.75
 ): Promise<CheckResult> {
+  // Normalize to match base versions
+  const normalizedArtist = normalizeArtist(artist);
+  const normalizedTitle = normalizeTitle(title);
+  
   // Prefer findSongMatch for similarity matching
   if (window.electronAPI?.findSongMatch) {
     try {
-      const result = await window.electronAPI.findSongMatch({
-        artist,
-        title,
+      // First try normalized
+      let result = await window.electronAPI.findSongMatch({
+        artist: normalizedArtist,
+        title: normalizedTitle,
         musicFolders,
         threshold,
-      } as any); // Type assertion to bypass potential stale types
+      } as any);
+      
+      // If no match, try original
+      if (!result.exists && (normalizedTitle !== title || normalizedArtist !== artist)) {
+        const originalResult = await window.electronAPI.findSongMatch({
+          artist,
+          title,
+          musicFolders,
+          threshold,
+        } as any);
+        
+        if (originalResult.exists) {
+          result = originalResult;
+        }
+      }
       
       // Only log misses to reduce console spam - matches are silent
       if (!result.exists && result.similarity && result.similarity > 0.5) {
@@ -159,11 +236,23 @@ export async function checkSongInLibrary(
   // Fallback to exact match
   if (window.electronAPI?.checkSongExists) {
     try {
-      return await window.electronAPI.checkSongExists({
-        artist,
-        title,
+      // Try normalized first
+      let result = await window.electronAPI.checkSongExists({
+        artist: normalizedArtist,
+        title: normalizedTitle,
         musicFolders,
       });
+      
+      // If no match, try original
+      if (!result.exists && (normalizedTitle !== title || normalizedArtist !== artist)) {
+        result = await window.electronAPI.checkSongExists({
+          artist,
+          title,
+          musicFolders,
+        });
+      }
+      
+      return result;
     } catch (error) {
       console.error('Error checking song:', error);
       return { exists: false };
