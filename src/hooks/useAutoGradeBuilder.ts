@@ -467,7 +467,8 @@ export function useAutoGradeBuilder() {
 
     // Normal block with 10 songs following the configured SEQUENCE
     const songs: string[] = [];
-    const usedInBlock = new Set<string>();
+    const usedInBlock = new Set<string>(); // song keys (title-artist)
+    const usedArtistsInBlock = new Set<string>(); // artist names - prevent same artist in same block
     const stationIdToName: Record<string, string> = {};
     
     stations.forEach(s => {
@@ -547,8 +548,10 @@ export function useAutoGradeBuilder() {
         const key = `${rankSong.title.toLowerCase()}-${rankSong.artist.toLowerCase()}`;
         top50IndexUsed++;
         
-        if (!usedInBlock.has(key) && !isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
+        const normalizedArtist = rankSong.artist.toLowerCase().trim();
+        if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
           usedInBlock.add(key);
+          usedArtistsInBlock.add(normalizedArtist);
           markSongAsUsed(rankSong.title, rankSong.artist, timeStr);
           
           blockLogs.push({
@@ -657,13 +660,15 @@ export function useAutoGradeBuilder() {
         for (const candidate of allSongsPool) {
           const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
           
-          if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
+          const normalizedArtist = candidate.artist.toLowerCase().trim();
+          if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
             const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
             
             if (libraryResult.exists) {
               const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
               songs.push(`"${correctFilename}"`);
               usedInBlock.add(key);
+              usedArtistsInBlock.add(normalizedArtist);
               markSongAsUsed(candidate.title, candidate.artist, timeStr);
               
               blockLogs.push({
@@ -714,9 +719,11 @@ export function useAutoGradeBuilder() {
       const carryOverForStation = carryOverByStation[stationName] || [];
       for (const carryOverSong of carryOverForStation) {
         const key = `${carryOverSong.title.toLowerCase()}-${carryOverSong.artist.toLowerCase()}`;
-        if (!usedInBlock.has(key) && !isRecentlyUsed(carryOverSong.title, carryOverSong.artist, timeStr, isFullDay)) {
+        const normalizedArtist = carryOverSong.artist.toLowerCase().trim();
+        if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !isRecentlyUsed(carryOverSong.title, carryOverSong.artist, timeStr, isFullDay)) {
           selectedSong = carryOverSong;
           usedInBlock.add(key);
+          usedArtistsInBlock.add(normalizedArtist);
           blockLogs.push({
             blockTime: timeStr,
             type: 'used',
@@ -738,8 +745,9 @@ export function useAutoGradeBuilder() {
           const candidate = stationSongs[songIdx];
           const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
 
-          // Check if not used in this block and not recently used
-          if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
+          const normalizedArtist = candidate.artist.toLowerCase().trim();
+          // Check if not used in this block, artist not already used, and not recently used
+          if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
             const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
             
             if (libraryResult.exists) {
@@ -783,7 +791,8 @@ export function useAutoGradeBuilder() {
         for (const rankSong of sortedRanking) {
           const key = `${rankSong.title.toLowerCase()}-${rankSong.artist.toLowerCase()}`;
           
-          if (!usedInBlock.has(key) && !isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
+          const normalizedArtist = rankSong.artist.toLowerCase().trim();
+          if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
             const libraryResult = await findSongInLibrary(rankSong.artist, rankSong.title);
             
             if (libraryResult.exists) {
@@ -824,7 +833,8 @@ export function useAutoGradeBuilder() {
             
             const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
             
-            if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
+            const normalizedArtist = candidate.artist.toLowerCase().trim();
+            if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
               const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
               
               if (libraryResult.exists) {
@@ -854,7 +864,8 @@ export function useAutoGradeBuilder() {
         for (const candidate of allSongsPool) {
           const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
           
-          if (!usedInBlock.has(key) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
+          const normalizedArtist = candidate.artist.toLowerCase().trim();
+          if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
             const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
             
             if (libraryResult.exists) {
@@ -884,7 +895,8 @@ export function useAutoGradeBuilder() {
         for (const rankSong of shuffledRanking) {
           const key = `${rankSong.title.toLowerCase()}-${rankSong.artist.toLowerCase()}`;
           
-          if (!usedInBlock.has(key) && !isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
+          const normalizedArtist = rankSong.artist.toLowerCase().trim();
+          if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
             const libraryResult = await findSongInLibrary(rankSong.artist, rankSong.title);
             
             if (libraryResult.exists) {
@@ -917,6 +929,7 @@ export function useAutoGradeBuilder() {
         // Format: "Artista - Musica.mp3" (already sanitized via filename property)
         songs.push(`"${selectedSong.filename}"`);
         usedInBlock.add(`${selectedSong.title.toLowerCase()}-${selectedSong.artist.toLowerCase()}`);
+        usedArtistsInBlock.add(selectedSong.artist.toLowerCase().trim());
         markSongAsUsed(selectedSong.title, selectedSong.artist, timeStr);
         
         blockLogs.push({
