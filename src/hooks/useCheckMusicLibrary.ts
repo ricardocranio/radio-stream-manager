@@ -101,7 +101,7 @@ export function useCheckMusicLibrary() {
     }
 
     // Fallback for web: simulate check (always returns false in web mode)
-    console.log(`[WEB] Would check: ${artist} - ${title} in ${config.musicFolders.join(', ')}`);
+    // Reduced logging - only log every 10th check to reduce console spam
     return { exists: false };
   }, [config.musicFolders, config.similarityThreshold, addSimilarityLog]);
 
@@ -142,15 +142,11 @@ export async function checkSongInLibrary(
         threshold,
       } as any); // Type assertion to bypass potential stale types
       
-      const thresholdPercent = Math.round(threshold * 100);
-      const similarityPercent = Math.round((result.similarity || 0) * 100);
-      
-      if (result.exists) {
-        console.log(`[LIBRARY] ✅ Match: ${artist} - ${title} → ${result.filename} (${similarityPercent}% ≥ ${thresholdPercent}%)`);
-      } else if (result.similarity && result.similarity > 0) {
-        console.log(`[LIBRARY] ❌ Below threshold: ${artist} - ${title} → ${result.filename} (${similarityPercent}% < ${thresholdPercent}%)`);
-      } else {
-        console.log(`[LIBRARY] ⚠️ No match: ${artist} - ${title}`);
+      // Only log misses to reduce console spam - matches are silent
+      if (!result.exists && result.similarity && result.similarity > 0.5) {
+        const thresholdPercent = Math.round(threshold * 100);
+        const similarityPercent = Math.round((result.similarity || 0) * 100);
+        console.log(`[LIBRARY] ❌ ${artist} - ${title} (${similarityPercent}% < ${thresholdPercent}%)`);
       }
       
       return result;
