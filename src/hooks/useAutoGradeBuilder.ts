@@ -59,6 +59,20 @@ const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI?.isE
 const ARTIST_REPETITION_MINUTES = 60;
 const DEFAULT_MINUTES_BEFORE_BLOCK = 10; // Build 10 minutes before each block
 
+// Mapeamento explícito de IDs da store local para nomes no banco de dados
+// Isso garante que TODAS as estações funcionem corretamente na sequência
+const STATION_ID_TO_DB_NAME: Record<string, string> = {
+  'bh': 'BH FM',
+  'band': 'Band FM',
+  'clube': 'Clube FM',
+  'showfm': 'Show FM 101.1',
+  'globo': 'Rádio Globo RJ',
+  'blink': 'Blink 102 FM',
+  'positiva': 'Positiva FM',
+  'liberdade': 'Liberdade FM',
+  'mix': 'Mix FM',
+};
+
 export function useAutoGradeBuilder() {
   const { toast } = useToast();
   const {
@@ -314,8 +328,11 @@ export function useAutoGradeBuilder() {
       const stationNameToStyle: Record<string, string> = {};
       const seenSongs = new Set<string>(); // Avoid duplicates
 
+      // Build style mapping for all stations (by name AND by ID)
       stations.forEach(s => {
         stationNameToStyle[s.name] = s.styles?.[0] || 'POP/VARIADO';
+        stationNameToStyle[s.name.toLowerCase()] = s.styles?.[0] || 'POP/VARIADO';
+        stationNameToStyle[s.id] = s.styles?.[0] || 'POP/VARIADO';
       });
 
       data?.forEach(song => {
@@ -329,7 +346,7 @@ export function useAutoGradeBuilder() {
         }
         // Increased limit per station from 50 to 150
         if (songsByStation[song.station_name].length < 150) {
-          const style = stationNameToStyle[song.station_name] || 'POP/VARIADO';
+          const style = stationNameToStyle[song.station_name] || stationNameToStyle[song.station_name.toLowerCase()] || 'POP/VARIADO';
           songsByStation[song.station_name].push({
             title: song.title,
             artist: song.artist,
@@ -340,8 +357,9 @@ export function useAutoGradeBuilder() {
         }
       });
 
-      const totalSongs = Object.values(songsByStation).reduce((sum, arr) => sum + arr.length, 0);
-      console.log(`[AUTO-GRADE] Pool de músicas: ${totalSongs} únicas de ${Object.keys(songsByStation).length} estações`);
+      // Log available stations for debugging
+      const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
+      console.log(`[AUTO-GRADE] Pool: ${stationList}`);
 
       return songsByStation;
     } catch (error) {
@@ -748,22 +766,37 @@ export function useAutoGradeBuilder() {
       }
 
       // Normal station logic - flexible station name resolution
-      let stationName = stationIdToName[seq.radioSource];
+      // The seq.radioSource is the station ID (e.g., 'bh', 'band', 'globo', 'mix', etc.)
+      // We need to map it to the actual station_name in songsByStation (e.g., 'BH FM', 'Band FM', etc.)
       
-      // Try lowercase match if direct match fails
+      // Step 1: Use explicit mapping first (most reliable)
+      let stationName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()] || '';
+      
+      // Step 2: Fallback to station config if explicit mapping not found
       if (!stationName) {
-        stationName = stationIdToName[seq.radioSource.toLowerCase()];
+        const stationConfig = stations.find(s => s.id === seq.radioSource || s.id.toLowerCase() === seq.radioSource.toLowerCase());
+        stationName = stationConfig?.name || '';
       }
       
-      // Try to find station songs with flexible matching
-      let stationSongs = stationName ? songsByStation[stationName] : [];
+      // Step 3: Get songs for this station from the pool
+      let stationSongs: SongEntry[] = [];
       
-      // If no songs found, try matching by normalized name in songsByStation keys
-      if (!stationSongs || stationSongs.length === 0) {
+      if (stationName && songsByStation[stationName]) {
+        // Direct match by name
+        stationSongs = songsByStation[stationName];
+      } else {
+        // Try flexible matching - the station_name in database might be slightly different
+        const normalizedConfigName = stationName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const normalizedSource = seq.radioSource.toLowerCase().replace(/[^a-z0-9]/g, '');
+        
         for (const [poolStationName, poolSongs] of Object.entries(songsByStation)) {
           const normalizedPool = poolStationName.toLowerCase().replace(/[^a-z0-9]/g, '');
-          if (normalizedPool.includes(normalizedSource) || normalizedSource.includes(normalizedPool)) {
+          
+          // Match by: exact ID, config name, or partial match
+          if (normalizedPool === normalizedSource || 
+              normalizedPool === normalizedConfigName ||
+              normalizedPool.includes(normalizedSource) || 
+              normalizedSource.includes(normalizedPool)) {
             stationName = poolStationName;
             stationSongs = poolSongs;
             break;
@@ -772,6 +805,11 @@ export function useAutoGradeBuilder() {
       }
       
       const stationStyle = getStationStyle(seq.radioSource);
+      
+      // Log if no songs found for this station (helps debug)
+      if (stationSongs.length === 0) {
+        console.log(`[GRADE] ⚠️ Sem músicas para ${seq.radioSource} (${stationName || 'não mapeado'})`);
+      }
       
       // Initialize index for this station
       if (stationName && stationSongIndex[stationName] === undefined) {
