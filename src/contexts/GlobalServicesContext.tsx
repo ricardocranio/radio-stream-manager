@@ -404,32 +404,36 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     const { deezerConfig, stations, config } = state;
     const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl).length;
     
+    // Use configurable intervals from config (with defaults)
+    const scrapeIntervalSec = config.scrapeIntervalSeconds ?? 300; // 5 min default
+    const missingDetectionSec = config.missingDetectionIntervalSeconds ?? 30; // 30s default
+    
     console.log('╔══════════════════════════════════════════════════════════════╗');
     console.log('║     🚀 SISTEMA AUTOMATIZADO - INICIANDO TODOS OS SERVIÇOS    ║');
     console.log('╠══════════════════════════════════════════════════════════════╣');
-    console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras) - 5 min` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
+    console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras) - ${Math.floor(scrapeIntervalSec / 60)} min` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
     console.log(`║ 🎵 Grade Builder: ✅ ATIVO (${gradeBuilder.minutesBeforeBlock || 10} min antes de cada bloco)`.padEnd(65) + '║');
     console.log(`║ 📥 Downloads:     ${deezerConfig.autoDownload ? '✅ IMEDIATO (5s entre cada)' : '⏸️ MANUAL (ativar em Config)'}`.padEnd(65) + '║');
     console.log(`║ 💾 Banco Musical: ${config.musicFolders?.length > 0 ? `✅ ${config.musicFolders.length} pastas` : '⚠️ Configurar pastas'}`.padEnd(65) + '║');
-    console.log(`║ 📊 Stats:         ✅ ATIVO - refresh 10 min`.padEnd(65) + '║');
+    console.log(`║ 📊 Detecção:      ✅ ATIVO - a cada ${missingDetectionSec}s`.padEnd(65) + '║');
     console.log(`║ 🔄 Sync Cloud:    ✅ ATIVO (Realtime)`.padEnd(65) + '║');
     console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
-    // 1. Download check every 10 seconds - IMMEDIATE processing when songs arrive
+    // 1. Download check using configurable interval (default 30s)
     downloadIntervalRef.current = setInterval(() => {
       checkNewMissingSongs();
-    }, 10000);
+    }, missingDetectionSec * 1000);
     checkNewMissingSongs(); // Initial check immediately
 
-    // 2. Scraping every 5 minutes (was 3 min - optimized for performance)
+    // 2. Scraping using configurable interval (default 5 minutes)
     scrapeIntervalRef.current = setInterval(() => {
       const currentState = useRadioStore.getState();
       const hasEnabledStations = currentState.stations.some(s => s.enabled && s.scrapeUrl);
       if (hasEnabledStations) {
         scrapeAllStations();
       }
-    }, 5 * 60 * 1000);
+    }, scrapeIntervalSec * 1000);
 
     // Initial scrape
     if (enabledStations > 0) {

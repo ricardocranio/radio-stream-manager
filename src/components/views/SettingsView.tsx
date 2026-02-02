@@ -762,24 +762,160 @@ export function SettingsView() {
               Performance e Economia de Recursos
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Power Saving Mode - NEW */}
-              <div className="flex items-center justify-between p-4 rounded-lg bg-orange-500/10 border border-orange-500/30">
-                <div>
-                  <Label className="text-orange-400">🔋 Modo Economia</Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Reduz atualizações quando o app está em segundo plano (3x mais lento)
+          <CardContent className="p-6 space-y-6">
+            {/* Power Saving Mode */}
+            <div className="flex items-center justify-between p-4 rounded-lg bg-orange-500/10 border border-orange-500/30">
+              <div>
+                <Label className="text-orange-400">🔋 Modo Economia</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Reduz atualizações quando o app está em segundo plano (2x mais lento)
+                </p>
+              </div>
+              <Switch
+                checked={(localConfig as any).powerSavingMode ?? false}
+                onCheckedChange={(checked) =>
+                  setLocalConfig((prev) => ({ ...prev, powerSavingMode: checked }))
+                }
+              />
+            </div>
+
+            {/* Interval Settings */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Intervalos de Atualização
+              </h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Scrape Interval */}
+                <div className="p-4 rounded-lg bg-secondary/30 border border-border space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Captura de Rádios</Label>
+                    <span className="text-sm font-mono text-primary">
+                      {Math.floor((localConfig.scrapeIntervalSeconds ?? 300) / 60)}min
+                    </span>
+                  </div>
+                  <Slider
+                    value={[localConfig.scrapeIntervalSeconds ?? 300]}
+                    onValueChange={([value]) =>
+                      setLocalConfig((prev) => ({ ...prev, scrapeIntervalSeconds: value }))
+                    }
+                    min={120}
+                    max={900}
+                    step={60}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    2-15 min (padrão: 5min)
                   </p>
                 </div>
-                <Switch
-                  checked={(localConfig as any).powerSavingMode ?? false}
-                  onCheckedChange={(checked) =>
-                    setLocalConfig((prev) => ({ ...prev, powerSavingMode: checked }))
-                  }
-                />
-              </div>
 
+                {/* Missing Detection Interval */}
+                <div className="p-4 rounded-lg bg-secondary/30 border border-border space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Detecção de Faltantes</Label>
+                    <span className="text-sm font-mono text-primary">
+                      {localConfig.missingDetectionIntervalSeconds ?? 30}s
+                    </span>
+                  </div>
+                  <Slider
+                    value={[localConfig.missingDetectionIntervalSeconds ?? 30]}
+                    onValueChange={([value]) =>
+                      setLocalConfig((prev) => ({ ...prev, missingDetectionIntervalSeconds: value }))
+                    }
+                    min={10}
+                    max={120}
+                    step={10}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    10-120s (padrão: 30s)
+                  </p>
+                </div>
+
+                {/* Dashboard Refresh Interval */}
+                <div className="p-4 rounded-lg bg-secondary/30 border border-border space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Refresh Dashboard</Label>
+                    <span className="text-sm font-mono text-primary">
+                      {Math.floor((localConfig.dashboardRefreshIntervalSeconds ?? 600) / 60)}min
+                    </span>
+                  </div>
+                  <Slider
+                    value={[localConfig.dashboardRefreshIntervalSeconds ?? 600]}
+                    onValueChange={([value]) =>
+                      setLocalConfig((prev) => ({ ...prev, dashboardRefreshIntervalSeconds: value }))
+                    }
+                    min={300}
+                    max={1800}
+                    step={60}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    5-30 min (padrão: 10min)
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Cache & Memory Limits */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <HardDrive className="w-4 h-4" />
+                Limites de Cache e Memória
+              </h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Captured Songs Limit */}
+                <div className="p-4 rounded-lg bg-secondary/30 border border-border space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Histórico de Capturadas</Label>
+                    <span className="text-sm font-mono text-primary">
+                      {localConfig.capturedSongsLimit ?? 100} músicas
+                    </span>
+                  </div>
+                  <Slider
+                    value={[localConfig.capturedSongsLimit ?? 100]}
+                    onValueChange={([value]) =>
+                      setLocalConfig((prev) => ({ ...prev, capturedSongsLimit: value }))
+                    }
+                    min={25}
+                    max={200}
+                    step={25}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    25-200 músicas (padrão: 100)
+                  </p>
+                </div>
+
+                {/* Recent Songs Cache Limit */}
+                <div className="p-4 rounded-lg bg-secondary/30 border border-border space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Cache por Estação</Label>
+                    <span className="text-sm font-mono text-primary">
+                      {localConfig.recentSongsCacheLimit ?? 5} músicas
+                    </span>
+                  </div>
+                  <Slider
+                    value={[localConfig.recentSongsCacheLimit ?? 5]}
+                    onValueChange={([value]) =>
+                      setLocalConfig((prev) => ({ ...prev, recentSongsCacheLimit: value }))
+                    }
+                    min={3}
+                    max={10}
+                    step={1}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    3-10 músicas por estação (padrão: 5)
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Toggles */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border">
               <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border">
                 <div>
                   <Label>Curadoria TOP50 (10x10)</Label>
@@ -795,36 +931,6 @@ export function SettingsView() {
                   <Label>Auto-Clean</Label>
                   <p className="text-xs text-muted-foreground mt-1">
                     Limpar músicas faltando automaticamente
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border">
-                <div>
-                  <Label>Logging Detalhado</Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Registrar operações no log
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border">
-                <div>
-                  <Label>Conteúdo Fixo</Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Incluir notícias/horóscopo
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border">
-                <div>
-                  <Label>Ranking de Sucessos</Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Usar ranking para priorização
                   </p>
                 </div>
                 <Switch defaultChecked />

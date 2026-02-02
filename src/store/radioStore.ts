@@ -302,6 +302,13 @@ const defaultConfig: SystemConfig = {
   powerSavingMode: false,
   // Similarity threshold for music library matching (0.5 to 0.95)
   similarityThreshold: 0.75,
+  // Configurable performance intervals (in seconds)
+  scrapeIntervalSeconds: 300, // 5 minutes default
+  missingDetectionIntervalSeconds: 30, // 30 seconds default
+  dashboardRefreshIntervalSeconds: 600, // 10 minutes default
+  // Configurable cache/history limits
+  capturedSongsLimit: 100,
+  recentSongsCacheLimit: 5,
 };
 
 const defaultDeezerConfig: DeezerConfig = {
@@ -354,15 +361,19 @@ export const useRadioStore = create<RadioState>()(
       capturedSongs: [],
       addCapturedSong: (song) =>
         set((state) => {
-          // Avoid duplicate songs (same title/artist in last 50)
-          const isDuplicate = state.capturedSongs.slice(0, 50).some(
+          // Use configurable limit (default 100)
+          const limit = state.config.capturedSongsLimit ?? 100;
+          const duplicateCheckLimit = Math.min(50, limit / 2);
+          
+          // Avoid duplicate songs (same title/artist in recent songs)
+          const isDuplicate = state.capturedSongs.slice(0, duplicateCheckLimit).some(
             s => s.title === song.title && s.artist === song.artist
           );
           if (isDuplicate) return state;
           
           // Prepend and limit - reuse array if possible
           const newSongs = [song, ...state.capturedSongs];
-          return { capturedSongs: newSongs.length > 100 ? newSongs.slice(0, 100) : newSongs };
+          return { capturedSongs: newSongs.length > limit ? newSongs.slice(0, limit) : newSongs };
         }),
       clearCapturedSongs: () => set({ capturedSongs: [] }),
 
