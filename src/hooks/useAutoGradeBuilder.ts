@@ -118,7 +118,7 @@ export function useAutoGradeBuilder() {
   // These will be prioritized in the next block since downloads are fast (~1 min)
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
 
-  // Get day code for filename - SÁB with accent for compatibility
+  // Get day code for filename - abbreviated (SEG, TER, etc.) for file naming convention
   // Can receive targetDay for full-day generation (e.g., 'seg', 'ter', etc.)
   const getDayCode = useCallback((targetDay?: WeekDay) => {
     const dayMap: Record<WeekDay, string> = {
@@ -136,6 +136,26 @@ export function useAutoGradeBuilder() {
     }
     
     const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
+    return days[new Date().getDay()];
+  }, []);
+
+  // Get FULL day name for fixed content filenames (SEGUNDA, TERCA, etc.) - NO abbreviation
+  const getFullDayName = useCallback((targetDay?: WeekDay) => {
+    const dayMap: Record<WeekDay, string> = {
+      'dom': 'DOMINGO',
+      'seg': 'SEGUNDA',
+      'ter': 'TERCA',
+      'qua': 'QUARTA',
+      'qui': 'QUINTA',
+      'sex': 'SEXTA',
+      'sab': 'SABADO',
+    };
+    
+    if (targetDay) {
+      return dayMap[targetDay] || 'SEGUNDA';
+    }
+    
+    const days = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SABADO'];
     return days[new Date().getDay()];
   }, []);
 
@@ -522,7 +542,7 @@ export function useAutoGradeBuilder() {
   }, [rankingSongs, isRecentlyUsed, markSongAsUsed]);
 
   // Process fixed content filename placeholders
-  // {HH} → 2-digit hour, {DIA} → weekday code (SEG, TER, etc.), {ED} → edition number, {N} → position number
+  // {HH} → 2-digit hour, {DIA} → FULL day name (SEGUNDA, TERCA, etc.) - NO abbreviation, {ED} → edition number
   const processFixedContentFilename = useCallback((
     fileName: string,
     hour: number,
@@ -530,31 +550,35 @@ export function useAutoGradeBuilder() {
     editionIndex: number,
     targetDay?: WeekDay
   ): string => {
-    const dayCode = getDayCode(targetDay);
+    // Use FULL day name (SEGUNDA, TERCA, etc.) - NOT abbreviated (SEG, TER)
+    const fullDayName = getFullDayName(targetDay);
     const hourStr = hour.toString().padStart(2, '0');
     const edition = (editionIndex + 1).toString().padStart(2, '0');
     
     let result = fileName
       .replace(/\{HH\}/gi, hourStr)
-      .replace(/\{DIA\}/gi, dayCode)
+      .replace(/\{DIA\}/gi, fullDayName)
       .replace(/\{ED\}/gi, edition);
     
-    // CRITICAL: Always append _{DIA} if the filename doesn't already have it
+    // CRITICAL: Always append _{DIA} (full name) if the filename doesn't already have it
     // This ensures all fixed content files are identified by day
-    if (!result.toLowerCase().includes('_{dia}') && !result.includes(`_${dayCode}`)) {
-      // Remove .mp3 extension if present, add day code, then re-add extension
+    const hasFullDayName = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SABADO']
+      .some(day => result.toUpperCase().includes(`_${day}`));
+    
+    if (!result.toLowerCase().includes('_{dia}') && !hasFullDayName) {
+      // Remove .mp3 extension if present, add full day name, then re-add extension
       if (result.toLowerCase().endsWith('.mp3')) {
-        result = result.slice(0, -4) + `_${dayCode}.mp3`;
+        result = result.slice(0, -4) + `_${fullDayName}.mp3`;
       } else {
-        result = result + `_${dayCode}`;
+        result = result + `_${fullDayName}`;
       }
     } else {
       // Replace any remaining {DIA} placeholder (case insensitive)
-      result = result.replace(/\{DIA\}/gi, dayCode);
+      result = result.replace(/\{DIA\}/gi, fullDayName);
     }
     
     return sanitizeFilename(result);
-  }, [getDayCode]);
+  }, [getFullDayName]);
 
   // Generate a single block line with format: "musica1.mp3",vht,"musica2.mp3",vht,...
   // isFullDay = true uses shorter repetition window (30 min instead of 60)
