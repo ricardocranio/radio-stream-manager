@@ -192,6 +192,7 @@ export function useAutoGradeBuilder() {
   }, [config.artistRepetitionMinutes]);
 
   // Mark song as used
+  // Mark song as used
   const markSongAsUsed = useCallback((title: string, artist: string, blockTime: string) => {
     usedSongsRef.current.push({
       title,
@@ -199,8 +200,9 @@ export function useAutoGradeBuilder() {
       usedAt: new Date(),
       blockTime,
     });
-    if (usedSongsRef.current.length > 100) {
-      usedSongsRef.current = usedSongsRef.current.slice(-100);
+    // Keep last 500 entries (enough for full day + overlap)
+    if (usedSongsRef.current.length > 500) {
+      usedSongsRef.current = usedSongsRef.current.slice(-500);
     }
   }, []);
 
@@ -209,6 +211,78 @@ export function useAutoGradeBuilder() {
     usedSongsRef.current = [];
     carryOverSongsRef.current = []; // Also clear carry-over for new day
   }, []);
+
+  // Reconstruct used songs history from existing TXT file
+  // This ensures artist/song repetition rules work correctly when updating individual blocks
+  const reconstructHistoryFromFile = useCallback(async (dayCode: string): Promise<void> => {
+    if (!isElectronEnv || !window.electronAPI?.readGradeFile) {
+      console.log('[HISTORY] Skipping history reconstruction - not in Electron');
+      return;
+    }
+
+    try {
+      const filename = `${dayCode}.txt`;
+      const result = await window.electronAPI.readGradeFile({
+        folder: config.gradeFolder,
+        filename,
+      });
+
+      if (!result.success || !result.content) {
+        console.log('[HISTORY] No existing file to reconstruct history from');
+        return;
+      }
+
+      const lines = result.content.split('\n').filter(l => l.trim());
+      let songsAdded = 0;
+
+      for (const line of lines) {
+        // Parse time from line: "HH:MM (ID=...) ..."
+        const timeMatch = line.match(/^(\d{2}:\d{2})/);
+        if (!timeMatch) continue;
+        const blockTime = timeMatch[1];
+
+        // Extract all quoted filenames: "Artist - Title.mp3"
+        const songMatches = line.matchAll(/"([^"]+\.mp3)"/g);
+        
+        for (const match of songMatches) {
+          const filename = match[1];
+          
+          // Parse "Artist - Title.mp3" format
+          const songMatch = filename.match(/^(.+?)\s*-\s*(.+?)\.mp3$/i);
+          if (songMatch) {
+            const artist = songMatch[1].trim();
+            const title = songMatch[2].trim();
+            
+            // Check if already in history to avoid duplicates
+            const alreadyExists = usedSongsRef.current.some(
+              s => s.title.toLowerCase() === title.toLowerCase() &&
+                   s.artist.toLowerCase() === artist.toLowerCase() &&
+                   s.blockTime === blockTime
+            );
+            
+            if (!alreadyExists) {
+              usedSongsRef.current.push({
+                title,
+                artist,
+                usedAt: new Date(),
+                blockTime,
+              });
+              songsAdded++;
+            }
+          }
+        }
+      }
+
+      // Keep last 500 entries (increased for full day support)
+      if (usedSongsRef.current.length > 500) {
+        usedSongsRef.current = usedSongsRef.current.slice(-500);
+      }
+
+      console.log(`[HISTORY] ✅ Reconstruído histórico: ${songsAdded} músicas de ${lines.length} blocos`);
+    } catch (error) {
+      console.error('[HISTORY] Error reconstructing history:', error);
+    }
+  }, [config.gradeFolder]);
 
   // Add song to carry-over queue (will be used in next block after download)
   const addCarryOverSong = useCallback((song: Omit<CarryOverSong, 'addedAt'>) => {
@@ -1296,15 +1370,19 @@ export function useAutoGradeBuilder() {
       const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
       const bufferTimeKey = `${blocks.buffer.hour.toString().padStart(2, '0')}:${blocks.buffer.minute.toString().padStart(2, '0')}`;
 
+      // Get current day code and convert to WeekDay for sequence matching
+      const dayCode = getDayCode();
+      const targetDay = dayCodeToWeekDay(dayCode);
+
+      // CRITICAL: Reconstruct history from existing TXT file before generating new blocks
+      // This ensures artist/song repetition rules work correctly
+      await reconstructHistoryFromFile(dayCode);
+
       console.log(`[AUTO-GRADE] 🔄 Buffer de 2 blocos: ${currentTimeKey} (protegido), ${nextTimeKey}, ${bufferTimeKey} -> salvando na pasta destino`);
 
       const songsByStation = await fetchRecentSongs();
       const stats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: Parameters<typeof addBlockLogs>[0] = [];
-
-      // Get current day code and convert to WeekDay for sequence matching
-      const dayCode = getDayCode();
-      const targetDay = dayCodeToWeekDay(dayCode);
 
       // Generate current block (protegido, mas mantemos atualizado) and next 2 blocks (buffer)
       // BUFFER DE 2 BLOCOS: sempre monta próximo + próximo+1 com músicas capturadas
@@ -1407,8 +1485,8 @@ export function useAutoGradeBuilder() {
     }
   }, [
     getBlockTimes, fetchRecentSongs, generateBlockLine,
-    getDayCode, config.gradeFolder, addGradeHistory,
-    getProgramForHour, toast, addBlockLogs
+    getDayCode, dayCodeToWeekDay, config.gradeFolder, addGradeHistory,
+    getProgramForHour, toast, addBlockLogs, reconstructHistoryFromFile
   ]);
 
   // Calculate seconds until next build based on minutesBeforeBlock setting
