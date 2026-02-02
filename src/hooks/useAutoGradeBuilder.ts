@@ -312,15 +312,30 @@ export function useAutoGradeBuilder() {
     );
   }, [existingMissingSongs]);
 
-  // Fetch recent songs from Supabase with styles
-  // Increased limits to support full day generation (48 blocks x 10 songs = 480 songs needed)
-  const fetchRecentSongs = useCallback(async (): Promise<Record<string, SongEntry[]>> => {
+  // Fetch songs from Supabase for a specific 30-minute window BEFORE the block time
+  // Block 17:30 → uses songs from 17:00-17:30
+  // Block 18:00 → uses songs from 17:30-18:00
+  const fetchSongsForBlock = useCallback(async (blockHour: number, blockMinute: number, targetDate?: Date): Promise<Record<string, SongEntry[]>> => {
     try {
+      // Calculate the 30-minute window BEFORE this block
+      const baseDate = targetDate || new Date();
+      const blockTime = new Date(baseDate);
+      blockTime.setHours(blockHour, blockMinute, 0, 0);
+      
+      // Window: 30 minutes before block start
+      const windowEnd = blockTime.toISOString();
+      const windowStart = new Date(blockTime.getTime() - 30 * 60 * 1000).toISOString();
+      
+      console.log(`[AUTO-GRADE] 🕐 Buscando músicas para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')}`);
+      console.log(`[AUTO-GRADE] 📅 Janela: ${windowStart.slice(11, 16)} → ${windowEnd.slice(11, 16)} UTC`);
+      
       const { data, error } = await supabase
         .from('scraped_songs')
         .select('title, artist, station_name, scraped_at')
+        .gte('scraped_at', windowStart)
+        .lte('scraped_at', windowEnd)
         .order('scraped_at', { ascending: false })
-        .limit(2000); // Increased from 500 to 2000
+        .limit(500);
 
       if (error) throw error;
 
@@ -344,8 +359,7 @@ export function useAutoGradeBuilder() {
         if (!songsByStation[song.station_name]) {
           songsByStation[song.station_name] = [];
         }
-        // Increased limit per station from 50 to 150
-        if (songsByStation[song.station_name].length < 150) {
+        if (songsByStation[song.station_name].length < 50) {
           const style = stationNameToStyle[song.station_name] || stationNameToStyle[song.station_name.toLowerCase()] || 'POP/VARIADO';
           songsByStation[song.station_name].push({
             title: song.title,
@@ -359,11 +373,63 @@ export function useAutoGradeBuilder() {
 
       // Log available stations for debugging
       const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
-      console.log(`[AUTO-GRADE] Pool: ${stationList}`);
+      console.log(`[AUTO-GRADE] Pool (janela 30min): ${stationList}`);
 
       return songsByStation;
     } catch (error) {
-      console.error('[AUTO-GRADE] Error fetching songs:', error);
+      console.error('[AUTO-GRADE] Error fetching songs for block:', error);
+      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
+      return {};
+    }
+  }, [stations]);
+
+  // Fallback: Fetch ALL recent songs (used for full day generation or when window is empty)
+  const fetchAllRecentSongs = useCallback(async (): Promise<Record<string, SongEntry[]>> => {
+    try {
+      const { data, error } = await supabase
+        .from('scraped_songs')
+        .select('title, artist, station_name, scraped_at')
+        .order('scraped_at', { ascending: false })
+        .limit(2000);
+
+      if (error) throw error;
+
+      const songsByStation: Record<string, SongEntry[]> = {};
+      const stationNameToStyle: Record<string, string> = {};
+      const seenSongs = new Set<string>();
+
+      stations.forEach(s => {
+        stationNameToStyle[s.name] = s.styles?.[0] || 'POP/VARIADO';
+        stationNameToStyle[s.name.toLowerCase()] = s.styles?.[0] || 'POP/VARIADO';
+        stationNameToStyle[s.id] = s.styles?.[0] || 'POP/VARIADO';
+      });
+
+      data?.forEach(song => {
+        const songKey = `${song.title.toLowerCase()}-${song.artist.toLowerCase()}`;
+        if (seenSongs.has(songKey)) return;
+        seenSongs.add(songKey);
+
+        if (!songsByStation[song.station_name]) {
+          songsByStation[song.station_name] = [];
+        }
+        if (songsByStation[song.station_name].length < 150) {
+          const style = stationNameToStyle[song.station_name] || stationNameToStyle[song.station_name.toLowerCase()] || 'POP/VARIADO';
+          songsByStation[song.station_name].push({
+            title: song.title,
+            artist: song.artist,
+            station: song.station_name,
+            style,
+            filename: sanitizeFilename(`${song.artist} - ${song.title}.mp3`),
+          });
+        }
+      });
+
+      const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
+      console.log(`[AUTO-GRADE] Pool (completo): ${stationList}`);
+
+      return songsByStation;
+    } catch (error) {
+      console.error('[AUTO-GRADE] Error fetching all songs:', error);
       logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
       return {};
     }
@@ -1143,7 +1209,8 @@ export function useAutoGradeBuilder() {
       
       clearUsedSongs();
 
-      const songsByStation = await fetchRecentSongs();
+      // For full day, use all recent songs (fallback pool)
+      const songsByStation = await fetchAllRecentSongs();
       
       const stats = { skipped: 0, substituted: 0, missing: 0 };
       const lines: string[] = [];
@@ -1279,7 +1346,7 @@ export function useAutoGradeBuilder() {
       });
     }
   }, [
-    clearUsedSongs, fetchRecentSongs, generateBlockLine,
+    clearUsedSongs, fetchAllRecentSongs, generateBlockLine,
     getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, toast, addBlockLogs
   ]);
 
@@ -1300,16 +1367,27 @@ export function useAutoGradeBuilder() {
 
       console.log(`[AUTO-GRADE] 🔄 Atualizando blocos: ${currentTimeKey}, ${nextTimeKey} -> salvando na pasta destino`);
 
-      const songsByStation = await fetchRecentSongs();
+      // Fetch songs from 30-minute window BEFORE each block (mirrors radio timing)
+      const currentSongsByStation = await fetchSongsForBlock(blocks.current.hour, blocks.current.minute);
+      const nextSongsByStation = await fetchSongsForBlock(blocks.next.hour, blocks.next.minute);
+      
+      // Fallback: if window is empty, use all recent songs
+      const fallbackSongs = (Object.keys(currentSongsByStation).length === 0 || Object.keys(nextSongsByStation).length === 0) 
+        ? await fetchAllRecentSongs() 
+        : {};
+      
+      const currentPool = Object.keys(currentSongsByStation).length > 0 ? currentSongsByStation : fallbackSongs;
+      const nextPool = Object.keys(nextSongsByStation).length > 0 ? nextSongsByStation : fallbackSongs;
+      
       const stats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: Parameters<typeof addBlockLogs>[0] = [];
 
-      // Generate current and next blocks (isFullDay=false for normal repetition rules)
+      // Generate current and next blocks using their specific 30-min window
       const currentResult = await generateBlockLine(
-        blocks.current.hour, blocks.current.minute, songsByStation, stats, false
+        blocks.current.hour, blocks.current.minute, currentPool, stats, false
       );
       const nextResult = await generateBlockLine(
-        blocks.next.hour, blocks.next.minute, songsByStation, stats, false
+        blocks.next.hour, blocks.next.minute, nextPool, stats, false
       );
       
       allLogs.push(...currentResult.logs, ...nextResult.logs);
@@ -1399,7 +1477,7 @@ export function useAutoGradeBuilder() {
       });
     }
   }, [
-    getBlockTimes, fetchRecentSongs, generateBlockLine,
+    getBlockTimes, fetchSongsForBlock, fetchAllRecentSongs, generateBlockLine,
     getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length,
     getProgramForHour, toast, addBlockLogs
   ]);
