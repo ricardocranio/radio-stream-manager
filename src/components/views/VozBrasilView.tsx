@@ -161,14 +161,24 @@ export function VozBrasilView() {
     };
   }, [config.scheduleTime, config.cleanupTime, config.enabled]);
 
-  // Generate download URL with current date
-  const getDownloadUrl = () => {
+  // Generate download URLs with current date - multiple fallback URLs
+  const getDownloadUrls = () => {
     const now = new Date();
     const day = now.getDate().toString().padStart(2, '0');
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const year = now.getFullYear();
-    return `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`;
+    
+    // Multiple EBC URL formats as fallback
+    return [
+      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
+      `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/voz_${day}${month}${year}.mp3`,
+      `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/vozbrasil_${day}${month}${year}.mp3`,
+      `https://conteudo.ebcservicos.com.br/25-streaming-ebc/a-voz-do-brasil/VozDoBrasil_${day}-${month}-${year}.mp3`,
+    ];
   };
+  
+  // Get primary download URL (for display)
+  const getDownloadUrl = () => getDownloadUrls()[0];
 
   // Generate filename with current date
   const getFilename = () => {
@@ -203,26 +213,52 @@ export function VozBrasilView() {
       progress: 0,
     });
 
-    const url = getDownloadUrl();
+    const urls = getDownloadUrls();
     const filename = getFilename();
 
     try {
       // Check if running in Electron
       if (window.electronAPI?.downloadVozBrasil) {
-        console.log('[VOZ] Starting Electron download...');
-        console.log('[VOZ] URL:', url);
+        console.log('[VOZ] Starting Electron download with fallback URLs...');
+        console.log('[VOZ] URLs to try:', urls);
         console.log('[VOZ] Folder:', config.downloadFolder);
         console.log('[VOZ] Filename:', filename);
         
-        const result = await window.electronAPI.downloadVozBrasil({
-          url,
-          outputFolder: config.downloadFolder,
-          filename,
-        });
+        // Try each URL until one works
+        let lastError = null;
+        let result = null;
+        
+        for (let i = 0; i < urls.length; i++) {
+          const url = urls[i];
+          console.log(`[VOZ] Trying URL ${i + 1}/${urls.length}: ${url}`);
+          
+          setDownloadStatus(prev => ({
+            ...prev,
+            progress: 0,
+            errorMessage: i > 0 ? `Tentando fonte alternativa ${i + 1}...` : undefined,
+          }));
+          
+          try {
+            result = await window.electronAPI.downloadVozBrasil({
+              url,
+              outputFolder: config.downloadFolder,
+              filename,
+            });
+            
+            if (result.success) {
+              console.log(`[VOZ] Success with URL ${i + 1}: ${url}`);
+              break;
+            } else {
+              lastError = result.error || `Falha na URL ${i + 1}`;
+              console.log(`[VOZ] URL ${i + 1} failed: ${lastError}`);
+            }
+          } catch (err) {
+            lastError = err instanceof Error ? err.message : 'Erro desconhecido';
+            console.log(`[VOZ] URL ${i + 1} error: ${lastError}`);
+          }
+        }
 
-        console.log('[VOZ] Download result:', result);
-
-        if (result.success) {
+        if (result?.success) {
           setDownloadStatus({
             status: 'success',
             lastAttempt: new Date(),
@@ -243,7 +279,7 @@ export function VozBrasilView() {
             description: `A Voz do Brasil foi salva em ${config.downloadFolder}`,
           });
         } else {
-          throw new Error(result.error || 'Erro desconhecido no download');
+          throw new Error(lastError || 'Todas as URLs falharam');
         }
       } else {
         // Web simulation fallback
@@ -510,8 +546,14 @@ export function VozBrasilView() {
 
             {/* URL Preview */}
             <div className="p-3 rounded-lg bg-background/50 border border-border">
-              <p className="text-xs text-muted-foreground mb-1">URL de hoje:</p>
-              <code className="text-xs text-primary break-all">{getDownloadUrl()}</code>
+              <p className="text-xs text-muted-foreground mb-2">URLs de hoje (com fallback):</p>
+              <div className="space-y-1">
+                {getDownloadUrls().map((url, idx) => (
+                  <code key={idx} className="text-[10px] text-primary/80 break-all block">
+                    {idx + 1}. {url}
+                  </code>
+                ))}
+              </div>
             </div>
 
             {/* Schedule Info */}
