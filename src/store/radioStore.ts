@@ -354,15 +354,15 @@ export const useRadioStore = create<RadioState>()(
       capturedSongs: [],
       addCapturedSong: (song) =>
         set((state) => {
-          // Avoid duplicate songs (same title/artist in last 50)
-          const isDuplicate = state.capturedSongs.slice(0, 50).some(
+          // Avoid duplicate songs (same title/artist in last 30 - reduced from 50)
+          const isDuplicate = state.capturedSongs.slice(0, 30).some(
             s => s.title === song.title && s.artist === song.artist
           );
           if (isDuplicate) return state;
           
-          // Prepend and limit - reuse array if possible
+          // Limit to 50 songs (was 100) - reduces memory usage by 50%
           const newSongs = [song, ...state.capturedSongs];
-          return { capturedSongs: newSongs.length > 100 ? newSongs.slice(0, 100) : newSongs };
+          return { capturedSongs: newSongs.length > 50 ? newSongs.slice(0, 50) : newSongs };
         }),
       clearCapturedSongs: () => set({ capturedSongs: [] }),
 
@@ -450,11 +450,11 @@ export const useRadioStore = create<RadioState>()(
           batchDownloadProgress: { ...state.batchDownloadProgress, ...progress },
         })),
 
-      // Download History
+      // Download History - reduced limit for memory optimization
       downloadHistory: [],
       addDownloadHistory: (entry) =>
         set((state) => ({
-          downloadHistory: [entry, ...state.downloadHistory].slice(0, 500), // Keep last 500 entries
+          downloadHistory: [entry, ...state.downloadHistory].slice(0, 100), // Keep last 100 entries (was 500)
         })),
       clearDownloadHistory: () => set({ downloadHistory: [] }),
 
@@ -520,14 +520,15 @@ export const useRadioStore = create<RadioState>()(
               lastPlayed: new Date(),
             };
             
-            const updatedSongs = [...state.rankingSongs, newSong];
+            // Limit ranking to 50 songs (was 100) for memory optimization
+            const updatedSongs = [...state.rankingSongs, newSong].slice(0, 50);
             
-            // Sort only every 10 new songs (increased from 5)
-            if (updatedSongs.length % 10 === 0) {
+            // Sort only every 20 new songs for performance
+            if (updatedSongs.length % 20 === 0) {
               updatedSongs.sort((a, b) => b.plays - a.plays);
             }
             
-            return { rankingSongs: updatedSongs.slice(0, 100) };
+            return { rankingSongs: updatedSongs };
           }
         }),
       // Batch update: applies multiple ranking updates at once (from batcher)

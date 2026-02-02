@@ -193,10 +193,9 @@ const Index = () => {
     
     addCapturedSong(capturedSong);
     
-    // UPDATE RANKING - Integração com TOP50
+    // UPDATE RANKING - Integração com TOP50 (silent - no log)
     const stationStyle = stationStyles[randomStation] || 'POP/VARIADO';
     addOrUpdateRankingSong(song.title, song.artist, stationStyle);
-    console.log(`[RANKING] Música adicionada ao ranking: ${song.artist} - ${song.title} (${stationStyle})`);
     
     // If song is missing AND not already in missing list, add to missing songs for auto-download
     if (!existsInLibrary && !alreadyMissing) {
@@ -209,13 +208,9 @@ const Index = () => {
         status: 'missing',
       };
       addMissingSong(missingSong);
-      console.log(`[AUTO-FLOW] ✅ Nova música faltando detectada: ${song.artist} - ${song.title}`);
-      console.log(`[AUTO-FLOW] → Adicionada à lista Faltando → Download automático via Deemix (se configurado)`);
-    } else if (!existsInLibrary && alreadyMissing) {
-      console.log(`[CAPTURE] Música já está na lista de faltando: ${song.artist} - ${song.title}`);
-    } else {
-      console.log(`[CAPTURE] ✓ Música encontrada no banco musical: ${song.artist} - ${song.title}${libraryCheck.path ? ` (${libraryCheck.path})` : ''}`);
+      console.log(`[AUTO-FLOW] ➕ Faltando: ${song.artist} - ${song.title}`);
     }
+    // Removed verbose logs for "already missing" and "found" cases to reduce console spam
     
     setLastUpdate(new Date());
   }, [addCapturedSong, addMissingSong, addOrUpdateRankingSong, setLastUpdate, checkSongExists, isSongAlreadyMissing]);
