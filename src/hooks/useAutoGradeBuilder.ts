@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRadioStore } from '@/store/radioStore';
+import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import type { WeekDay, ScheduledSequence, SequenceConfig } from '@/types/radio';
 
 interface SongEntry {
   title: string;
@@ -62,7 +63,8 @@ export function useAutoGradeBuilder() {
   const { toast } = useToast();
   const {
     programs,
-    sequence,
+    sequence: defaultSequence,
+    scheduledSequences,
     stations,
     config,
     fixedContent,
@@ -102,9 +104,9 @@ export function useAutoGradeBuilder() {
   // These will be prioritized in the next block since downloads are fast (~1 min)
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
 
-  // Get day code for filename
+  // Get day code for filename - SÁB with accent for compatibility
   const getDayCode = useCallback(() => {
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
     return days[new Date().getDay()];
   }, []);
 
@@ -144,6 +146,36 @@ export function useAutoGradeBuilder() {
     const station = stations.find(s => s.id === stationId);
     return station?.styles?.[0] || 'POP/VARIADO';
   }, [stations]);
+
+  // Get active sequence based on specific hour/minute/day (for scheduled sequences)
+  const getActiveSequenceForBlock = useCallback((hour: number, minute: number, targetDay?: WeekDay): SequenceConfig[] => {
+    const timeMinutes = hour * 60 + minute;
+    const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
+    const currentDay = targetDay || dayMap[new Date().getDay()];
+    
+    // Find active scheduled sequence for this specific time
+    const activeScheduled = scheduledSequences
+      .filter((s) => s.enabled)
+      .filter((s) => s.weekDays.length === 0 || s.weekDays.includes(currentDay))
+      .filter((s) => {
+        const startMinutes = s.startHour * 60 + s.startMinute;
+        const endMinutes = s.endHour * 60 + s.endMinute;
+        
+        // Handle overnight ranges
+        if (endMinutes <= startMinutes) {
+          return timeMinutes >= startMinutes || timeMinutes < endMinutes;
+        }
+        return timeMinutes >= startMinutes && timeMinutes < endMinutes;
+      })
+      .sort((a, b) => b.priority - a.priority);
+    
+    if (activeScheduled.length > 0) {
+      console.log(`[SEQUENCE] Usando sequência agendada "${activeScheduled[0].name}" para ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} (${currentDay})`);
+      return activeScheduled[0].sequence;
+    }
+    
+    return defaultSequence;
+  }, [scheduledSequences, defaultSequence]);
 
   // Check if song/artist was used recently
   // For full day generation, use shorter window (30 min) to allow more variety
@@ -570,9 +602,12 @@ export function useAutoGradeBuilder() {
       return null;
     };
 
+    // Get active sequence for this specific block time
+    const activeSequence = getActiveSequenceForBlock(hour, minute);
+    
     // Follow the user-configured SEQUENCE (position 1 = Band FM, position 2 = Clube FM, etc.)
-    for (const seq of sequence) {
-      if (songs.length >= sequence.length) break; // Use sequence length as max
+    for (const seq of activeSequence) {
+      if (songs.length >= activeSequence.length) break; // Use sequence length as max
 
       // Handle special sequence types - check for specific fixed content (fixo_ID)
       if (seq.radioSource.startsWith('fixo_')) {
@@ -982,7 +1017,7 @@ export function useAutoGradeBuilder() {
     };
   }, [
     getProgramForHour, getFixedContentForTime, isWeekday, getTop50Songs,
-    stations, sequence, getStationStyle, isRecentlyUsed, findSubstitute,
+    stations, getActiveSequenceForBlock, getStationStyle, isRecentlyUsed, findSubstitute,
     markSongAsUsed, config.coringaCode, checkSongInLibrary, isSongAlreadyMissing,
     addMissingSong, addCarryOverSong, getCarryOverSongs, findSongInLibrary
   ]);
@@ -1126,7 +1161,7 @@ export function useAutoGradeBuilder() {
           id: `grade-fullday-${Date.now()}`,
           timestamp: new Date(),
           blockTime: 'COMPLETA',
-          songsProcessed: 48 * sequence.length,
+          songsProcessed: 48 * defaultSequence.length,
           songsFound: lines.length,
           songsMissing: stats.missing,
           programName: 'Grade Completa',
@@ -1175,7 +1210,7 @@ export function useAutoGradeBuilder() {
     }
   }, [
     clearUsedSongs, fetchRecentSongs, generateBlockLine,
-    getDayCode, config.gradeFolder, addGradeHistory, sequence.length, toast, addBlockLogs
+    getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, toast, addBlockLogs
   ]);
 
   // Build current and next blocks (incremental update to existing file)
@@ -1257,8 +1292,8 @@ export function useAutoGradeBuilder() {
           id: `grade-${Date.now()}`,
           timestamp: new Date(),
           blockTime: currentTimeKey,
-          songsProcessed: sequence.length * 2,
-          songsFound: sequence.length * 2 - stats.missing,
+          songsProcessed: defaultSequence.length * 2,
+          songsFound: defaultSequence.length * 2 - stats.missing,
           songsMissing: stats.missing,
           programName: getProgramForHour(blocks.current.hour),
         });
@@ -1295,7 +1330,7 @@ export function useAutoGradeBuilder() {
     }
   }, [
     getBlockTimes, fetchRecentSongs, generateBlockLine,
-    getDayCode, config.gradeFolder, addGradeHistory, sequence.length,
+    getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length,
     getProgramForHour, toast, addBlockLogs
   ]);
 
