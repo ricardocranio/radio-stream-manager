@@ -205,6 +205,9 @@ interface ElectronAPI {
   readGradeFile: (params: Omit<GradeFileParams, 'content'>) => Promise<GradeFileResult>;
   listFolderFiles: (params: FolderListParams) => Promise<FolderListResult>;
   
+  // Window management
+  showWindow: () => Promise<{ success: boolean }>;
+  
   // Auto-update
   checkForUpdates: () => Promise<void>;
   onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: string }) => void) => void;

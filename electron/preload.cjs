@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readGradeFile: (params) => ipcRenderer.invoke('read-grade-file', params),
   listFolderFiles: (params) => ipcRenderer.invoke('list-folder-files', params),
   
+  // Window management
+  showWindow: () => ipcRenderer.invoke('show-window'),
+  
   // Auto-update
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (_, info) => callback(info)),
