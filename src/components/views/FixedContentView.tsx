@@ -452,7 +452,7 @@ export function FixedContentView() {
                           </p>
                         ) : (
                           <p className="text-xs font-mono text-muted-foreground truncate mt-1">
-                            "{content.fileName}_{'{DIA}'}.mp3"
+                            {content.fileName}_{'{DIA}'}.mp3
                           </p>
                         )}
                         <div className="flex flex-wrap gap-1 mt-2">
