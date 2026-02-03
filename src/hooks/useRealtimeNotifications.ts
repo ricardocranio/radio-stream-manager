@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useId } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRadioStore } from '@/store/radioStore';
 import { realtimeManager } from '@/lib/realtimeManager';
@@ -11,12 +11,14 @@ interface NotificationOptions {
   onRankingUpdate?: (count: number) => void;
 }
 
+// STABLE subscriber ID - prevents channel disconnect on tab navigation
+const NOTIFICATIONS_SUBSCRIBER_ID = 'realtime_notifications_global';
+
 export function useRealtimeNotifications(options: NotificationOptions = {}) {
   const { toast } = useToast();
   const { applyRankingBatch } = useRadioStore();
   const lastSongIdRef = useRef<string | null>(null);
   const notificationPermissionRef = useRef<NotificationPermission>('default');
-  const subscriberId = useId();
   const batcherInitializedRef = useRef(false);
 
   const {
@@ -89,10 +91,11 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
   }, [enableToastNotifications, toast]);
 
   // Subscribe to realtime changes via centralized manager
+  // Using a STABLE subscriber ID prevents channel disconnect on tab navigation
   useEffect(() => {
     const unsubscribe = realtimeManager.subscribe(
       'scraped_songs',
-      `notifications_${subscriberId}`,
+      NOTIFICATIONS_SUBSCRIBER_ID,
       (payload) => {
         const newSong = payload.new as {
           id: string;
@@ -138,7 +141,7 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
     );
 
     return unsubscribe;
-  }, [subscriberId, showToastNotification, showBrowserNotification, onNewSong, onRankingUpdate]);
+  }, [showToastNotification, showBrowserNotification, onNewSong, onRankingUpdate]);
 
   // Request notification permission manually
   const requestPermission = useCallback(async () => {
