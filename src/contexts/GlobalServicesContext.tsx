@@ -462,23 +462,56 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   }, [scrapeStation]);
 
   // ============= VOZ DO BRASIL SERVICE =============
+  
+  // Cleanup old files before downloading new one
+  const cleanupOldVozBrasil = useCallback(async (folder: string): Promise<void> => {
+    if (!isElectron || !window.electronAPI?.cleanupVozBrasil) {
+      return;
+    }
+    
+    try {
+      console.log('[VOZ-SVC] 🗑️ Limpando arquivos antigos...');
+      const result = await window.electronAPI.cleanupVozBrasil({
+        folder,
+        maxAgeDays: 1, // Delete files older than 1 day to ensure only today's file remains
+      });
+      
+      if (result.success && result.deletedCount && result.deletedCount > 0) {
+        console.log(`[VOZ-SVC] 🗑️ Removidos ${result.deletedCount} arquivo(s) antigo(s)`);
+      }
+    } catch (error) {
+      console.log('[VOZ-SVC] ⚠️ Erro na limpeza (continuando):', error);
+    }
+  }, []);
+  
   const downloadVozBrasil = useCallback(async (): Promise<boolean> => {
     if (!isElectron || !window.electronAPI?.downloadVozBrasil) {
       console.log('[VOZ-SVC] ⚠️ Electron API não disponível');
       return false;
     }
 
-    // Get config from localStorage
-    const savedConfig = localStorage.getItem('vozBrasilConfig');
-    const config = savedConfig ? JSON.parse(savedConfig) : {
+    // Get config from localStorage with proper defaults
+    let config = {
       enabled: true,
       downloadFolder: 'C:\\Playlist\\A Voz do Brasil',
     };
+    
+    try {
+      const savedConfig = localStorage.getItem('vozBrasilConfig');
+      if (savedConfig) {
+        config = { ...config, ...JSON.parse(savedConfig) };
+      }
+    } catch (e) {
+      console.log('[VOZ-SVC] Usando config padrão');
+    }
 
     if (!config.enabled) {
       console.log('[VOZ-SVC] ⚠️ Voz do Brasil desabilitada nas configurações');
       return false;
     }
+
+    // Clean up old files first
+    await cleanupOldVozBrasil(config.downloadFolder);
 
     // Generate URLs with fallback
     const now = new Date();
@@ -523,22 +556,32 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
 
     console.log('[VOZ-SVC] ❌ Todas as URLs falharam');
     return false;
-  }, []);
+  }, [cleanupOldVozBrasil]);
 
   const scheduleVozBrasil = useCallback(() => {
     if (!isElectron || !window.electronAPI?.downloadVozBrasil) {
+      console.log('[VOZ-SVC] ⚠️ Electron API não disponível para agendamento');
       return;
     }
 
-    // Get config from localStorage
-    const savedConfig = localStorage.getItem('vozBrasilConfig');
-    const config = savedConfig ? JSON.parse(savedConfig) : {
+    // Get config from localStorage with proper defaults
+    let config = {
       enabled: true,
       scheduleTime: '20:35',
+      downloadFolder: 'C:\\Playlist\\A Voz do Brasil',
     };
+    
+    try {
+      const savedConfig = localStorage.getItem('vozBrasilConfig');
+      if (savedConfig) {
+        config = { ...config, ...JSON.parse(savedConfig) };
+      }
+    } catch (e) {
+      console.log('[VOZ-SVC] Erro ao ler config, usando padrões');
+    }
 
     if (!config.enabled) {
-      console.log('[VOZ-SVC] Agendamento desabilitado');
+      console.log('[VOZ-SVC] Agendamento desabilitado nas configurações');
       return;
     }
 
@@ -546,11 +589,14 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     
     const getNextDownloadTime = () => {
       const now = new Date();
-      const [scheduleHour, scheduleMinute] = (config.scheduleTime || '20:35').split(':').map(Number);
+      const timeParts = (config.scheduleTime || '20:35').split(':');
+      const scheduleHour = parseInt(timeParts[0], 10) || 20;
+      const scheduleMinute = parseInt(timeParts[1], 10) || 35;
       
       const nextDl = new Date(now);
       nextDl.setHours(scheduleHour, scheduleMinute, 0, 0);
       
+      // If time has passed or it's weekend, move to next weekday
       if (nextDl <= now || !isWeekday(nextDl)) {
         nextDl.setDate(nextDl.getDate() + 1);
         while (!isWeekday(nextDl)) {
@@ -571,28 +617,72 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     // Clear existing scheduler
     if (vozBrasilSchedulerRef.current) {
       clearTimeout(vozBrasilSchedulerRef.current);
+      vozBrasilSchedulerRef.current = null;
     }
 
-    // Schedule the download (only if within 24h)
-    if (msUntilDownload > 0 && msUntilDownload < 86400000) {
-      vozBrasilSchedulerRef.current = setTimeout(async () => {
-        console.log('[VOZ-SVC] ⏰ Horário de download atingido!');
+    // Schedule the download - handle both short and long timeouts
+    // For very long waits (>12h), use a recurring check every hour instead
+    const maxTimeout = 12 * 60 * 60 * 1000; // 12 hours
+    
+    if (msUntilDownload <= 0) {
+      // Already past the scheduled time - check if we should download now (weekday)
+      if (isWeekday(now)) {
+        console.log('[VOZ-SVC] 📻 Horário já passou, verificando se deve baixar agora...');
+        // Only download if within 30 minutes of scheduled time
+        const timeParts = (config.scheduleTime || '20:35').split(':');
+        const scheduleHour = parseInt(timeParts[0], 10) || 20;
+        const scheduleMinute = parseInt(timeParts[1], 10) || 35;
+        const scheduledToday = new Date(now);
+        scheduledToday.setHours(scheduleHour, scheduleMinute, 0, 0);
+        const msSinceSchedule = now.getTime() - scheduledToday.getTime();
         
-        // Check again if it's a weekday and enabled
-        const currentDay = new Date().getDay();
-        const currentConfig = JSON.parse(localStorage.getItem('vozBrasilConfig') || '{"enabled":true}');
-        
-        if (currentConfig.enabled && currentDay >= 1 && currentDay <= 5) {
-          console.log('[VOZ-SVC] 📻 Executando download automático...');
-          await downloadVozBrasil();
-        } else {
-          console.log('[VOZ-SVC] Download pulado (fim de semana ou desabilitado)');
+        if (msSinceSchedule >= 0 && msSinceSchedule <= 30 * 60 * 1000) {
+          console.log('[VOZ-SVC] 📻 Dentro da janela de 30 min, executando download...');
+          downloadVozBrasil();
         }
-        
-        // Schedule next download after a brief delay
-        setTimeout(scheduleVozBrasil, 60000);
-      }, msUntilDownload);
+      }
+      // Schedule for next occurrence
+      setTimeout(scheduleVozBrasil, 60000);
+      return;
     }
+    
+    if (msUntilDownload > maxTimeout) {
+      // Very long wait - reschedule check in 1 hour
+      console.log('[VOZ-SVC] ⏰ Agendamento distante, verificando novamente em 1 hora');
+      vozBrasilSchedulerRef.current = setTimeout(scheduleVozBrasil, 60 * 60 * 1000);
+      return;
+    }
+
+    // Schedule the actual download
+    vozBrasilSchedulerRef.current = setTimeout(async () => {
+      console.log('[VOZ-SVC] ⏰ Horário de download atingido!');
+      
+      // Re-check config in case it changed
+      let currentConfig = { enabled: true };
+      try {
+        const saved = localStorage.getItem('vozBrasilConfig');
+        if (saved) currentConfig = JSON.parse(saved);
+      } catch (e) { /* use default */ }
+      
+      const currentDay = new Date().getDay();
+      
+      if (currentConfig.enabled && currentDay >= 1 && currentDay <= 5) {
+        console.log('[VOZ-SVC] 📻 Executando download automático...');
+        const success = await downloadVozBrasil();
+        if (success) {
+          console.log('[VOZ-SVC] ✅ Download da Voz do Brasil concluído!');
+        } else {
+          console.log('[VOZ-SVC] ⚠️ Download falhou, tentará novamente no próximo horário');
+        }
+      } else {
+        console.log('[VOZ-SVC] Download pulado (fim de semana ou desabilitado)');
+      }
+      
+      // Schedule next download after a brief delay
+      setTimeout(scheduleVozBrasil, 60000);
+    }, msUntilDownload);
+    
+    console.log(`[VOZ-SVC] ✅ Agendamento configurado com sucesso`);
   }, [downloadVozBrasil]);
 
   // ============= INITIALIZATION =============
