@@ -317,6 +317,10 @@ export function SequenceView() {
 
   const handleToggleSchedule = (id: string, enabled: boolean) => {
     updateScheduledSequence(id, { enabled });
+    toast({
+      title: enabled ? 'Sequência ativada' : 'Sequência desativada',
+      description: `A sequência foi ${enabled ? 'ativada' : 'desativada'} com sucesso.`,
+    });
   };
 
   const toggleWeekDay = (day: WeekDay) => {

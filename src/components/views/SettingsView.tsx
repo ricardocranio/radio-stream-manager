@@ -35,11 +35,40 @@ export function SettingsView() {
   const [showArl, setShowArl] = useState(false);
   const [arlValidation, setArlValidation] = useState<ArlValidationResult>({ status: 'idle' });
   const [forbiddenWords, setForbiddenWords] = useState(
-    '1.FM, Love Classics, Solitaire, Mahjong, Dayspedia, Games, Online, METROPOLITANA - SP, BAND FM'
+    config.forbiddenWords?.join(', ') || '1.FM, Love Classics, Solitaire, Mahjong, Dayspedia, Games, Online, METROPOLITANA - SP, BAND FM'
   );
   const [funkWords, setFunkWords] = useState(
-    'funk, mc , sequencia, proibidão, baile, kondzilla, gr6'
+    config.funkWords?.join(', ') || 'funk, mc , sequencia, proibidão, baile, kondzilla, gr6'
   );
+  
+  // Auto-save filter words when they change
+  const filterSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  useEffect(() => {
+    // Skip on initial mount
+    if (isInitialMount.current) return;
+    
+    if (filterSaveTimeoutRef.current) {
+      clearTimeout(filterSaveTimeoutRef.current);
+    }
+    
+    filterSaveTimeoutRef.current = setTimeout(() => {
+      const parsedForbidden = forbiddenWords.split(',').map(w => w.trim()).filter(Boolean);
+      const parsedFunk = funkWords.split(',').map(w => w.trim()).filter(Boolean);
+      
+      setConfig({
+        forbiddenWords: parsedForbidden,
+        funkWords: parsedFunk,
+      });
+      console.log('[SETTINGS] ✓ Auto-saved content filters');
+    }, 800);
+    
+    return () => {
+      if (filterSaveTimeoutRef.current) {
+        clearTimeout(filterSaveTimeoutRef.current);
+      }
+    };
+  }, [forbiddenWords, funkWords, setConfig]);
   
   // Track if initial load is complete to avoid auto-save on mount
   const isInitialMount = useRef(true);
@@ -78,9 +107,16 @@ export function SettingsView() {
     };
   }, [localConfig, autoSaveConfig]);
 
-  // Sync localConfig when store config changes externally
+  // Sync localConfig and filters when store config changes externally
   useEffect(() => {
     setLocalConfig(config);
+    // Sync filter words from config
+    if (config.forbiddenWords) {
+      setForbiddenWords(config.forbiddenWords.join(', '));
+    }
+    if (config.funkWords) {
+      setFunkWords(config.funkWords.join(', '));
+    }
   }, [config]);
 
   const handleReset = () => {
