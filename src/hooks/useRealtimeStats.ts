@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { withRetry, ErrorCodes, createError } from '@/lib/errorHandler';
 import { useRadioStore } from '@/store/radioStore';
 import { realtimeManager } from '@/lib/realtimeManager';
+import { useRealtimeStatsStore } from '@/store/realtimeStatsStore';
 
 interface LastSongByStation {
   title: string;
@@ -36,33 +37,39 @@ interface RealtimeStats {
   nextRefreshIn: number;
 }
 
-const REFRESH_INTERVAL = 600; // Stats refresh every 10 minutes (was 2 min)
+const REFRESH_INTERVAL = 600; // Stats refresh every 10 minutes
 const BACKGROUND_REFRESH_MULTIPLIER = 2; // Background = 20 minutes
 
 // STABLE subscriber ID - prevents channel disconnect on tab navigation
-// Using a constant ensures the subscription is reused across component remounts
 const STATS_SUBSCRIBER_ID = 'realtime_stats_global';
 
 export function useRealtimeStats() {
   const powerSavingMode = useRadioStore((s) => s.config.powerSavingMode ?? false);
   const isInBackgroundRef = useRef(false);
-  
-  const [stats, setStats] = useState<RealtimeStats>({
-    totalSongs: 0,
-    songsLast24h: 0,
-    songsLastHour: 0,
-    activeStations: 0,
-    allStations: [],
-    lastSong: null,
-    lastSongsByStation: [],
-    recentSongsByStation: {},
-    stationCounts: {},
-    isLoading: true,
-    lastUpdated: null,
-    nextRefreshIn: REFRESH_INTERVAL,
-  });
-  
   const countdownRef = useRef<number>(REFRESH_INTERVAL);
+  
+  // Use persisted store for data that survives navigation
+  const persistedStore = useRealtimeStatsStore();
+  
+  // Local loading state
+  const [isLoading, setIsLoading] = useState(!persistedStore.isHydrated);
+  const [nextRefreshIn, setNextRefreshIn] = useState(REFRESH_INTERVAL);
+  
+  // Create stats object from persisted store + local state
+  const stats = useMemo<RealtimeStats>(() => ({
+    totalSongs: persistedStore.totalSongs,
+    songsLast24h: persistedStore.songsLast24h,
+    songsLastHour: persistedStore.songsLastHour,
+    activeStations: persistedStore.activeStations,
+    allStations: persistedStore.allStations,
+    lastSong: persistedStore.lastSong,
+    lastSongsByStation: persistedStore.lastSongsByStation,
+    recentSongsByStation: persistedStore.recentSongsByStation,
+    stationCounts: persistedStore.stationCounts,
+    isLoading,
+    lastUpdated: persistedStore.lastUpdated ? new Date(persistedStore.lastUpdated) : null,
+    nextRefreshIn,
+  }), [persistedStore, isLoading, nextRefreshIn]);
 
   // Track background state
   useEffect(() => {
@@ -82,6 +89,7 @@ export function useRealtimeStats() {
 
   const loadStats = useCallback(async () => {
     const context = { component: 'useRealtimeStats', action: 'loadStats' };
+    setIsLoading(true);
     
     try {
       await withRetry(
@@ -108,13 +116,13 @@ export function useRealtimeStats() {
             .select('station_name')
             .gte('scraped_at', last24h.toISOString());
 
-          const stationCounts: Record<string, number> = {};
+          const newStationCounts: Record<string, number> = {};
           stationSongs?.forEach(song => {
-            stationCounts[song.station_name] = (stationCounts[song.station_name] || 0) + 1;
+            newStationCounts[song.station_name] = (newStationCounts[song.station_name] || 0) + 1;
           });
 
-          const lastSongsByStation: LastSongByStation[] = [];
-          const recentSongsByStation: Record<string, LastSongByStation[]> = {};
+          const newLastSongsByStation: LastSongByStation[] = [];
+          const newRecentSongsByStation: Record<string, LastSongByStation[]> = {};
           const seenStations = new Set<string>();
 
           recentSongsResult.data?.forEach(song => {
@@ -128,25 +136,26 @@ export function useRealtimeStats() {
 
             if (!seenStations.has(stationName)) {
               seenStations.add(stationName);
-              lastSongsByStation.push(songData);
+              newLastSongsByStation.push(songData);
             }
 
-            if (!recentSongsByStation[stationName]) {
-              recentSongsByStation[stationName] = [];
+            if (!newRecentSongsByStation[stationName]) {
+              newRecentSongsByStation[stationName] = [];
             }
-            if (recentSongsByStation[stationName].length < 5) {
-              recentSongsByStation[stationName].push(songData);
+            if (newRecentSongsByStation[stationName].length < 5) {
+              newRecentSongsByStation[stationName].push(songData);
             }
           });
 
           const allStationsList: RadioStation[] = stationsResult.data?.map(s => ({ name: s.name, enabled: s.enabled ?? true })) || [];
           allStationsList.forEach(station => {
-            if (!recentSongsByStation[station.name]) {
-              recentSongsByStation[station.name] = [];
+            if (!newRecentSongsByStation[station.name]) {
+              newRecentSongsByStation[station.name] = [];
             }
           });
 
-          setStats(prev => ({
+          // Update persisted store
+          persistedStore.setStats({
             totalSongs: totalResult.count || 0,
             songsLast24h: last24hResult.count || 0,
             songsLastHour: lastHourResult.count || 0,
@@ -158,13 +167,12 @@ export function useRealtimeStats() {
               station: lastSongResult.data.station_name,
               timestamp: lastSongResult.data.scraped_at,
             } : null,
-            lastSongsByStation,
-            recentSongsByStation,
-            stationCounts,
-            isLoading: false,
-            lastUpdated: new Date(),
-            nextRefreshIn: prev.nextRefreshIn,
-          }));
+            lastSongsByStation: newLastSongsByStation,
+            recentSongsByStation: newRecentSongsByStation,
+            stationCounts: newStationCounts,
+          });
+          
+          setIsLoading(false);
         },
         {
           maxRetries: 3,
@@ -181,14 +189,21 @@ export function useRealtimeStats() {
         ErrorCodes.SUPABASE_QUERY,
         context
       );
-      setStats(prev => ({ ...prev, isLoading: false }));
+      setIsLoading(false);
     }
-  }, []);
+  }, [persistedStore]);
 
-  // Initial load
+  // Initial load - only if data is stale or missing
   useEffect(() => {
-    loadStats();
-  }, [loadStats]);
+    const shouldLoad = !persistedStore.lastUpdated || 
+      (new Date().getTime() - new Date(persistedStore.lastUpdated).getTime()) > 5 * 60 * 1000; // 5 min stale
+    
+    if (shouldLoad) {
+      loadStats();
+    } else {
+      setIsLoading(false);
+    }
+  }, [loadStats, persistedStore.lastUpdated]);
 
   // Auto-refresh with power saving support
   useEffect(() => {
@@ -210,10 +225,7 @@ export function useRealtimeStats() {
     // Update countdown display every 40 seconds
     countdownIntervalId = setInterval(() => {
       countdownRef.current = Math.max(0, countdownRef.current - 40);
-      setStats(prev => {
-        if (prev.nextRefreshIn === countdownRef.current) return prev;
-        return { ...prev, nextRefreshIn: countdownRef.current };
-      });
+      setNextRefreshIn(countdownRef.current);
     }, 40000);
 
     return () => {
@@ -223,55 +235,18 @@ export function useRealtimeStats() {
   }, [loadStats, getEffectiveInterval, powerSavingMode]);
 
   // Subscribe to realtime updates via centralized manager
-  // Using a STABLE subscriber ID prevents channel disconnect on tab navigation
   useEffect(() => {
     const unsubscribe = realtimeManager.subscribe(
       'scraped_songs',
       STATS_SUBSCRIBER_ID,
       (payload) => {
         const newSong = payload.new as { title: string; artist: string; station_name: string; scraped_at: string };
-        
-        setStats(prev => {
-          const newSongData = {
-            title: newSong.title,
-            artist: newSong.artist,
-            station: newSong.station_name,
-            timestamp: newSong.scraped_at,
-          };
-
-          const updatedLastSongsByStation = [...prev.lastSongsByStation];
-          const existingIndex = updatedLastSongsByStation.findIndex(s => s.station === newSong.station_name);
-          if (existingIndex >= 0) {
-            updatedLastSongsByStation[existingIndex] = newSongData;
-          } else {
-            updatedLastSongsByStation.unshift(newSongData);
-          }
-
-          const updatedRecentSongsByStation = { ...prev.recentSongsByStation };
-          const stationSongs = updatedRecentSongsByStation[newSong.station_name] || [];
-          updatedRecentSongsByStation[newSong.station_name] = [newSongData, ...stationSongs].slice(0, 5);
-
-          return {
-            ...prev,
-            totalSongs: prev.totalSongs + 1,
-            songsLast24h: prev.songsLast24h + 1,
-            songsLastHour: prev.songsLastHour + 1,
-            lastSong: newSongData,
-            lastSongsByStation: updatedLastSongsByStation,
-            recentSongsByStation: updatedRecentSongsByStation,
-            stationCounts: {
-              ...prev.stationCounts,
-              [newSong.station_name]: (prev.stationCounts[newSong.station_name] || 0) + 1,
-            },
-          };
-        });
+        persistedStore.updateFromNewSong(newSong);
       }
     );
 
-    // NOTE: We intentionally do NOT unsubscribe on unmount to keep the channel alive
-    // The subscription uses a stable ID so remounts just update the callback
     return unsubscribe;
-  }, []);
+  }, [persistedStore]);
 
   return { stats, refresh: loadStats };
 }

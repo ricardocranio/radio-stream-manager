@@ -185,15 +185,15 @@ export function DashboardView() {
 
   // Get unique stations from stationCounts (deduplicated)
   const uniqueStationCounts = Object.entries(realtimeStats.stationCounts)
-    .reduce((acc, [station, count]) => {
+    .reduce<Record<string, number>>((acc, [station, count]) => {
       // Normalize station name to prevent duplicates
       const normalizedName = station.trim();
       if (!acc[normalizedName]) {
         acc[normalizedName] = 0;
       }
-      acc[normalizedName] += count;
+      acc[normalizedName] += typeof count === 'number' ? count : 0;
       return acc;
-    }, {} as Record<string, number>);
+    }, {});
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6 animate-fade-in">
