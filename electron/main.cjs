@@ -371,7 +371,50 @@ function createWindow() {
   Menu.setApplicationMenu(menu);
 }
 
+/**
+ * Robust function to show and focus the main window
+ * Handles cases where window is destroyed, minimized, or hidden
+ */
+function showMainWindow() {
+  try {
+    // If window doesn't exist or was destroyed, recreate it
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      console.log('[WINDOW] Window destroyed, recreating...');
+      createWindow();
+      return;
+    }
+
+    // Restore if minimized
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+
+    // Show if hidden
+    if (!mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+
+    // Always focus
+    mainWindow.focus();
+
+    console.log('[WINDOW] Window shown and focused');
+  } catch (error) {
+    console.error('[WINDOW] Error showing window:', error.message);
+    // Try to recreate as last resort
+    try {
+      createWindow();
+    } catch (recreateError) {
+      console.error('[WINDOW] Failed to recreate window:', recreateError.message);
+    }
+  }
+}
+
 function createTray() {
+  // Don't create duplicate tray
+  if (tray && !tray.isDestroyed()) {
+    return;
+  }
+
   const iconPath = path.join(__dirname, '../public/favicon.ico');
   tray = new Tray(iconPath);
   
@@ -379,12 +422,21 @@ function createTray() {
     {
       label: 'Abrir Programador',
       click: () => {
-        mainWindow.show();
+        showMainWindow();
       },
     },
     {
       label: 'Status: Ativo',
       enabled: false,
+    },
+    { type: 'separator' },
+    {
+      label: 'Reiniciar',
+      click: () => {
+        app.relaunch();
+        app.isQuitting = true;
+        app.quit();
+      },
     },
     { type: 'separator' },
     {
@@ -399,9 +451,17 @@ function createTray() {
   tray.setToolTip(`Programador Rádio - v${app.getVersion()}`);
   tray.setContextMenu(contextMenu);
 
+  // Single click to show window
   tray.on('click', () => {
-    mainWindow.show();
+    showMainWindow();
   });
+
+  // Double click also shows window
+  tray.on('double-click', () => {
+    showMainWindow();
+  });
+
+  console.log('[TRAY] System tray icon created');
 }
 
 // Configure auto-updater
@@ -631,12 +691,9 @@ app.whenReady().then(async () => {
   });
 });
 
-// Second instance handling
+// Second instance handling - use robust showMainWindow
 app.on('second-instance', () => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
+  showMainWindow();
 });
 
 // Window all closed
@@ -720,6 +777,13 @@ ipcMain.handle('install-deemix', async () => {
   }
 
   return result;
+});
+
+// IPC handler to show and focus the main window (called from browser Service Mode)
+ipcMain.handle('show-window', () => {
+  console.log('[IPC] show-window request received');
+  showMainWindow();
+  return { success: true };
 });
 
 // Test deemix with a simple help check (--version not supported)
