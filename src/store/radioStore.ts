@@ -296,7 +296,21 @@ const defaultConfig: SystemConfig = {
   inventoryCacheDuration: 3600,
   hardResetInterval: 3600,
   monitorInterval: 300,
-  forbiddenWords: ['1.FM', 'Love Classics', 'Solitaire', 'Mahjong', 'Dayspedia', 'Games', 'Online', 'METROPOLITANA - SP', 'BAND FM'],
+  forbiddenWords: [
+    // Genéricos/jogos
+    '1.FM', 'Love Classics', 'Solitaire', 'Mahjong', 'Dayspedia', 'Games', 'Online',
+    // Nomes de rádios
+    'METROPOLITANA - SP', 'BAND FM', 'Globo FM', 'Mix FM', 'Jovem Pan', 'Transamérica', 'Nativa FM', 
+    'Antena 1', 'Alpha FM', '89 FM', 'Kiss FM', 'Energia 97', 'Rádio Disney', 'Rede Aleluia',
+    '105 FM', 'Cidade FM', 'Tupi FM', 'Capital FM', 'Nova Brasil FM', 'Rádio Bandeirantes',
+    // Hinos de clubes de futebol
+    'Hino do Flamengo', 'Hino do Corinthians', 'Hino do Palmeiras', 'Hino do São Paulo', 
+    'Hino do Santos', 'Hino do Vasco', 'Hino do Fluminense', 'Hino do Botafogo',
+    'Hino do Grêmio', 'Hino do Internacional', 'Hino do Cruzeiro', 'Hino do Atlético',
+    'Hino do Bahia', 'Hino do Vitória', 'Hino do Sport', 'Hino do Náutico',
+    'Hino do Fortaleza', 'Hino do Ceará', 'Hino do Coritiba', 'Hino do Athletico',
+    'Mengão', 'Timão', 'Verdão', 'Tricolor', 'Peixe', 'Cruzmaltino',
+  ],
   funkWords: ['funk', 'mc ', 'sequencia', 'proibidão', 'baile', 'kondzilla', 'gr6'],
   // Power saving mode
   powerSavingMode: false,
