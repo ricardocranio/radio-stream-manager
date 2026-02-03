@@ -19,6 +19,11 @@ export type Database = {
           created_at: string
           enabled: boolean | null
           id: string
+          monitoring_end_hour: number | null
+          monitoring_end_minute: number | null
+          monitoring_start_hour: number | null
+          monitoring_start_minute: number | null
+          monitoring_week_days: string[] | null
           name: string
           scrape_url: string
           styles: string[] | null
@@ -28,6 +33,11 @@ export type Database = {
           created_at?: string
           enabled?: boolean | null
           id?: string
+          monitoring_end_hour?: number | null
+          monitoring_end_minute?: number | null
+          monitoring_start_hour?: number | null
+          monitoring_start_minute?: number | null
+          monitoring_week_days?: string[] | null
           name: string
           scrape_url: string
           styles?: string[] | null
@@ -37,6 +47,11 @@ export type Database = {
           created_at?: string
           enabled?: boolean | null
           id?: string
+          monitoring_end_hour?: number | null
+          monitoring_end_minute?: number | null
+          monitoring_start_hour?: number | null
+          monitoring_start_minute?: number | null
+          monitoring_week_days?: string[] | null
           name?: string
           scrape_url?: string
           styles?: string[] | null
