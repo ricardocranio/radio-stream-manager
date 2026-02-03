@@ -34,12 +34,16 @@ export function SettingsView() {
   const [localConfig, setLocalConfig] = useState(config);
   const [showArl, setShowArl] = useState(false);
   const [arlValidation, setArlValidation] = useState<ArlValidationResult>({ status: 'idle' });
+  // Initialize from config (persisted) or use defaults
   const [forbiddenWords, setForbiddenWords] = useState(
-    '1.FM, Love Classics, Solitaire, Mahjong, Dayspedia, Games, Online, METROPOLITANA - SP, BAND FM'
+    config.forbiddenWords?.join(', ') || '1.FM, Love Classics, Solitaire, Mahjong, Dayspedia, Games, Online, METROPOLITANA - SP, BAND FM'
   );
   const [funkWords, setFunkWords] = useState(
-    'funk, mc , sequencia, proibidão, baile, kondzilla, gr6'
+    config.funkWords?.join(', ') || 'funk, mc , sequencia, proibidão, baile, kondzilla, gr6'
   );
+  
+  // Refs to track if filters have changed
+  const filtersSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Track if initial load is complete to avoid auto-save on mount
   const isInitialMount = useRef(true);
@@ -82,6 +86,51 @@ export function SettingsView() {
   useEffect(() => {
     setLocalConfig(config);
   }, [config]);
+  
+  // Sync filter words when config changes
+  useEffect(() => {
+    if (config.forbiddenWords) {
+      setForbiddenWords(config.forbiddenWords.join(', '));
+    }
+    if (config.funkWords) {
+      setFunkWords(config.funkWords.join(', '));
+    }
+  }, [config.forbiddenWords, config.funkWords]);
+  
+  // Auto-save filter words with debounce
+  const autoSaveFilters = useCallback(() => {
+    if (filtersSaveTimeoutRef.current) {
+      clearTimeout(filtersSaveTimeoutRef.current);
+    }
+    
+    filtersSaveTimeoutRef.current = setTimeout(() => {
+      const parsedForbidden = forbiddenWords.split(',').map(w => w.trim()).filter(Boolean);
+      const parsedFunk = funkWords.split(',').map(w => w.trim()).filter(Boolean);
+      
+      setConfig({ 
+        forbiddenWords: parsedForbidden, 
+        funkWords: parsedFunk 
+      });
+      console.log('[SETTINGS] ✓ Auto-saved filters:', { forbiddenWords: parsedForbidden.length, funkWords: parsedFunk.length });
+    }, 800);
+  }, [forbiddenWords, funkWords, setConfig]);
+  
+  // Trigger auto-save when filter words change (skip initial mount)
+  const isFiltersMounted = useRef(false);
+  useEffect(() => {
+    if (!isFiltersMounted.current) {
+      isFiltersMounted.current = true;
+      return;
+    }
+    
+    autoSaveFilters();
+    
+    return () => {
+      if (filtersSaveTimeoutRef.current) {
+        clearTimeout(filtersSaveTimeoutRef.current);
+      }
+    };
+  }, [forbiddenWords, funkWords, autoSaveFilters]);
 
   const handleReset = () => {
     setLocalConfig(config);
