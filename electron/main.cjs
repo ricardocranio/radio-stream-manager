@@ -244,6 +244,103 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   }
 
+  // =============== WHITE SCREEN RECOVERY ===============
+  // Auto-reload on failed loads or render crashes
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error(`[WINDOW] Load failed: ${errorCode} - ${errorDescription}`);
+    // Wait 2 seconds and try to reload
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        console.log('[WINDOW] Attempting auto-reload after failed load...');
+        mainWindow.reload();
+      }
+    }, 2000);
+  });
+
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error(`[WINDOW] Render process gone: ${details.reason}`);
+    // Wait 1 second and try to reload
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        console.log('[WINDOW] Attempting recovery after render crash...');
+        mainWindow.reload();
+      }
+    }, 1000);
+  });
+
+  mainWindow.webContents.on('unresponsive', () => {
+    console.error('[WINDOW] Window became unresponsive');
+    // Show dialog asking if user wants to reload
+    dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: 'Aplicação Não Responde',
+      message: 'A aplicação parou de responder.',
+      detail: 'Deseja recarregar a aplicação?',
+      buttons: ['Recarregar', 'Aguardar'],
+      defaultId: 0,
+    }).then(({ response }) => {
+      if (response === 0 && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.reload();
+      }
+    });
+  });
+
+  mainWindow.webContents.on('responsive', () => {
+    console.log('[WINDOW] Window became responsive again');
+  });
+
+  // Monitor for blank/white screen by checking if content loaded
+  let contentCheckAttempts = 0;
+  const maxContentCheckAttempts = 3;
+  
+  mainWindow.webContents.on('did-finish-load', () => {
+    contentCheckAttempts = 0;
+    // After 3 seconds, check if page rendered properly
+    setTimeout(async () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        try {
+          // Check if document body has content
+          const hasContent = await mainWindow.webContents.executeJavaScript(`
+            document.body && document.body.innerHTML && document.body.innerHTML.length > 100
+          `);
+          
+          if (!hasContent) {
+            console.error('[WINDOW] Blank screen detected!');
+            contentCheckAttempts++;
+            
+            if (contentCheckAttempts < maxContentCheckAttempts) {
+              console.log(`[WINDOW] Reload attempt ${contentCheckAttempts}/${maxContentCheckAttempts}...`);
+              mainWindow.reload();
+            } else {
+              console.error('[WINDOW] Max reload attempts reached, showing error');
+              dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'Erro de Carregamento',
+                message: 'A aplicação não carregou corretamente.',
+                detail: 'Tente reiniciar o aplicativo. Se o problema persistir, reinstale o programa.',
+                buttons: ['Reiniciar', 'Fechar'],
+                defaultId: 0,
+              }).then(({ response }) => {
+                if (response === 0) {
+                  app.relaunch();
+                  app.isQuitting = true;
+                  app.quit();
+                } else {
+                  app.isQuitting = true;
+                  app.quit();
+                }
+              });
+            }
+          } else {
+            console.log('[WINDOW] Content loaded successfully');
+          }
+        } catch (e) {
+          console.error('[WINDOW] Error checking content:', e.message);
+        }
+      }
+    }, 3000);
+  });
+
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
