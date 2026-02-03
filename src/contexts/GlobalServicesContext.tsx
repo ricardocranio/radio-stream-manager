@@ -16,6 +16,7 @@ import { useRadioStore, MissingSong, DownloadHistoryEntry } from '@/store/radioS
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { radioScraperApi } from '@/lib/api/radioScraper';
 import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
+import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -289,12 +290,12 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   }, []);
 
   const scrapeAllStations = useCallback(async (_forceRefresh = false) => {
-    const { stations, addCapturedSong, addOrUpdateRankingSong } = useRadioStore.getState();
+    const { stations, addCapturedSong, addOrUpdateRankingSong, addMissingSong, missingSongs, config } = useRadioStore.getState();
     const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl);
     
     if (enabledStations.length === 0) {
       console.log('[GLOBAL-SVC] No enabled stations with scrape URLs');
-      return { successCount: 0, errorCount: 0, newSongsCount: 0 };
+      return { successCount: 0, errorCount: 0, newSongsCount: 0, missingCount: 0 };
     }
 
     console.log(`[GLOBAL-SVC] 📡 Scraping ${enabledStations.length} stations...`);
@@ -309,7 +310,79 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     let successCount = 0;
     let errorCount = 0;
     let newSongsCount = 0;
+    let missingCount = 0;
     const failedStations: string[] = [];
+
+    // Helper to check if song is already in missing list
+    const isSongAlreadyMissing = (artist: string, title: string): boolean => {
+      const normalizedArtist = artist.toLowerCase().trim();
+      const normalizedTitle = title.toLowerCase().trim();
+      return missingSongs.some(
+        s => s.artist.toLowerCase().trim() === normalizedArtist && 
+             s.title.toLowerCase().trim() === normalizedTitle
+      );
+    };
+
+    // Helper to process a single song (check library, add to missing if needed)
+    const processSong = async (
+      songTitle: string,
+      songArtist: string,
+      stationName: string,
+      stationStyle: string,
+      scrapeUrl: string,
+      timestamp: Date = new Date()
+    ) => {
+      // Skip if already in missing list
+      const alreadyMissing = isSongAlreadyMissing(songArtist, songTitle);
+      
+      // Check if song exists in library (only in Electron)
+      let existsInLibrary = false;
+      if (isElectron && config.musicFolders?.length > 0) {
+        try {
+          const result = await checkSongInLibrary(
+            songArtist,
+            songTitle,
+            config.musicFolders,
+            config.similarityThreshold || 0.75
+          );
+          existsInLibrary = result.exists;
+        } catch (error) {
+          // If check fails, assume not in library to trigger download
+          console.error('[GLOBAL-SVC] Library check failed:', error);
+        }
+      }
+
+      const songId = `${stationName}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      
+      // Add to captured songs
+      addCapturedSong({
+        id: songId,
+        title: songTitle,
+        artist: songArtist,
+        station: stationName,
+        timestamp,
+        status: existsInLibrary ? 'found' : 'missing',
+        source: scrapeUrl,
+      });
+      
+      // Update ranking
+      addOrUpdateRankingSong(songTitle, songArtist, stationStyle);
+      
+      // If missing and not already in list, add to missing songs for download
+      if (!existsInLibrary && !alreadyMissing && isElectron) {
+        addMissingSong({
+          id: songId,
+          title: songTitle,
+          artist: songArtist,
+          station: stationName,
+          timestamp: new Date(),
+          status: 'missing',
+        });
+        return { isNew: true, isMissing: true };
+      }
+      
+      return { isNew: true, isMissing: false };
+    };
 
     const batchSize = 3;
     for (let i = 0; i < enabledStations.length; i += batchSize) {
@@ -328,34 +401,31 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
           const { stationName, nowPlaying, recentSongs, scrapeUrl } = result.value;
           const stationStyle = station.styles?.[0] || 'POP/VARIADO';
           
+          // Process now playing song
           if (nowPlaying) {
-            addCapturedSong({
-              id: `${stationName}-${Date.now()}`,
-              title: nowPlaying.title,
-              artist: nowPlaying.artist,
-              station: stationName,
-              timestamp: new Date(),
-              status: 'found',
-              source: scrapeUrl,
-            });
-            
-            addOrUpdateRankingSong(nowPlaying.title, nowPlaying.artist, stationStyle);
+            const { isMissing } = await processSong(
+              nowPlaying.title,
+              nowPlaying.artist,
+              stationName,
+              stationStyle,
+              scrapeUrl
+            );
             newSongsCount++;
+            if (isMissing) missingCount++;
           }
 
+          // Process recent songs (limit to 3)
           for (const song of (recentSongs || []).slice(0, 3)) {
-            addCapturedSong({
-              id: `${stationName}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-              title: song.title,
-              artist: song.artist,
-              station: stationName,
-              timestamp: new Date(song.timestamp),
-              status: 'found',
-              source: scrapeUrl,
-            });
-            
-            addOrUpdateRankingSong(song.title, song.artist, stationStyle);
+            const { isMissing } = await processSong(
+              song.title,
+              song.artist,
+              stationName,
+              stationStyle,
+              scrapeUrl,
+              new Date(song.timestamp)
+            );
             newSongsCount++;
+            if (isMissing) missingCount++;
           }
         } else {
           errorCount++;
@@ -384,10 +454,11 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     }));
 
     if (successCount > 0 || errorCount > 0) {
-      console.log(`[GLOBAL-SVC] 📡 Scrape complete: ${successCount}✓ ${errorCount}✗ ${newSongsCount} songs`);
+      const missingInfo = missingCount > 0 ? ` | ${missingCount} faltando` : '';
+      console.log(`[GLOBAL-SVC] 📡 Scrape complete: ${successCount}✓ ${errorCount}✗ ${newSongsCount} songs${missingInfo}`);
     }
 
-    return { successCount, errorCount, newSongsCount };
+    return { successCount, errorCount, newSongsCount, missingCount };
   }, [scrapeStation]);
 
   // ============= VOZ DO BRASIL SERVICE =============
