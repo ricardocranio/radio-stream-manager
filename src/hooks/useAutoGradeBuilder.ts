@@ -596,7 +596,7 @@ export function useAutoGradeBuilder() {
     const fixedItems = getFixedContentForTime(hour, minute);
     const blockLogs: Parameters<typeof addBlockLogs>[0] = [];
 
-    // Voz do Brasil (21:00 weekdays) - NO SYSTEM ASSEMBLY, just the fixed block
+    // Voz do Brasil (21:00 weekdays) - Fixed block with correct format
     if (hour === 21 && minute === 0 && isWeekday(targetDay)) {
       blockLogs.push({
         blockTime: timeStr,
@@ -606,9 +606,9 @@ export function useAutoGradeBuilder() {
         station: 'EBC',
         reason: 'Conteúdo fixo obrigatório - sem montagem do sistema',
       });
-      // Format: 21:00 19:01 (FIXO ID=VOZ DO BRASIL) - no songs, no vht, just the fixed block
+      // Format: 21:00 (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASIL
       return { 
-        line: `${timeStr} 19:01 (FIXO ID=VOZ DO BRASIL)`,
+        line: `${timeStr} (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASIL`,
         logs: blockLogs,
       };
     }
