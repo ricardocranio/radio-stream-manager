@@ -947,14 +947,114 @@ function saveArlToDeemixConfig(arl) {
   }
 }
 
+// Check if a file exists in any subfolder (for anti-duplicate logic)
+function checkFileExistsInSubfolders(baseFolder, searchPattern) {
+  try {
+    if (!fs.existsSync(baseFolder)) return { exists: false };
+    
+    const items = fs.readdirSync(baseFolder, { withFileTypes: true });
+    const searchLower = searchPattern.toLowerCase();
+    
+    // Check files in base folder
+    for (const item of items) {
+      if (item.isFile()) {
+        const fileName = path.basename(item.name, path.extname(item.name)).toLowerCase();
+        if (fileName.includes(searchLower) || searchLower.includes(fileName)) {
+          return { exists: true, path: path.join(baseFolder, item.name) };
+        }
+      }
+    }
+    
+    // Check subfolders (station folders)
+    for (const item of items) {
+      if (item.isDirectory()) {
+        const subfolderPath = path.join(baseFolder, item.name);
+        const subFiles = fs.readdirSync(subfolderPath);
+        for (const file of subFiles) {
+          const fileName = path.basename(file, path.extname(file)).toLowerCase();
+          if (fileName.includes(searchLower) || searchLower.includes(fileName)) {
+            return { exists: true, path: path.join(subfolderPath, file), station: item.name };
+          }
+        }
+      }
+    }
+    
+    return { exists: false };
+  } catch (error) {
+    console.error('[FOLDER] Error checking subfolders:', error.message);
+    return { exists: false };
+  }
+}
+
+// Sanitize folder name for filesystem
+function sanitizeFolderName(name) {
+  return name.replace(/[<>:"/\\|?*]/g, '_').trim();
+}
+
+// IPC: Create station folders for all active stations
+ipcMain.handle('ensure-station-folders', async (event, { baseFolder, stations }) => {
+  console.log(`[FOLDERS] Creating station folders in: ${baseFolder}`);
+  const created = [];
+  
+  try {
+    if (!fs.existsSync(baseFolder)) {
+      fs.mkdirSync(baseFolder, { recursive: true });
+    }
+    
+    for (const stationName of stations) {
+      const sanitized = sanitizeFolderName(stationName);
+      const folderPath = path.join(baseFolder, sanitized);
+      
+      if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+        created.push(sanitized);
+        console.log(`[FOLDERS] Created: ${folderPath}`);
+      }
+    }
+    
+    return { success: true, created, total: stations.length };
+  } catch (error) {
+    console.error('[FOLDERS] Error creating station folders:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC: Check if file exists in any station subfolder
+ipcMain.handle('check-file-in-subfolders', async (event, { baseFolder, artist, title }) => {
+  const searchPattern = `${artist} - ${title}`;
+  return checkFileExistsInSubfolders(baseFolder, searchPattern);
+});
+
 // Deezer Download Handler using deemix CLI
 ipcMain.handle('download-from-deezer', async (event, params) => {
-  const { artist, title, arl, outputFolder, quality } = params;
+  const { artist, title, arl, outputFolder, quality, stationName } = params;
+  
+  // If stationName provided, use station subfolder
+  const sanitizedStation = stationName ? sanitizeFolderName(stationName) : null;
+  const finalOutputFolder = sanitizedStation 
+    ? path.join(outputFolder, sanitizedStation)
+    : outputFolder;
   
   console.log(`[DEEMIX] === Starting download ===`);
   console.log(`[DEEMIX] Track: ${artist} - ${title}`);
-  console.log(`[DEEMIX] Output: ${outputFolder}`);
+  console.log(`[DEEMIX] Station: ${stationName || 'N/A'}`);
+  console.log(`[DEEMIX] Output: ${finalOutputFolder}`);
   console.log(`[DEEMIX] Quality: ${quality}`);
+  
+  // Check if file already exists in any subfolder (anti-duplicate)
+  if (stationName) {
+    const existingCheck = checkFileExistsInSubfolders(outputFolder, `${artist} - ${title}`);
+    if (existingCheck.exists) {
+      console.log(`[DEEMIX] File already exists at: ${existingCheck.path}`);
+      return {
+        success: true,
+        skipped: true,
+        existingPath: existingCheck.path,
+        existingStation: existingCheck.station,
+        message: `Arquivo já existe em ${existingCheck.station || 'pasta principal'}`
+      };
+    }
+  }
   
   try {
     // First check if deemix is installed
@@ -971,23 +1071,23 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
     
     console.log(`[DEEMIX] Using command: ${deemixCommand}`);
 
-    // Ensure output folder exists
-    if (!fs.existsSync(outputFolder)) {
-      console.log(`[DEEMIX] Creating output folder: ${outputFolder}`);
+    // Ensure output folder exists (use finalOutputFolder for station subfolders)
+    if (!fs.existsSync(finalOutputFolder)) {
+      console.log(`[DEEMIX] Creating output folder: ${finalOutputFolder}`);
       try {
-        fs.mkdirSync(outputFolder, { recursive: true });
+        fs.mkdirSync(finalOutputFolder, { recursive: true });
       } catch (mkdirError) {
         console.error(`[DEEMIX] Failed to create folder: ${mkdirError.message}`);
         return {
           success: false,
-          error: `Não foi possível criar a pasta: ${outputFolder}. Verifique as permissões.`
+          error: `Não foi possível criar a pasta: ${finalOutputFolder}. Verifique as permissões.`
         };
       }
     }
 
     // Verify folder is writable
     try {
-      const testFile = path.join(outputFolder, '.deemix_test');
+      const testFile = path.join(finalOutputFolder, '.deemix_test');
       fs.writeFileSync(testFile, 'test', 'utf8');
       fs.unlinkSync(testFile);
       console.log(`[DEEMIX] Output folder is writable`);
@@ -995,7 +1095,7 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
       console.error(`[DEEMIX] Folder not writable: ${writeError.message}`);
       return {
         success: false,
-        error: `Pasta não tem permissão de escrita: ${outputFolder}`
+        error: `Pasta não tem permissão de escrita: ${finalOutputFolder}`
       };
     }
 
@@ -1031,8 +1131,8 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
 
     // Run deemix CLI using the detected command
     return new Promise((resolve) => {
-      // Build the full command string
-      const fullCommand = `${deemixCommand} "${deezerUrl}" -p "${outputFolder}" -b ${deemixQuality}`;
+      // Build the full command string - use finalOutputFolder for station subfolder
+      const fullCommand = `${deemixCommand} "${deezerUrl}" -p "${finalOutputFolder}" -b ${deemixQuality}`;
 
       console.log(`[DEEMIX] Executing: ${fullCommand}`);
       
@@ -1066,20 +1166,22 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
         
         // Verify the file was created
         try {
-          const files = fs.readdirSync(outputFolder);
+          const files = fs.readdirSync(finalOutputFolder);
           console.log(`[DEEMIX] Files in output folder: ${files.join(', ')}`);
         } catch (e) {
           console.log('[DEEMIX] Could not list output folder:', e.message);
         }
         
-        // Show Windows notification
-        showNotification(
-          '✅ Download Concluído',
-          `${track.artist.name} - ${track.title}`,
-          () => {
-            shell.openPath(outputFolder);
-          }
-        );
+        // Show Windows notification (only for manual downloads, not auto)
+        if (!stationName) {
+          showNotification(
+            '✅ Download Concluído',
+            `${track.artist.name} - ${track.title}`,
+            () => {
+              shell.openPath(finalOutputFolder);
+            }
+          );
+        }
 
         resolve({ 
           success: true, 
@@ -1091,7 +1193,8 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
             duration: track.duration,
           },
           output: stdout,
-          outputFolder: outputFolder,
+          outputFolder: finalOutputFolder,
+          stationFolder: sanitizedStation,
           message: `Download concluído: ${track.artist.name} - ${track.title}`
         });
       });
