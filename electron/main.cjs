@@ -1805,7 +1805,7 @@ ipcMain.handle('get-music-library-stats', async (event, params) => {
 // =============== VOZ DO BRASIL DOWNLOAD ===============
 
 // Download file from URL to specified folder
-function downloadFile(url, outputFolder, filename, onProgress) {
+function downloadFile(url, outputFolder, filename, onProgress, deleteExisting = false) {
   return new Promise((resolve, reject) => {
     // Ensure output folder exists
     if (!fs.existsSync(outputFolder)) {
@@ -1819,6 +1819,52 @@ function downloadFile(url, outputFolder, filename, onProgress) {
     }
 
     const filePath = path.join(outputFolder, filename);
+    
+    // Delete existing file if requested (for Voz do Brasil - ensure fresh download)
+    if (deleteExisting || filename.startsWith('VozDoBrasil')) {
+      try {
+        // Delete the target file if it exists
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log(`[VOZ] Deleted existing file: ${filePath}`);
+        }
+        
+        // Also delete other VozDoBrasil files from today (different naming patterns)
+        if (filename.startsWith('VozDoBrasil')) {
+          const files = fs.readdirSync(outputFolder);
+          const today = new Date();
+          const day = today.getDate().toString().padStart(2, '0');
+          const month = (today.getMonth() + 1).toString().padStart(2, '0');
+          const year = today.getFullYear();
+          const todayPatterns = [
+            `VozDoBrasil_${day}-${month}-${year}`,
+            `voz_${day}${month}${year}`,
+            `vozbrasil_${day}${month}${year}`,
+          ];
+          
+          for (const file of files) {
+            const lowerFile = file.toLowerCase();
+            for (const pattern of todayPatterns) {
+              if (lowerFile.includes(pattern.toLowerCase())) {
+                const oldFilePath = path.join(outputFolder, file);
+                if (oldFilePath !== filePath) {
+                  try {
+                    fs.unlinkSync(oldFilePath);
+                    console.log(`[VOZ] Deleted old variant: ${file}`);
+                  } catch (e) {
+                    console.log(`[VOZ] Could not delete ${file}: ${e.message}`);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.log(`[VOZ] Warning during cleanup: ${err.message}`);
+        // Continue anyway - file might not exist or be in use
+      }
+    }
+    
     const protocol = url.startsWith('https') ? https : http;
     
     console.log(`[VOZ] Starting download from: ${url}`);
@@ -1836,7 +1882,7 @@ function downloadFile(url, outputFolder, filename, onProgress) {
       // Handle redirects
       if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
         console.log(`[VOZ] Redirect to: ${response.headers.location}`);
-        downloadFile(response.headers.location, outputFolder, filename, onProgress)
+        downloadFile(response.headers.location, outputFolder, filename, onProgress, false) // Already deleted on first call
           .then(resolve)
           .catch(reject);
         return;
