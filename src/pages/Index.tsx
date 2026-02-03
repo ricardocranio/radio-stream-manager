@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { DashboardView } from '@/components/views/DashboardView';
@@ -9,10 +9,6 @@ import { ScheduleView } from '@/components/views/ScheduleView';
 import { FoldersView } from '@/components/views/FoldersView';
 import { MissingView } from '@/components/views/MissingView';
 import { SettingsView } from '@/components/views/SettingsView';
-import { RankingView } from '@/components/views/RankingView';
-import { LogsView } from '@/components/views/LogsView';
-import { GradeBuilderView } from '@/components/views/GradeBuilderView';
-import { ExportView } from '@/components/views/ExportView';
 import { FixedContentView } from '@/components/views/FixedContentView';
 import { BlockEditorView } from '@/components/views/BlockEditorView';
 import { VozBrasilView } from '@/components/views/VozBrasilView';
@@ -22,7 +18,24 @@ import { CapturedSong } from '@/types/radio';
 import { useAutoDownload } from '@/hooks/useAutoDownload';
 import { useCheckMusicLibrary } from '@/hooks/useCheckMusicLibrary';
 import { useInitializeFolders } from '@/hooks/useInitializeFolders';
+import { useAutoCleanup } from '@/hooks/useAutoCleanup';
+import { Skeleton } from '@/components/ui/skeleton';
 import logo from '@/assets/logo.png';
+
+// Lazy load heavy components (Ranking, Logs, Export, GradeBuilder)
+const RankingView = lazy(() => import('@/components/views/RankingView').then(m => ({ default: m.RankingView })));
+const LogsView = lazy(() => import('@/components/views/LogsView').then(m => ({ default: m.LogsView })));
+const ExportView = lazy(() => import('@/components/views/ExportView').then(m => ({ default: m.ExportView })));
+const GradeBuilderView = lazy(() => import('@/components/views/GradeBuilderView').then(m => ({ default: m.GradeBuilderView })));
+
+// Loading fallback for lazy components
+const ViewSkeleton = () => (
+  <div className="p-6 space-y-4">
+    <Skeleton className="h-8 w-48" />
+    <Skeleton className="h-64 w-full" />
+    <Skeleton className="h-32 w-full" />
+  </div>
+);
 
 // Style mapping for stations (for ranking integration)
 const stationStyles: Record<string, string> = {
@@ -109,6 +122,9 @@ const Index = () => {
   
   // Initialize required folders on startup (Electron only)
   useInitializeFolders();
+  
+  // Auto cleanup of old data (>24h) - runs every hour
+  useAutoCleanup();
   
   // Hook for checking songs in local music library (Electron IPC)
   const { checkSongExists } = useCheckMusicLibrary();
@@ -282,19 +298,39 @@ const Index = () => {
       case 'schedule':
         return <ScheduleView />;
       case 'gradebuilder':
-        return <GradeBuilderView />;
+        // Lazy loaded
+        return (
+          <Suspense fallback={<ViewSkeleton />}>
+            <GradeBuilderView />
+          </Suspense>
+        );
       case 'blockeditor':
         return <BlockEditorView />;
       case 'fixedcontent':
         return <FixedContentView />;
       case 'ranking':
-        return <RankingView />;
+        // Lazy loaded
+        return (
+          <Suspense fallback={<ViewSkeleton />}>
+            <RankingView />
+          </Suspense>
+        );
       case 'vozbrasil':
         return <VozBrasilView />;
       case 'logs':
-        return <LogsView />;
+        // Lazy loaded
+        return (
+          <Suspense fallback={<ViewSkeleton />}>
+            <LogsView />
+          </Suspense>
+        );
       case 'export':
-        return <ExportView />;
+        // Lazy loaded
+        return (
+          <Suspense fallback={<ViewSkeleton />}>
+            <ExportView />
+          </Suspense>
+        );
       case 'folders':
         return <FoldersView />;
       case 'missing':
