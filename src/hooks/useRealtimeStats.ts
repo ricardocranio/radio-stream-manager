@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useId } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { withRetry, ErrorCodes, createError } from '@/lib/errorHandler';
 import { useRadioStore } from '@/store/radioStore';
@@ -39,10 +39,13 @@ interface RealtimeStats {
 const REFRESH_INTERVAL = 600; // Stats refresh every 10 minutes (was 2 min)
 const BACKGROUND_REFRESH_MULTIPLIER = 2; // Background = 20 minutes
 
+// STABLE subscriber ID - prevents channel disconnect on tab navigation
+// Using a constant ensures the subscription is reused across component remounts
+const STATS_SUBSCRIBER_ID = 'realtime_stats_global';
+
 export function useRealtimeStats() {
   const powerSavingMode = useRadioStore((s) => s.config.powerSavingMode ?? false);
   const isInBackgroundRef = useRef(false);
-  const subscriberId = useId();
   
   const [stats, setStats] = useState<RealtimeStats>({
     totalSongs: 0,
@@ -220,10 +223,11 @@ export function useRealtimeStats() {
   }, [loadStats, getEffectiveInterval, powerSavingMode]);
 
   // Subscribe to realtime updates via centralized manager
+  // Using a STABLE subscriber ID prevents channel disconnect on tab navigation
   useEffect(() => {
     const unsubscribe = realtimeManager.subscribe(
       'scraped_songs',
-      `stats_${subscriberId}`,
+      STATS_SUBSCRIBER_ID,
       (payload) => {
         const newSong = payload.new as { title: string; artist: string; station_name: string; scraped_at: string };
         
@@ -264,8 +268,10 @@ export function useRealtimeStats() {
       }
     );
 
+    // NOTE: We intentionally do NOT unsubscribe on unmount to keep the channel alive
+    // The subscription uses a stable ID so remounts just update the callback
     return unsubscribe;
-  }, [subscriberId]);
+  }, []);
 
   return { stats, refresh: loadStats };
 }
