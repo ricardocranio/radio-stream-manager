@@ -116,6 +116,72 @@ Deno.serve(async (req) => {
         );
       }
 
+      case 'clear-scraped-songs': {
+        // Clear all scraped songs from the database
+        const { error } = await supabase
+          .from('scraped_songs')
+          .delete()
+          .gte('id', '00000000-0000-0000-0000-000000000000'); // Match all UUIDs
+
+        if (error) throw error;
+        console.log('[EDGE] Cleared all scraped songs');
+        return new Response(
+          JSON.stringify({ success: true, message: 'All scraped songs cleared' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'full-system-reset': {
+        // COMPLETE SYSTEM RESET - Clears ALL data from Supabase
+        // 1. Clear scraped songs
+        const { error: songsError } = await supabase
+          .from('scraped_songs')
+          .delete()
+          .gte('id', '00000000-0000-0000-0000-000000000000');
+        
+        if (songsError) {
+          console.error('[EDGE] Error clearing scraped songs:', songsError);
+        }
+
+        // 2. Clear special monitoring schedules (optional, based on data.clearSchedules)
+        if (data?.clearSchedules) {
+          const { error: schedError } = await supabase
+            .from('special_monitoring')
+            .delete()
+            .gte('id', '00000000-0000-0000-0000-000000000000');
+          
+          if (schedError) {
+            console.error('[EDGE] Error clearing special monitoring:', schedError);
+          }
+        }
+
+        // 3. Reset radio stations to default (disable all) - optional
+        if (data?.resetStations) {
+          const { error: stationsError } = await supabase
+            .from('radio_stations')
+            .update({ enabled: false })
+            .gte('id', '00000000-0000-0000-0000-000000000000');
+          
+          if (stationsError) {
+            console.error('[EDGE] Error resetting stations:', stationsError);
+          }
+        }
+
+        console.log('[EDGE] Full system reset completed');
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: 'Full system reset completed',
+            cleared: {
+              scrapedSongs: !songsError,
+              specialMonitoring: data?.clearSchedules ? true : 'skipped',
+              radioStations: data?.resetStations ? true : 'skipped',
+            }
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ success: false, error: 'Invalid action' }),

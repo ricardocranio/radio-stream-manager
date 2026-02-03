@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive } from 'lucide-react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Shield } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
+import { useAutoDownloadStore } from '@/store/autoDownloadStore';
+import { useSimilarityLogStore } from '@/store/similarityLogStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
 import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
@@ -12,13 +14,26 @@ import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { GradePreviewCard } from '@/components/dashboard/GradePreviewCard';
 import { GradeScheduleCard } from '@/components/dashboard/GradeScheduleCard';
 
 export function DashboardView() {
-  const { stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs } = useRadioStore();
+  const { 
+    stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs,
+    clearCapturedSongs, clearMissingSongs, clearDownloadHistory, clearRanking,
+    setBatchDownloadProgress
+  } = useRadioStore();
+  const { resetQueue } = useAutoDownloadStore();
+  const resetSimilarityStats = useSimilarityLogStore((state) => state.resetStats);
+  const { toast } = useToast();
+  
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
   const { stats: realtimeStats, refresh: refreshStats } = useRealtimeStats();
   const { stats: libraryStats } = useMusicLibraryStats();
@@ -26,6 +41,14 @@ export function DashboardView() {
   const { gradeBuilder, downloads, scraping } = useGlobalServices();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  
+  // Reset options
+  const [resetOptions, setResetOptions] = useState({
+    clearSupabase: true,
+    clearSchedules: false,
+    resetStations: false,
+  });
   
   // Realtime notifications hook
   const { requestPermission } = useRealtimeNotifications({
@@ -55,6 +78,84 @@ export function DashboardView() {
     setIsRefreshing(true);
     await refreshStats();
     setIsRefreshing(false);
+  };
+
+  // FULL SYSTEM RESET - Local + Supabase
+  const handleFullSystemReset = async () => {
+    setIsResetting(true);
+    
+    try {
+      // 1. Clear all local data
+      clearCapturedSongs();
+      clearMissingSongs();
+      clearDownloadHistory();
+      clearGradeHistory();
+      clearRanking();
+      resetQueue();
+      resetSimilarityStats();
+      setBatchDownloadProgress({
+        isRunning: false,
+        total: 0,
+        completed: 0,
+        failed: 0,
+        current: '',
+      });
+
+      // 2. Clear Supabase data via Edge Function
+      if (resetOptions.clearSupabase) {
+        const { data, error } = await supabase.functions.invoke('manage-special-monitoring', {
+          body: {
+            action: 'full-system-reset',
+            data: {
+              clearSchedules: resetOptions.clearSchedules,
+              resetStations: resetOptions.resetStations,
+            },
+          },
+        });
+
+        if (error) {
+          console.error('[RESET] Supabase error:', error);
+          toast({
+            title: '⚠️ Reset parcial',
+            description: 'Dados locais limpos, mas houve erro ao limpar o banco de dados remoto.',
+            variant: 'destructive',
+          });
+        } else {
+          console.log('[RESET] Supabase cleared:', data);
+        }
+      }
+
+      // 3. Clear localStorage keys related to the system
+      const keysToPreserve = ['vozBrasilConfig', 'theme']; // Preserve user preferences
+      const allKeys = Object.keys(localStorage);
+      allKeys.forEach(key => {
+        if (!keysToPreserve.includes(key) && !key.startsWith('supabase')) {
+          // Only clear app-specific keys, not Supabase auth
+          if (key.includes('radio') || key.includes('grade') || key.includes('similarity')) {
+            localStorage.removeItem(key);
+          }
+        }
+      });
+
+      // Force page reload to ensure clean state
+      toast({
+        title: '✅ Sistema Resetado',
+        description: 'Todos os dados foram limpos. O sistema está pronto para uma nova instalação.',
+      });
+
+      // Refresh stats to reflect changes
+      await refreshStats();
+
+    } catch (error) {
+      console.error('[RESET] Error:', error);
+      toast({
+        title: '❌ Erro no Reset',
+        description: error instanceof Error ? error.message : 'Erro desconhecido ao resetar o sistema.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   const localStats = {
@@ -761,6 +862,121 @@ export function DashboardView() {
           </CardContent>
         </Card>
       </div>
+
+      {/* System Reset Card */}
+      <Card className="glass-card border-destructive/30 bg-gradient-to-r from-destructive/5 to-transparent">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
+                <RotateCcw className="w-5 h-5 text-destructive" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium text-foreground">Zerar Sistema Completo</p>
+                <p className="text-sm text-muted-foreground">
+                  Limpa todos os dados locais e do banco de dados para novas instalações
+                </p>
+              </div>
+            </div>
+            
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="destructive" 
+                  size="sm" 
+                  className="gap-2 shrink-0"
+                  disabled={isResetting}
+                >
+                  {isResetting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  Zerar Tudo
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="max-w-md">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                    <Shield className="w-5 h-5" />
+                    Reset Completo do Sistema
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="space-y-3">
+                    <p>Esta ação irá limpar <strong>TODOS</strong> os dados do sistema:</p>
+                    
+                    <div className="space-y-2 p-3 rounded-lg bg-muted/50 text-sm">
+                      <p>✓ Músicas capturadas (local)</p>
+                      <p>✓ Ranking TOP50</p>
+                      <p>✓ Músicas faltando</p>
+                      <p>✓ Histórico de downloads</p>
+                      <p>✓ Histórico de grades</p>
+                      <p>✓ Estatísticas de similaridade</p>
+                    </div>
+
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="clearSupabase" 
+                          checked={resetOptions.clearSupabase}
+                          onCheckedChange={(checked) => 
+                            setResetOptions(prev => ({ ...prev, clearSupabase: checked === true }))
+                          }
+                        />
+                        <Label htmlFor="clearSupabase" className="text-sm font-medium cursor-pointer">
+                          Limpar banco de dados remoto (Supabase)
+                        </Label>
+                      </div>
+                      
+                      {resetOptions.clearSupabase && (
+                        <>
+                          <div className="flex items-center space-x-2 ml-6">
+                            <Checkbox 
+                              id="clearSchedules" 
+                              checked={resetOptions.clearSchedules}
+                              onCheckedChange={(checked) => 
+                                setResetOptions(prev => ({ ...prev, clearSchedules: checked === true }))
+                              }
+                            />
+                            <Label htmlFor="clearSchedules" className="text-sm cursor-pointer">
+                              Limpar monitoramentos especiais
+                            </Label>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2 ml-6">
+                            <Checkbox 
+                              id="resetStations" 
+                              checked={resetOptions.resetStations}
+                              onCheckedChange={(checked) => 
+                                setResetOptions(prev => ({ ...prev, resetStations: checked === true }))
+                              }
+                            />
+                            <Label htmlFor="resetStations" className="text-sm cursor-pointer">
+                              Desativar todas as emissoras
+                            </Label>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <p className="text-destructive text-xs font-medium pt-2">
+                      ⚠️ Esta ação é irreversível!
+                    </p>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleFullSystemReset}
+                    className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                  >
+                    Confirmar Reset
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
