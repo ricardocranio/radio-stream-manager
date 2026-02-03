@@ -82,10 +82,12 @@ export function DashboardView() {
 
   // FULL SYSTEM RESET - Local + Supabase
   const handleFullSystemReset = async () => {
+    console.log('[RESET] Starting full system reset...');
     setIsResetting(true);
     
     try {
       // 1. Clear all local data
+      console.log('[RESET] Clearing local data...');
       clearCapturedSongs();
       clearMissingSongs();
       clearDownloadHistory();
@@ -100,51 +102,78 @@ export function DashboardView() {
         failed: 0,
         current: '',
       });
+      console.log('[RESET] Local data cleared');
 
       // 2. Clear Supabase data via Edge Function
       if (resetOptions.clearSupabase) {
-        const { data, error } = await supabase.functions.invoke('manage-special-monitoring', {
-          body: {
-            action: 'full-system-reset',
-            data: {
-              clearSchedules: resetOptions.clearSchedules,
-              resetStations: resetOptions.resetStations,
+        console.log('[RESET] Clearing Supabase data...', resetOptions);
+        try {
+          const { data, error } = await supabase.functions.invoke('manage-special-monitoring', {
+            body: {
+              action: 'full-system-reset',
+              data: {
+                clearSchedules: resetOptions.clearSchedules,
+                resetStations: resetOptions.resetStations,
+              },
             },
-          },
-        });
-
-        if (error) {
-          console.error('[RESET] Supabase error:', error);
-          toast({
-            title: '⚠️ Reset parcial',
-            description: 'Dados locais limpos, mas houve erro ao limpar o banco de dados remoto.',
-            variant: 'destructive',
           });
-        } else {
-          console.log('[RESET] Supabase cleared:', data);
+
+          if (error) {
+            console.error('[RESET] Supabase Edge Function error:', error);
+            toast({
+              title: '⚠️ Reset parcial',
+              description: `Dados locais limpos. Erro no banco remoto: ${error.message || 'Erro desconhecido'}`,
+              variant: 'destructive',
+            });
+          } else {
+            console.log('[RESET] Supabase cleared successfully:', data);
+          }
+        } catch (supaError) {
+          console.error('[RESET] Supabase call exception:', supaError);
+          // Don't block the rest of the reset if Supabase fails
         }
       }
 
       // 3. Clear localStorage keys related to the system
-      const keysToPreserve = ['vozBrasilConfig', 'theme']; // Preserve user preferences
+      console.log('[RESET] Clearing localStorage...');
+      const keysToPreserve = ['vozBrasilConfig', 'theme', 'supabase.auth.token']; 
       const allKeys = Object.keys(localStorage);
+      let clearedKeys = 0;
+      
       allKeys.forEach(key => {
-        if (!keysToPreserve.includes(key) && !key.startsWith('supabase')) {
-          // Only clear app-specific keys, not Supabase auth
-          if (key.includes('radio') || key.includes('grade') || key.includes('similarity')) {
-            localStorage.removeItem(key);
-          }
+        // Preserve Supabase auth and user preferences
+        if (key.startsWith('supabase') || keysToPreserve.some(k => key.includes(k))) {
+          return;
+        }
+        // Clear app-specific keys
+        if (key.includes('radio') || key.includes('grade') || key.includes('similarity') || 
+            key.includes('stats') || key.includes('ranking') || key.includes('download') ||
+            key.includes('missing') || key.includes('captured') || key.includes('pgm-')) {
+          localStorage.removeItem(key);
+          clearedKeys++;
         }
       });
+      console.log(`[RESET] Cleared ${clearedKeys} localStorage keys`);
 
-      // Force page reload to ensure clean state
+      // 4. Clear the realtime stats store
+      try {
+        const { useRealtimeStatsStore } = await import('@/store/realtimeStatsStore');
+        useRealtimeStatsStore.getState().reset();
+        console.log('[RESET] Realtime stats store cleared');
+      } catch (e) {
+        console.log('[RESET] Could not clear realtime stats store:', e);
+      }
+
       toast({
         title: '✅ Sistema Resetado',
         description: 'Todos os dados foram limpos. O sistema está pronto para uma nova instalação.',
       });
 
       // Refresh stats to reflect changes
+      console.log('[RESET] Refreshing stats...');
       await refreshStats();
+      
+      console.log('[RESET] Full system reset completed successfully!');
 
     } catch (error) {
       console.error('[RESET] Error:', error);
