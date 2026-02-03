@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Radio, Plus, Trash2, ExternalLink, Save, X, RefreshCw, Loader2, Download, Copy, CheckCircle2, AlertCircle, Power, Settings, CloudUpload } from 'lucide-react';
+import { Radio, Plus, Trash2, ExternalLink, Save, X, RefreshCw, Loader2, Download, Copy, CheckCircle2, AlertCircle, Power, Settings, CloudUpload, Clock } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { RadioStation } from '@/types/radio';
+import { RadioStation, WeekDay } from '@/types/radio';
 import { useToast } from '@/hooks/use-toast';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
@@ -43,6 +44,33 @@ interface ConfigData {
   radios: RadioConfig[];
 }
 
+// Extended DB station type with monitoring schedule
+interface DbStation {
+  id: string;
+  name: string;
+  scrape_url: string;
+  enabled: boolean;
+  styles: string[];
+  monitoring_start_hour: number | null;
+  monitoring_start_minute: number;
+  monitoring_end_hour: number | null;
+  monitoring_end_minute: number;
+  monitoring_week_days: string[];
+}
+
+const WEEK_DAYS: { value: WeekDay; label: string }[] = [
+  { value: 'dom', label: 'Dom' },
+  { value: 'seg', label: 'Seg' },
+  { value: 'ter', label: 'Ter' },
+  { value: 'qua', label: 'Qua' },
+  { value: 'qui', label: 'Qui' },
+  { value: 'sex', label: 'Sex' },
+  { value: 'sab', label: 'Sáb' },
+];
+
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const MINUTES = [0, 15, 30, 45];
+
 export function StationsView() {
   const { stations, updateStation, setStations, addCapturedSong, addOrUpdateRankingSong } = useRadioStore();
   const { toast } = useToast();
@@ -52,7 +80,15 @@ export function StationsView() {
   const [capturedSongsCount, setCapturedSongsCount] = useState(0);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [lastCapture, setLastCapture] = useState<string | null>(null);
-  const [dbStations, setDbStations] = useState<{ id: string; name: string; scrape_url: string; enabled: boolean; styles: string[] }[]>([]);
+  const [dbStations, setDbStations] = useState<DbStation[]>([]);
+  const [scheduleOpen, setScheduleOpen] = useState<Record<string, boolean>>({});
+  const [editSchedule, setEditSchedule] = useState<{
+    startHour: number | null;
+    startMinute: number;
+    endHour: number | null;
+    endMinute: number;
+    weekDays: string[];
+  } | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   
   // Auto-sync stations to Supabase
@@ -94,7 +130,12 @@ export function StationsView() {
             name: s.name,
             scrape_url: s.scrape_url,
             enabled: s.enabled ?? true,
-            styles: s.styles || []
+            styles: s.styles || [],
+            monitoring_start_hour: (s as any).monitoring_start_hour ?? null,
+            monitoring_start_minute: (s as any).monitoring_start_minute ?? 0,
+            monitoring_end_hour: (s as any).monitoring_end_hour ?? null,
+            monitoring_end_minute: (s as any).monitoring_end_minute ?? 0,
+            monitoring_week_days: (s as any).monitoring_week_days || ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'],
           })));
         }
       } catch (error) {
@@ -398,6 +439,8 @@ export function StationsView() {
         {stations.map((station) => {
           const isEditing = editingStation === station.id;
           const data = isEditing && editForm ? editForm : station;
+          const dbStation = dbStations.find(s => s.name === station.name);
+          const hasSchedule = dbStation?.monitoring_start_hour !== null && dbStation?.monitoring_end_hour !== null;
 
           return (
             <Card key={station.id} className={`transition-all ${!data.enabled ? 'opacity-60' : ''}`}>
@@ -485,6 +528,188 @@ export function StationsView() {
                     )}
                   </div>
                 </div>
+
+                {/* Horários de Monitoramento */}
+                <Collapsible 
+                  open={scheduleOpen[station.id]} 
+                  onOpenChange={(open) => setScheduleOpen(prev => ({ ...prev, [station.id]: open }))}
+                >
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="w-full justify-between px-0 h-7">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Horário de Monitoramento</span>
+                      </div>
+                      {hasSchedule ? (
+                        <Badge variant="secondary" className="text-xs">
+                          {String(dbStation?.monitoring_start_hour ?? 0).padStart(2, '0')}:
+                          {String(dbStation?.monitoring_start_minute ?? 0).padStart(2, '0')} - 
+                          {String(dbStation?.monitoring_end_hour ?? 0).padStart(2, '0')}:
+                          {String(dbStation?.monitoring_end_minute ?? 0).padStart(2, '0')}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs">24h</Badge>
+                      )}
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-2 space-y-3">
+                    {/* Time Range */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Início</Label>
+                        <div className="flex gap-1 mt-1">
+                          <select
+                            className="w-full h-8 text-xs rounded border bg-background px-2"
+                            value={dbStation?.monitoring_start_hour ?? ''}
+                            onChange={async (e) => {
+                              const val = e.target.value === '' ? null : parseInt(e.target.value);
+                              await supabase
+                                .from('radio_stations')
+                                .update({ monitoring_start_hour: val })
+                                .eq('name', station.name);
+                              setDbStations(prev => prev.map(s => 
+                                s.name === station.name ? { ...s, monitoring_start_hour: val } : s
+                              ));
+                            }}
+                          >
+                            <option value="">--</option>
+                            {HOURS.map(h => (
+                              <option key={h} value={h}>{String(h).padStart(2, '0')}</option>
+                            ))}
+                          </select>
+                          <span className="text-xs self-center">:</span>
+                          <select
+                            className="w-full h-8 text-xs rounded border bg-background px-2"
+                            value={dbStation?.monitoring_start_minute ?? 0}
+                            onChange={async (e) => {
+                              const val = parseInt(e.target.value);
+                              await supabase
+                                .from('radio_stations')
+                                .update({ monitoring_start_minute: val })
+                                .eq('name', station.name);
+                              setDbStations(prev => prev.map(s => 
+                                s.name === station.name ? { ...s, monitoring_start_minute: val } : s
+                              ));
+                            }}
+                          >
+                            {MINUTES.map(m => (
+                              <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Fim</Label>
+                        <div className="flex gap-1 mt-1">
+                          <select
+                            className="w-full h-8 text-xs rounded border bg-background px-2"
+                            value={dbStation?.monitoring_end_hour ?? ''}
+                            onChange={async (e) => {
+                              const val = e.target.value === '' ? null : parseInt(e.target.value);
+                              await supabase
+                                .from('radio_stations')
+                                .update({ monitoring_end_hour: val })
+                                .eq('name', station.name);
+                              setDbStations(prev => prev.map(s => 
+                                s.name === station.name ? { ...s, monitoring_end_hour: val } : s
+                              ));
+                            }}
+                          >
+                            <option value="">--</option>
+                            {HOURS.map(h => (
+                              <option key={h} value={h}>{String(h).padStart(2, '0')}</option>
+                            ))}
+                          </select>
+                          <span className="text-xs self-center">:</span>
+                          <select
+                            className="w-full h-8 text-xs rounded border bg-background px-2"
+                            value={dbStation?.monitoring_end_minute ?? 0}
+                            onChange={async (e) => {
+                              const val = parseInt(e.target.value);
+                              await supabase
+                                .from('radio_stations')
+                                .update({ monitoring_end_minute: val })
+                                .eq('name', station.name);
+                              setDbStations(prev => prev.map(s => 
+                                s.name === station.name ? { ...s, monitoring_end_minute: val } : s
+                              ));
+                            }}
+                          >
+                            {MINUTES.map(m => (
+                              <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Week Days */}
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Dias da semana</Label>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {WEEK_DAYS.map(day => {
+                          const isActive = dbStation?.monitoring_week_days?.includes(day.value) ?? true;
+                          return (
+                            <Badge
+                              key={day.value}
+                              variant={isActive ? 'default' : 'outline'}
+                              className="cursor-pointer text-xs px-2"
+                              onClick={async () => {
+                                const currentDays = dbStation?.monitoring_week_days || ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+                                const newDays = isActive 
+                                  ? currentDays.filter(d => d !== day.value)
+                                  : [...currentDays, day.value];
+                                await supabase
+                                  .from('radio_stations')
+                                  .update({ monitoring_week_days: newDays })
+                                  .eq('name', station.name);
+                                setDbStations(prev => prev.map(s => 
+                                  s.name === station.name ? { ...s, monitoring_week_days: newDays } : s
+                                ));
+                              }}
+                            >
+                              {day.label}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Clear Schedule Button */}
+                    {hasSchedule && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs text-muted-foreground"
+                        onClick={async () => {
+                          await supabase
+                            .from('radio_stations')
+                            .update({ 
+                              monitoring_start_hour: null, 
+                              monitoring_end_hour: null,
+                              monitoring_week_days: ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab']
+                            })
+                            .eq('name', station.name);
+                          setDbStations(prev => prev.map(s => 
+                            s.name === station.name ? { 
+                              ...s, 
+                              monitoring_start_hour: null, 
+                              monitoring_end_hour: null,
+                              monitoring_week_days: ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab']
+                            } : s
+                          ));
+                          toast({
+                            title: 'Horário removido',
+                            description: 'A emissora será monitorada 24 horas.',
+                          });
+                        }}
+                      >
+                        <X className="w-3 h-3 mr-1" />
+                        Monitorar 24h (remover horário)
+                      </Button>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
 
                 {/* Actions */}
                 <div className="flex justify-end gap-2 pt-2 border-t border-border">

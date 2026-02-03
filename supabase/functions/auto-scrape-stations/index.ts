@@ -17,6 +17,11 @@ interface RadioStation {
   scrape_url: string;
   styles: string[];
   enabled: boolean;
+  monitoring_start_hour: number | null;
+  monitoring_start_minute: number;
+  monitoring_end_hour: number | null;
+  monitoring_end_minute: number;
+  monitoring_week_days: string[];
 }
 
 interface SpecialMonitoring {
@@ -63,6 +68,51 @@ function isWithinSchedule(schedule: SpecialMonitoring, now: Date): boolean {
   const endMins = schedule.end_hour * 60 + schedule.end_minute;
 
   return currentMins >= startMins && currentMins <= endMins;
+}
+
+// Helper to check if station should be monitored now (based on its schedule)
+function isStationActiveNow(station: RadioStation, now: Date): boolean {
+  // If no schedule configured (start_hour is null), monitor 24/7
+  if (station.monitoring_start_hour === null || station.monitoring_end_hour === null) {
+    return true;
+  }
+
+  const currentHour = now.getUTCHours() - 3; // Convert to BRT (UTC-3)
+  const adjustedHour = currentHour < 0 ? currentHour + 24 : currentHour;
+  const currentMinute = now.getMinutes();
+  const currentDay = now.getDay(); // 0 = Sunday
+
+  // Map day of week
+  const dayMap: Record<number, string> = {
+    0: 'dom',
+    1: 'seg',
+    2: 'ter',
+    3: 'qua',
+    4: 'qui',
+    5: 'sex',
+    6: 'sab',
+  };
+
+  // Check if current day is in weekDays
+  if (station.monitoring_week_days && station.monitoring_week_days.length > 0) {
+    if (!station.monitoring_week_days.includes(dayMap[currentDay])) {
+      console.log(`[${station.name}] Skipping: not active on ${dayMap[currentDay]}`);
+      return false;
+    }
+  }
+
+  // Convert to minutes for easier comparison
+  const currentMins = adjustedHour * 60 + currentMinute;
+  const startMins = station.monitoring_start_hour * 60 + station.monitoring_start_minute;
+  const endMins = station.monitoring_end_hour * 60 + station.monitoring_end_minute;
+
+  const isActive = currentMins >= startMins && currentMins <= endMins;
+  
+  if (!isActive) {
+    console.log(`[${station.name}] Skipping: outside schedule (${station.monitoring_start_hour}:${station.monitoring_start_minute}-${station.monitoring_end_hour}:${station.monitoring_end_minute})`);
+  }
+
+  return isActive;
 }
 
 // Retry configuration
@@ -380,12 +430,20 @@ Deno.serve(async (req) => {
 
     console.log(`Found ${stations?.length || 0} enabled stations to scrape`);
 
-    const results: { station: string; success: boolean; songs: number; error?: string }[] = [];
+    const results: { station: string; success: boolean; songs: number; error?: string; skipped?: boolean }[] = [];
+    const now = new Date();
     
     // Process stations sequentially to avoid rate limits
     for (const station of (stations || []) as RadioStation[]) {
-      console.log(`\n--- Scraping ${station.name} ---`);
+      console.log(`\n--- Processing ${station.name} ---`);
       
+      // Check if station should be monitored at current time
+      if (!isStationActiveNow(station, now)) {
+        results.push({ station: station.name, success: true, songs: 0, skipped: true });
+        continue;
+      }
+      
+      console.log(`[${station.name}] Scraping...`);
       const scrapeResult = await scrapeWithFirecrawl(firecrawlApiKey, station.scrape_url);
       
       if (!scrapeResult.success || !scrapeResult.data) {
@@ -466,7 +524,7 @@ Deno.serve(async (req) => {
     // === SPECIAL MONITORING: Same capture logic ===
     console.log('\n=== Processing Special Monitoring Schedules ===');
     
-    const now = new Date();
+    const specialNow = new Date();
     
     // Get all enabled special monitoring schedules
     const { data: specialMonitoring, error: specialError } = await supabase
@@ -481,7 +539,7 @@ Deno.serve(async (req) => {
       
       // Filter schedules that are active right now
       const activeSchedules = (specialMonitoring || []).filter((schedule: SpecialMonitoring) => 
-        isWithinSchedule(schedule, now)
+        isWithinSchedule(schedule, specialNow)
       );
       
       console.log(`${activeSchedules.length} schedules are active right now`);
