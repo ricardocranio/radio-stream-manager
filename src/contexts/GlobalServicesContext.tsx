@@ -120,11 +120,16 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         arl: state.deezerConfig.arl,
         outputFolder: state.deezerConfig.downloadFolder,
         quality: state.deezerConfig.quality,
+        stationName: song.station, // Pass station for subfolder organization
       });
 
       const duration = Date.now() - startTime;
 
       if (result?.success) {
+        // Handle both downloaded and skipped (already exists) cases
+        if (result.skipped) {
+          console.log(`[GLOBAL-SVC] ⏭️ Skipped (already exists): ${song.artist} - ${song.title} in ${result.existingStation || 'main folder'}`);
+        }
         useRadioStore.getState().updateMissingSong(song.id, { status: 'downloaded' });
         
         const historyEntry: DownloadHistoryEntry = {
@@ -546,6 +551,21 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
     console.log(`║ 📻 Voz do Brasil: ✅ ATIVO (Seg-Sex 20:35)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
+
+    // 0. Initialize station folders (create subfolder for each enabled station)
+    if (isElectron && deezerConfig.downloadFolder && enabledStations > 0) {
+      const stationNames = stations.filter(s => s.enabled).map(s => s.name);
+      window.electronAPI?.ensureStationFolders?.({
+        baseFolder: deezerConfig.downloadFolder,
+        stations: stationNames,
+      }).then(result => {
+        if (result?.success && result.created.length > 0) {
+          console.log(`[GLOBAL-SVC] 📁 Criadas ${result.created.length} pastas de estações`);
+        }
+      }).catch(err => {
+        console.error('[GLOBAL-SVC] Erro ao criar pastas de estações:', err);
+      });
+    }
 
     // 1. Download check every 30 seconds (was 10s - optimized for less CPU)
     downloadIntervalRef.current = setInterval(() => {

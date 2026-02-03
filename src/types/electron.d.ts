@@ -4,12 +4,17 @@ interface DeezerDownloadParams {
   arl: string;
   outputFolder: string;
   quality: 'MP3_128' | 'MP3_320' | 'FLAC';
+  stationName?: string; // If provided, saves to station subfolder
 }
 
 interface DeezerDownloadResult {
   success: boolean;
   error?: string;
   needsInstall?: boolean;
+  skipped?: boolean; // True if file already existed
+  existingPath?: string; // Path where file already exists
+  existingStation?: string; // Station folder where file exists
+  stationFolder?: string; // Station folder where file was saved
   track?: {
     id: number;
     title: string;
@@ -18,7 +23,33 @@ interface DeezerDownloadResult {
     duration: number;
   };
   output?: string;
+  outputFolder?: string;
   message?: string;
+}
+
+// Station folder management
+interface EnsureStationFoldersParams {
+  baseFolder: string;
+  stations: string[];
+}
+
+interface EnsureStationFoldersResult {
+  success: boolean;
+  created: string[];
+  total: number;
+  error?: string;
+}
+
+interface CheckFileInSubfoldersParams {
+  baseFolder: string;
+  artist: string;
+  title: string;
+}
+
+interface CheckFileInSubfoldersResult {
+  exists: boolean;
+  path?: string;
+  station?: string;
 }
 
 interface BatchCompleteStats {
@@ -204,6 +235,10 @@ interface ElectronAPI {
   saveGradeFile: (params: GradeFileParams) => Promise<GradeFileResult>;
   readGradeFile: (params: Omit<GradeFileParams, 'content'>) => Promise<GradeFileResult>;
   listFolderFiles: (params: FolderListParams) => Promise<FolderListResult>;
+  
+  // Station folder management
+  ensureStationFolders: (params: EnsureStationFoldersParams) => Promise<EnsureStationFoldersResult>;
+  checkFileInSubfolders: (params: CheckFileInSubfoldersParams) => Promise<CheckFileInSubfoldersResult>;
   
   // Window management
   showWindow: () => Promise<{ success: boolean }>;

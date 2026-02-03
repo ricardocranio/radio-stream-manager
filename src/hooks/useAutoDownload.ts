@@ -69,11 +69,16 @@ export function useAutoDownload() {
         arl: state.deezerConfig.arl,
         outputFolder: state.deezerConfig.downloadFolder,
         quality: state.deezerConfig.quality,
+        stationName: song.station, // Pass station for subfolder organization
       });
 
       const duration = Date.now() - startTime;
 
       if (result?.success) {
+        // Handle both downloaded and skipped (already exists) cases
+        if (result.skipped) {
+          console.log(`[AUTO-DL] Skipped (already exists): ${song.artist} - ${song.title} in ${result.existingStation || 'main folder'}`);
+        }
         updateMissingSong(song.id, { status: 'downloaded' });
         
         const historyEntry: DownloadHistoryEntry = {
