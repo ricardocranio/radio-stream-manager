@@ -15,7 +15,6 @@ import { VozBrasilView } from '@/components/views/VozBrasilView';
 import { SpecialMonitoringView } from '@/components/views/SpecialMonitoringView';
 import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { CapturedSong } from '@/types/radio';
-import { useAutoDownload } from '@/hooks/useAutoDownload';
 import { useCheckMusicLibrary } from '@/hooks/useCheckMusicLibrary';
 import { useInitializeFolders } from '@/hooks/useInitializeFolders';
 import { useAutoCleanup } from '@/hooks/useAutoCleanup';
@@ -117,8 +116,7 @@ const Index = () => {
     missingSongs,
   } = useRadioStore();
   
-  // Initialize auto-download hook (manages queue in global store)
-  useAutoDownload();
+  // NOTE: Auto-download is handled by GlobalServicesContext (runs at App level)
   
   // Initialize required folders on startup (Electron only)
   useInitializeFolders();
