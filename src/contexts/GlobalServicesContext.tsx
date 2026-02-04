@@ -234,13 +234,12 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     
     const newToQueue = pendingMissing.filter(s => !processedSongsRef.current.has(getProcessKey(s)));
 
-    // Only log every 5 minutes OR when queue size changes significantly
+    // Only log every 10 minutes OR when there are new songs (reduced from 5 min)
     const now = Date.now();
-    const shouldLog = (now - lastLogTimeRef.current > 300000) || 
-                      (newToQueue.length > 0) ||
-                      (Math.abs(pendingMissing.length - lastQueueSizeRef.current) >= 5);
+    const shouldLog = (now - lastLogTimeRef.current > 600000) || 
+                      (newToQueue.length > 0);
     
-    if (shouldLog && pendingMissing.length > 0) {
+    if (shouldLog && pendingMissing.length > 0 && newToQueue.length > 0) {
       console.log(`[GLOBAL-SVC] 🎵 Fila: ${pendingMissing.length} faltando | ${newToQueue.length} novas`);
       lastLogTimeRef.current = now;
       lastQueueSizeRef.current = pendingMissing.length;
@@ -753,20 +752,21 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       });
     }
 
-    // 1. Download check every 30 seconds (was 10s - optimized for less CPU)
+    // 1. Download check every 60 seconds (was 30s - optimized for less CPU)
     downloadIntervalRef.current = setInterval(() => {
       checkNewMissingSongs();
-    }, 30000);
+    }, 60000);
     checkNewMissingSongs(); // Initial check immediately
 
-    // 2. Scraping every 5 minutes (was 3 min - optimized for performance)
+    // 2. Scraping every 10 minutes (was 5 min - optimized for performance)
+    // This significantly reduces network and CPU usage
     scrapeIntervalRef.current = setInterval(() => {
       const currentState = useRadioStore.getState();
       const hasEnabledStations = currentState.stations.some(s => s.enabled && s.scrapeUrl);
       if (hasEnabledStations) {
         scrapeAllStations();
       }
-    }, 5 * 60 * 1000);
+    }, 10 * 60 * 1000);
 
     // Initial scrape
     if (enabledStations > 0) {

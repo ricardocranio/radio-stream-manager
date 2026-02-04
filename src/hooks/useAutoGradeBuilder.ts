@@ -1767,15 +1767,16 @@ export function useAutoGradeBuilder() {
         buildGrade();
         lastPeriodicSave = Date.now();
       } else {
-        // PERIODIC SAVE: Also save every 5 minutes to ensure file is always current
+        // PERIODIC SAVE: Also save every 10 minutes to ensure file is always current
+        // (was 5 min - reduced frequency for better performance)
         const timeSinceLastSave = Date.now() - lastPeriodicSave;
-        if (timeSinceLastSave >= 5 * 60 * 1000) {
-          console.log(`[AUTO-GRADE] 📁 Salvamento periódico (5 min) - garantindo arquivo atualizado`);
+        if (timeSinceLastSave >= 10 * 60 * 1000) {
+          console.log(`[AUTO-GRADE] 📁 Salvamento periódico (10 min) - garantindo arquivo atualizado`);
           buildGrade();
           lastPeriodicSave = Date.now();
         }
       }
-    }, 30 * 1000); // Check every 30 seconds for better responsiveness
+    }, 60 * 1000); // Check every 60 seconds (was 30s) for better performance
 
     // Also run immediately on mount to catch current block
     const now = new Date();
@@ -1807,7 +1808,7 @@ export function useAutoGradeBuilder() {
     };
 
     update();
-    const interval = setInterval(update, 30000); // Every 30 seconds
+    const interval = setInterval(update, 60000); // Every 60 seconds (was 30s)
     return () => clearInterval(interval);
   }, [getBlockTimes, getSecondsUntilNextBuild]);
 
