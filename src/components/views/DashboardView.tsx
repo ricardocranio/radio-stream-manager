@@ -6,7 +6,7 @@ import { useSimilarityLogStore } from '@/store/similarityLogStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
 import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
-import { useMusicLibraryStats } from '@/hooks/useMusicLibraryStats';
+import { useMusicLibraryStats, invalidateMusicLibraryCache } from '@/hooks/useMusicLibraryStats';
 import { useGlobalServices } from '@/contexts/GlobalServicesContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -36,7 +36,7 @@ export function DashboardView() {
   
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
   const { stats: realtimeStats, refresh: refreshStats } = useRealtimeStats();
-  const { stats: libraryStats } = useMusicLibraryStats();
+  const { stats: libraryStats, refreshStats: refreshLibraryStats } = useMusicLibraryStats();
   // All services from global context - runs from boot, independent of navigation
   const { gradeBuilder, downloads, scraping } = useGlobalServices();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -86,7 +86,7 @@ export function DashboardView() {
     setIsResetting(true);
     
     try {
-      // 1. Clear all local data
+      // 1. Clear all local data in Zustand stores
       console.log('[RESET] Clearing local data...');
       clearCapturedSongs();
       clearMissingSongs();
@@ -145,10 +145,12 @@ export function DashboardView() {
         if (key.startsWith('supabase') || keysToPreserve.some(k => key.includes(k))) {
           return;
         }
-        // Clear app-specific keys
+        // Clear app-specific keys - INCLUDING the main Zustand store
         if (key.includes('radio') || key.includes('grade') || key.includes('similarity') || 
             key.includes('stats') || key.includes('ranking') || key.includes('download') ||
-            key.includes('missing') || key.includes('captured') || key.includes('pgm-')) {
+            key.includes('missing') || key.includes('captured') || key.includes('pgm-') ||
+            key === 'pgm-radio-storage' || key === 'auto-download-storage' || 
+            key === 'realtime-stats-storage' || key === 'similarity-log-storage') {
           localStorage.removeItem(key);
           clearedKeys++;
         }
@@ -163,6 +165,14 @@ export function DashboardView() {
       } catch (e) {
         console.log('[RESET] Could not clear realtime stats store:', e);
       }
+
+      // 5. Invalidate music library cache - forces fresh read from filesystem
+      console.log('[RESET] Invalidating music library cache...');
+      invalidateMusicLibraryCache();
+      
+      // 6. Force refresh of music library stats
+      console.log('[RESET] Refreshing music library stats...');
+      await refreshLibraryStats();
 
       toast({
         title: '✅ Sistema Resetado',

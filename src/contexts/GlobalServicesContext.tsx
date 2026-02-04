@@ -227,7 +227,12 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
 
     // Count songs with 'missing' status (verified as not in music library)
     const pendingMissing = missingSongs.filter(s => s.status === 'missing');
-    const newToQueue = pendingMissing.filter(s => !processedSongsRef.current.has(s.id));
+    
+    // Use artist+title as key to avoid duplicates, not ID
+    const getProcessKey = (song: typeof missingSongs[0]) => 
+      `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
+    
+    const newToQueue = pendingMissing.filter(s => !processedSongsRef.current.has(getProcessKey(s)));
 
     // Only log every 5 minutes OR when queue size changes significantly
     const now = Date.now();
@@ -249,11 +254,12 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     // Add new songs to queue (only songs verified as missing from music library)
     if (newToQueue.length > 0) {
       for (const song of newToQueue) {
-        processedSongsRef.current.add(song.id);
+        // Mark by content, not ID
+        processedSongsRef.current.add(getProcessKey(song));
         downloadQueueRef.current.push({ song, retryCount: 0 });
       }
       
-      console.log(`[GLOBAL-SVC] 📥 +${newToQueue.length} músicas na fila (total: ${downloadQueueRef.current.length})`);
+      console.log(`[GLOBAL-SVC] 📥 +${newToQueue.length} músicas na fila de download (total: ${downloadQueueRef.current.length})`);
       setDownloadState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
       useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
       
@@ -313,14 +319,21 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     let missingCount = 0;
     const failedStations: string[] = [];
 
-    // Helper to check if song is already in missing list
+    // Helper to check if song is already in missing list (case-insensitive)
     const isSongAlreadyMissing = (artist: string, title: string): boolean => {
       const normalizedArtist = artist.toLowerCase().trim();
       const normalizedTitle = title.toLowerCase().trim();
-      return missingSongs.some(
+      const currentMissing = useRadioStore.getState().missingSongs;
+      return currentMissing.some(
         s => s.artist.toLowerCase().trim() === normalizedArtist && 
              s.title.toLowerCase().trim() === normalizedTitle
       );
+    };
+    
+    // Helper to check if song was already processed this session (avoid re-downloading)
+    const isSongAlreadyProcessed = (artist: string, title: string): boolean => {
+      const key = `${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`;
+      return processedSongsRef.current.has(key);
     };
 
     // Helper to process a single song (check library, add to missing if needed)
@@ -332,6 +345,16 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       scrapeUrl: string,
       timestamp: Date = new Date()
     ) => {
+      // Skip if already processed this session (by song content, not ID)
+      const alreadyProcessed = isSongAlreadyProcessed(songArtist, songTitle);
+      if (alreadyProcessed) {
+        return { isNew: false, isMissing: false };
+      }
+      
+      // Mark as processed immediately to avoid duplicates
+      const processKey = `${songArtist.toLowerCase().trim()}|${songTitle.toLowerCase().trim()}`;
+      processedSongsRef.current.add(processKey);
+      
       // Skip if already in missing list
       const alreadyMissing = isSongAlreadyMissing(songArtist, songTitle);
       
@@ -354,7 +377,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
 
       const songId = `${stationName}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       
-      // Add to captured songs
+      // Add to captured songs (for history/display)
       addCapturedSong({
         id: songId,
         title: songTitle,
@@ -369,7 +392,9 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       addOrUpdateRankingSong(songTitle, songArtist, stationStyle);
       
       // If missing and not already in list, add to missing songs for download
+      // This triggers the auto-download queue
       if (!existsInLibrary && !alreadyMissing && isElectron) {
+        console.log(`[GLOBAL-SVC] 📥 Nova música faltando: ${songArtist} - ${songTitle} (${stationName})`);
         addMissingSong({
           id: songId,
           title: songTitle,
