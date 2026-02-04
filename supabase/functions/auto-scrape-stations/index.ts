@@ -117,65 +117,114 @@ function isStationActiveNow(station: RadioStation, now: Date): boolean {
 
 // Retry configuration
 const RETRY_CONFIG = {
-  maxRetries: 2,
-  retryDelay: 1000,
-  timeout: 45000,
+  maxRetries: 3,  // Increased from 2
+  retryDelay: 2000, // Increased from 1000
+  timeout: 60000,   // Increased from 45000
+};
+
+// Known fallback URLs for problematic stations
+const STATION_FALLBACK_URLS: Record<string, string[]> = {
+  'Band FM': [
+    'https://mytuner-radio.com/pt/radio/band-fm-413397/',
+    'https://mytuner-radio.com/radio/band-fm-413397/',
+    'https://mytuner-radio.com/radio/band-fm/',
+  ],
+  'BH FM': [
+    'https://mytuner-radio.com/pt/radio/radio-bh-fm-402270/',
+    'https://mytuner-radio.com/radio/radio-bh-fm-402270/',
+    'https://mytuner-radio.com/radio/bh-fm/',
+  ],
+  'Clube FM': [
+    'https://mytuner-radio.com/pt/radio/radio-clube-fm-brasilia-1055-406812/',
+    'https://mytuner-radio.com/radio/radio-clube-fm-brasilia-1055-406812/',
+    'https://mytuner-radio.com/radio/clube-fm/',
+  ],
 };
 
 async function scrapeWithFirecrawl(
   apiKey: string,
-  url: string
-): Promise<{ success: boolean; data?: any; error?: string }> {
-  for (let attempt = 1; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
-    try {
-      console.log(`[Attempt ${attempt}/${RETRY_CONFIG.maxRetries}] Scraping: ${url}`);
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), RETRY_CONFIG.timeout);
-
-      const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url,
-          formats: ['markdown', 'html'],
-          onlyMainContent: false,
-          // Increase wait times to allow JavaScript to fully load
-          waitFor: 10000, // Wait 10 seconds for initial page load
-          actions: [
-            { type: 'wait', milliseconds: 6000 }, // Wait 6s for dynamic content
-            { type: 'scroll', direction: 'down', amount: 500 }, // Scroll to trigger lazy loading
-            { type: 'wait', milliseconds: 3000 }, // Wait 3s after scroll
-          ],
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      const data = await response.json();
-
-      if (response.ok && data.success !== false) {
-        return { success: true, data };
-      }
-
-      console.warn(`[Attempt ${attempt}] API returned error:`, data.error);
-      
-      if (attempt < RETRY_CONFIG.maxRetries) {
-        await new Promise(r => setTimeout(r, RETRY_CONFIG.retryDelay * attempt));
-      }
-    } catch (error) {
-      console.error(`[Attempt ${attempt}] Request failed:`, error);
-      
-      if (attempt < RETRY_CONFIG.maxRetries) {
-        await new Promise(r => setTimeout(r, RETRY_CONFIG.retryDelay * attempt));
+  url: string,
+  stationName?: string
+): Promise<{ success: boolean; data?: any; error?: string; usedUrl?: string }> {
+  // Build list of URLs to try: primary URL first, then fallbacks
+  const urlsToTry: string[] = [url];
+  
+  // Add station-specific fallback URLs
+  if (stationName && STATION_FALLBACK_URLS[stationName]) {
+    for (const fallbackUrl of STATION_FALLBACK_URLS[stationName]) {
+      if (fallbackUrl !== url && !urlsToTry.includes(fallbackUrl)) {
+        urlsToTry.push(fallbackUrl);
       }
     }
   }
+  
+  // Also add generic URL variations
+  if (url.includes('/pt/')) {
+    const withoutPt = url.replace('/pt/', '/');
+    if (!urlsToTry.includes(withoutPt)) urlsToTry.push(withoutPt);
+  }
 
-  return { success: false, error: 'All retry attempts failed' };
+  for (const currentUrl of urlsToTry) {
+    for (let attempt = 1; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+      try {
+        console.log(`[Attempt ${attempt}/${RETRY_CONFIG.maxRetries}] Scraping: ${currentUrl}`);
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), RETRY_CONFIG.timeout);
+
+        const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: currentUrl,
+            formats: ['markdown', 'html'],
+            onlyMainContent: false,
+            // Increase wait times to allow JavaScript to fully load
+            waitFor: 12000, // Wait 12 seconds for initial page load
+            actions: [
+              { type: 'wait', milliseconds: 8000 }, // Wait 8s for dynamic content
+              { type: 'scroll', direction: 'down', amount: 500 }, // Scroll to trigger lazy loading
+              { type: 'wait', milliseconds: 4000 }, // Wait 4s after scroll
+            ],
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+        const data = await response.json();
+
+        if (response.ok && data.success !== false) {
+          return { success: true, data, usedUrl: currentUrl };
+        }
+
+        console.warn(`[Attempt ${attempt}] API returned error:`, data.error || 'Unknown error');
+        
+        if (attempt < RETRY_CONFIG.maxRetries) {
+          const delay = RETRY_CONFIG.retryDelay * attempt;
+          console.log(`[Waiting ${delay}ms before retry...]`);
+          await new Promise(r => setTimeout(r, delay));
+        }
+      } catch (error) {
+        console.error(`[Attempt ${attempt}] Request failed:`, error instanceof Error ? error.message : 'Unknown');
+        
+        if (attempt < RETRY_CONFIG.maxRetries) {
+          const delay = RETRY_CONFIG.retryDelay * attempt;
+          console.log(`[Waiting ${delay}ms before retry...]`);
+          await new Promise(r => setTimeout(r, delay));
+        }
+      }
+    }
+    
+    // If primary URL failed all retries, try next fallback URL
+    if (urlsToTry.indexOf(currentUrl) < urlsToTry.length - 1) {
+      console.log(`[Fallback] Trying next URL in list...`);
+    }
+  }
+
+  return { success: false, error: `All ${urlsToTry.length} URLs and retry attempts failed` };
 }
 
 function cleanText(text: string): string {
@@ -444,10 +493,11 @@ Deno.serve(async (req) => {
       }
       
       console.log(`[${station.name}] Scraping...`);
-      const scrapeResult = await scrapeWithFirecrawl(firecrawlApiKey, station.scrape_url);
+      const scrapeResult = await scrapeWithFirecrawl(firecrawlApiKey, station.scrape_url, station.name);
       
       if (!scrapeResult.success || !scrapeResult.data) {
         console.error(`[${station.name}] Scrape failed: ${scrapeResult.error}`);
+        results.push({ station: station.name, success: false, songs: 0, error: scrapeResult.error });
         results.push({ station: station.name, success: false, songs: 0, error: scrapeResult.error });
         continue;
       }
@@ -549,7 +599,7 @@ Deno.serve(async (req) => {
         console.log(`\n--- Special Monitoring: ${schedule.station_name} (${schedule.label || 'No label'}) ---`);
         console.log(`Time window: ${schedule.start_hour}:${schedule.start_minute.toString().padStart(2, '0')} - ${schedule.end_hour}:${schedule.end_minute.toString().padStart(2, '0')}`);
         
-        const scrapeResult = await scrapeWithFirecrawl(firecrawlApiKey, schedule.scrape_url);
+        const scrapeResult = await scrapeWithFirecrawl(firecrawlApiKey, schedule.scrape_url, schedule.station_name);
         
         if (!scrapeResult.success || !scrapeResult.data) {
           console.error(`[${schedule.station_name}] Scrape failed: ${scrapeResult.error}`);
