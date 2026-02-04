@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRadioStore } from '@/store/radioStore';
 
 interface MusicLibraryStats {
@@ -6,6 +6,15 @@ interface MusicLibraryStats {
   folders: number;
   isLoading: boolean;
   lastUpdated: Date | null;
+}
+
+// Global cache version to force refresh when needed
+let cacheVersion = 0;
+
+// Force a global cache refresh - call this when folders change or reset occurs
+export function invalidateMusicLibraryCache() {
+  cacheVersion++;
+  console.log('[MUSIC-LIB] 🔄 Cache invalidated, version:', cacheVersion);
 }
 
 /**
@@ -20,8 +29,21 @@ export function useMusicLibraryStats() {
     isLoading: true,
     lastUpdated: null,
   });
+  
+  const lastVersionRef = useRef(cacheVersion);
+  const lastFoldersRef = useRef<string[]>([]);
 
-  const refreshStats = useCallback(async () => {
+  const refreshStats = useCallback(async (forceRefresh = false) => {
+    // Check if folders changed
+    const foldersChanged = JSON.stringify(config.musicFolders) !== JSON.stringify(lastFoldersRef.current);
+    const versionChanged = cacheVersion > lastVersionRef.current;
+    
+    if (foldersChanged || versionChanged || forceRefresh) {
+      console.log('[MUSIC-LIB] 📊 Refreshing stats (force:', forceRefresh, 'foldersChanged:', foldersChanged, ')');
+      lastFoldersRef.current = [...config.musicFolders];
+      lastVersionRef.current = cacheVersion;
+    }
+    
     if (!window.electronAPI?.getMusicLibraryStats) {
       setStats({
         count: 0,
@@ -32,7 +54,11 @@ export function useMusicLibraryStats() {
       return;
     }
 
+    setStats(prev => ({ ...prev, isLoading: true }));
+    
     try {
+      // Note: The Electron API will always read fresh from filesystem
+      // We just need to ensure we call it when cache is invalidated
       const result = await window.electronAPI.getMusicLibraryStats({
         musicFolders: config.musicFolders,
       });
@@ -44,6 +70,7 @@ export function useMusicLibraryStats() {
           isLoading: false,
           lastUpdated: new Date(),
         });
+        console.log('[MUSIC-LIB] ✅ Stats refreshed:', result.count, 'files in', result.folders, 'folders');
       } else {
         setStats(prev => ({
           ...prev,
@@ -52,7 +79,7 @@ export function useMusicLibraryStats() {
         }));
       }
     } catch (error) {
-      console.error('Error getting music library stats:', error);
+      console.error('[MUSIC-LIB] Error getting stats:', error);
       setStats(prev => ({
         ...prev,
         isLoading: false,
@@ -61,12 +88,22 @@ export function useMusicLibraryStats() {
   }, [config.musicFolders]);
 
   useEffect(() => {
-    refreshStats();
+    refreshStats(true); // Force refresh on mount
 
     // Refresh every 5 minutes
-    const interval = setInterval(refreshStats, 5 * 60 * 1000);
+    const interval = setInterval(() => refreshStats(false), 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [refreshStats]);
 
-  return { stats, refreshStats };
+  // Also watch for cache invalidation
+  useEffect(() => {
+    const checkVersion = setInterval(() => {
+      if (cacheVersion > lastVersionRef.current) {
+        refreshStats(true);
+      }
+    }, 1000);
+    return () => clearInterval(checkVersion);
+  }, [refreshStats]);
+
+  return { stats, refreshStats: () => refreshStats(true) };
 }

@@ -368,15 +368,16 @@ export const useRadioStore = create<RadioState>()(
       capturedSongs: [],
       addCapturedSong: (song) =>
         set((state) => {
-          // Avoid duplicate songs (same title/artist in last 30 - reduced from 50)
-          const isDuplicate = state.capturedSongs.slice(0, 30).some(
-            s => s.title === song.title && s.artist === song.artist
+          // Avoid duplicate songs (same title/artist in recent captures)
+          const isDuplicate = state.capturedSongs.slice(0, 100).some(
+            s => s.title.toLowerCase() === song.title.toLowerCase() && 
+                 s.artist.toLowerCase() === song.artist.toLowerCase()
           );
           if (isDuplicate) return state;
           
-          // Limit to 50 songs (was 100) - reduces memory usage by 50%
+          // Limit to 200 songs to keep memory reasonable while allowing more captures
           const newSongs = [song, ...state.capturedSongs];
-          return { capturedSongs: newSongs.length > 50 ? newSongs.slice(0, 50) : newSongs };
+          return { capturedSongs: newSongs.length > 200 ? newSongs.slice(0, 200) : newSongs };
         }),
       clearCapturedSongs: () => set({ capturedSongs: [] }),
 
