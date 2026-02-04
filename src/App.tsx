@@ -9,6 +9,7 @@ import NotFound from "./pages/NotFound";
 import { useCleanStart } from "./hooks/useCleanStart";
 import { useSyncStationsFromDb } from "./hooks/useSyncStationsFromDb";
 import { useDailyReset } from "./hooks/useDailyReset";
+import { useInitializeStationFolders } from "./hooks/useInitializeStationFolders";
 import { GlobalServicesProvider } from "./contexts/GlobalServicesContext";
 
 const queryClient = new QueryClient();
@@ -16,7 +17,8 @@ const queryClient = new QueryClient();
 // Component that runs initialization hooks - RUNS ONCE AT APP LEVEL
 function AppInitializer({ children }: { children: React.ReactNode }) {
   useCleanStart();
-  useSyncStationsFromDb();
+  useSyncStationsFromDb(); // Syncs stations from Supabase DB
+  useInitializeStationFolders(); // Creates download folders for ALL enabled stations (runs after sync)
   useDailyReset(); // Reset automático às 20:00
   // GlobalServicesProvider now handles ALL background services:
   // - Auto-download queue
