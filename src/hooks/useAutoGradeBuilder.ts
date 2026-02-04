@@ -613,6 +613,66 @@ export function useAutoGradeBuilder() {
       };
     }
 
+    // MISTURADAO blocks - Special format for 20:00 and 20:30 (Monday to Friday only)
+    // 20:00: MISTURADAO_BLOCO01_{DIA}.mp3, posicao05, MISTURADAO_BLOCO02_{DIA}.mp3, posicao02
+    // 20:30: MISTURADAO_BLOCO03_{DIA}.mp3, posicao08, MISTURADAO_BLOCO04_{DIA}.mp3, posicao09
+    if ((hour === 20 && (minute === 0 || minute === 30)) && isWeekday(targetDay)) {
+      const dayName = getFullDayName(targetDay);
+      const sortedRanking = [...rankingSongs].sort((a, b) => b.plays - a.plays);
+      
+      // Helper to get ranking filename by position (1-indexed)
+      const getRankingFilename = (position: number): string => {
+        if (position <= sortedRanking.length && position > 0) {
+          const song = sortedRanking[position - 1];
+          return sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
+        }
+        // Fallback to position placeholder if ranking not available
+        return `posicao${position.toString().padStart(2, '0')}.mp3`;
+      };
+      
+      if (minute === 0) {
+        // 20:00 block format
+        const misturadao01 = `MISTURADAO_BLOCO01_${dayName}.mp3`;
+        const posicao05 = getRankingFilename(5);
+        const misturadao02 = `MISTURADAO_BLOCO02_${dayName}.mp3`;
+        const posicao02 = getRankingFilename(2);
+        
+        blockLogs.push({
+          blockTime: timeStr,
+          type: 'fixed',
+          title: 'MISTURADÃO Bloco 20:00',
+          artist: `${misturadao01}, ${misturadao02}`,
+          station: 'FIXO',
+          reason: `Formato especial com ranking posições 2 e 5`,
+        });
+        
+        return {
+          line: `${timeStr} (ID=MISTURADAO) "${misturadao01}",vht,"${posicao05}",vht,"${misturadao02}",vht,"${posicao02}"`,
+          logs: blockLogs,
+        };
+      } else {
+        // 20:30 block format
+        const misturadao03 = `MISTURADAO_BLOCO03_${dayName}.mp3`;
+        const posicao08 = getRankingFilename(8);
+        const misturadao04 = `MISTURADAO_BLOCO04_${dayName}.mp3`;
+        const posicao09 = getRankingFilename(9);
+        
+        blockLogs.push({
+          blockTime: timeStr,
+          type: 'fixed',
+          title: 'MISTURADÃO Bloco 20:30',
+          artist: `${misturadao03}, ${misturadao04}`,
+          station: 'FIXO',
+          reason: `Formato especial com ranking posições 8 e 9`,
+        });
+        
+        return {
+          line: `${timeStr} (ID=MISTURADAO) "${misturadao03}",vht,"${posicao08}",vht,"${misturadao04}",vht,"${posicao09}"`,
+          logs: blockLogs,
+        };
+      }
+    }
+
     // TOP50 blocks - USE REAL SONG NAMES from ranking, not position placeholders
     const top50Item = fixedItems.find(fc => fc.type === 'top50');
     if (top50Item) {
