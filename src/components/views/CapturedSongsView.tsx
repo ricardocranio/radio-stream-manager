@@ -77,7 +77,15 @@ export function CapturedSongsView() {
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
-  const [autoDownloadMode, setAutoDownloadMode] = useState<'manual' | 'auto'>('manual');
+  const [autoDownloadMode, setAutoDownloadMode] = useState<'manual' | 'auto'>(() => {
+    const saved = localStorage.getItem('captured-songs-download-mode');
+    return saved === 'auto' ? 'auto' : 'manual';
+  });
+
+  // Auto-save download mode preference
+  useEffect(() => {
+    localStorage.setItem('captured-songs-download-mode', autoDownloadMode);
+  }, [autoDownloadMode]);
 
   // Load songs from Supabase
   const loadSongs = useCallback(async () => {
