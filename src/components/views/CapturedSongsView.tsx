@@ -77,6 +77,7 @@ export function CapturedSongsView() {
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
+  const [autoDownloadMode, setAutoDownloadMode] = useState<'manual' | 'auto'>('manual');
 
   // Load songs from Supabase
   const loadSongs = useCallback(async () => {
@@ -541,8 +542,9 @@ export function CapturedSongsView() {
         });
       }
 
-      // Small delay between downloads
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Delay between downloads (2 minutes for auto mode, 5 seconds for manual)
+      const delayMs = autoDownloadMode === 'auto' ? 120000 : 5000;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
 
     setIsDownloadingAll(false);
@@ -550,7 +552,7 @@ export function CapturedSongsView() {
       title: '📥 Download em lote concluído!',
       description: `✅ ${successCount} baixadas | ⏭️ ${existsCount} já existiam | ❌ ${errorCount} erros`,
     });
-  }, [filteredSongs, deezerConfig, config, toast, addDownloadHistory]);
+  }, [filteredSongs, deezerConfig, config, toast, addDownloadHistory, autoDownloadMode]);
 
   // Export songs as JSON
   const handleExport = () => {
@@ -626,6 +628,23 @@ export function CapturedSongsView() {
             )}
             <span className="hidden sm:inline">Sync Ranking</span>
           </Button>
+          
+          {/* Download Mode Toggle */}
+          {isElectron && (
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-secondary/50 border border-border">
+              <Download className="w-3.5 h-3.5 text-muted-foreground" />
+              <Select value={autoDownloadMode} onValueChange={(v: 'manual' | 'auto') => setAutoDownloadMode(v)}>
+                <SelectTrigger className="h-6 w-[90px] text-xs border-0 bg-transparent p-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">Manual</SelectItem>
+                  <SelectItem value="auto">Automático</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          
           {isElectron && (
             <Button
               variant="default"
@@ -859,7 +878,7 @@ export function CapturedSongsView() {
                   <h3 className="text-lg font-medium mb-2">Nenhuma música encontrada</h3>
                   <p className="text-muted-foreground">
                     {songs.length === 0
-                      ? 'Execute o script Python para começar a capturar músicas.'
+                      ? 'Aguardando captura de músicas. Verifique se o monitoramento está ativo.'
                       : 'Tente ajustar os filtros de busca.'}
                   </p>
                 </div>
