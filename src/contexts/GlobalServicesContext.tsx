@@ -773,7 +773,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log('╔══════════════════════════════════════════════════════════════╗');
     console.log('║     🚀 SISTEMA AUTOMATIZADO - INICIANDO TODOS OS SERVIÇOS    ║');
     console.log('╠══════════════════════════════════════════════════════════════╣');
-    console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras) - 10 min` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
+    console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras) - 15 min` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
     console.log(`║ 🎵 Grade Builder: ✅ ATIVO (${gradeBuilder.minutesBeforeBlock || 10} min antes de cada bloco)`.padEnd(65) + '║');
     console.log(`║ 📥 Downloads:     ${deezerConfig.autoDownload ? '✅ IMEDIATO (5s entre cada)' : '⏸️ MANUAL (ativar em Config)'}`.padEnd(65) + '║');
     console.log(`║ 💾 Banco Musical: ${config.musicFolders?.length > 0 ? `✅ ${config.musicFolders.length} pastas` : '⚠️ Configurar pastas'}`.padEnd(65) + '║');
@@ -798,21 +798,21 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       });
     }
 
-    // 1. Download check every 60 seconds (optimized for less CPU)
+    // 1. Download check every 100 seconds (optimized for CPU - ~40% reduction)
     // RESPECTS isRunning state - only runs when system is active
     downloadIntervalRef.current = setInterval(() => {
       const { isRunning } = useRadioStore.getState();
       if (isRunning) {
         checkNewMissingSongsRef.current();
       }
-    }, 60000);
+    }, 100000);
     
     // Initial check only if running
     if (state.isRunning) {
       checkNewMissingSongsRef.current();
     }
 
-    // 2. Scraping every 10 minutes (optimized for performance)
+    // 2. Scraping every 15 minutes (optimized for CPU - ~33% reduction)
     // RESPECTS isRunning state - only runs when system is active
     scrapeIntervalRef.current = setInterval(() => {
       const currentState = useRadioStore.getState();
@@ -823,7 +823,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       if (hasEnabledStations) {
         scrapeAllStationsRef.current();
       }
-    }, 10 * 60 * 1000);
+    }, 15 * 60 * 1000);
 
     // Initial scrape only if running
     if (state.isRunning && enabledStations > 0) {

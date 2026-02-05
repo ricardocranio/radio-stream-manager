@@ -10,8 +10,8 @@ export interface HealthStatus {
   issues: string[];
 }
 
-// Increased intervals and thresholds for stability
-const CHECK_INTERVAL = 120000; // 2 minutes (was 1 minute)
+// Increased intervals and thresholds for stability and CPU optimization
+const CHECK_INTERVAL = 300000; // 5 minutes (was 2 minutes - ~60% CPU reduction)
 const LATENCY_THRESHOLD = 8000; // 8 seconds (was 3 seconds)
 const REALTIME_TIMEOUT = 5000; // 5 seconds (was 3 seconds)
 
