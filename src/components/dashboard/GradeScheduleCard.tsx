@@ -35,14 +35,37 @@ interface CapturedSong {
   scraped_at: string;
 }
 
+// Cache key for persisting captured songs across navigation
+const GRADE_SONGS_CACHE_KEY = 'grade-schedule-songs-cache';
+const CACHE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+
+function loadCachedSongs(): CapturedSong[] {
+  try {
+    const cached = localStorage.getItem(GRADE_SONGS_CACHE_KEY);
+    if (cached) {
+      const { songs, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_MAX_AGE_MS && Array.isArray(songs) && songs.length > 0) {
+        return songs;
+      }
+    }
+  } catch {}
+  return [];
+}
+
+function saveSongsToCache(songs: CapturedSong[]) {
+  try {
+    localStorage.setItem(GRADE_SONGS_CACHE_KEY, JSON.stringify({ songs, timestamp: Date.now() }));
+  } catch {}
+}
+
 export function GradeScheduleCard() {
   const { blockSongs, programs, fixedContent, setBlockSongs, stations, config } = useRadioStore();
   const { toast } = useToast();
   const [selectedBlock, setSelectedBlock] = useState<BlockInfo | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedSongs, setEditedSongs] = useState<BlockSong[]>([]);
-  const [capturedSongs, setCapturedSongs] = useState<CapturedSong[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [capturedSongs, setCapturedSongs] = useState<CapturedSong[]>(loadCachedSongs);
+  const [isLoading, setIsLoading] = useState(() => loadCachedSongs().length === 0);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'songs' | 'preview'>('songs');
 
@@ -75,7 +98,10 @@ export function GradeScheduleCard() {
   // Fetch captured songs from Supabase
   useEffect(() => {
     const fetchCapturedSongs = async () => {
-      setIsLoading(true);
+      // Only show loading if we have no cached data
+      if (capturedSongs.length === 0) {
+        setIsLoading(true);
+      }
       try {
         const { data, error } = await supabase
           .from('scraped_songs')
@@ -84,9 +110,12 @@ export function GradeScheduleCard() {
           .limit(200);
 
         if (error) throw error;
-        setCapturedSongs(data || []);
+        if (data && data.length > 0) {
+          setCapturedSongs(data);
+          saveSongsToCache(data);
+        }
       } catch (error) {
-        console.error('Error fetching songs:', error);
+        console.error('[GRADE-SCHEDULE] Error fetching songs:', error);
       }
       setIsLoading(false);
     };
@@ -99,7 +128,11 @@ export function GradeScheduleCard() {
       'grade_schedule_card',
       (payload) => {
         const newSong = payload.new as CapturedSong;
-        setCapturedSongs(prev => [newSong, ...prev].slice(0, 200));
+        setCapturedSongs(prev => {
+          const updated = [newSong, ...prev].slice(0, 200);
+          saveSongsToCache(updated);
+          return updated;
+        });
       }
     );
 
@@ -115,7 +148,7 @@ export function GradeScheduleCard() {
       if (!uniqueSongs.has(key)) {
         const stationAbbrev = song.station_name.split(' ').map(w => w[0]).join('').toUpperCase();
         uniqueSongs.set(key, {
-          id: `captured-${index}-${Date.now()}`,
+          id: `captured-${index}`,
           title: song.title,
           artist: song.artist,
           file: `${song.artist} - ${song.title}.mp3`,
@@ -187,7 +220,7 @@ export function GradeScheduleCard() {
           const song = songsPool[poolIndex];
           selectedSongs.push({
             ...song,
-            id: `${timeKey}-${i}-${Date.now()}`,
+            id: `${timeKey}-${i}`,
           });
         }
         

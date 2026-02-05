@@ -59,6 +59,8 @@ const CHART_COLORS = [
   'hsl(60, 85%, 50%)',
 ];
 
+const PAGE_SIZE = 50;
+
 export function CapturedSongsView() {
   const { toast } = useToast();
   const { addOrUpdateRankingSong, rankingSongs, deezerConfig, config, addDownloadHistory } = useRadioStore();
@@ -71,12 +73,13 @@ export function CapturedSongsView() {
   const [stations, setStations] = useState<string[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true); // Always enabled by default
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState('list');
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
+  const [currentPage, setCurrentPage] = useState(1);
   const [autoDownloadMode, setAutoDownloadMode] = useState<'manual' | 'auto'>(() => {
     const saved = localStorage.getItem('captured-songs-download-mode');
     return saved === 'auto' ? 'auto' : 'manual';
@@ -287,6 +290,34 @@ export function CapturedSongsView() {
         song.station_name.toLowerCase().includes(term)
     );
   }, [songs, searchTerm]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedStation, dateRange]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filteredSongs.length / PAGE_SIZE));
+  const paginatedSongs = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredSongs.slice(start, start + PAGE_SIZE);
+  }, [filteredSongs, currentPage]);
+
+  const getPageNumbers = useCallback((): (number | '...')[] => {
+    const pages: (number | '...')[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (currentPage > 3) pages.push('...');
+      for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+        pages.push(i);
+      }
+      if (currentPage < totalPages - 2) pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  }, [totalPages, currentPage]);
 
   // Group songs by station for stats
   const stationStats = useMemo(() => {
@@ -920,15 +951,15 @@ export function CapturedSongsView() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                  {filteredSongs.map((song, index) => (
+                <div className="space-y-2">
+                  {paginatedSongs.map((song, index) => (
                     <div
                       key={song.id}
                       className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <span className="text-sm font-mono text-muted-foreground w-8">
-                          {index + 1}
+                          {(currentPage - 1) * PAGE_SIZE + index + 1}
                         </span>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium truncate">{song.title}</p>
@@ -949,7 +980,6 @@ export function CapturedSongsView() {
                           <Clock className="w-3 h-3 mr-1" />
                           {format(new Date(song.scraped_at), 'dd/MM HH:mm', { locale: ptBR })}
                         </span>
-                        {/* Download button - Always visible, disabled in browser */}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -973,6 +1003,68 @@ export function CapturedSongsView() {
                       </div>
                     </div>
                   ))}
+                  
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between pt-4 border-t border-border">
+                      <p className="text-sm text-muted-foreground">
+                        Mostrando {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filteredSongs.length)} de {filteredSongs.length}
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(1)}
+                          disabled={currentPage === 1}
+                          className="h-8 px-2"
+                        >
+                          «
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className="h-8 px-2"
+                        >
+                          ‹
+                        </Button>
+                        {getPageNumbers().map((page, i) => (
+                          typeof page === 'number' ? (
+                            <Button
+                              key={i}
+                              variant={currentPage === page ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => setCurrentPage(page)}
+                              className="h-8 w-8 p-0"
+                            >
+                              {page}
+                            </Button>
+                          ) : (
+                            <span key={i} className="px-1 text-muted-foreground">…</span>
+                          )
+                        ))}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                          className="h-8 px-2"
+                        >
+                          ›
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(totalPages)}
+                          disabled={currentPage === totalPages}
+                          className="h-8 px-2"
+                        >
+                          »
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
