@@ -615,7 +615,7 @@ export function useAutoGradeBuilder() {
     const fixedItems = getFixedContentForTime(hour, minute);
     const blockLogs: Parameters<typeof addBlockLogs>[0] = [];
 
-    // Voz do Brasil (21:00 weekdays) - Fixed block with correct format
+    // Voz do Brasil (21:00 weekdays) - Fixed block with EXACT format (no sanitization needed)
     if (hour === 21 && minute === 0 && isWeekday(targetDay)) {
       blockLogs.push({
         blockTime: timeStr,
@@ -625,9 +625,9 @@ export function useAutoGradeBuilder() {
         station: 'EBC',
         reason: 'Conteúdo fixo obrigatório - sem montagem do sistema',
       });
-      // Format: 21:00 (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASIL
+      // HARDCODED format - never goes through sanitizeGradeLine to prevent any corruption
       return { 
-        line: sanitizeGradeLine(`${timeStr} (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASIL`),
+        line: '21:00 (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASIL',
         logs: blockLogs,
       };
     }
@@ -1631,6 +1631,17 @@ export function useAutoGradeBuilder() {
       // Update the lines for current and next blocks
       lineMap.set(currentTimeKey, currentResult.line);
       lineMap.set(nextTimeKey, nextResult.line);
+
+      // ALWAYS enforce correct 21:00 Voz do Brasil format on weekdays
+      // This fixes stale lines from previous code versions or corrupted saves
+      const VOZ_DO_BRASIL_LINE = '21:00 (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASIL';
+      if (isWeekday(targetDay)) {
+        const existing2100 = lineMap.get('21:00');
+        if (!existing2100 || existing2100 !== VOZ_DO_BRASIL_LINE) {
+          console.log(`[AUTO-GRADE] 🔧 Corrigindo linha 21:00 Voz do Brasil (era: "${existing2100 || 'ausente'}")`);
+          lineMap.set('21:00', VOZ_DO_BRASIL_LINE);
+        }
+      }
 
       // Sort all lines by time and join
       const sortedContent = Array.from(lineMap.keys())
