@@ -1,18 +1,8 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
+// OPTIMIZED: Dashboard is eagerly loaded (most used), others are lazy
 import { DashboardView } from '@/components/views/DashboardView';
-import { StationsView } from '@/components/views/StationsView';
-import { CapturedSongsView } from '@/components/views/CapturedSongsView';
-import { SequenceView } from '@/components/views/SequenceView';
-import { ScheduleView } from '@/components/views/ScheduleView';
-import { FoldersView } from '@/components/views/FoldersView';
-import { MissingView } from '@/components/views/MissingView';
-import { SettingsView } from '@/components/views/SettingsView';
-import { FixedContentView } from '@/components/views/FixedContentView';
-import { BlockEditorView } from '@/components/views/BlockEditorView';
-import { VozBrasilView } from '@/components/views/VozBrasilView';
-import { SpecialMonitoringView } from '@/components/views/SpecialMonitoringView';
 import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { CapturedSong } from '@/types/radio';
 import { useCheckMusicLibrary } from '@/hooks/useCheckMusicLibrary';
@@ -21,7 +11,18 @@ import { useAutoCleanup } from '@/hooks/useAutoCleanup';
 import { Skeleton } from '@/components/ui/skeleton';
 import logo from '@/assets/logo.png';
 
-// Lazy load heavy components (Ranking, Logs, Export, GradeBuilder)
+// OPTIMIZED: Lazy load ALL heavy views except Dashboard
+const StationsView = lazy(() => import('@/components/views/StationsView').then(m => ({ default: m.StationsView })));
+const CapturedSongsView = lazy(() => import('@/components/views/CapturedSongsView').then(m => ({ default: m.CapturedSongsView })));
+const SequenceView = lazy(() => import('@/components/views/SequenceView').then(m => ({ default: m.SequenceView })));
+const ScheduleView = lazy(() => import('@/components/views/ScheduleView').then(m => ({ default: m.ScheduleView })));
+const FoldersView = lazy(() => import('@/components/views/FoldersView').then(m => ({ default: m.FoldersView })));
+const MissingView = lazy(() => import('@/components/views/MissingView').then(m => ({ default: m.MissingView })));
+const SettingsView = lazy(() => import('@/components/views/SettingsView').then(m => ({ default: m.SettingsView })));
+const FixedContentView = lazy(() => import('@/components/views/FixedContentView').then(m => ({ default: m.FixedContentView })));
+const BlockEditorView = lazy(() => import('@/components/views/BlockEditorView').then(m => ({ default: m.BlockEditorView })));
+const VozBrasilView = lazy(() => import('@/components/views/VozBrasilView').then(m => ({ default: m.VozBrasilView })));
+const SpecialMonitoringView = lazy(() => import('@/components/views/SpecialMonitoringView').then(m => ({ default: m.SpecialMonitoringView })));
 const RankingView = lazy(() => import('@/components/views/RankingView').then(m => ({ default: m.RankingView })));
 const LogsView = lazy(() => import('@/components/views/LogsView').then(m => ({ default: m.LogsView })));
 const ExportView = lazy(() => import('@/components/views/ExportView').then(m => ({ default: m.ExportView })));
@@ -286,55 +287,35 @@ const Index = () => {
       case 'dashboard':
         return <DashboardView />;
       case 'stations':
-        return <StationsView />;
+        return <Suspense fallback={<ViewSkeleton />}><StationsView /></Suspense>;
       case 'specialmonitoring':
-        return <SpecialMonitoringView />;
+        return <Suspense fallback={<ViewSkeleton />}><SpecialMonitoringView /></Suspense>;
       case 'captured':
-        return <CapturedSongsView />;
+        return <Suspense fallback={<ViewSkeleton />}><CapturedSongsView /></Suspense>;
       case 'sequence':
-        return <SequenceView />;
+        return <Suspense fallback={<ViewSkeleton />}><SequenceView /></Suspense>;
       case 'schedule':
-        return <ScheduleView />;
+        return <Suspense fallback={<ViewSkeleton />}><ScheduleView /></Suspense>;
       case 'gradebuilder':
-        // Lazy loaded
-        return (
-          <Suspense fallback={<ViewSkeleton />}>
-            <GradeBuilderView />
-          </Suspense>
-        );
+        return <Suspense fallback={<ViewSkeleton />}><GradeBuilderView /></Suspense>;
       case 'blockeditor':
-        return <BlockEditorView />;
+        return <Suspense fallback={<ViewSkeleton />}><BlockEditorView /></Suspense>;
       case 'fixedcontent':
-        return <FixedContentView />;
+        return <Suspense fallback={<ViewSkeleton />}><FixedContentView /></Suspense>;
       case 'ranking':
-        // Lazy loaded
-        return (
-          <Suspense fallback={<ViewSkeleton />}>
-            <RankingView />
-          </Suspense>
-        );
+        return <Suspense fallback={<ViewSkeleton />}><RankingView /></Suspense>;
       case 'vozbrasil':
-        return <VozBrasilView />;
+        return <Suspense fallback={<ViewSkeleton />}><VozBrasilView /></Suspense>;
       case 'logs':
-        // Lazy loaded
-        return (
-          <Suspense fallback={<ViewSkeleton />}>
-            <LogsView />
-          </Suspense>
-        );
+        return <Suspense fallback={<ViewSkeleton />}><LogsView /></Suspense>;
       case 'export':
-        // Lazy loaded
-        return (
-          <Suspense fallback={<ViewSkeleton />}>
-            <ExportView />
-          </Suspense>
-        );
+        return <Suspense fallback={<ViewSkeleton />}><ExportView /></Suspense>;
       case 'folders':
-        return <FoldersView />;
+        return <Suspense fallback={<ViewSkeleton />}><FoldersView /></Suspense>;
       case 'missing':
-        return <MissingView />;
+        return <Suspense fallback={<ViewSkeleton />}><MissingView /></Suspense>;
       case 'settings':
-        return <SettingsView />;
+        return <Suspense fallback={<ViewSkeleton />}><SettingsView /></Suspense>;
       default:
         return <DashboardView />;
     }
