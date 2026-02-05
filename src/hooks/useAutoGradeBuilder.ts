@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
-import { sanitizeFilename } from '@/lib/sanitizeFilename';
+import { sanitizeFilename, processFixedContentTemplate } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import type { WeekDay, ScheduledSequence, SequenceConfig } from '@/types/radio';
@@ -577,7 +577,9 @@ export function useAutoGradeBuilder() {
       result = result.replace(/\{DIA\}/gi, fullDayName);
     }
     
-    return sanitizeFilename(result);
+    // Ensure uppercase and proper formatting
+    // Use processFixedContentTemplate for final sanitization
+    return processFixedContentTemplate(result, hour, fullDayName);
   }, [getFullDayName]);
 
   // Generate a single block line with format: "musica1.mp3",vht,"musica2.mp3",vht,...
