@@ -1569,15 +1569,19 @@ function normalizeText(text) {
     .trim();
 }
 
-// Strip common suffixes like (Ao Vivo), [Remix], (Acústico), etc.
-// Used to normalize BOTH search query and library filenames for better matching
-function stripSuffixes(text) {
+// Strip ALL parenthetical and bracketed content from raw text BEFORE normalizing
+// This handles: "(Ao Vivo Em Brasília)", "[Remix Deluxe]", "(Acústico)", etc.
+function stripParenthetical(text) {
   return text
-    // Remove parenthetical content (already stripped of parens by normalizeText, so match as plain text)
-    .replace(/\b(?:ao vivo|live|acustico|acoustic|remix|remastered|remaster|radio edit|single version|album version|explicit|clean|deluxe|bonus track)\b/gi, '')
-    // Normalize spaces
+    .replace(/\s*\([^)]*\)/g, '')  // Remove (...) and content
+    .replace(/\s*\[[^\]]*\]/g, '') // Remove [...] and content
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// Get a "clean" normalized version: strip parentheticals first, then normalize
+function cleanNormalize(text) {
+  return normalizeText(stripParenthetical(text));
 }
 
 // Calculate similarity between two strings (Levenshtein-based)
@@ -1648,6 +1652,7 @@ function scanMusicLibrary(musicFolders) {
               name: entry.name,
               baseName: baseName,
               normalized: normalizeText(baseName),
+              cleanNormalized: cleanNormalize(baseName), // Without (Ao Vivo), [Remix], etc.
               path: fullPath,
             });
           }
@@ -1676,11 +1681,11 @@ function findBestMatch(artist, title, musicFolders) {
   const normalizedTitle = normalizeText(title);
   const searchQuery = normalizeText(`${artist} ${title}`);
   
-  // Also create suffix-stripped versions for flexible matching
-  // This handles: library has "(Ao Vivo)" but capture doesn't, or vice-versa
-  const strippedArtist = stripSuffixes(normalizedArtist);
-  const strippedTitle = stripSuffixes(normalizedTitle);
-  const strippedQuery = stripSuffixes(searchQuery);
+  // Create "clean" versions with ALL parenthetical content removed
+  // This handles: library has "(Ao Vivo Em Brasília)" but capture has "(Ao Vivo)" or no suffix
+  const cleanArtist = cleanNormalize(artist);
+  const cleanTitle = cleanNormalize(title);
+  const cleanQuery = cleanNormalize(`${artist} ${title}`);
   
   let bestMatch = null;
   let bestScore = 0;
@@ -1688,13 +1693,11 @@ function findBestMatch(artist, title, musicFolders) {
   const ARTIST_MIN_SIMILARITY = 0.6; // Minimum 60% artist match required
   
   for (const file of files) {
-    const strippedFile = stripSuffixes(file.normalized);
-    
     // PRIORITY 1: Direct match - both artist AND title present in filename
-    // Check both original and stripped versions for maximum flexibility
+    // Check BOTH full normalized AND clean (no parenthetical) versions
     if (
       (file.normalized.includes(normalizedArtist) && file.normalized.includes(normalizedTitle)) ||
-      (strippedFile.includes(strippedArtist) && strippedFile.includes(strippedTitle))
+      (file.cleanNormalized.includes(cleanArtist) && file.cleanNormalized.includes(cleanTitle))
     ) {
       return { 
         exists: true, 
@@ -1706,10 +1709,10 @@ function findBestMatch(artist, title, musicFolders) {
     }
     
     // PRIORITY 2: Similarity-based matching with ARTIST VERIFICATION
-    // Check artist similarity using BOTH original and stripped versions
+    // Check artist similarity using BOTH original and clean versions
     const artistScore = Math.max(
       calculateSimilarity(normalizedArtist, file.normalized),
-      calculateSimilarity(strippedArtist, strippedFile)
+      calculateSimilarity(cleanArtist, file.cleanNormalized)
     );
     
     // Only consider this file if artist has some presence in filename
@@ -1717,10 +1720,10 @@ function findBestMatch(artist, title, musicFolders) {
       continue;
     }
     
-    // Check overall similarity using BOTH original and stripped versions
+    // Check overall similarity using BOTH original and clean versions
     const score = Math.max(
       calculateSimilarity(searchQuery, file.normalized),
-      calculateSimilarity(strippedQuery, strippedFile)
+      calculateSimilarity(cleanQuery, file.cleanNormalized)
     );
     
     if (score > bestScore && score >= THRESHOLD) {
