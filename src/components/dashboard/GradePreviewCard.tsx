@@ -3,7 +3,7 @@ import { Eye, Music, TrendingUp, Radio, Clock, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useRadioStore } from '@/store/radioStore';
+import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -13,7 +13,7 @@ interface GradePreviewProps {
 }
 
 export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
-  const { sequence, stations, rankingSongs, gradeHistory } = useRadioStore();
+  const { stations, rankingSongs, gradeHistory, scheduledSequences } = useRadioStore();
   
   // Calculate next block time
   const getNextBlockTime = () => {
@@ -35,13 +35,16 @@ export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
   const previewSongs = useMemo(() => {
     const songs: { position: number; title: string; artist: string; source: string; isFromRanking: boolean }[] = [];
     
+    // Use the active sequence (considers scheduled sequences based on current time/day)
+    const activeSequence = getActiveSequence();
+    
     // Map station IDs to names
     const stationIdToName: Record<string, string> = {};
     stations.forEach(s => {
       stationIdToName[s.id] = s.name;
     });
     
-    sequence.forEach((seq, index) => {
+    activeSequence.forEach((seq, index) => {
       const stationName = stationIdToName[seq.radioSource];
       const stationSongs = stationName ? recentSongsByStation[stationName] : [];
       
@@ -73,7 +76,7 @@ export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
     });
     
     return songs;
-  }, [sequence, stations, recentSongsByStation, rankingSongs]);
+  }, [stations, recentSongsByStation, rankingSongs, scheduledSequences]);
   
   // Count songs from ranking
   const songsFromRanking = previewSongs.filter(s => s.isFromRanking).length;
