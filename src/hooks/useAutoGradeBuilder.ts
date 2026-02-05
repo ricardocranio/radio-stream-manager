@@ -1726,8 +1726,14 @@ export function useAutoGradeBuilder() {
     let lastBuiltBlock = '';
     let lastPeriodicSave = Date.now();
 
-    // Check every 30 seconds to ensure we catch block transitions
+    // Check every 60 seconds to ensure we catch block transitions
     buildIntervalRef.current = setInterval(() => {
+      // RESPECT isRunning - skip if system is paused by user
+      const { isRunning } = useRadioStore.getState();
+      if (!isRunning) {
+        return; // System paused by user - skip build
+      }
+      
       const now = new Date();
       const minutesBefore = state.minutesBeforeBlock;
       const currentMinute = now.getMinutes();
@@ -1779,13 +1785,12 @@ export function useAutoGradeBuilder() {
     }, 60 * 1000); // Check every 60 seconds (was 30s) for better performance
 
     // Also run immediately on mount to catch current block
-    const now = new Date();
-    const currentMinute = now.getMinutes();
-    const minutesBefore = state.minutesBeforeBlock;
-    
-    // ALWAYS build immediately on mount to ensure file exists
-    console.log(`[AUTO-GRADE] 🚀 Build inicial - salvando grade na pasta destino`);
-    buildGrade();
+    // ONLY if system is running
+    const { isRunning } = useRadioStore.getState();
+    if (isRunning) {
+      console.log(`[AUTO-GRADE] 🚀 Build inicial - salvando grade na pasta destino`);
+      buildGrade();
+    }
 
     return () => {
       if (buildIntervalRef.current) clearInterval(buildIntervalRef.current);
