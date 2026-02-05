@@ -575,6 +575,7 @@ export function useAutoGradeBuilder() {
     let result = fileName
       .replace(/\{HH\}/gi, hourStr)
       .replace(/\{DIA\}/gi, fullDayName)
+      .replace(/\{DD\}/gi, fullDayName)
       .replace(/\{ED\}/gi, edition);
     
     // CRITICAL: Always append _{DIA} (full name) if the filename doesn't already have it
@@ -582,7 +583,7 @@ export function useAutoGradeBuilder() {
     const hasFullDayName = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SABADO']
       .some(day => result.toUpperCase().includes(`_${day}`));
     
-    if (!result.toLowerCase().includes('_{dia}') && !hasFullDayName) {
+    if (!result.toLowerCase().includes('_{dia}') && !result.toLowerCase().includes('_{dd}') && !hasFullDayName) {
       // Remove .mp3 extension if present, add full day name, then re-add extension
       if (result.toLowerCase().endsWith('.mp3')) {
         result = result.slice(0, -4) + `_${fullDayName}.mp3`;
@@ -590,8 +591,9 @@ export function useAutoGradeBuilder() {
         result = result + `_${fullDayName}`;
       }
     } else {
-      // Replace any remaining {DIA} placeholder (case insensitive)
+      // Replace any remaining {DIA} or {DD} placeholder (case insensitive)
       result = result.replace(/\{DIA\}/gi, fullDayName);
+      result = result.replace(/\{DD\}/gi, fullDayName);
     }
     
     // Ensure uppercase and proper formatting

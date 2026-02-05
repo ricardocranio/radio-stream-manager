@@ -131,8 +131,9 @@ export function processFixedContentTemplate(
   // Replace {HH} with 2-digit hour
   result = result.replace(/\{HH\}/gi, hour.toString().padStart(2, '0'));
   
-  // Replace {DIA} with full day name
+  // Replace {DIA} or {DD} with full day name
   result = result.replace(/\{DIA\}/gi, dayName);
+  result = result.replace(/\{DD\}/gi, dayName);
   
   // Replace {ED} or {1}, {2}, etc. for edition numbers (handled separately)
   result = result.replace(/\{ED\}/gi, '01');
