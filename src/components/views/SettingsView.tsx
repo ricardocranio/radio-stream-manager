@@ -831,9 +831,9 @@ export function SettingsView() {
 
               <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border">
                 <div>
-                  <Label>Curadoria TOP50 (10x10)</Label>
+                  <Label>Curadoria TOP25</Label>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Ativar seleção inteligente TOP50
+                    Ativar seleção inteligente TOP25
                   </p>
                 </div>
                 <Switch defaultChecked />

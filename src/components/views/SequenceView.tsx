@@ -90,7 +90,7 @@ export function SequenceView() {
   const radioOptions = [
     ...stationOptions,
     { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)', isFixo: false },
-    { value: 'top50', label: '🏆 TOP50 (Curadoria)', isFixo: false },
+    { value: 'top50', label: '🏆 TOP25 (Curadoria)', isFixo: false },
     ...fixedContentOptions,
   ];
 
@@ -360,7 +360,7 @@ export function SequenceView() {
       weather: '🌤️ Clima',
       romance: '💕 Romance',
       curiosity: '💡 Curiosidade',
-      top50: '🏆 TOP50',
+      top50: '🏆 TOP25',
       vozbrasil: '🇧🇷 Voz do Brasil',
       other: '📁 Outro',
     };
@@ -382,7 +382,7 @@ export function SequenceView() {
     
     // Special options
     if (source === 'random_pop') return 'Aleatório';
-    if (source === 'top50') return 'TOP50';
+    if (source === 'top50') return 'TOP25';
     
     return source;
   };
@@ -799,7 +799,7 @@ export function SequenceView() {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded bg-yellow-500/30" />
-                    <span className="text-muted-foreground">TOP50</span>
+                    <span className="text-muted-foreground">TOP25</span>
                   </div>
                 </div>
               </div>

@@ -22,7 +22,7 @@ const staticNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'gradebuilder', label: 'Montagem da Grade', icon: FileCode },
   { id: 'blockeditor', label: 'Editor de Blocos', icon: Layers },
   { id: 'fixedcontent', label: 'Conteúdos Fixos', icon: Newspaper },
-  { id: 'ranking', label: 'Ranking TOP50', icon: TrendingUp },
+  { id: 'ranking', label: 'Ranking TOP25', icon: TrendingUp },
   { id: 'vozbrasil', label: 'Voz do Brasil', icon: Mic },
   { id: 'logs', label: 'Logs', icon: Terminal },
   { id: 'export', label: 'Exportar Config', icon: Download },

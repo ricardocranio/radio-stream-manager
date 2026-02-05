@@ -31,7 +31,7 @@ const typeLabels: Record<string, string> = {
   romance: 'Romance',
   curiosity: 'Curiosidades',
   other: 'Outros',
-  top50: 'TOP50 (Curadoria)',
+  top50: 'TOP25 (Curadoria)',
   vozbrasil: 'A Voz do Brasil',
 };
 
@@ -178,10 +178,10 @@ export function FixedContentView() {
                 <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
                   <div className="flex items-center gap-2 text-yellow-400 mb-2">
                     <TrendingUp className="w-4 h-4" />
-                    <span className="font-medium text-sm">TOP50 - Curadoria do Monitoramento</span>
+                    <span className="font-medium text-sm">TOP25 - Curadoria do Monitoramento</span>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs">Quantidade de músicas aleatórias do TOP50</Label>
+                    <Label className="text-xs">Quantidade de músicas aleatórias do TOP25</Label>
                     <Select
                       value={(newContent.top50Count || 5).toString()}
                       onValueChange={(value) => setNewContent({ ...newContent, top50Count: parseInt(value) })}

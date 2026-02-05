@@ -220,7 +220,7 @@ export function CapturedSongsView() {
       if (!silent) {
         toast({
           title: '✓ Sincronizado com Ranking',
-          description: `${synced} músicas adicionadas/atualizadas no TOP50.`,
+          description: `${synced} músicas adicionadas/atualizadas no TOP25.`,
         });
       } else {
         console.log(`[AUTO-SYNC] ${synced} músicas sincronizadas com o ranking`);
@@ -729,7 +729,7 @@ export function CapturedSongsView() {
         <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
           <span className="text-sm text-foreground">
-            Sincronização automática ativa - Músicas são enviadas ao ranking TOP50 a cada 30 minutos
+            Sincronização automática ativa - Músicas são enviadas ao ranking TOP25 a cada 30 minutos
           </span>
           {lastAutoSync && (
             <Badge variant="secondary" className="ml-auto">
