@@ -627,7 +627,7 @@ export function useAutoGradeBuilder() {
       });
       // HARDCODED format - never goes through sanitizeGradeLine to prevent any corruption
       return { 
-        line: '21:00 (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASIL',
+        line: '21:00 (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASI',
         logs: blockLogs,
       };
     }
@@ -1634,7 +1634,7 @@ export function useAutoGradeBuilder() {
 
       // ALWAYS enforce correct 21:00 Voz do Brasil format on weekdays
       // This fixes stale lines from previous code versions or corrupted saves
-      const VOZ_DO_BRASIL_LINE = '21:00 (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASIL';
+      const VOZ_DO_BRASIL_LINE = '21:00 (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASI';
       if (isWeekday(targetDay)) {
         const existing2100 = lineMap.get('21:00');
         if (!existing2100 || existing2100 !== VOZ_DO_BRASIL_LINE) {
