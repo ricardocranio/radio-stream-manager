@@ -52,7 +52,8 @@ export const useSimilarityLogStore = create<SimilarityLogState>((set) => ({
         timestamp: new Date(),
       };
 
-      const newLogs = [newEntry, ...state.logs].slice(0, 500); // Keep last 500
+      // OPTIMIZED: Reduced from 500 to 200 entries for lower memory usage
+      const newLogs = [newEntry, ...state.logs].slice(0, 200);
 
       // Update stats
       const newStats = { ...state.stats };
@@ -77,37 +78,15 @@ export const useSimilarityLogStore = create<SimilarityLogState>((set) => ({
         newStats.averageSimilarity = matchLogs.reduce((sum, l) => sum + l.similarity, 0) / matchLogs.length;
       }
 
-      // Log to console with detailed info
-      const thresholdPercent = Math.round(entry.threshold * 100);
-      const similarityPercent = Math.round(entry.similarity * 100);
-      
-      if (entry.accepted) {
-        console.log(
-          `[SIMILARITY] ✅ ACEITA: ${entry.artist} - ${entry.title} → ${entry.matchedFilename} (${similarityPercent}% ≥ ${thresholdPercent}%)`
-        );
-      } else if (entry.reason === 'below_threshold') {
-        console.log(
-          `[SIMILARITY] ❌ REJEITADA (abaixo threshold): ${entry.artist} - ${entry.title} → ${entry.matchedFilename} (${similarityPercent}% < ${thresholdPercent}%)`
-        );
-      } else if (entry.reason === 'no_match') {
-        console.log(
-          `[SIMILARITY] ⚠️ SEM MATCH: ${entry.artist} - ${entry.title} (nenhum arquivo similar encontrado)`
-        );
-      } else {
-        console.log(
-          `[SIMILARITY] 🔴 ERRO: ${entry.artist} - ${entry.title}`
-        );
-      }
-
-      // Log summary every 10 checks
-      if (newStats.totalChecked % 10 === 0) {
+      // OPTIMIZED: Reduced logging - only log summary every 25 checks (was 10)
+      // Individual logs removed to reduce console spam
+      if (newStats.totalChecked % 25 === 0) {
         const acceptRate = newStats.totalChecked > 0 
           ? Math.round((newStats.accepted / newStats.totalChecked) * 100) 
           : 0;
         console.log(
           `[SIMILARITY] 📊 Resumo: ${newStats.accepted}/${newStats.totalChecked} aceitas (${acceptRate}%) | ` +
-          `Rejeitadas: ${newStats.rejected} (${newStats.belowThreshold} abaixo threshold, ${newStats.noMatch} sem match) | ` +
-          `Média similaridade: ${Math.round(newStats.averageSimilarity * 100)}%`
+          `Rejeitadas: ${newStats.rejected} | Média: ${Math.round(newStats.averageSimilarity * 100)}%`
         );
       }
 

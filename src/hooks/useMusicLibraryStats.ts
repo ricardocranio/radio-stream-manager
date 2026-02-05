@@ -90,8 +90,8 @@ export function useMusicLibraryStats() {
   useEffect(() => {
     refreshStats(true); // Force refresh on mount
 
-    // Refresh every 5 minutes
-    const interval = setInterval(() => refreshStats(false), 5 * 60 * 1000);
+    // OPTIMIZED: Refresh every 15 minutes (was 5 minutes) for lower I/O
+    const interval = setInterval(() => refreshStats(false), 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [refreshStats]);
 
