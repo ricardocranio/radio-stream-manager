@@ -1569,6 +1569,17 @@ function normalizeText(text) {
     .trim();
 }
 
+// Strip common suffixes like (Ao Vivo), [Remix], (Acústico), etc.
+// Used to normalize BOTH search query and library filenames for better matching
+function stripSuffixes(text) {
+  return text
+    // Remove parenthetical content (already stripped of parens by normalizeText, so match as plain text)
+    .replace(/\b(?:ao vivo|live|acustico|acoustic|remix|remastered|remaster|radio edit|single version|album version|explicit|clean|deluxe|bonus track)\b/gi, '')
+    // Normalize spaces
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Calculate similarity between two strings (Levenshtein-based)
 function calculateSimilarity(str1, str2) {
   const s1 = normalizeText(str1);
@@ -1665,14 +1676,26 @@ function findBestMatch(artist, title, musicFolders) {
   const normalizedTitle = normalizeText(title);
   const searchQuery = normalizeText(`${artist} ${title}`);
   
+  // Also create suffix-stripped versions for flexible matching
+  // This handles: library has "(Ao Vivo)" but capture doesn't, or vice-versa
+  const strippedArtist = stripSuffixes(normalizedArtist);
+  const strippedTitle = stripSuffixes(normalizedTitle);
+  const strippedQuery = stripSuffixes(searchQuery);
+  
   let bestMatch = null;
   let bestScore = 0;
   const THRESHOLD = 0.75; // 75% similarity required
   const ARTIST_MIN_SIMILARITY = 0.6; // Minimum 60% artist match required
   
   for (const file of files) {
+    const strippedFile = stripSuffixes(file.normalized);
+    
     // PRIORITY 1: Direct match - both artist AND title present in filename
-    if (file.normalized.includes(normalizedArtist) && file.normalized.includes(normalizedTitle)) {
+    // Check both original and stripped versions for maximum flexibility
+    if (
+      (file.normalized.includes(normalizedArtist) && file.normalized.includes(normalizedTitle)) ||
+      (strippedFile.includes(strippedArtist) && strippedFile.includes(strippedTitle))
+    ) {
       return { 
         exists: true, 
         path: file.path, 
@@ -1683,18 +1706,22 @@ function findBestMatch(artist, title, musicFolders) {
     }
     
     // PRIORITY 2: Similarity-based matching with ARTIST VERIFICATION
-    // First check if artist has reasonable similarity to prevent cross-artist confusion
-    const artistScore = calculateSimilarity(normalizedArtist, file.normalized);
+    // Check artist similarity using BOTH original and stripped versions
+    const artistScore = Math.max(
+      calculateSimilarity(normalizedArtist, file.normalized),
+      calculateSimilarity(strippedArtist, strippedFile)
+    );
     
     // Only consider this file if artist has some presence in filename
-    // This prevents "Kaize - Olha onde eu tô" matching "Ana Castela - Olha onde eu tô"
     if (artistScore < ARTIST_MIN_SIMILARITY) {
-      // Artist doesn't match well enough - skip this file
       continue;
     }
     
-    // Now check overall similarity
-    const score = calculateSimilarity(searchQuery, file.normalized);
+    // Check overall similarity using BOTH original and stripped versions
+    const score = Math.max(
+      calculateSimilarity(searchQuery, file.normalized),
+      calculateSimilarity(strippedQuery, strippedFile)
+    );
     
     if (score > bestScore && score >= THRESHOLD) {
       bestScore = score;
