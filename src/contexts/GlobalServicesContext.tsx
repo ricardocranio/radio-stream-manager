@@ -607,6 +607,9 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     return false;
   }, [cleanupOldVozBrasil]);
 
+  // Track if we already downloaded today
+  const lastVozDownloadDateRef = useRef<string | null>(null);
+
   const scheduleVozBrasil = useCallback(() => {
     if (!isElectron || !window.electronAPI?.downloadVozBrasil) {
       console.log('[VOZ-SVC] ⚠️ Electron API não disponível para agendamento');
@@ -636,105 +639,99 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
 
     const isWeekday = (d: Date) => d.getDay() >= 1 && d.getDay() <= 5;
     
-    const getNextDownloadTime = () => {
+    // Check every minute if it's time to download
+    // This is more robust than setTimeout because it handles:
+    // 1. System sleep/suspend
+    // 2. Long JavaScript pauses
+    // 3. Browser tab inactivity
+    const checkAndDownload = async () => {
       const now = new Date();
-      const timeParts = (config.scheduleTime || '20:35').split(':');
+      const todayStr = now.toDateString();
+      
+      // Skip if not a weekday
+      if (!isWeekday(now)) {
+        return;
+      }
+      
+      // Skip if we already downloaded today
+      if (lastVozDownloadDateRef.current === todayStr) {
+        return;
+      }
+      
+      // Re-read config (in case it changed)
+      let currentConfig = { enabled: true, scheduleTime: '20:35' };
+      try {
+        const saved = localStorage.getItem('vozBrasilConfig');
+        if (saved) currentConfig = { ...currentConfig, ...JSON.parse(saved) };
+      } catch (e) { /* use default */ }
+      
+      if (!currentConfig.enabled) {
+        return;
+      }
+      
+      const timeParts = (currentConfig.scheduleTime || '20:35').split(':');
       const scheduleHour = parseInt(timeParts[0], 10) || 20;
       const scheduleMinute = parseInt(timeParts[1], 10) || 35;
       
-      const nextDl = new Date(now);
-      nextDl.setHours(scheduleHour, scheduleMinute, 0, 0);
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
       
-      // If time has passed or it's weekend, move to next weekday
-      if (nextDl <= now || !isWeekday(nextDl)) {
-        nextDl.setDate(nextDl.getDate() + 1);
-        while (!isWeekday(nextDl)) {
-          nextDl.setDate(nextDl.getDate() + 1);
+      // Check if we're within the download window (schedule time to +30 minutes)
+      const scheduleTotalMinutes = scheduleHour * 60 + scheduleMinute;
+      const currentTotalMinutes = currentHour * 60 + currentMinute;
+      const windowEndMinutes = scheduleTotalMinutes + 30;
+      
+      if (currentTotalMinutes >= scheduleTotalMinutes && currentTotalMinutes <= windowEndMinutes) {
+        console.log('[VOZ-SVC] ⏰ Dentro da janela de download! Iniciando...');
+        lastVozDownloadDateRef.current = todayStr;
+        
+        const success = await downloadVozBrasil();
+        if (success) {
+          console.log('[VOZ-SVC] ✅ Download da Voz do Brasil concluído automaticamente!');
+        } else {
+          // If failed, allow retry in next check
+          lastVozDownloadDateRef.current = null;
+          console.log('[VOZ-SVC] ⚠️ Download falhou, tentará novamente no próximo minuto');
         }
       }
-      
-      return nextDl;
     };
 
-    const now = new Date();
-    const nextDl = getNextDownloadTime();
-    const msUntilDownload = nextDl.getTime() - now.getTime();
-    
-    console.log(`[VOZ-SVC] 📻 Próximo download agendado para: ${nextDl.toLocaleString('pt-BR')}`);
-    console.log(`[VOZ-SVC] ⏰ Tempo restante: ${Math.round(msUntilDownload / 60000)} minutos`);
-
-    // Clear existing scheduler
+    // Clear any existing scheduler
     if (vozBrasilSchedulerRef.current) {
-      clearTimeout(vozBrasilSchedulerRef.current);
+      clearInterval(vozBrasilSchedulerRef.current as unknown as number);
       vozBrasilSchedulerRef.current = null;
     }
 
-    // Schedule the download - handle both short and long timeouts
-    // For very long waits (>12h), use a recurring check every hour instead
-    const maxTimeout = 12 * 60 * 60 * 1000; // 12 hours
-    
-    if (msUntilDownload <= 0) {
-      // Already past the scheduled time - check if we should download now (weekday)
-      if (isWeekday(now)) {
-        console.log('[VOZ-SVC] 📻 Horário já passou, verificando se deve baixar agora...');
-        // Only download if within 30 minutes of scheduled time
-        const timeParts = (config.scheduleTime || '20:35').split(':');
-        const scheduleHour = parseInt(timeParts[0], 10) || 20;
-        const scheduleMinute = parseInt(timeParts[1], 10) || 35;
-        const scheduledToday = new Date(now);
-        scheduledToday.setHours(scheduleHour, scheduleMinute, 0, 0);
-        const msSinceSchedule = now.getTime() - scheduledToday.getTime();
-        
-        if (msSinceSchedule >= 0 && msSinceSchedule <= 30 * 60 * 1000) {
-          console.log('[VOZ-SVC] 📻 Dentro da janela de 30 min, executando download...');
-          downloadVozBrasil();
-        }
-      }
-      // Schedule for next occurrence
-      setTimeout(scheduleVozBrasil, 60000);
-      return;
-    }
-    
-    if (msUntilDownload > maxTimeout) {
-      // Very long wait - reschedule check in 1 hour
-      console.log('[VOZ-SVC] ⏰ Agendamento distante, verificando novamente em 1 hora');
-      vozBrasilSchedulerRef.current = setTimeout(scheduleVozBrasil, 60 * 60 * 1000);
-      return;
-    }
+    // Log next scheduled time for reference
+    const timeParts = (config.scheduleTime || '20:35').split(':');
+    const scheduleHour = parseInt(timeParts[0], 10) || 20;
+    const scheduleMinute = parseInt(timeParts[1], 10) || 35;
+    console.log(`[VOZ-SVC] 📻 Monitoramento ativo: verificando a cada 1 minuto`);
+    console.log(`[VOZ-SVC] ⏰ Horário alvo: ${scheduleHour.toString().padStart(2, '0')}:${scheduleMinute.toString().padStart(2, '0')} (Seg-Sex)`);
 
-    // Schedule the actual download
-    vozBrasilSchedulerRef.current = setTimeout(async () => {
-      console.log('[VOZ-SVC] ⏰ Horário de download atingido!');
-      
-      // Re-check config in case it changed
-      let currentConfig = { enabled: true };
-      try {
-        const saved = localStorage.getItem('vozBrasilConfig');
-        if (saved) currentConfig = JSON.parse(saved);
-      } catch (e) { /* use default */ }
-      
-      const currentDay = new Date().getDay();
-      
-      if (currentConfig.enabled && currentDay >= 1 && currentDay <= 5) {
-        console.log('[VOZ-SVC] 📻 Executando download automático...');
-        const success = await downloadVozBrasil();
-        if (success) {
-          console.log('[VOZ-SVC] ✅ Download da Voz do Brasil concluído!');
-        } else {
-          console.log('[VOZ-SVC] ⚠️ Download falhou, tentará novamente no próximo horário');
-        }
-      } else {
-        console.log('[VOZ-SVC] Download pulado (fim de semana ou desabilitado)');
-      }
-      
-      // Schedule next download after a brief delay
-      setTimeout(scheduleVozBrasil, 60000);
-    }, msUntilDownload);
+    // Check immediately
+    checkAndDownload();
+
+    // Then check every minute (much more robust than long setTimeout)
+    vozBrasilSchedulerRef.current = setInterval(checkAndDownload, 60000) as unknown as NodeJS.Timeout;
     
-    console.log(`[VOZ-SVC] ✅ Agendamento configurado com sucesso`);
+    console.log(`[VOZ-SVC] ✅ Agendamento robusto configurado com sucesso`);
   }, [downloadVozBrasil]);
 
   // ============= INITIALIZATION =============
+  // IMPORTANT: This effect must run ONCE on mount only
+  // Using refs for callbacks to avoid re-running when callbacks change
+  const checkNewMissingSongsRef = useRef(checkNewMissingSongs);
+  const scrapeAllStationsRef = useRef(scrapeAllStations);
+  const scheduleVozBrasilRef = useRef(scheduleVozBrasil);
+  
+  // Keep refs updated with latest callbacks
+  useEffect(() => {
+    checkNewMissingSongsRef.current = checkNewMissingSongs;
+    scrapeAllStationsRef.current = scrapeAllStations;
+    scheduleVozBrasilRef.current = scheduleVozBrasil;
+  }, [checkNewMissingSongs, scrapeAllStations, scheduleVozBrasil]);
+
   useEffect(() => {
     if (isGlobalServicesRunning || isInitializedRef.current) {
       console.log('[GLOBAL-SVC] Already running, skipping initialization');
@@ -752,14 +749,14 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log('╔══════════════════════════════════════════════════════════════╗');
     console.log('║     🚀 SISTEMA AUTOMATIZADO - INICIANDO TODOS OS SERVIÇOS    ║');
     console.log('╠══════════════════════════════════════════════════════════════╣');
-    console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras) - 5 min` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
+    console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras) - 10 min` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
     console.log(`║ 🎵 Grade Builder: ✅ ATIVO (${gradeBuilder.minutesBeforeBlock || 10} min antes de cada bloco)`.padEnd(65) + '║');
     console.log(`║ 📥 Downloads:     ${deezerConfig.autoDownload ? '✅ IMEDIATO (5s entre cada)' : '⏸️ MANUAL (ativar em Config)'}`.padEnd(65) + '║');
     console.log(`║ 💾 Banco Musical: ${config.musicFolders?.length > 0 ? `✅ ${config.musicFolders.length} pastas` : '⚠️ Configurar pastas'}`.padEnd(65) + '║');
     console.log(`║ 📊 Stats:         ✅ ATIVO - refresh 10 min`.padEnd(65) + '║');
     console.log(`║ 🔄 Sync Cloud:    ✅ ATIVO (Realtime)`.padEnd(65) + '║');
     console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
-    console.log(`║ 📻 Voz do Brasil: ✅ ATIVO (Seg-Sex 20:35)`.padEnd(65) + '║');
+    console.log(`║ 📻 Voz do Brasil: ✅ ATIVO (Seg-Sex 20:35) + check 1min`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
     // 0. Initialize station folders (create subfolder for each enabled station)
@@ -777,31 +774,30 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       });
     }
 
-    // 1. Download check every 60 seconds (was 30s - optimized for less CPU)
+    // 1. Download check every 60 seconds (optimized for less CPU)
     downloadIntervalRef.current = setInterval(() => {
-      checkNewMissingSongs();
+      checkNewMissingSongsRef.current();
     }, 60000);
-    checkNewMissingSongs(); // Initial check immediately
+    checkNewMissingSongsRef.current(); // Initial check immediately
 
-    // 2. Scraping every 10 minutes (was 5 min - optimized for performance)
-    // This significantly reduces network and CPU usage
+    // 2. Scraping every 10 minutes (optimized for performance)
     scrapeIntervalRef.current = setInterval(() => {
       const currentState = useRadioStore.getState();
       const hasEnabledStations = currentState.stations.some(s => s.enabled && s.scrapeUrl);
       if (hasEnabledStations) {
-        scrapeAllStations();
+        scrapeAllStationsRef.current();
       }
     }, 10 * 60 * 1000);
 
     // Initial scrape
     if (enabledStations > 0) {
-      scrapeAllStations();
+      scrapeAllStationsRef.current();
     }
 
     // NOTE: Grade builder runs its own intervals via useAutoGradeBuilder hook
 
-    // 3. Voz do Brasil scheduled download (Mon-Fri 20:35)
-    scheduleVozBrasil();
+    // 3. Voz do Brasil - Start the robust scheduler
+    scheduleVozBrasilRef.current();
 
     console.log('[GLOBAL-SVC] ✅ Todos os serviços automáticos iniciados com sucesso!');
     console.log('[GLOBAL-SVC] 💡 Sistema funcionando em segundo plano - nenhuma intervenção necessária');
@@ -810,11 +806,13 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       console.log('[GLOBAL-SVC] 🛑 Parando todos os serviços globais');
       if (downloadIntervalRef.current) clearInterval(downloadIntervalRef.current);
       if (scrapeIntervalRef.current) clearInterval(scrapeIntervalRef.current);
-      if (vozBrasilSchedulerRef.current) clearTimeout(vozBrasilSchedulerRef.current);
+      // Voz do Brasil now uses setInterval, not setTimeout
+      if (vozBrasilSchedulerRef.current) clearInterval(vozBrasilSchedulerRef.current as unknown as number);
       isGlobalServicesRunning = false;
       isInitializedRef.current = false;
     };
-  }, [checkNewMissingSongs, scrapeAllStations, scheduleVozBrasil]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run ONCE on mount - using refs for callbacks
 
   // Watch for reset signal
   useEffect(() => {
