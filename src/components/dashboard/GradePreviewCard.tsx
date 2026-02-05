@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore } from '@/store/radioStore';
+import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -47,10 +48,13 @@ export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
       if (stationSongs && stationSongs.length > 0) {
         const songIndex = index % stationSongs.length;
         const song = stationSongs[songIndex];
+        // Apply sanitization to remove special characters
+        const sanitizedTitle = sanitizeFilename(song.title).replace('.mp3', '').replace(' - ', '');
+        const sanitizedArtist = sanitizeFilename(song.artist).replace('.mp3', '');
         songs.push({
           position: seq.position,
-          title: song.title,
-          artist: song.artist,
+          title: sanitizedTitle || song.title,
+          artist: sanitizedArtist || song.artist,
           source: stationName || seq.radioSource,
           isFromRanking: rankingSongs.some(
             r => r.title.toLowerCase() === song.title.toLowerCase() && 
