@@ -1658,29 +1658,21 @@ function scanMusicLibrary(musicFolders) {
 }
 
 // Find best matching file in library using similarity
+// IMPORTANT: Artist matching is STRICT to avoid confusing different artists with same song title
 function findBestMatch(artist, title, musicFolders) {
   const files = scanMusicLibrary(musicFolders);
+  const normalizedArtist = normalizeText(artist);
+  const normalizedTitle = normalizeText(title);
   const searchQuery = normalizeText(`${artist} ${title}`);
   
   let bestMatch = null;
   let bestScore = 0;
   const THRESHOLD = 0.75; // 75% similarity required
+  const ARTIST_MIN_SIMILARITY = 0.6; // Minimum 60% artist match required
   
   for (const file of files) {
-    // Check similarity with full search query
-    const score = calculateSimilarity(searchQuery, file.normalized);
-    
-    if (score > bestScore && score >= THRESHOLD) {
-      bestScore = score;
-      bestMatch = file;
-    }
-    
-    // Also try individual checks for artist and title
-    const normalizedArtist = normalizeText(artist);
-    const normalizedTitle = normalizeText(title);
-    
+    // PRIORITY 1: Direct match - both artist AND title present in filename
     if (file.normalized.includes(normalizedArtist) && file.normalized.includes(normalizedTitle)) {
-      // Direct match - highest priority
       return { 
         exists: true, 
         path: file.path, 
@@ -1688,6 +1680,25 @@ function findBestMatch(artist, title, musicFolders) {
         baseName: file.baseName,
         similarity: 1.0 
       };
+    }
+    
+    // PRIORITY 2: Similarity-based matching with ARTIST VERIFICATION
+    // First check if artist has reasonable similarity to prevent cross-artist confusion
+    const artistScore = calculateSimilarity(normalizedArtist, file.normalized);
+    
+    // Only consider this file if artist has some presence in filename
+    // This prevents "Kaize - Olha onde eu tô" matching "Ana Castela - Olha onde eu tô"
+    if (artistScore < ARTIST_MIN_SIMILARITY) {
+      // Artist doesn't match well enough - skip this file
+      continue;
+    }
+    
+    // Now check overall similarity
+    const score = calculateSimilarity(searchQuery, file.normalized);
+    
+    if (score > bestScore && score >= THRESHOLD) {
+      bestScore = score;
+      bestMatch = file;
     }
   }
   
