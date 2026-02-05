@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { withRetry, createError, ErrorCodes } from '@/lib/errorHandler';
+import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -10,10 +11,11 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 5000;
 
-// Queue for auto-download
+// Queue for auto-download with priority
 interface DownloadQueueItem {
   song: MissingSong;
   retryCount: number;
+  priority: number; // Higher = more important (ranking position)
 }
 
 export function useAutoDownload() {
@@ -81,6 +83,9 @@ export function useAutoDownload() {
         }
         updateMissingSong(song.id, { status: 'downloaded' });
         
+        // Update library cache to prevent future re-checks
+        markSongAsDownloaded(song.artist, song.title, result.output);
+        
         const historyEntry: DownloadHistoryEntry = {
           id: crypto.randomUUID(),
           songId: song.id,
@@ -142,6 +147,9 @@ export function useAutoDownload() {
         break;
       }
 
+      // Sort queue by priority (higher first) before each iteration
+      downloadQueueRef.current.sort((a, b) => b.priority - a.priority);
+
       const item = downloadQueueRef.current.shift();
       setQueueLength(downloadQueueRef.current.length);
       if (!item) break;
@@ -149,10 +157,11 @@ export function useAutoDownload() {
       const success = await downloadSong(item.song);
       
       if (!success && item.retryCount < 2) {
-        // Re-add to queue for retry (max 2 retries)
+        // Re-add to queue for retry (max 2 retries), keep same priority
         downloadQueueRef.current.push({
           song: item.song,
           retryCount: item.retryCount + 1,
+          priority: item.priority,
         });
         setQueueLength(downloadQueueRef.current.length);
       }
@@ -173,6 +182,14 @@ export function useAutoDownload() {
       return;
     }
 
+    // Get ranking songs for priority calculation
+    const { rankingSongs } = useRadioStore.getState();
+    const rankingMap = new Map<string, number>();
+    rankingSongs.forEach((song, index) => {
+      const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
+      rankingMap.set(key, 50 - index); // Higher priority for top ranking positions
+    });
+
     // Get current missing song IDs
     const currentIds = missingSongs
       .filter(s => s.status === 'missing')
@@ -186,13 +203,22 @@ export function useAutoDownload() {
         !processedSongsRef.current.has(song.id)
     );
 
-    // Add new songs to queue
+    // Add new songs to queue with ranking priority
     for (const song of newSongs) {
-      console.log(`[AUTO-DL] New missing song detected: ${song.artist} - ${song.title}`);
+      const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
+      const priority = rankingMap.get(key) || 0; // 0 for non-ranking songs
+      
+      if (priority > 0) {
+        console.log(`[AUTO-DL] 🎯 Ranking song #${51 - priority}: ${song.artist} - ${song.title}`);
+      } else {
+        console.log(`[AUTO-DL] New missing song: ${song.artist} - ${song.title}`);
+      }
+      
       processedSongsRef.current.add(song.id);
       downloadQueueRef.current.push({
         song,
         retryCount: 0,
+        priority,
       });
     }
     
