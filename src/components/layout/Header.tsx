@@ -29,10 +29,17 @@ export function Header() {
     <header className="h-16 bg-card border-b border-border px-4 md:px-6 flex items-center justify-between">
       <div className="flex items-center gap-2 md:gap-4">
         <div className="flex items-center gap-2">
-          {isRunning && (
+          {isRunning ? (
             <div className="live-indicator">
               <span className="text-xs md:text-sm font-semibold text-destructive uppercase tracking-wider">
                 AO VIVO
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-muted rounded-md">
+            <div className="w-2 h-2 rounded-full bg-warning animate-pulse" />
+              <span className="text-xs md:text-sm font-semibold text-warning uppercase tracking-wider">
+                PAUSADO
               </span>
             </div>
           )}

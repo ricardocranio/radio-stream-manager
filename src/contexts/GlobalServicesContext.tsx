@@ -176,6 +176,12 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     }
 
     const state = useRadioStore.getState();
+    
+    // RESPECT isRunning - skip if system is paused by user
+    if (!state.isRunning) {
+      return;
+    }
+    
     if (!state.deezerConfig.autoDownload || !state.deezerConfig.enabled) {
       return;
     }
@@ -186,6 +192,13 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
 
     while (downloadQueueRef.current.length > 0) {
       const currentState = useRadioStore.getState();
+      
+      // RESPECT isRunning - pause queue if system is stopped by user
+      if (!currentState.isRunning) {
+        console.log('[GLOBAL-SVC] ⏸️ Sistema pausado pelo usuário, aguardando retomada...');
+        break;
+      }
+      
       if (!currentState.deezerConfig.autoDownload) {
         console.log('[GLOBAL-SVC] Auto-download disabled, stopping queue');
         break;
@@ -648,6 +661,12 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       const now = new Date();
       const todayStr = now.toDateString();
       
+      // RESPECT isRunning - skip if system is paused by user
+      const { isRunning } = useRadioStore.getState();
+      if (!isRunning) {
+        return;
+      }
+      
       // Skip if not a weekday
       if (!isWeekday(now)) {
         return;
@@ -775,22 +794,34 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     }
 
     // 1. Download check every 60 seconds (optimized for less CPU)
+    // RESPECTS isRunning state - only runs when system is active
     downloadIntervalRef.current = setInterval(() => {
-      checkNewMissingSongsRef.current();
+      const { isRunning } = useRadioStore.getState();
+      if (isRunning) {
+        checkNewMissingSongsRef.current();
+      }
     }, 60000);
-    checkNewMissingSongsRef.current(); // Initial check immediately
+    
+    // Initial check only if running
+    if (state.isRunning) {
+      checkNewMissingSongsRef.current();
+    }
 
     // 2. Scraping every 10 minutes (optimized for performance)
+    // RESPECTS isRunning state - only runs when system is active
     scrapeIntervalRef.current = setInterval(() => {
       const currentState = useRadioStore.getState();
+      if (!currentState.isRunning) {
+        return; // Skip if system is paused by user
+      }
       const hasEnabledStations = currentState.stations.some(s => s.enabled && s.scrapeUrl);
       if (hasEnabledStations) {
         scrapeAllStationsRef.current();
       }
     }, 10 * 60 * 1000);
 
-    // Initial scrape
-    if (enabledStations > 0) {
+    // Initial scrape only if running
+    if (state.isRunning && enabledStations > 0) {
       scrapeAllStationsRef.current();
     }
 
