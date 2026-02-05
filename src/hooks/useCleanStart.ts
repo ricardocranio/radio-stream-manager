@@ -3,7 +3,6 @@ import { useRadioStore } from '@/store/radioStore';
 import { useGradeLogStore } from '@/store/gradeLogStore';
 import { useRealtimeStatsStore } from '@/store/realtimeStatsStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
-import { supabase } from '@/integrations/supabase/client';
 import { invalidateMusicLibraryCache } from '@/hooks/useMusicLibraryStats';
 
 // Key for first-ever launch detection (persists across sessions)
@@ -46,33 +45,13 @@ export function useCleanStart() {
     hasRun.current = true;
     sessionStorage.setItem(CLEAN_START_KEY, 'true');
     
-    const performCleanStart = async () => {
-      console.log('[CLEAN START] 🧹 Performing clean start...');
+    const performCleanStart = () => {
+      console.log('[CLEAN START] 🧹 Performing clean start (local state only)...');
       
-      // Check if this is the first-ever launch
-      const isFirstLaunch = !localStorage.getItem(FIRST_LAUNCH_KEY);
-      
-      if (isFirstLaunch) {
-        console.log('[CLEAN START] 🆕 First launch detected - clearing Supabase data...');
-        
-        // Clear scraped_songs from Supabase on first launch
-        try {
-          const { error } = await supabase
-            .from('scraped_songs')
-            .delete()
-            .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
-          
-          if (error) {
-            console.error('[CLEAN START] Failed to clear Supabase:', error);
-          } else {
-            console.log('[CLEAN START] ✅ Supabase scraped_songs cleared');
-          }
-        } catch (err) {
-          console.error('[CLEAN START] Error clearing Supabase:', err);
-        }
-        
-        // Mark first launch as completed
+      // Mark first launch if not set (for future reference, but NO data deletion)
+      if (!localStorage.getItem(FIRST_LAUNCH_KEY)) {
         localStorage.setItem(FIRST_LAUNCH_KEY, new Date().toISOString());
+        console.log('[CLEAN START] 🆕 First launch marked');
       }
       
       // Clear all local state (every launch)
