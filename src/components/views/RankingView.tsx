@@ -504,7 +504,7 @@ export function RankingView() {
               <CardHeader className="border-b border-border">
                 <CardTitle className="flex items-center gap-2">
                   <Crown className="w-5 h-5 text-yellow-400" />
-                  TOP 10 - Músicas Mais Tocadas
+                  TOP 25 - Músicas Mais Tocadas
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -516,7 +516,7 @@ export function RankingView() {
                   </div>
                 ) : (
                   <div className="divide-y divide-border">
-                    {filteredRanking.slice(0, 10).map((song, index) => (
+                    {filteredRanking.slice(0, 25).map((song, index) => (
                       <div
                         key={`${song.title}-${index}`}
                         className={`p-4 flex items-center gap-4 hover:bg-secondary/30 transition-colors ${
