@@ -17,6 +17,7 @@ import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { radioScraperApi } from '@/lib/api/radioScraper';
 import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
+import { useBackgroundCacheCleanup } from '@/hooks/useBackgroundCacheCleanup';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -66,6 +67,10 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   // ============= GLOBAL GRADE BUILDER - RUNS FROM BOOT =============
   // This hook contains its own intervals and runs continuously in background
   const gradeBuilder = useAutoGradeBuilder();
+  
+  // ============= BACKGROUND CACHE CLEANUP =============
+  // Automatically clears library verification cache when app goes to background
+  useBackgroundCacheCleanup();
   
   // ============= REFS =============
   // Download
