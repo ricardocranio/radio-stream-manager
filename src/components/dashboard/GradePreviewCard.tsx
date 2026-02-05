@@ -51,9 +51,11 @@ export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
       if (stationSongs && stationSongs.length > 0) {
         const songIndex = index % stationSongs.length;
         const song = stationSongs[songIndex];
-        // Apply sanitization to remove special characters
-        const sanitizedTitle = sanitizeFilename(song.title).replace('.mp3', '').replace(' - ', '');
-        const sanitizedArtist = sanitizeFilename(song.artist).replace('.mp3', '');
+        // Apply sanitization to remove special characters and force uppercase
+        const sanitized = sanitizeFilename(`${song.artist} - ${song.title}.mp3`).replace(/\s+\./g, '.').toUpperCase();
+        const parts = sanitized.replace(/\.MP3$/i, '').split(' - ');
+        const sanitizedArtist = parts[0] || song.artist;
+        const sanitizedTitle = parts.slice(1).join(' - ') || song.title;
         songs.push({
           position: seq.position,
           title: sanitizedTitle || song.title,
