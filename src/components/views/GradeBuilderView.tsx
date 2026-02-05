@@ -91,9 +91,9 @@ export function GradeBuilderView() {
     const time = formatTime(hour, minute);
     const program = getProgramForHour(hour);
 
-    // Special format for Voz do Brasil (weekdays only): 21:00 (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASIL
+    // Special format for Voz do Brasil (weekdays only): 21:00 (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASI
     if (fixedType === 'vozbrasil') {
-      return `${time} (FIXO ${format.programPrefix}VOZ DO BRASIL) vht,VOZ_DO_BRASIL`;
+      return `${time} (FIXO ${format.programPrefix}VOZ DO BRASIL) vht,VOZ_DO_BRASI`;
     }
 
     if (isFixed) {
