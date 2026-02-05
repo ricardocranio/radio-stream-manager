@@ -629,43 +629,48 @@ export function CapturedSongsView() {
             <span className="hidden sm:inline">Sync Ranking</span>
           </Button>
           
-          {/* Download Mode Toggle */}
-          {isElectron && (
-            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-secondary/50 border border-border">
-              <Download className="w-3.5 h-3.5 text-muted-foreground" />
-              <Select value={autoDownloadMode} onValueChange={(v: 'manual' | 'auto') => setAutoDownloadMode(v)}>
-                <SelectTrigger className="h-6 w-[90px] text-xs border-0 bg-transparent p-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="manual">Manual</SelectItem>
-                  <SelectItem value="auto">Automático</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          
-          {isElectron && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleDownloadAll}
-              disabled={isDownloadingAll || filteredSongs.length === 0}
-              className="gap-1.5 bg-primary"
+          {/* Download Mode Toggle - Always visible, disabled in browser */}
+          <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-secondary/50 border border-border">
+            <Download className="w-3.5 h-3.5 text-muted-foreground" />
+            <Select 
+              value={autoDownloadMode} 
+              onValueChange={(v: 'manual' | 'auto') => setAutoDownloadMode(v)}
+              disabled={!isElectron}
             >
-              {isDownloadingAll ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span className="hidden sm:inline">{downloadProgress.current}/{downloadProgress.total}</span>
-                </>
-              ) : (
-                <>
-                  <PlayCircle className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Baixar Todas</span>
-                </>
-              )}
-            </Button>
-          )}
+              <SelectTrigger className="h-6 w-[90px] text-xs border-0 bg-transparent p-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manual">Manual</SelectItem>
+                <SelectItem value="auto">Automático</SelectItem>
+              </SelectContent>
+            </Select>
+            {!isElectron && (
+              <Badge variant="outline" className="text-[9px] px-1 py-0">Desktop</Badge>
+            )}
+          </div>
+          
+          {/* Baixar Todas - Always visible, disabled in browser */}
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleDownloadAll}
+            disabled={!isElectron || isDownloadingAll || filteredSongs.length === 0}
+            className="gap-1.5 bg-primary"
+            title={!isElectron ? 'Disponível apenas no app Desktop' : undefined}
+          >
+            {isDownloadingAll ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span className="hidden sm:inline">{downloadProgress.current}/{downloadProgress.total}</span>
+              </>
+            ) : (
+              <>
+                <PlayCircle className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Baixar Todas</span>
+              </>
+            )}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
             <Download className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Exportar</span>
@@ -912,29 +917,27 @@ export function CapturedSongsView() {
                           <Clock className="w-3 h-3 mr-1" />
                           {format(new Date(song.scraped_at), 'dd/MM HH:mm', { locale: ptBR })}
                         </span>
-                        {/* Download button */}
-                        {isElectron && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => handleDownloadSong(song)}
-                            disabled={downloadStatus[song.id] === 'downloading'}
-                            title="Baixar música"
-                          >
-                            {downloadStatus[song.id] === 'downloading' ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : downloadStatus[song.id] === 'success' ? (
-                              <CheckCircle className="w-3.5 h-3.5 text-success" />
-                            ) : downloadStatus[song.id] === 'exists' ? (
-                              <CheckCircle className="w-3.5 h-3.5 text-muted-foreground" />
-                            ) : downloadStatus[song.id] === 'error' ? (
-                              <XCircle className="w-3.5 h-3.5 text-destructive" />
-                            ) : (
-                              <Download className="w-3.5 h-3.5" />
-                            )}
-                          </Button>
-                        )}
+                        {/* Download button - Always visible, disabled in browser */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => handleDownloadSong(song)}
+                          disabled={!isElectron || downloadStatus[song.id] === 'downloading'}
+                          title={!isElectron ? 'Disponível no Desktop' : 'Baixar música'}
+                        >
+                          {downloadStatus[song.id] === 'downloading' ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : downloadStatus[song.id] === 'success' ? (
+                            <CheckCircle className="w-3.5 h-3.5 text-success" />
+                          ) : downloadStatus[song.id] === 'exists' ? (
+                            <CheckCircle className="w-3.5 h-3.5 text-muted-foreground" />
+                          ) : downloadStatus[song.id] === 'error' ? (
+                            <XCircle className="w-3.5 h-3.5 text-destructive" />
+                          ) : (
+                            <Download className="w-3.5 h-3.5" />
+                          )}
+                        </Button>
                       </div>
                     </div>
                   ))}
