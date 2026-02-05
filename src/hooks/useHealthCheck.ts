@@ -10,7 +10,13 @@ export interface HealthStatus {
   issues: string[];
 }
 
-const CHECK_INTERVAL = 60000; // 1 minute
+// Increased intervals and thresholds for stability
+const CHECK_INTERVAL = 120000; // 2 minutes (was 1 minute)
+const LATENCY_THRESHOLD = 8000; // 8 seconds (was 3 seconds)
+const REALTIME_TIMEOUT = 5000; // 5 seconds (was 3 seconds)
+
+// Track consecutive failures before showing degraded status
+const FAILURE_THRESHOLD = 2;
 
 export function useHealthCheck() {
   const [status, setStatus] = useState<HealthStatus>({
@@ -23,6 +29,10 @@ export function useHealthCheck() {
   });
   
   const realtimeCheckRef = useRef<boolean>(false);
+  const consecutiveFailuresRef = useRef<{ supabase: number; realtime: number }>({
+    supabase: 0,
+    realtime: 0,
+  });
 
   const checkSupabase = useCallback(async (): Promise<'ok' | 'degraded' | 'offline'> => {
     try {
@@ -35,22 +45,36 @@ export function useHealthCheck() {
       
       const latency = Date.now() - startTime;
       
-      // Consider degraded if latency > 3 seconds
-      if (latency > 3000) {
-        console.warn('[HEALTH] Supabase latency high:', latency, 'ms');
-        return 'degraded';
-      }
-      
       // PGRST116 is "no rows returned" - that's ok
       if (error && error.code !== 'PGRST116') {
-        console.error('[HEALTH] Supabase error:', error);
-        return 'degraded';
+        consecutiveFailuresRef.current.supabase++;
+        if (consecutiveFailuresRef.current.supabase >= FAILURE_THRESHOLD) {
+          console.warn('[HEALTH] Supabase error after', consecutiveFailuresRef.current.supabase, 'failures:', error);
+          return 'degraded';
+        }
+        return 'ok'; // Don't report degraded on first failure
       }
       
+      // Consider degraded only if latency > 8 seconds AND multiple occurrences
+      if (latency > LATENCY_THRESHOLD) {
+        consecutiveFailuresRef.current.supabase++;
+        if (consecutiveFailuresRef.current.supabase >= FAILURE_THRESHOLD) {
+          console.warn('[HEALTH] Supabase latency high after', consecutiveFailuresRef.current.supabase, 'checks:', latency, 'ms');
+          return 'degraded';
+        }
+        return 'ok'; // Don't report degraded on first high latency
+      }
+      
+      // Reset failure counter on success
+      consecutiveFailuresRef.current.supabase = 0;
       return 'ok';
     } catch (error) {
-      console.error('[HEALTH] Supabase offline:', error);
-      return 'offline';
+      consecutiveFailuresRef.current.supabase++;
+      if (consecutiveFailuresRef.current.supabase >= FAILURE_THRESHOLD) {
+        console.error('[HEALTH] Supabase offline after', consecutiveFailuresRef.current.supabase, 'failures');
+        return 'offline';
+      }
+      return 'ok'; // Don't report offline on first failure
     }
   }, []);
 
@@ -61,20 +85,31 @@ export function useHealthCheck() {
     
     if (status === 'connected') {
       realtimeCheckRef.current = true;
+      consecutiveFailuresRef.current.realtime = 0;
       return 'ok';
     } else if (status === 'error') {
-      return 'offline';
-    } else if (status === 'connecting') {
-      return 'degraded';
+      consecutiveFailuresRef.current.realtime++;
+      if (consecutiveFailuresRef.current.realtime >= FAILURE_THRESHOLD) {
+        return 'offline';
+      }
+      return 'ok';
+    } else if (status === 'connecting' || status === 'idle') {
+      // Connecting and idle are normal states, not degraded
+      return 'ok';
     }
     
-    // Fallback: quick ping test
+    // Fallback: quick ping test (only if no manager status)
     return new Promise((resolve) => {
       const testChannel = supabase.channel('health_check_' + Date.now());
       const timeout = setTimeout(() => {
         try { supabase.removeChannel(testChannel); } catch (e) {}
-        resolve('degraded');
-      }, 3000);
+        consecutiveFailuresRef.current.realtime++;
+        if (consecutiveFailuresRef.current.realtime >= FAILURE_THRESHOLD) {
+          resolve('degraded');
+        } else {
+          resolve('ok');
+        }
+      }, REALTIME_TIMEOUT);
 
       testChannel
         .subscribe((status) => {
@@ -83,11 +118,18 @@ export function useHealthCheck() {
           
           if (status === 'SUBSCRIBED') {
             realtimeCheckRef.current = true;
+            consecutiveFailuresRef.current.realtime = 0;
             resolve('ok');
           } else if (status === 'CHANNEL_ERROR') {
-            resolve('offline');
+            consecutiveFailuresRef.current.realtime++;
+            if (consecutiveFailuresRef.current.realtime >= FAILURE_THRESHOLD) {
+              resolve('offline');
+            } else {
+              resolve('ok');
+            }
           } else {
-            resolve('degraded');
+            // TIMED_OUT, CLOSED - consider ok unless repeated
+            resolve('ok');
           }
         });
     });
@@ -130,17 +172,19 @@ export function useHealthCheck() {
       issues,
     });
     
-    // Log health status
+    // Log health status (only if issues, reduce console spam)
     if (issues.length > 0) {
       console.warn('[HEALTH] Issues detected:', issues);
-    } else {
-      console.log('[HEALTH] All systems operational');
     }
   }, [checkSupabase, checkRealtime]);
 
-  // Initial check
+  // Initial check (delayed to let app stabilize)
   useEffect(() => {
-    runHealthCheck();
+    const initialDelay = setTimeout(() => {
+      runHealthCheck();
+    }, 10000); // Wait 10 seconds after mount
+    
+    return () => clearTimeout(initialDelay);
   }, [runHealthCheck]);
 
   // Periodic checks
@@ -153,8 +197,11 @@ export function useHealthCheck() {
   useEffect(() => {
     const handleOnline = () => {
       console.log('[HEALTH] Network online');
+      // Reset failure counters when coming back online
+      consecutiveFailuresRef.current = { supabase: 0, realtime: 0 };
       setStatus(prev => ({ ...prev, network: 'online' }));
-      runHealthCheck();
+      // Delay check to let connections stabilize
+      setTimeout(runHealthCheck, 3000);
     };
     
     const handleOffline = () => {
