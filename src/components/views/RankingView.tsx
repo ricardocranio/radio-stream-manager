@@ -242,7 +242,7 @@ export function RankingView() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ranking_top50_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `ranking_top25_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
 
@@ -258,7 +258,7 @@ export function RankingView() {
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Ranking TOP50</h2>
+          <h2 className="text-2xl font-bold text-foreground">Ranking TOP25</h2>
           <p className="text-muted-foreground">Curadoria através do monitoramento das rádios</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -287,9 +287,9 @@ export function RankingView() {
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle className="flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-amber-500" />
-                  Zerar Ranking TOP50?
+                  <AlertDialogTitle className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-500" />
+                    Zerar Ranking TOP25?
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   Esta ação irá resetar todas as contagens de reprodução. 
@@ -482,7 +482,7 @@ export function RankingView() {
                   {dynamicStyleDistribution[0]?.name || 'Sem dados'}
                 </p>
                 <p className="text-xs text-success">
-                  {dynamicStyleDistribution[0]?.value ? `${dynamicStyleDistribution[0].value}% do TOP50` : '-'}
+                  {dynamicStyleDistribution[0]?.value ? `${dynamicStyleDistribution[0].value}% do TOP25` : '-'}
                 </p>
               </div>
             </div>

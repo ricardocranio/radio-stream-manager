@@ -306,7 +306,7 @@ export function DashboardView() {
                 <p className="text-lg md:text-2xl font-bold text-foreground">{localStats.rankingTotal}</p>
                 <p className="text-[10px] md:text-xs text-purple-500 flex items-center gap-1">
                   <TrendingUp className="w-3 h-3" />
-                  TOP50
+                  TOP25
                 </p>
               </div>
               <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
@@ -595,7 +595,7 @@ export function DashboardView() {
                 <TrendingUp className="w-5 h-5 text-primary" />
               </div>
               <div className="min-w-0">
-                <p className="font-medium text-foreground">Ranking TOP50 Integrado</p>
+                <p className="font-medium text-foreground">Ranking TOP25 Integrado</p>
                 <p className="text-sm text-muted-foreground truncate">
                   Músicas capturadas são automaticamente adicionadas ao ranking
                 </p>
@@ -945,7 +945,7 @@ export function DashboardView() {
                     
                     <div className="space-y-2 p-3 rounded-lg bg-muted/50 text-sm">
                       <p>✓ Músicas capturadas (local)</p>
-                      <p>✓ Ranking TOP50</p>
+                      <p>✓ Ranking TOP25</p>
                       <p>✓ Músicas faltando</p>
                       <p>✓ Histórico de downloads</p>
                       <p>✓ Histórico de grades</p>

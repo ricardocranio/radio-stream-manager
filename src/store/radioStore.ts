@@ -535,8 +535,8 @@ export const useRadioStore = create<RadioState>()(
               lastPlayed: new Date(),
             };
             
-            // Limit ranking to 50 songs (was 100) for memory optimization
-            const updatedSongs = [...state.rankingSongs, newSong].slice(0, 50);
+            // Limit ranking to 25 songs for memory optimization
+            const updatedSongs = [...state.rankingSongs, newSong].slice(0, 25);
             
             // Sort only every 20 new songs for performance
             if (updatedSongs.length % 20 === 0) {
@@ -589,7 +589,7 @@ export const useRadioStore = create<RadioState>()(
           // Sort once after all updates
           updatedSongs.sort((a, b) => b.plays - a.plays);
           
-          return { rankingSongs: updatedSongs.slice(0, 100) };
+          return { rankingSongs: updatedSongs.slice(0, 25) };
         }),
       clearRanking: () => set({ rankingSongs: [] }),
 

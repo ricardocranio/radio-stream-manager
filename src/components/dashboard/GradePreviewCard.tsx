@@ -116,13 +116,13 @@ export function GradePreviewCard({ recentSongsByStation }: GradePreviewProps) {
               <TrendingUp className="w-5 h-5 text-purple-500" />
             </div>
             <div>
-              <p className="text-sm font-medium text-foreground">Músicas do TOP50 na Grade</p>
+              <p className="text-sm font-medium text-foreground">Músicas do TOP25 na Grade</p>
               <p className="text-xs text-muted-foreground">Última grade usou músicas do ranking</p>
             </div>
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-purple-500">{lastGradeTop50Count}</p>
-            <p className="text-xs text-muted-foreground">de {Math.min(rankingSongs.length, 50)}</p>
+            <p className="text-xs text-muted-foreground">de {Math.min(rankingSongs.length, 25)}</p>
           </div>
         </div>
 
