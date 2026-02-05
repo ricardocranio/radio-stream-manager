@@ -1,6 +1,7 @@
 /**
  * Centralized Realtime Channel Manager
  * Prevents duplicate subscriptions and stack overflow errors
+ * Includes auto-recovery with exponential backoff and periodic health checks
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -19,12 +20,39 @@ interface ManagedChannel {
   status: 'idle' | 'connecting' | 'connected' | 'error';
   retryCount: number;
   retryTimeoutId: NodeJS.Timeout | null;
+  table: string;
 }
 
 class RealtimeManager {
   private channels: Map<string, ManagedChannel> = new Map();
-  private readonly MAX_RETRIES = 3;
-  private readonly RETRY_DELAY = 2000;
+  private readonly MAX_RETRIES = 10; // Increased from 3
+  private readonly BASE_RETRY_DELAY = 2000;
+  private readonly MAX_RETRY_DELAY = 30000; // Cap at 30 seconds
+  private healthCheckIntervalId: NodeJS.Timeout | null = null;
+  private readonly HEALTH_CHECK_INTERVAL = 60000; // Check every 60 seconds
+
+  constructor() {
+    this.startHealthCheck();
+  }
+
+  /**
+   * Periodic health check - reconnects any errored or stale channels
+   */
+  private startHealthCheck() {
+    if (this.healthCheckIntervalId) return;
+
+    this.healthCheckIntervalId = setInterval(() => {
+      this.channels.forEach((managed, channelKey) => {
+        if (managed.subscribers.length === 0) return;
+
+        if (managed.status === 'error') {
+          console.log(`[REALTIME-MGR] Health check: reconnecting errored channel ${channelKey}`);
+          managed.retryCount = 0; // Reset retries on health check
+          this.connectChannel(channelKey, managed.table);
+        }
+      });
+    }, this.HEALTH_CHECK_INTERVAL);
+  }
 
   /**
    * Subscribe to a table's INSERT events
@@ -45,6 +73,7 @@ class RealtimeManager {
         status: 'idle',
         retryCount: 0,
         retryTimeoutId: null,
+        table,
       };
       this.channels.set(channelKey, managed);
     }
@@ -89,7 +118,7 @@ class RealtimeManager {
     }
 
     managed.status = 'connecting';
-    console.log(`[REALTIME-MGR] Connecting to ${channelKey}...`);
+    console.log(`[REALTIME-MGR] Connecting to ${channelKey}... (attempt ${managed.retryCount + 1})`);
 
     const channel = supabase
       .channel(channelKey)
@@ -114,25 +143,37 @@ class RealtimeManager {
         const current = this.channels.get(channelKey);
         if (!current) return;
 
-        console.log(`[REALTIME-MGR] ${channelKey} status: ${status}`);
-
         if (status === 'SUBSCRIBED') {
           current.status = 'connected';
           current.retryCount = 0;
-          console.log(`[REALTIME-MGR] ✓ ${channelKey} connected`);
+          console.log(`[REALTIME-MGR] ✓ ${channelKey} connected (${current.subscribers.length} subscribers)`);
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           current.status = 'error';
           
           if (current.retryCount < this.MAX_RETRIES) {
             current.retryCount++;
-            const delay = this.RETRY_DELAY * current.retryCount;
-            console.warn(`[REALTIME-MGR] ${channelKey} error, retry ${current.retryCount}/${this.MAX_RETRIES} in ${delay}ms`);
+            // Exponential backoff with cap
+            const delay = Math.min(
+              this.BASE_RETRY_DELAY * Math.pow(1.5, current.retryCount - 1),
+              this.MAX_RETRY_DELAY
+            );
+            console.warn(`[REALTIME-MGR] ${channelKey} error, retry ${current.retryCount}/${this.MAX_RETRIES} in ${Math.round(delay)}ms`);
             
             current.retryTimeoutId = setTimeout(() => {
               this.connectChannel(channelKey, table);
             }, delay);
           } else {
-            console.error(`[REALTIME-MGR] ${channelKey} max retries reached`);
+            console.error(`[REALTIME-MGR] ${channelKey} max retries reached, will retry on next health check`);
+            // Health check will eventually reconnect
+          }
+        } else if (status === 'CLOSED') {
+          // Channel was closed unexpectedly - reconnect if we still have subscribers
+          if (current.subscribers.length > 0 && current.status !== 'connecting') {
+            console.warn(`[REALTIME-MGR] ${channelKey} closed unexpectedly, reconnecting...`);
+            current.retryCount = 0;
+            setTimeout(() => {
+              this.connectChannel(channelKey, table);
+            }, this.BASE_RETRY_DELAY);
           }
         }
       });
@@ -181,15 +222,32 @@ class RealtimeManager {
     const managed = this.channels.get(channelKey);
     if (managed && managed.subscribers.length > 0) {
       managed.retryCount = 0;
-      this.connectChannel(channelKey, table);
+      this.connectChannel(channelKey, managed.table);
     }
+  }
+
+  /**
+   * Force reconnect all channels
+   */
+  reconnectAll() {
+    console.log('[REALTIME-MGR] Reconnecting all channels...');
+    this.channels.forEach((managed, channelKey) => {
+      if (managed.subscribers.length > 0) {
+        managed.retryCount = 0;
+        this.connectChannel(channelKey, managed.table);
+      }
+    });
   }
 
   /**
    * Cleanup all channels
    */
   cleanup() {
-    this.channels.forEach((managed, key) => {
+    if (this.healthCheckIntervalId) {
+      clearInterval(this.healthCheckIntervalId);
+      this.healthCheckIntervalId = null;
+    }
+    this.channels.forEach((managed) => {
       if (managed.retryTimeoutId) {
         clearTimeout(managed.retryTimeoutId);
       }

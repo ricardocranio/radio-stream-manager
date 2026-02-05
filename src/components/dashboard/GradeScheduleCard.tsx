@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore, BlockSong, FixedContent } from '@/store/radioStore';
 import { supabase } from '@/integrations/supabase/client';
+import { realtimeManager } from '@/lib/realtimeManager';
 import {
   Dialog,
   DialogContent,
@@ -92,26 +93,17 @@ export function GradeScheduleCard() {
 
     fetchCapturedSongs();
 
-    // Subscribe to realtime updates
-    const channel = supabase
-      .channel('grade-songs')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'scraped_songs',
-        },
-        (payload) => {
-          const newSong = payload.new as CapturedSong;
-          setCapturedSongs(prev => [newSong, ...prev].slice(0, 200));
-        }
-      )
-      .subscribe();
+    // Subscribe to realtime updates via centralized manager (prevents duplicate channels)
+    const unsubscribe = realtimeManager.subscribe(
+      'scraped_songs',
+      'grade_schedule_card',
+      (payload) => {
+        const newSong = payload.new as CapturedSong;
+        setCapturedSongs(prev => [newSong, ...prev].slice(0, 200));
+      }
+    );
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return unsubscribe;
   }, []);
 
   // Generate songs pool from captured songs
