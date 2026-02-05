@@ -104,6 +104,9 @@ export function CapturedSongsView() {
           dateThreshold = subDays(new Date(), 1);
       }
 
+      console.log('[CAPTURED-SONGS] Loading songs with threshold:', dateThreshold.toISOString());
+      console.log('[CAPTURED-SONGS] Selected station:', selectedStation);
+
       // Build query
       let query = supabase
         .from('scraped_songs')
@@ -116,31 +119,52 @@ export function CapturedSongsView() {
         query = query.eq('station_name', selectedStation);
       }
 
-      const { data, error } = await query;
+      const { data, error, status, statusText } = await query;
 
-      if (error) throw error;
+      console.log('[CAPTURED-SONGS] Query response:', { 
+        status, 
+        statusText, 
+        dataLength: data?.length || 0, 
+        error: error?.message 
+      });
+
+      if (error) {
+        console.error('[CAPTURED-SONGS] Query error:', error);
+        throw error;
+      }
 
       setSongs(data || []);
+      console.log('[CAPTURED-SONGS] Songs set:', data?.length || 0);
       
       // Get total count
-      const { count: totalCount } = await supabase
+      const { count: totalCount, error: countError } = await supabase
         .from('scraped_songs')
         .select('*', { count: 'exact', head: true });
       
+      if (countError) {
+        console.error('[CAPTURED-SONGS] Count error:', countError);
+      }
+      
       setTotalCount(totalCount || 0);
+      console.log('[CAPTURED-SONGS] Total count:', totalCount);
 
       // Get unique stations
-      const { data: stationsData } = await supabase
+      const { data: stationsData, error: stationsError } = await supabase
         .from('radio_stations')
         .select('name')
         .order('name');
       
+      if (stationsError) {
+        console.error('[CAPTURED-SONGS] Stations error:', stationsError);
+      }
+      
       if (stationsData) {
         setStations(stationsData.map(s => s.name));
+        console.log('[CAPTURED-SONGS] Stations loaded:', stationsData.length);
       }
 
     } catch (error) {
-      console.error('Error loading songs:', error);
+      console.error('[CAPTURED-SONGS] Error loading songs:', error);
     }
   }, [selectedStation, dateRange]);
 
