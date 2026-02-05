@@ -831,7 +831,7 @@ export function CapturedSongsView() {
           {/* Station Stats */}
           {stationStats.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border">
-              {stationStats.slice(0, 6).map(([station, count]) => (
+              {stationStats.map(([station, count]) => (
                 <Badge
                   key={station}
                   variant={selectedStation === station ? 'default' : 'outline'}
