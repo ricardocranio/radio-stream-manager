@@ -722,7 +722,75 @@ export function useAutoGradeBuilder() {
       }
     }
 
-    // Fixed content block (not TOP50 or vozbrasil) - Process placeholders and add _{DIA}
+    // MADRUGADA MISCELÂNEA (00:00-05:30) - Mix songs from ALL monitored stations
+    if (hour >= 0 && hour <= 5) {
+      const allPool: SongEntry[] = [];
+      for (const [, stationSongs] of Object.entries(songsByStation)) {
+        allPool.push(...stationSongs);
+      }
+      
+      // Shuffle the pool for true randomness
+      const shuffled = [...allPool].sort(() => Math.random() - 0.5);
+      
+      const mixSongs: string[] = [];
+      const mixUsedArtists = new Set<string>();
+      const mixUsedKeys = new Set<string>();
+      const TARGET_SONGS = 10;
+      
+      for (const candidate of shuffled) {
+        if (mixSongs.length >= TARGET_SONGS) break;
+        
+        const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+        const normalizedArtist = candidate.artist.toLowerCase().trim();
+        
+        // Skip if already used in this block or artist repeated
+        if (mixUsedKeys.has(key) || mixUsedArtists.has(normalizedArtist)) continue;
+        // Skip if recently used (global repetition check)
+        if (isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
+        
+        // Check if song exists in library
+        const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
+        if (libraryResult.exists) {
+          const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+          mixSongs.push(`"${correctFilename}"`);
+          mixUsedKeys.add(key);
+          mixUsedArtists.add(normalizedArtist);
+          markSongAsUsed(candidate.title, candidate.artist, timeStr);
+          
+          blockLogs.push({
+            blockTime: timeStr,
+            type: 'used',
+            title: candidate.title,
+            artist: candidate.artist,
+            station: candidate.station,
+            style: candidate.style,
+            reason: 'Miscelânea madrugada (todas as rádios)',
+          });
+        }
+      }
+      
+      // Fill remaining slots with coringa if needed
+      const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
+      while (mixSongs.length < TARGET_SONGS) {
+        mixSongs.push(coringaCode);
+        stats.missing++;
+        blockLogs.push({
+          blockTime: timeStr,
+          type: 'substituted',
+          title: coringaCode,
+          artist: 'CORINGA',
+          station: 'FALLBACK',
+          reason: 'Pool da madrugada esgotado',
+        });
+      }
+      
+      const programName = getProgramForHour(hour);
+      return {
+        line: sanitizeGradeLine(`${timeStr} (ID=${programName}) ${mixSongs.join(',vht,')}`),
+        logs: blockLogs,
+      };
+    }
+
     const fixedItem = fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil');
     let fixedContentFile: string | null = null;
     let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
