@@ -251,7 +251,7 @@ const defaultStations: RadioStation[] = [
 
 // V21 Program IDs - Atualizado com nova grade
 const defaultPrograms: ProgramSchedule[] = [
-  { timeRange: '1-5', programName: 'Nossa Madrugada' },
+  { timeRange: '0-5', programName: 'Nossa Madrugada' },
   { timeRange: '6-8', programName: 'Happy Hour' },
   { timeRange: '9-11', programName: 'Manhã de Hits' },
   { timeRange: '12-13', programName: 'Hora do Almoço' },
@@ -261,8 +261,7 @@ const defaultPrograms: ProgramSchedule[] = [
   { timeRange: '19-19', programName: 'TOP50' }, // TOP50 às 19:00 e 19:30
   { timeRange: '20-20', programName: 'FIXO' },
   { timeRange: '21-21', programName: 'VOZ_BRASIL' }, // A Voz do Brasil às 21:00
-  { timeRange: '22-23', programName: 'Romance' }, // Romance às 22:00-00:00
-  { timeRange: '0-0', programName: 'Romance' },
+  { timeRange: '22-23', programName: 'Romance' }, // Romance às 22:00-23:30
 ];
 
 // V21 Sequence - Based on pos_map: 1-3=bh, 4-6=band, 7-8=clube, 9-10=showfm
