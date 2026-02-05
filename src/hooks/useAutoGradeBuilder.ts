@@ -6,6 +6,23 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import type { WeekDay, ScheduledSequence, SequenceConfig } from '@/types/radio';
 
+/**
+ * Sanitize all quoted filenames in a grade line for radio automation compatibility.
+ * Removes accents, &→e, removes (), [], forces UPPERCASE, ensures single .MP3 extension.
+ */
+function sanitizeGradeLine(line: string): string {
+  return line.replace(/"([^"]+)"/g, (_match, filename: string) => {
+    let sanitized = sanitizeFilename(filename);
+    // Clean up space before extension (artifact from parentheses removal)
+    sanitized = sanitized.replace(/\s+\./g, '.');
+    // Remove any double extensions
+    sanitized = sanitized.replace(/\.mp3\.mp3/gi, '.mp3');
+    // Force UPPERCASE for radio automation
+    sanitized = sanitized.toUpperCase();
+    return `"${sanitized}"`;
+  });
+}
+
 interface SongEntry {
   title: string;
   artist: string;
@@ -610,7 +627,7 @@ export function useAutoGradeBuilder() {
       });
       // Format: 21:00 (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASIL
       return { 
-        line: `${timeStr} (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASIL`,
+        line: sanitizeGradeLine(`${timeStr} (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASIL`),
         logs: blockLogs,
       };
     }
@@ -649,7 +666,7 @@ export function useAutoGradeBuilder() {
         });
         
         return {
-          line: `${timeStr} (ID=MISTURADAO) "${misturadao01}",vht,"${posicao05}",vht,"${misturadao02}",vht,"${posicao02}"`,
+          line: sanitizeGradeLine(`${timeStr} (ID=MISTURADAO) "${misturadao01}",vht,"${posicao05}",vht,"${misturadao02}",vht,"${posicao02}"`),
           logs: blockLogs,
         };
       } else {
@@ -669,7 +686,7 @@ export function useAutoGradeBuilder() {
         });
         
         return {
-          line: `${timeStr} (ID=MISTURADAO) "${misturadao03}",vht,"${posicao08}",vht,"${misturadao04}",vht,"${posicao09}"`,
+          line: sanitizeGradeLine(`${timeStr} (ID=MISTURADAO) "${misturadao03}",vht,"${posicao08}",vht,"${misturadao04}",vht,"${posicao09}"`),
           logs: blockLogs,
         };
       }
@@ -697,7 +714,7 @@ export function useAutoGradeBuilder() {
         });
         // Songs are already real filenames like "Shallow - Lady Gaga.mp3"
         return { 
-          line: `${timeStr} (ID=TOP50) ${top50Songs.map(s => `"${s}"`).join(',vht,')}`,
+          line: sanitizeGradeLine(`${timeStr} (ID=TOP50) ${top50Songs.map(s => `"${s}"`).join(',vht,')}`),
           logs: blockLogs,
         };
       }
@@ -722,8 +739,8 @@ export function useAutoGradeBuilder() {
       );
       editionIndex++;
       
-      // Ensure it ends with .mp3
-      const finalFileName = processedFileName.endsWith('.mp3') 
+      // Ensure it ends with .mp3 (case-insensitive check since processFixedContentTemplate returns UPPERCASE)
+      const finalFileName = processedFileName.toLowerCase().endsWith('.mp3') 
         ? processedFileName 
         : `${processedFileName}.mp3`;
       
@@ -817,8 +834,8 @@ export function useAutoGradeBuilder() {
       );
       fixoIndexUsed++;
       
-      // Ensure .mp3 extension
-      const finalFileName = processedFileName.endsWith('.mp3') 
+      // Ensure .mp3 extension (case-insensitive check)
+      const finalFileName = processedFileName.toLowerCase().endsWith('.mp3') 
         ? processedFileName 
         : `${processedFileName}.mp3`;
       
@@ -895,8 +912,8 @@ export function useAutoGradeBuilder() {
             targetDay
           );
           
-          // Ensure .mp3 extension
-          const finalFileName = processedFileName.endsWith('.mp3') 
+          // Ensure .mp3 extension (case-insensitive check)
+          const finalFileName = processedFileName.toLowerCase().endsWith('.mp3') 
             ? processedFileName 
             : `${processedFileName}.mp3`;
           
@@ -1334,7 +1351,7 @@ export function useAutoGradeBuilder() {
     
     const lineContent = allContent.join(',vht,');
     return {
-      line: `${timeStr} (ID=${programName}) ${lineContent}`,
+      line: sanitizeGradeLine(`${timeStr} (ID=${programName}) ${lineContent}`),
       logs: blockLogs,
     };
   }, [
