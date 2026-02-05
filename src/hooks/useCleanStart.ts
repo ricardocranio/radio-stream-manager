@@ -31,7 +31,7 @@ export function useCleanStart() {
   } = useRadioStore();
   
   const { clearBlockLogs, clearSystemErrors } = useGradeLogStore();
-  const resetRealtimeStats = useRealtimeStatsStore(state => state.reset);
+  const resetRealtimeStats = useRealtimeStatsStore(state => state.resetCountsOnly);
   const resetDownloadQueue = useAutoDownloadStore(state => state.resetQueue);
 
   useEffect(() => {
@@ -63,7 +63,7 @@ export function useCleanStart() {
       clearBlockLogs();
       clearSystemErrors();
       
-      // Reset realtime stats (24h, 1h counts, etc.)
+      // Reset realtime stats counts only - preserves captured songs data
       resetRealtimeStats();
       
       // Reset download queue

@@ -37,6 +37,7 @@ interface RealtimeStatsActions {
   updateFromNewSong: (song: { title: string; artist: string; station_name: string; scraped_at: string }) => void;
   setHydrated: (hydrated: boolean) => void;
   reset: () => void;
+  resetCountsOnly: () => void; // Resets counts but preserves song data
 }
 
 const initialState: Omit<RealtimeStatsState, 'isHydrated'> = {
@@ -106,6 +107,24 @@ export const useRealtimeStatsStore = create<RealtimeStatsState & RealtimeStatsAc
       setHydrated: (hydrated) => set({ isHydrated: hydrated }),
 
       reset: () => set({ ...initialState, isHydrated: true }),
+
+      // Reset counts only - preserves lastSongsByStation and recentSongsByStation
+      resetCountsOnly: () => {
+        const state = get();
+        set({
+          totalSongs: 0,
+          songsLast24h: 0,
+          songsLastHour: 0,
+          activeStations: state.activeStations,
+          allStations: state.allStations,
+          lastSong: state.lastSong,
+          lastSongsByStation: state.lastSongsByStation,
+          recentSongsByStation: state.recentSongsByStation,
+          stationCounts: {},
+          lastUpdated: new Date().toISOString(),
+          isHydrated: true,
+        });
+      },
     }),
     {
       name: 'realtime-stats-storage',
