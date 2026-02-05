@@ -196,21 +196,21 @@ export function CapturedSongsView() {
     
     setIsSyncing(true);
     try {
+      // Build style map from radio_stations table (real styles from DB)
+      const { data: stationsData } = await supabase
+        .from('radio_stations')
+        .select('name, styles');
+      
+      const stationStyleMap = new Map<string, string>();
+      if (stationsData) {
+        for (const s of stationsData) {
+          stationStyleMap.set(s.name.toLowerCase().trim(), s.styles?.[0] || 'POP/VARIADO');
+        }
+      }
+
       let synced = 0;
       for (const song of songs) {
-        // Determine style based on station
-        let style = 'POP/VARIADO';
-        const stationLower = song.station_name.toLowerCase();
-        if (stationLower.includes('bh') || stationLower.includes('sertanejo') || stationLower.includes('clube')) {
-          style = 'SERTANEJO';
-        } else if (stationLower.includes('band') || stationLower.includes('pagode')) {
-          style = 'PAGODE';
-        } else if (stationLower.includes('globo')) {
-          style = 'POP/VARIADO';
-        } else if (stationLower.includes('dance') || stationLower.includes('mix')) {
-          style = 'DANCE';
-        }
-
+        const style = stationStyleMap.get(song.station_name.toLowerCase().trim()) || 'POP/VARIADO';
         addOrUpdateRankingSong(song.title, song.artist, style);
         synced++;
       }
