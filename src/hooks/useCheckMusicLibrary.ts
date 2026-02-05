@@ -1,6 +1,11 @@
 import { useCallback } from 'react';
 import { useRadioStore } from '@/store/radioStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
+import { 
+  getCachedVerification, 
+  setCachedVerification, 
+  markSongAsDownloaded 
+} from '@/lib/libraryVerificationCache';
 
 interface CheckResult {
   exists: boolean;
@@ -8,6 +13,7 @@ interface CheckResult {
   filename?: string;
   baseName?: string;
   similarity?: number;
+  cached?: boolean;
 }
 
 /**
@@ -190,6 +196,17 @@ export async function checkSongInLibrary(
   musicFolders: string[],
   threshold: number = 0.75
 ): Promise<CheckResult> {
+  // Check cache first
+  const cached = getCachedVerification(artist, title);
+  if (cached !== null) {
+    return { 
+      exists: cached.exists, 
+      filename: cached.matchedFile, 
+      similarity: cached.similarity,
+      cached: true,
+    };
+  }
+
   // Normalize to match base versions
   const normalizedArtist = normalizeArtist(artist);
   const normalizedTitle = normalizeTitle(title);
@@ -218,6 +235,13 @@ export async function checkSongInLibrary(
           result = originalResult;
         }
       }
+      
+      // Cache the result
+      setCachedVerification(artist, title, {
+        exists: result.exists,
+        matchedFile: result.filename,
+        similarity: result.similarity,
+      });
       
       // Only log misses to reduce console spam - matches are silent
       if (!result.exists && result.similarity && result.similarity > 0.5) {
@@ -252,6 +276,13 @@ export async function checkSongInLibrary(
         });
       }
       
+      // Cache the result
+      setCachedVerification(artist, title, {
+        exists: result.exists,
+        matchedFile: result.filename,
+        similarity: result.similarity,
+      });
+      
       return result;
     } catch (error) {
       console.error('Error checking song:', error);
@@ -259,6 +290,9 @@ export async function checkSongInLibrary(
     }
   }
 
-  // Web mode: always returns false
+  // Web mode: always returns false (don't cache - no library access)
   return { exists: false };
 }
+
+// Re-export cache functions for external use
+export { markSongAsDownloaded, getCachedVerification } from '@/lib/libraryVerificationCache';
