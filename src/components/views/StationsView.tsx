@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Radio, Plus, Trash2, ExternalLink, Save, X, RefreshCw, Loader2, Download, Copy, CheckCircle2, AlertCircle, Power, Settings, CloudUpload, Clock } from 'lucide-react';
+import { Radio, Plus, Trash2, ExternalLink, Save, X, RefreshCw, Loader2, Download, Copy, CheckCircle2, AlertCircle, Power, Settings, CloudUpload, Clock, Zap } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -70,6 +70,9 @@ const WEEK_DAYS: { value: WeekDay; label: string }[] = [
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = [0, 15, 30, 45];
+
+// Check if running in Electron
+const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
 export function StationsView() {
   const { stations, updateStation, setStations, addCapturedSong, addOrUpdateRankingSong } = useRadioStore();
@@ -379,15 +382,15 @@ export function StationsView() {
       {/* Status Card */}
       <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
         <CardContent className="py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
                 <Radio className="w-5 h-5 text-primary" />
                 <span className="text-sm font-medium">
                   {stations.filter(s => s.enabled).length} emissoras ativas
                 </span>
               </div>
-              <div className="h-4 w-px bg-border" />
+              <div className="h-4 w-px bg-border hidden sm:block" />
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-green-500" />
                 <span className="text-sm text-muted-foreground">
@@ -396,39 +399,64 @@ export function StationsView() {
               </div>
               {lastCapture && (
                 <>
-                  <div className="h-4 w-px bg-border" />
+                  <div className="h-4 w-px bg-border hidden sm:block" />
                   <span className="text-xs text-muted-foreground">
                     Última: {lastCapture}
                   </span>
                 </>
               )}
             </div>
-            <Button 
-              variant="secondary" 
-              size="sm" 
-              onClick={handleDownloadScript}
-              className="gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Baixar Script Python
-            </Button>
+            {/* Show cloud scraping badge for Desktop, Python script for web */}
+            {isElectron ? (
+              <Badge className="bg-green-500/20 text-green-600 border-green-500/30 gap-1">
+                <Zap className="w-3 h-3" />
+                Cloud Scraping Ativo
+              </Badge>
+            ) : (
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={handleDownloadScript}
+                className="gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Baixar Script Python
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Instructions */}
+      {/* Instructions - Different for Desktop vs Web */}
       <Card className="border-dashed border-2 border-muted-foreground/20">
         <CardContent className="py-4">
           <div className="flex items-start gap-3">
             <Settings className="w-5 h-5 text-muted-foreground mt-0.5" />
             <div className="space-y-1">
-              <p className="text-sm font-medium">Como usar o monitoramento automático:</p>
-              <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                <li>Configure as emissoras abaixo com as URLs do mytuner-radio.com</li>
-                <li>Baixe a configuração (JSON) e o script Python</li>
-                <li>Execute o script no seu computador: <code className="bg-muted px-1 rounded">python radio_monitor_supabase.py</code></li>
-                <li>O script captura músicas automaticamente a cada 5 minutos</li>
-              </ol>
+              {isElectron ? (
+                <>
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-green-500" />
+                    Monitoramento automático via Cloud
+                  </p>
+                  <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                    <li>Configure as emissoras abaixo com as URLs do mytuner-radio.com</li>
+                    <li>Ative as emissoras que deseja monitorar</li>
+                    <li>O sistema captura músicas automaticamente a cada 5 minutos via Edge Functions</li>
+                    <li>As músicas aparecem em "Músicas Capturadas" e no Ranking</li>
+                  </ol>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium">Como usar o monitoramento automático:</p>
+                  <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                    <li>Configure as emissoras abaixo com as URLs do mytuner-radio.com</li>
+                    <li>Baixe a configuração (JSON) e o script Python</li>
+                    <li>Execute o script no seu computador: <code className="bg-muted px-1 rounded">python radio_monitor_supabase.py</code></li>
+                    <li>O script captura músicas automaticamente a cada 5 minutos</li>
+                  </ol>
+                </>
+              )}
             </div>
           </div>
         </CardContent>
