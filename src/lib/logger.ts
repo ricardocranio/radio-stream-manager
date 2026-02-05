@@ -10,9 +10,9 @@ const isDebugMode = (): boolean => {
   return localStorage.getItem('pgm-debug') === 'true';
 };
 
-// Throttle repeated messages
+// Throttle repeated messages (optimized for CPU)
 const messageThrottle = new Map<string, number>();
-const THROTTLE_INTERVAL = 60000; // 1 minute between identical messages
+const THROTTLE_INTERVAL = 600000; // 10 minutes between identical messages (~90% log reduction)
 
 const shouldLog = (key: string): boolean => {
   const now = Date.now();
