@@ -244,6 +244,7 @@ interface ElectronAPI {
   // Voz do Brasil download
   downloadVozBrasil: (params: VozDownloadParams) => Promise<VozDownloadResult>;
   cleanupVozBrasil: (params: VozCleanupParams) => Promise<VozCleanupResult>;
+  scrapeVozDownloadUrl: () => Promise<{ success: boolean; url: string | null; error?: string }>;
   onVozDownloadProgress: (callback: (progress: VozDownloadProgress) => void) => void;
   
   // Grade file operations

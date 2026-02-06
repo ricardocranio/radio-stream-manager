@@ -1954,6 +1954,19 @@ function downloadFile(url, outputFolder, filename, onProgress, deleteExisting = 
       fileStream.on('finish', () => {
         fileStream.close();
         console.log(`[VOZ] Download complete: ${filePath} (${downloadedSize} bytes)`);
+        
+        // Validate minimum file size for Voz do Brasil (~45MB expected)
+        const MIN_VOZ_SIZE = 40 * 1024 * 1024; // 40MB
+        if (filename.startsWith('VozDoBrasil') && downloadedSize < MIN_VOZ_SIZE) {
+          console.log(`[VOZ] ⚠️ Arquivo muito pequeno (${(downloadedSize / 1024 / 1024).toFixed(1)}MB < 40MB) - não é válido`);
+          try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
+          resolve({
+            success: false,
+            error: `Arquivo inválido: ${(downloadedSize / 1024 / 1024).toFixed(1)}MB (mínimo 40MB)`,
+          });
+          return;
+        }
+        
         resolve({
           success: true,
           filePath,
@@ -1977,6 +1990,72 @@ function downloadFile(url, outputFolder, filename, onProgress, deleteExisting = 
     });
   });
 }
+
+// Scrape EBC download page to find the correct Voz do Brasil download URL
+function scrapeVozDownloadUrl() {
+  return new Promise((resolve) => {
+    const pageUrl = 'https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download';
+    console.log('[VOZ] 🔍 Scraping EBC download page for latest link...');
+    
+    const options = {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html',
+      },
+      timeout: 15000,
+    };
+    
+    https.get(pageUrl, options, (response) => {
+      if (response.statusCode !== 200) {
+        console.log(`[VOZ] 🔍 Scrape page returned HTTP ${response.statusCode}`);
+        resolve(null);
+        return;
+      }
+      
+      let html = '';
+      response.on('data', (chunk) => { html += chunk; });
+      response.on('end', () => {
+        try {
+          // Look for download links - pattern: /programas/a-voz-do-brasil-download/DD-MM-YYYY[-N]/@@download/file
+          const matches = [];
+          const regex = /href="((?:https?:\/\/radiogov\.ebc\.com\.br)?\/programas\/a-voz-do-brasil-download\/[\d]+-[\d]+-[\d]+(?:-\d+)?\/@@download\/file)"/gi;
+          let match;
+          while ((match = regex.exec(html)) !== null) {
+            const url = match[1].startsWith('http') ? match[1] : `https://radiogov.ebc.com.br${match[1]}`;
+            matches.push(url);
+          }
+          
+          if (matches.length > 0) {
+            console.log(`[VOZ] 🔍 Found ${matches.length} download link(s). Using: ${matches[0]}`);
+            resolve(matches[0]);
+          } else {
+            console.log('[VOZ] 🔍 No download links found on page');
+            resolve(null);
+          }
+        } catch (e) {
+          console.log('[VOZ] 🔍 Parse error:', e.message);
+          resolve(null);
+        }
+      });
+    }).on('error', (err) => {
+      console.log('[VOZ] 🔍 Scrape error:', err.message);
+      resolve(null);
+    }).on('timeout', () => {
+      console.log('[VOZ] 🔍 Scrape timeout');
+      resolve(null);
+    });
+  });
+}
+
+// IPC handler for scraping Voz do Brasil download URL
+ipcMain.handle('scrape-voz-download-url', async () => {
+  try {
+    const url = await scrapeVozDownloadUrl();
+    return { success: true, url };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
 
 // IPC handler for Voz do Brasil download
 ipcMain.handle('download-voz-brasil', async (event, params) => {
