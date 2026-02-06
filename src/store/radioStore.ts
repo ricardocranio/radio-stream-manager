@@ -265,18 +265,18 @@ const defaultPrograms: ProgramSchedule[] = [
   { timeRange: '22-23', programName: 'Romance' }, // Romance às 22:00-23:30
 ];
 
-// V21 Sequence - Based on pos_map: 1-3=bh, 4-6=band, 7-8=clube, 9-10=showfm
+// V21 Sequence - Based on pos_map: 1-3=bh, 4-5=globo, 6-8=band, 9-10=clube
 const defaultSequence: SequenceConfig[] = [
   { position: 1, radioSource: 'bh' },
   { position: 2, radioSource: 'bh' },
   { position: 3, radioSource: 'bh' },
-  { position: 4, radioSource: 'band' },
-  { position: 5, radioSource: 'band' },
+  { position: 4, radioSource: 'globo' },
+  { position: 5, radioSource: 'globo' },
   { position: 6, radioSource: 'band' },
-  { position: 7, radioSource: 'clube' },
-  { position: 8, radioSource: 'clube' },
-  { position: 9, radioSource: 'showfm' },
-  { position: 10, radioSource: 'showfm' },
+  { position: 7, radioSource: 'band' },
+  { position: 8, radioSource: 'band' },
+  { position: 9, radioSource: 'clube' },
+  { position: 10, radioSource: 'clube' },
 ];
 
 // V21 System Config
