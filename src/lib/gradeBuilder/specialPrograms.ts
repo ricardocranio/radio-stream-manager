@@ -33,31 +33,75 @@ export function generateVozDoBrasil(timeStr: string): BlockResult {
 
 /**
  * Generate Misturadão block (20:00 or 20:30 weekdays).
+ * Uses real ranking songs with library verification.
  */
-export function generateMisturadao(
+export async function generateMisturadao(
   hour: number,
   minute: number,
   ctx: GradeContext,
   targetDay?: WeekDay
-): BlockResult {
+): Promise<BlockResult> {
   const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
   const dayName = ctx.getFullDayName(targetDay);
   const sortedRanking = [...ctx.rankingSongs].sort((a, b) => b.plays - a.plays);
   const logs: BlockLogItem[] = [];
+  const usedPositions = new Set<number>();
 
-  const getRankingFilename = (position: number): string => {
-    if (position <= sortedRanking.length && position > 0) {
-      const song = sortedRanking[position - 1];
-      return sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
+  /**
+   * Get the real filename from ranking at preferred position.
+   * Falls back to any available ranking song, then coringa.
+   */
+  const getRankingFilename = async (preferredPosition: number): Promise<string> => {
+    // Try preferred position first, then nearby positions
+    const positionsToTry: number[] = [preferredPosition];
+    for (let offset = 1; offset <= sortedRanking.length; offset++) {
+      if (preferredPosition + offset <= sortedRanking.length) positionsToTry.push(preferredPosition + offset);
+      if (preferredPosition - offset > 0) positionsToTry.push(preferredPosition - offset);
     }
-    return `posicao${position.toString().padStart(2, '0')}.mp3`;
+
+    for (const pos of positionsToTry) {
+      if (pos < 1 || pos > sortedRanking.length || usedPositions.has(pos)) continue;
+      
+      const song = sortedRanking[pos - 1];
+      if (ctx.isRecentlyUsed(song.title, song.artist, timeStr)) continue;
+
+      const libraryResult = await ctx.findSongInLibrary(song.artist, song.title);
+      if (libraryResult.exists) {
+        usedPositions.add(pos);
+        ctx.markSongAsUsed(song.title, song.artist, timeStr);
+        const realFilename = libraryResult.filename || sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
+        
+        logs.push({
+          blockTime: timeStr,
+          type: 'used',
+          title: song.title,
+          artist: song.artist,
+          station: 'RANKING',
+          reason: `Ranking posição ${pos}${pos !== preferredPosition ? ` (fallback da posição ${preferredPosition})` : ''}`,
+        });
+        
+        return realFilename;
+      }
+    }
+
+    // All ranking songs exhausted or missing from library → coringa
+    console.warn(`[MISTURADAO] ⚠️ Nenhuma música do ranking disponível para posição ${preferredPosition}, usando coringa`);
+    logs.push({
+      blockTime: timeStr,
+      type: 'substituted',
+      title: ctx.coringaCode,
+      artist: 'CORINGA',
+      station: 'RANKING',
+      reason: `Ranking vazio ou sem música na biblioteca para posição ${preferredPosition}`,
+    });
+    return ctx.coringaCode;
   };
 
   if (minute === 0) {
     const misturadao01 = `MISTURADAO_BLOCO01_${dayName}.mp3`;
-    const posicao05 = getRankingFilename(5);
     const misturadao02 = `MISTURADAO_BLOCO02_${dayName}.mp3`;
-    const posicao02 = getRankingFilename(2);
+    const posicao05 = await getRankingFilename(5);
+    const posicao02 = await getRankingFilename(2);
     
     logs.push({
       blockTime: timeStr,
@@ -65,7 +109,7 @@ export function generateMisturadao(
       title: 'MISTURADÃO Bloco 20:00',
       artist: `${misturadao01}, ${misturadao02}`,
       station: 'FIXO',
-      reason: 'Formato especial com ranking posições 2 e 5',
+      reason: `Formato especial com ranking (posições usadas: ${[...usedPositions].join(', ') || 'nenhuma'})`,
     });
     
     return {
@@ -74,9 +118,9 @@ export function generateMisturadao(
     };
   } else {
     const misturadao03 = `MISTURADAO_BLOCO03_${dayName}.mp3`;
-    const posicao08 = getRankingFilename(8);
     const misturadao04 = `MISTURADAO_BLOCO04_${dayName}.mp3`;
-    const posicao09 = getRankingFilename(9);
+    const posicao08 = await getRankingFilename(8);
+    const posicao09 = await getRankingFilename(9);
     
     logs.push({
       blockTime: timeStr,
@@ -84,7 +128,7 @@ export function generateMisturadao(
       title: 'MISTURADÃO Bloco 20:30',
       artist: `${misturadao03}, ${misturadao04}`,
       station: 'FIXO',
-      reason: 'Formato especial com ranking posições 8 e 9',
+      reason: `Formato especial com ranking (posições usadas: ${[...usedPositions].join(', ') || 'nenhuma'})`,
     });
     
     return {
