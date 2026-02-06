@@ -168,10 +168,12 @@ export function VozBrasilView() {
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const year = now.getFullYear();
     
-    // Multiple EBC URL formats as fallback (with -1 suffix first, as EBC sometimes uses it)
+    // Multiple EBC URL formats as fallback
+    const shortYear = year.toString().slice(-2);
     return [
       `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}-1/@@download/file`,
       `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
+      `https://audios.ebc.com.br/radiogov/${year}/${month}/${day}-${month}-${shortYear}-a-voz-do-brasil.mp3`,
       `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/voz_${day}${month}${year}.mp3`,
       `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/vozbrasil_${day}${month}${year}.mp3`,
       `https://conteudo.ebcservicos.com.br/25-streaming-ebc/a-voz-do-brasil/VozDoBrasil_${day}-${month}-${year}.mp3`,
