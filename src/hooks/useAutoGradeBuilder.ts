@@ -79,6 +79,8 @@ export function useAutoGradeBuilder() {
   const buildIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const usedSongsRef = useRef<UsedSong[]>([]);
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
+  /** Tracks which block time keys (e.g. "18:00") have already been assembled and locked */
+  const builtBlocksRef = useRef<Set<string>>(new Set());
 
   // ==================== Utility Helpers ====================
 
@@ -169,6 +171,7 @@ export function useAutoGradeBuilder() {
   const clearUsedSongs = useCallback(() => {
     usedSongsRef.current = [];
     carryOverSongsRef.current = [];
+    builtBlocksRef.current.clear();
   }, []);
 
   const addCarryOverSong = useCallback((song: Omit<CarryOverSong, 'addedAt'>) => {
@@ -644,7 +647,6 @@ export function useAutoGradeBuilder() {
       console.log('[AUTO-GRADE] Not in Electron mode, skipping');
       return;
     }
-    setState(prev => ({ ...prev, isBuilding: true, error: null }));
 
     try {
       const blocks = getBlockTimes();
@@ -653,28 +655,18 @@ export function useAutoGradeBuilder() {
       const dayCode = getDayCode();
       const filename = `${dayCode}.txt`;
 
-      // Fetch songs for both blocks
-      const [songsCurrent, songsNext] = await Promise.all([
-        fetchSongsForBlock(blocks.current.hour, blocks.current.minute),
-        fetchSongsForBlock(blocks.next.hour, blocks.next.minute),
-      ]);
+      // Check which blocks are already locked (already built)
+      const currentLocked = builtBlocksRef.current.has(currentTimeKey);
+      const nextLocked = builtBlocksRef.current.has(nextTimeKey);
 
-      // If windows empty, get all recent
-      let currentPool = songsCurrent;
-      let nextPool = songsNext;
-      const allSongs = await fetchAllRecentSongs();
-      if (Object.keys(currentPool).length === 0) currentPool = allSongs;
-      if (Object.keys(nextPool).length === 0) nextPool = allSongs;
+      if (currentLocked && nextLocked) {
+        console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já montados, pulando`);
+        return;
+      }
 
-      const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
-      const [currentResult, nextResult] = await Promise.all([
-        generateBlockLine(blocks.current.hour, blocks.current.minute, currentPool, stats),
-        generateBlockLine(blocks.next.hour, blocks.next.minute, nextPool, stats),
-      ]);
+      setState(prev => ({ ...prev, isBuilding: true, error: null }));
 
-      addBlockLogs([...currentResult.logs, ...nextResult.logs]);
-
-      // Read existing file and merge
+      // Read existing file first
       let existingContent = '';
       try {
         if (window.electronAPI?.readGradeFile) {
@@ -693,8 +685,41 @@ export function useAutoGradeBuilder() {
         }
       }
 
-      lineMap.set(currentTimeKey, currentResult.line);
-      lineMap.set(nextTimeKey, nextResult.line);
+      const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
+      const allLogs: BlockLogItem[] = [];
+
+      // Only generate blocks that are NOT locked
+      if (!currentLocked) {
+        const songsCurrent = await fetchSongsForBlock(blocks.current.hour, blocks.current.minute);
+        let currentPool = songsCurrent;
+        if (Object.keys(currentPool).length === 0) {
+          currentPool = await fetchAllRecentSongs();
+        }
+        const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, currentPool, stats);
+        lineMap.set(currentTimeKey, currentResult.line);
+        allLogs.push(...currentResult.logs);
+        builtBlocksRef.current.add(currentTimeKey);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} montado e travado`);
+      } else {
+        console.log(`[AUTO-GRADE] ⏭️ Bloco ${currentTimeKey} já travado, mantendo`);
+      }
+
+      if (!nextLocked) {
+        const songsNext = await fetchSongsForBlock(blocks.next.hour, blocks.next.minute);
+        let nextPool = songsNext;
+        if (Object.keys(nextPool).length === 0) {
+          nextPool = await fetchAllRecentSongs();
+        }
+        const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, nextPool, stats);
+        lineMap.set(nextTimeKey, nextResult.line);
+        allLogs.push(...nextResult.logs);
+        builtBlocksRef.current.add(nextTimeKey);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} montado e travado`);
+      } else {
+        console.log(`[AUTO-GRADE] ⏭️ Bloco ${nextTimeKey} já travado, mantendo`);
+      }
+
+      if (allLogs.length > 0) addBlockLogs(allLogs);
 
       const sortedContent = Array.from(lineMap.keys()).sort().map(t => lineMap.get(t)).join('\n');
       await renameFilesInGradeContent(sortedContent);
@@ -711,10 +736,12 @@ export function useAutoGradeBuilder() {
         setState(prev => ({
           ...prev, isBuilding: false, lastBuildTime: new Date(),
           currentBlock: currentTimeKey, nextBlock: nextTimeKey,
-          lastSavedFile: filename, blocksGenerated: prev.blocksGenerated + 2,
+          lastSavedFile: filename, blocksGenerated: prev.blocksGenerated + (currentLocked ? 0 : 1) + (nextLocked ? 0 : 1),
           skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
         }));
-        toast({ title: '✅ Grade Atualizada', description: `Blocos ${currentTimeKey} e ${nextTimeKey} atualizados em ${filename}` });
+        if (!currentLocked || !nextLocked) {
+          toast({ title: '✅ Grade Atualizada', description: `Blocos ${currentTimeKey} e ${nextTimeKey} atualizados em ${filename}` });
+        }
       } else {
         throw new Error(result.error || 'Erro ao salvar');
       }
@@ -759,7 +786,6 @@ export function useAutoGradeBuilder() {
     if (!isElectronEnv || !state.isAutoEnabled) return;
     console.log(`[AUTO-GRADE] ⏰ Modo automático ATIVO - atualiza ${state.minutesBeforeBlock} min antes de cada bloco`);
     let lastBuiltBlock = '';
-    let lastPeriodicSave = Date.now();
 
     buildIntervalRef.current = setInterval(() => {
       const { isRunning } = useRadioStore.getState();
@@ -773,18 +799,21 @@ export function useAutoGradeBuilder() {
       else { targetBlockHour = (currentHour + 1) % 24; targetBlockMinute = 0; }
       const minutesUntilBlock = currentMinute < 30 ? 30 - currentMinute : 60 - currentMinute;
       const blockKey = `${targetBlockHour.toString().padStart(2, '0')}:${targetBlockMinute.toString().padStart(2, '0')}`;
+
+      // Clear locks when we transition to a new block cycle
+      if (lastBuiltBlock && lastBuiltBlock !== blockKey) {
+        console.log(`[AUTO-GRADE] 🔓 Novo ciclo de blocos (${lastBuiltBlock} → ${blockKey}), limpando locks antigos`);
+        builtBlocksRef.current.clear();
+      }
+
       const shouldBuild = minutesUntilBlock <= state.minutesBeforeBlock && lastBuiltBlock !== blockKey;
 
       if (shouldBuild) {
         console.log(`[AUTO-GRADE] 🔄 Atualizando grade para bloco ${blockKey}`);
         lastBuiltBlock = blockKey;
         buildGrade();
-        lastPeriodicSave = Date.now();
-      } else if (Date.now() - lastPeriodicSave >= 10 * 60 * 1000) {
-        console.log(`[AUTO-GRADE] 📁 Salvamento periódico (10 min)`);
-        buildGrade();
-        lastPeriodicSave = Date.now();
       }
+      // Removed: periodic 10-min save that was causing unwanted block regeneration
     }, 60 * 1000);
 
     const { isRunning } = useRadioStore.getState();
