@@ -11,11 +11,15 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 5000;
 
+/** Stations that must have ALL songs downloaded to build local folder cache */
+const PRIORITY_DOWNLOAD_STATIONS = ['Mix FM', 'Positiva FM', 'Metropolitana FM'];
+const PRIORITY_STATION_BOOST = 100; // Priority boost for these stations (higher than any ranking position)
+
 // Queue for auto-download with priority
 interface DownloadQueueItem {
   song: MissingSong;
   retryCount: number;
-  priority: number; // Higher = more important (ranking position)
+  priority: number; // Higher = more important (ranking position + station boost)
 }
 
 export function useAutoDownload() {
@@ -203,12 +207,21 @@ export function useAutoDownload() {
         !processedSongsRef.current.has(song.id)
     );
 
-    // Add new songs to queue with ranking priority
+    // Add new songs to queue with ranking + station priority
     for (const song of newSongs) {
       const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
-      const priority = rankingMap.get(key) || 0; // 0 for non-ranking songs
+      let priority = rankingMap.get(key) || 0; // 0 for non-ranking songs
       
-      if (priority > 0) {
+      // Boost priority for cache-building stations (Mix FM, Positiva FM, Metropolitana FM)
+      const isPriorityStation = PRIORITY_DOWNLOAD_STATIONS.some(
+        ps => song.station?.toLowerCase().includes(ps.toLowerCase()) ||
+              ps.toLowerCase().includes(song.station?.toLowerCase() || '')
+      );
+      
+      if (isPriorityStation) {
+        priority += PRIORITY_STATION_BOOST;
+        console.log(`[AUTO-DL] 📂 Prioridade ALTA (cache ${song.station}): ${song.artist} - ${song.title}`);
+      } else if (priority > 0) {
         console.log(`[AUTO-DL] 🎯 Ranking song #${51 - priority}: ${song.artist} - ${song.title}`);
       } else {
         console.log(`[AUTO-DL] New missing song: ${song.artist} - ${song.title}`);
