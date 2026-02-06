@@ -19,7 +19,7 @@ import type { WeekDay } from '@/types/radio';
  */
 export function generateVozDoBrasil(timeStr: string): BlockResult {
   return {
-    line: '21:00 (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASI',
+    line: '21:00 (FIXO ID=VOZ DO BRASIL) vht,vozbrasil',
     logs: [{
       blockTime: timeStr,
       type: 'fixed',
