@@ -214,14 +214,31 @@ export function VozBrasilView() {
       progress: 0,
     });
 
-    const urls = getDownloadUrls();
+    const fallbackUrls = getDownloadUrls();
     const filename = getFilename();
 
     try {
       // Check if running in Electron
       if (window.electronAPI?.downloadVozBrasil) {
+        // Try scraping EBC page first for the correct URL
+        const urls: string[] = [];
+        if (window.electronAPI?.scrapeVozDownloadUrl) {
+          try {
+            console.log('[VOZ] 🔍 Buscando link na página do EBC...');
+            const scrapeResult = await window.electronAPI.scrapeVozDownloadUrl();
+            if (scrapeResult.success && scrapeResult.url) {
+              console.log(`[VOZ] 🔍 Link encontrado: ${scrapeResult.url}`);
+              urls.push(scrapeResult.url);
+            }
+          } catch (e) {
+            console.log('[VOZ] 🔍 Scraping falhou, usando URLs padrão');
+          }
+        }
+        urls.push(...fallbackUrls);
+        const uniqueUrls = [...new Set(urls)];
+        
         console.log('[VOZ] Starting Electron download with fallback URLs...');
-        console.log('[VOZ] URLs to try:', urls);
+        console.log('[VOZ] URLs to try:', uniqueUrls);
         console.log('[VOZ] Folder:', config.downloadFolder);
         console.log('[VOZ] Filename:', filename);
         
@@ -229,9 +246,9 @@ export function VozBrasilView() {
         let lastError = null;
         let result = null;
         
-        for (let i = 0; i < urls.length; i++) {
-          const url = urls[i];
-          console.log(`[VOZ] Trying URL ${i + 1}/${urls.length}: ${url}`);
+        for (let i = 0; i < uniqueUrls.length; i++) {
+          const url = uniqueUrls[i];
+          console.log(`[VOZ] Trying URL ${i + 1}/${uniqueUrls.length}: ${url}`);
           
           setDownloadStatus(prev => ({
             ...prev,

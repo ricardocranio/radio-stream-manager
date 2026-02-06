@@ -63,21 +63,41 @@ export function useVozBrasilService() {
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const year = now.getFullYear();
     
-    const urls = [
+    // Try scraping the EBC page first for the correct URL
+    const urls: string[] = [];
+    
+    if (window.electronAPI?.scrapeVozDownloadUrl) {
+      try {
+        console.log('[VOZ-SVC] 🔍 Buscando link na página do EBC...');
+        const scrapeResult = await window.electronAPI.scrapeVozDownloadUrl();
+        if (scrapeResult.success && scrapeResult.url) {
+          console.log(`[VOZ-SVC] 🔍 Link encontrado: ${scrapeResult.url}`);
+          urls.push(scrapeResult.url);
+        }
+      } catch (e) {
+        console.log('[VOZ-SVC] 🔍 Scraping falhou, usando URLs padrão');
+      }
+    }
+    
+    // Fallback URLs (hardcoded patterns)
+    urls.push(
       `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}-1/@@download/file`,
       `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
       `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/voz_${day}${month}${year}.mp3`,
       `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/vozbrasil_${day}${month}${year}.mp3`,
       `https://conteudo.ebcservicos.com.br/25-streaming-ebc/a-voz-do-brasil/VozDoBrasil_${day}-${month}-${year}.mp3`,
-    ];
+    );
+    
+    // Deduplicate URLs (scraped URL might match a hardcoded one)
+    const uniqueUrls = [...new Set(urls)];
     
     const filename = `VozDoBrasil_${day}-${month}-${year}.mp3`;
 
     console.log('[VOZ-SVC] 📻 Iniciando download...');
 
-    for (let i = 0; i < urls.length; i++) {
-      const url = urls[i];
-      console.log(`[VOZ-SVC] Tentativa ${i + 1}/${urls.length}`);
+    for (let i = 0; i < uniqueUrls.length; i++) {
+      const url = uniqueUrls[i];
+      console.log(`[VOZ-SVC] Tentativa ${i + 1}/${uniqueUrls.length}`);
       
       try {
         const result = await window.electronAPI.downloadVozBrasil({

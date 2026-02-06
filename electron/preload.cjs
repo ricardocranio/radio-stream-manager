@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Voz do Brasil download
   downloadVozBrasil: (params) => ipcRenderer.invoke('download-voz-brasil', params),
   cleanupVozBrasil: (params) => ipcRenderer.invoke('cleanup-voz-brasil', params),
+  scrapeVozDownloadUrl: () => ipcRenderer.invoke('scrape-voz-download-url'),
   onVozDownloadProgress: (callback) => ipcRenderer.on('voz-download-progress', (_, progress) => callback(progress)),
   
   // Grade file operations
