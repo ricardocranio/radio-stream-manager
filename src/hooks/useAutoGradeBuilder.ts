@@ -379,7 +379,7 @@ export function useAutoGradeBuilder() {
 
     // Misturadão (20:00, 20:30 weekdays)
     if ((hour === 20 && (minute === 0 || minute === 30)) && isWeekday(targetDay)) {
-      return generateMisturadao(hour, minute, ctx, targetDay);
+      return await generateMisturadao(hour, minute, ctx, targetDay);
     }
 
     // Folder-based blocks (17:00-18:30 Happy Hour)
