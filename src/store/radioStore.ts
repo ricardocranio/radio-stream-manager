@@ -200,14 +200,6 @@ const defaultStations: RadioStation[] = [
     enabled: true,
   },
   {
-    id: 'showfm',
-    name: 'Show FM 101.1',
-    urls: ['https://mytuner-radio.com/pt/radio/show-fm-oliveira-504298/'],
-    scrapeUrl: 'https://mytuner-radio.com/pt/radio/show-fm-oliveira-504298/',
-    styles: ['SERTANEJO', 'POP/VARIADO'],
-    enabled: true,
-  },
-  {
     id: 'globo',
     name: 'Rádio Globo RJ',
     urls: [],

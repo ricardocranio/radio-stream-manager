@@ -82,7 +82,7 @@ const STATION_ID_TO_DB_NAME: Record<string, string> = {
   'bh': 'BH FM',
   'band': 'Band FM',
   'clube': 'Clube FM',
-  'showfm': 'Show FM 101.1',
+  
   'globo': 'Rádio Globo RJ',
   'blink': 'Blink 102 FM',
   'positiva': 'Positiva FM',
