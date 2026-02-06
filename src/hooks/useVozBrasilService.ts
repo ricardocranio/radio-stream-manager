@@ -130,9 +130,6 @@ export function useVozBrasilService() {
       const now = new Date();
       const todayStr = now.toDateString();
       
-      const { isRunning } = useRadioStore.getState();
-      if (!isRunning) return;
-      
       let currentConfig = { enabled: true, scheduleTime: '20:35', cleanupTime: '23:59', downloadFolder: 'C:\\Playlist\\A Voz do Brasil' };
       try {
         const saved = localStorage.getItem('vozBrasilConfig');
@@ -145,12 +142,25 @@ export function useVozBrasilService() {
       const currentMinute = now.getMinutes();
       const currentTotalMinutes = currentHour * 60 + currentMinute;
 
-      // === CLEANUP ===
+      // === CLEANUP (runs regardless of isRunning) ===
       if (lastCleanupDateRef.current !== todayStr && window.electronAPI?.cleanupVozBrasil) {
         const cleanupParts = (currentConfig.cleanupTime || '23:59').split(':');
-        const cleanupTotalMinutes = parseInt(cleanupParts[0], 10) * 60 + parseInt(cleanupParts[1], 10);
+        const cleanupHour = parseInt(cleanupParts[0], 10);
+        const cleanupMinute = parseInt(cleanupParts[1], 10);
+        const cleanupTotalMinutes = cleanupHour * 60 + cleanupMinute;
         
-        if (currentTotalMinutes >= cleanupTotalMinutes && currentTotalMinutes <= cleanupTotalMinutes + 5) {
+        // Use a 30-minute window, handling midnight wrap (e.g., 23:59 → 00:29)
+        let isInCleanupWindow = false;
+        const windowEnd = cleanupTotalMinutes + 30;
+        
+        if (windowEnd > 1440) {
+          // Window wraps past midnight
+          isInCleanupWindow = currentTotalMinutes >= cleanupTotalMinutes || currentTotalMinutes <= (windowEnd - 1440);
+        } else {
+          isInCleanupWindow = currentTotalMinutes >= cleanupTotalMinutes && currentTotalMinutes <= windowEnd;
+        }
+        
+        if (isInCleanupWindow) {
           console.log('[VOZ-SVC] 🗑️ Horário de limpeza atingido');
           lastCleanupDateRef.current = todayStr;
           
@@ -161,8 +171,9 @@ export function useVozBrasilService() {
             });
             
             if (result.success) {
-              console.log(`[VOZ-SVC] 🗑️ Limpeza: ${result.deletedCount || 0} arquivo(s)`);
+              console.log(`[VOZ-SVC] 🗑️ Limpeza: ${result.deletedCount || 0} arquivo(s) removidos`);
             } else {
+              console.warn('[VOZ-SVC] ⚠️ Limpeza falhou:', result.error);
               lastCleanupDateRef.current = null;
             }
           } catch (error) {
@@ -172,8 +183,9 @@ export function useVozBrasilService() {
         }
       }
 
-      // === DOWNLOAD (weekdays only) ===
-      if (!isWeekday(now) || lastDownloadDateRef.current === todayStr) return;
+      // === DOWNLOAD (weekdays only, requires isRunning) ===
+      const { isRunning } = useRadioStore.getState();
+      if (!isRunning || !isWeekday(now) || lastDownloadDateRef.current === todayStr) return;
       
       const timeParts = (currentConfig.scheduleTime || '20:35').split(':');
       const scheduleTotalMinutes = (parseInt(timeParts[0], 10) || 20) * 60 + (parseInt(timeParts[1], 10) || 35);
