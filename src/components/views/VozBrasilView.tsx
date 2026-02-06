@@ -411,6 +411,63 @@ export function VozBrasilView() {
     }
   };
 
+  // Delete current file and re-download
+  const handleDeleteAndDownload = async () => {
+    if (!window.electronAPI?.cleanupVozBrasil) {
+      toast({
+        title: '⚠️ Modo web',
+        description: 'Funcionalidade disponível apenas no aplicativo desktop.',
+      });
+      return;
+    }
+
+    try {
+      // Step 1: Delete ALL files in the folder (maxAgeDays: 0 deletes everything)
+      console.log('[VOZ] Deleting all files before re-download...');
+      const cleanupResult = await window.electronAPI.cleanupVozBrasil({
+        folder: config.downloadFolder,
+        maxAgeDays: 0,
+      });
+
+      if (cleanupResult.success) {
+        const deletedMsg = cleanupResult.deletedCount && cleanupResult.deletedCount > 0
+          ? `${cleanupResult.deletedCount} arquivo(s) removido(s).`
+          : 'Pasta já estava vazia.';
+        
+        toast({
+          title: '🗑️ Arquivos deletados',
+          description: `${deletedMsg} Iniciando download...`,
+        });
+        
+        console.log(`[VOZ] Cleanup done: ${deletedMsg}`);
+      } else {
+        console.warn('[VOZ] Cleanup warning:', cleanupResult.error);
+      }
+
+      // Step 2: Start fresh download
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+      setDownloadStatus({
+        status: 'idle',
+        lastAttempt: null,
+        attempts: 0,
+        progress: 0,
+      });
+      
+      // Small delay to ensure file system catches up
+      await new Promise(resolve => setTimeout(resolve, 500));
+      performDownload();
+    } catch (error) {
+      console.error('[VOZ] Delete and download error:', error);
+      toast({
+        title: '❌ Erro',
+        description: 'Erro ao deletar e baixar. Tente novamente.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleSelectFolder = async () => {
     if (typeof window !== 'undefined' && window.electronAPI?.selectFolder) {
       try {
@@ -519,10 +576,16 @@ export function VozBrasilView() {
               </div>
               <div className="flex gap-2">
                 {(downloadStatus.status === 'idle' || downloadStatus.status === 'success' || downloadStatus.status === 'error') && (
-                  <Button onClick={handleManualDownload} className="gap-2">
-                    <Download className="w-4 h-4" />
-                    Baixar Agora
-                  </Button>
+                  <>
+                    <Button onClick={handleManualDownload} className="gap-2">
+                      <Download className="w-4 h-4" />
+                      Baixar Agora
+                    </Button>
+                    <Button variant="outline" onClick={handleDeleteAndDownload} className="gap-2 border-destructive/30 text-destructive hover:bg-destructive/10">
+                      <Trash2 className="w-4 h-4" />
+                      Deletar e Baixar
+                    </Button>
+                  </>
                 )}
                 {(downloadStatus.status === 'downloading' || downloadStatus.status === 'retrying') && (
                   <Button variant="destructive" onClick={handleCancelDownload} className="gap-2">
