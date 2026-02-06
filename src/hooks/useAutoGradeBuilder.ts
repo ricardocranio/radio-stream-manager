@@ -791,6 +791,97 @@ export function useAutoGradeBuilder() {
       };
     }
 
+    // SERTANEJO NOSSA (05:00-07:30) - Alternating Liberdade FM and Positiva FM
+    // 5 songs from each station, interleaved. Coringa: clas
+    if (hour >= 5 && hour <= 7) {
+      const SERTANEJO_STATIONS = ['Liberdade FM', 'Positiva FM'];
+      const TARGET_SONGS = 10;
+      const CORINGA = 'clas';
+      
+      // Collect songs per station
+      const stationPools: Record<string, SongEntry[]> = {};
+      for (const stName of SERTANEJO_STATIONS) {
+        const directPool = songsByStation[stName] || [];
+        if (directPool.length > 0) {
+          stationPools[stName] = [...directPool].sort(() => Math.random() - 0.5);
+        } else {
+          // Try flexible matching
+          for (const [poolName, poolSongs] of Object.entries(songsByStation)) {
+            const norm1 = poolName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const norm2 = stName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (norm1.includes(norm2) || norm2.includes(norm1)) {
+              stationPools[stName] = [...poolSongs].sort(() => Math.random() - 0.5);
+              break;
+            }
+          }
+        }
+        if (!stationPools[stName]) stationPools[stName] = [];
+      }
+      
+      const sertanejoSongs: string[] = [];
+      const sertUsedArtists = new Set<string>();
+      const sertUsedKeys = new Set<string>();
+      
+      // Alternate: Liberdade, Positiva, Liberdade, Positiva...
+      const stationIndices: Record<string, number> = {};
+      SERTANEJO_STATIONS.forEach(s => stationIndices[s] = 0);
+      
+      for (let i = 0; i < TARGET_SONGS; i++) {
+        const currentStation = SERTANEJO_STATIONS[i % SERTANEJO_STATIONS.length];
+        const pool = stationPools[currentStation] || [];
+        let found = false;
+        
+        while (stationIndices[currentStation] < pool.length && !found) {
+          const candidate = pool[stationIndices[currentStation]];
+          stationIndices[currentStation]++;
+          
+          const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+          const normalizedArtist = candidate.artist.toLowerCase().trim();
+          
+          if (sertUsedKeys.has(key) || sertUsedArtists.has(normalizedArtist)) continue;
+          if (isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
+          
+          const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
+          if (libraryResult.exists) {
+            const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+            sertanejoSongs.push(`"${correctFilename}"`);
+            sertUsedKeys.add(key);
+            sertUsedArtists.add(normalizedArtist);
+            markSongAsUsed(candidate.title, candidate.artist, timeStr);
+            
+            blockLogs.push({
+              blockTime: timeStr,
+              type: 'used',
+              title: candidate.title,
+              artist: candidate.artist,
+              station: currentStation,
+              style: candidate.style,
+              reason: `Sertanejo Nossa (${currentStation})`,
+            });
+            found = true;
+          }
+        }
+        
+        if (!found) {
+          sertanejoSongs.push(CORINGA);
+          stats.missing++;
+          blockLogs.push({
+            blockTime: timeStr,
+            type: 'substituted',
+            title: CORINGA,
+            artist: 'CORINGA',
+            station: currentStation,
+            reason: `Pool ${currentStation} esgotado`,
+          });
+        }
+      }
+      
+      return {
+        line: sanitizeGradeLine(`${timeStr} (ID=Sertanejo Nossa) ${sertanejoSongs.join(',vht,')}`),
+        logs: blockLogs,
+      };
+    }
+
     const fixedItem = fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil');
     let fixedContentFile: string | null = null;
     let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
