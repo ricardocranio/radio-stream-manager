@@ -2016,13 +2016,20 @@ function scrapeVozDownloadUrl() {
       response.on('data', (chunk) => { html += chunk; });
       response.on('end', () => {
         try {
-          // Look for download links - pattern: /programas/a-voz-do-brasil-download/DD-MM-YYYY[-N]/@@download/file
           const matches = [];
-          const regex = /href="((?:https?:\/\/radiogov\.ebc\.com\.br)?\/programas\/a-voz-do-brasil-download\/[\d]+-[\d]+-[\d]+(?:-\d+)?\/@@download\/file)"/gi;
+          
+          // Pattern 1: radiogov @@download links (e.g., /06-02-2025-1/@@download/file)
+          const regex1 = /href="((?:https?:\/\/radiogov\.ebc\.com\.br)?\/programas\/a-voz-do-brasil-download\/[\d]+-[\d]+-[\d]+(?:-\d+)?\/@@download\/file)"/gi;
           let match;
-          while ((match = regex.exec(html)) !== null) {
+          while ((match = regex1.exec(html)) !== null) {
             const url = match[1].startsWith('http') ? match[1] : `https://radiogov.ebc.com.br${match[1]}`;
             matches.push(url);
+          }
+          
+          // Pattern 2: audios.ebc.com.br direct MP3 links (e.g., audios.ebc.com.br/radiogov/2026/02/05-02-26-a-voz-do-brasil.mp3)
+          const regex2 = /href="(https?:\/\/audios\.ebc\.com\.br\/radiogov\/[\d]+\/[\d]+\/[\d-]+-a-voz-do-brasil\.mp3)"/gi;
+          while ((match = regex2.exec(html)) !== null) {
+            matches.push(match[1]);
           }
           
           if (matches.length > 0) {
