@@ -140,50 +140,96 @@ export async function generateMisturadao(
 
 /**
  * Generate TOP50 block (19:00/19:30 weekdays).
+ * Uses 20 positions from the ranking in reverse order:
+ *  - 19:00 → positions 20 down to 11 (least to mid)
+ *  - 19:30 → positions 10 down to 01 (mid to top)
+ * Each song is verified in the local music library.
  */
-export function generateTop50Block(
+export async function generateTop50Block(
   hour: number,
   minute: number,
   top50Count: number,
   ctx: GradeContext
-): BlockResult {
+): Promise<BlockResult> {
   const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
   const logs: BlockLogItem[] = [];
+  const SONGS_PER_BLOCK = 10;
   
-  // For 19:00: positions 1-10, for 19:30: positions 11-20
-  const blockIndex = (hour - 19) * 2 + (minute === 30 ? 1 : 0);
-  const startPosition = Math.max(0, blockIndex * 10);
-  
+  // Sort ranking by plays descending → index 0 = position 1 (most played)
   const sorted = [...ctx.rankingSongs].sort((a, b) => b.plays - a.plays);
-  const top50Songs: string[] = [];
+  
+  // 19:00 block: positions 20→11 (indices 19→10)
+  // 19:30 block: positions 10→01 (indices 9→0)
+  const isFirstBlock = minute === 0;
+  const startIndex = isFirstBlock ? 19 : 9;  // position 20 or 10
+  const endIndex = isFirstBlock ? 10 : 0;    // position 11 or 01
 
-  for (let i = startPosition; i < sorted.length && top50Songs.length < top50Count; i++) {
+  const top50Songs: string[] = [];
+  const usedPositions: number[] = [];
+
+  // Walk from startIndex down to endIndex (reverse order)
+  for (let i = startIndex; i >= endIndex && top50Songs.length < SONGS_PER_BLOCK; i--) {
+    if (i >= sorted.length) continue;
+    
     const song = sorted[i];
-    if (!ctx.isRecentlyUsed(song.title, song.artist, timeStr)) {
-      const realFilename = sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
+    if (ctx.isRecentlyUsed(song.title, song.artist, timeStr)) continue;
+
+    const libraryResult = await ctx.findSongInLibrary(song.artist, song.title);
+    if (libraryResult.exists) {
+      const realFilename = libraryResult.filename || sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
       top50Songs.push(realFilename);
       ctx.markSongAsUsed(song.title, song.artist, timeStr);
+      usedPositions.push(i + 1); // human-readable position (1-based)
+      
+      logs.push({
+        blockTime: timeStr,
+        type: 'used',
+        title: song.title,
+        artist: song.artist,
+        station: 'RANKING',
+        reason: `TOP50 posição ${i + 1}`,
+      });
+    } else {
+      // Song not in library → use coringa and log
+      top50Songs.push(ctx.coringaCode);
+      logs.push({
+        blockTime: timeStr,
+        type: 'substituted',
+        title: ctx.coringaCode,
+        artist: song.artist,
+        station: 'RANKING',
+        reason: `TOP50 posição ${i + 1} - não encontrada na biblioteca`,
+      });
     }
   }
 
-  if (top50Songs.length > 0) {
+  // Fill remaining slots with coringa if ranking has fewer than needed
+  while (top50Songs.length < SONGS_PER_BLOCK) {
+    top50Songs.push(ctx.coringaCode);
     logs.push({
       blockTime: timeStr,
-      type: 'fixed',
-      title: `TOP50 - Posições ${startPosition + 1} a ${startPosition + top50Songs.length}`,
-      artist: 'Ranking',
-      station: 'TOP50',
-      reason: `Bloco TOP50 com músicas reais do ranking (posições ${startPosition + 1}-${startPosition + top50Songs.length})`,
+      type: 'substituted',
+      title: ctx.coringaCode,
+      artist: 'CORINGA',
+      station: 'RANKING',
+      reason: 'Ranking insuficiente para preencher bloco TOP50',
     });
-    
-    return {
-      line: ctx.sanitizeGradeLine(`${timeStr} (ID=TOP50) ${top50Songs.map(s => `"${s}"`).join(',vht,')}`),
-      logs,
-    };
   }
-  
-  // Fallback: empty TOP50
-  return { line: `${timeStr} (ID=TOP50) ${ctx.coringaCode}`, logs };
+
+  const posRange = isFirstBlock ? '20→11' : '10→01';
+  logs.push({
+    blockTime: timeStr,
+    type: 'fixed',
+    title: `TOP50 - Posições ${posRange}`,
+    artist: 'Ranking',
+    station: 'TOP50',
+    reason: `Bloco TOP50 com músicas reais do ranking (posições ${usedPositions.join(', ') || 'nenhuma'})`,
+  });
+
+  return {
+    line: ctx.sanitizeGradeLine(`${timeStr} (ID=TOP50) ${top50Songs.map(s => s === ctx.coringaCode ? s : `"${s}"`).join(',vht,')}`),
+    logs,
+  };
 }
 
 /**

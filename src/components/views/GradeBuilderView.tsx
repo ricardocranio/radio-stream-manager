@@ -96,6 +96,25 @@ export function GradeBuilderView() {
       return `${time} (FIXO ${format.programPrefix}VOZ DO BRASIL) vht,VOZ_DO_BRASI`;
     }
 
+    // TOP50 (19:00 and 19:30) - ranking positions 20→11 then 10→01
+    if (hour === 19 && (minute === 0 || minute === 30)) {
+      const sorted = [...rankingSongs].sort((a, b) => b.plays - a.plays);
+      const isFirstBlock = minute === 0;
+      const startIdx = isFirstBlock ? 19 : 9;
+      const endIdx = isFirstBlock ? 10 : 0;
+      const posRange = isFirstBlock ? '20→11' : '10→01';
+      const songFiles: string[] = [];
+      for (let i = startIdx; i >= endIdx && songFiles.length < 10; i--) {
+        if (i < sorted.length) {
+          songFiles.push(`"${sanitizeFilename(`${sorted[i].artist} - ${sorted[i].title}.mp3`)}"`);
+        } else {
+          songFiles.push('mus');
+        }
+      }
+      while (songFiles.length < 10) songFiles.push('mus');
+      return `${time} (${format.programPrefix}TOP50 ${posRange}) ${songFiles.join(format.separator)}`;
+    }
+
     // Misturadão (20:00 and 20:30 weekdays) - special format with fixed blocks + ranking songs
     if (hour === 20 && (minute === 0 || minute === 30)) {
       const dayName = 'SEXTA'; // Demo uses Friday

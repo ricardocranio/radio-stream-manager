@@ -390,7 +390,7 @@ export function useAutoGradeBuilder() {
     // TOP50 blocks
     const top50Item = fixedItems.find(fc => fc.type === 'top50');
     if (top50Item) {
-      return generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx);
+      return await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx);
     }
 
     // Madrugada (00:00-04:30)
