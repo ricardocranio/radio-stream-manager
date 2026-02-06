@@ -21,6 +21,7 @@ export interface RadioStation {
   scrapeUrl?: string; // URL for real-time scraping (mytuner-radio, etc.)
   styles: string[];
   enabled: boolean;
+  prioritizeDownloads?: boolean; // Force download priority for building local folder cache
   monitoringSchedules?: MonitoringSchedule[]; // Horários específicos para monitoramento
 }
 

@@ -11,9 +11,7 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 5000;
 
-/** Stations that must have ALL songs downloaded to build local folder cache */
-const PRIORITY_DOWNLOAD_STATIONS = ['Mix FM', 'Positiva FM', 'Metropolitana FM'];
-const PRIORITY_STATION_BOOST = 100; // Priority boost for these stations (higher than any ranking position)
+const PRIORITY_STATION_BOOST = 100; // Priority boost for prioritized stations (higher than any ranking position)
 
 // Queue for auto-download with priority
 interface DownloadQueueItem {
@@ -187,12 +185,19 @@ export function useAutoDownload() {
     }
 
     // Get ranking songs for priority calculation
-    const { rankingSongs } = useRadioStore.getState();
+    const { rankingSongs, stations: allStations } = useRadioStore.getState();
     const rankingMap = new Map<string, number>();
     rankingSongs.forEach((song, index) => {
       const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
       rankingMap.set(key, 50 - index); // Higher priority for top ranking positions
     });
+
+    // Build set of station names with prioritized downloads
+    const priorityStationNames = new Set(
+      allStations
+        .filter(s => s.prioritizeDownloads)
+        .map(s => s.name.toLowerCase())
+    );
 
     // Get current missing song IDs
     const currentIds = missingSongs
@@ -212,11 +217,8 @@ export function useAutoDownload() {
       const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
       let priority = rankingMap.get(key) || 0; // 0 for non-ranking songs
       
-      // Boost priority for cache-building stations (Mix FM, Positiva FM, Metropolitana FM)
-      const isPriorityStation = PRIORITY_DOWNLOAD_STATIONS.some(
-        ps => song.station?.toLowerCase().includes(ps.toLowerCase()) ||
-              ps.toLowerCase().includes(song.station?.toLowerCase() || '')
-      );
+      // Boost priority for stations marked with "Priorizar Downloads"
+      const isPriorityStation = priorityStationNames.has(song.station?.toLowerCase() || '');
       
       if (isPriorityStation) {
         priority += PRIORITY_STATION_BOOST;

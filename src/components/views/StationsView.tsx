@@ -739,6 +739,26 @@ export function StationsView() {
                   </CollapsibleContent>
                 </Collapsible>
 
+                {/* Priorizar Downloads Toggle */}
+                <div className="flex items-center justify-between py-1">
+                  <div className="flex items-center gap-2">
+                    <Download className="w-3.5 h-3.5 text-muted-foreground" />
+                    <div>
+                      <span className="text-xs text-muted-foreground">Priorizar Downloads</span>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={data.prioritizeDownloads || false}
+                    onCheckedChange={(checked) => {
+                      if (isEditing) {
+                        setEditForm((prev) => prev && { ...prev, prioritizeDownloads: checked });
+                      } else {
+                        updateStation(station.id, { prioritizeDownloads: checked });
+                      }
+                    }}
+                  />
+                </div>
+
                 {/* Actions */}
                 <div className="flex justify-end gap-2 pt-2 border-t border-border">
                   {isEditing ? (
