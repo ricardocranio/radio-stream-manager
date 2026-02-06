@@ -251,8 +251,9 @@ const defaultStations: RadioStation[] = [
 
 // V21 Program IDs - Atualizado com nova grade
 const defaultPrograms: ProgramSchedule[] = [
-  { timeRange: '0-5', programName: 'Nossa Madrugada' },
-  { timeRange: '6-8', programName: 'Happy Hour' },
+  { timeRange: '0-4', programName: 'Nossa Madrugada' },
+  { timeRange: '5-7', programName: 'Sertanejo Nossa' },
+  { timeRange: '8-8', programName: 'Happy Hour' },
   { timeRange: '9-11', programName: 'Manhã de Hits' },
   { timeRange: '12-13', programName: 'Hora do Almoço' },
   { timeRange: '14-16', programName: 'Tarde Animada' },
