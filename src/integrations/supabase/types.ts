@@ -150,7 +150,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      cleanup_excess_scraped_songs: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
