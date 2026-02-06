@@ -11,12 +11,12 @@ export interface HealthStatus {
 }
 
 // Increased intervals and thresholds for stability and CPU optimization
-const CHECK_INTERVAL = 300000; // 5 minutes (was 2 minutes - ~60% CPU reduction)
-const LATENCY_THRESHOLD = 8000; // 8 seconds (was 3 seconds)
-const REALTIME_TIMEOUT = 5000; // 5 seconds (was 3 seconds)
+const CHECK_INTERVAL = 600000; // 10 minutes (was 5 minutes - further reduce noise)
+const LATENCY_THRESHOLD = 15000; // 15 seconds (was 8 seconds - avoid false positives from heavy scraping)
+const REALTIME_TIMEOUT = 8000; // 8 seconds (was 5 seconds)
 
 // Track consecutive failures before showing degraded status
-const FAILURE_THRESHOLD = 2;
+const FAILURE_THRESHOLD = 3; // Require 3 consecutive failures (was 2)
 
 export function useHealthCheck() {
   const [status, setStatus] = useState<HealthStatus>({
@@ -37,13 +37,32 @@ export function useHealthCheck() {
   const checkSupabase = useCallback(async (): Promise<'ok' | 'degraded' | 'offline'> => {
     try {
       const startTime = Date.now();
-      const { error } = await supabase
+      
+      // Use Promise.race with a timeout to prevent the health check from hanging
+      const queryPromise = supabase
         .from('radio_stations')
         .select('id')
         .limit(1)
-        .single();
+        .maybeSingle();
       
+      const timeoutPromise = new Promise<{ error: { code: string; message: string } }>((resolve) => {
+        setTimeout(() => resolve({ error: { code: 'TIMEOUT', message: 'Health check timeout' } }), LATENCY_THRESHOLD);
+      });
+      
+      const result = await Promise.race([queryPromise, timeoutPromise]);
       const latency = Date.now() - startTime;
+      
+      // Handle timeout
+      if ('error' in result && result.error?.code === 'TIMEOUT') {
+        consecutiveFailuresRef.current.supabase++;
+        if (consecutiveFailuresRef.current.supabase >= FAILURE_THRESHOLD) {
+          console.warn('[HEALTH] Supabase timeout after', consecutiveFailuresRef.current.supabase, 'failures');
+          return 'degraded';
+        }
+        return 'ok';
+      }
+      
+      const { error } = result as { error: any };
       
       // PGRST116 is "no rows returned" - that's ok
       if (error && error.code !== 'PGRST116') {
@@ -55,7 +74,7 @@ export function useHealthCheck() {
         return 'ok'; // Don't report degraded on first failure
       }
       
-      // Consider degraded only if latency > 8 seconds AND multiple occurrences
+      // Consider degraded only if latency > threshold AND multiple occurrences
       if (latency > LATENCY_THRESHOLD) {
         consecutiveFailuresRef.current.supabase++;
         if (consecutiveFailuresRef.current.supabase >= FAILURE_THRESHOLD) {
