@@ -43,7 +43,7 @@ const dayMap: Record<string, string> = {
 };
 
 export function GradeBuilderView() {
-  const { programs, sequence, stations } = useRadioStore();
+  const { programs, sequence, stations, rankingSongs } = useRadioStore();
   const { toast } = useToast();
   const [format, setFormat] = useState<GradeFormat>(defaultFormat);
   const [selectedHour, setSelectedHour] = useState(14);
@@ -91,9 +91,47 @@ export function GradeBuilderView() {
     const time = formatTime(hour, minute);
     const program = getProgramForHour(hour);
 
-    // Special format for Voz do Brasil (weekdays only): 21:00 (FIXO ID=VOZ DO BRASIL) vht,VOZ_DO_BRASI
+    // Special format for Voz do Brasil (weekdays only)
     if (fixedType === 'vozbrasil') {
       return `${time} (FIXO ${format.programPrefix}VOZ DO BRASIL) vht,VOZ_DO_BRASI`;
+    }
+
+    // Misturadão (20:00 and 20:30 weekdays) - special format with fixed blocks + ranking songs
+    if (hour === 20 && (minute === 0 || minute === 30)) {
+      const dayName = 'SEXTA'; // Demo uses Friday
+      if (minute === 0) {
+        const bloco01 = `MISTURADAO_BLOCO01_${dayName}.mp3`;
+        const bloco02 = `MISTURADAO_BLOCO02_${dayName}.mp3`;
+        const pos5 = rankingSongs.length >= 5 
+          ? sanitizeFilename(`${rankingSongs[4]?.artist} - ${rankingSongs[4]?.title}.mp3`)
+          : 'mus';
+        const pos2 = rankingSongs.length >= 2
+          ? sanitizeFilename(`${rankingSongs[1]?.artist} - ${rankingSongs[1]?.title}.mp3`)
+          : 'mus';
+        return `${time} (${format.programPrefix}MISTURADAO) "${bloco01}",vht,"${pos5}",vht,"${bloco02}",vht,"${pos2}"`;
+      } else {
+        const bloco03 = `MISTURADAO_BLOCO03_${dayName}.mp3`;
+        const bloco04 = `MISTURADAO_BLOCO04_${dayName}.mp3`;
+        const pos8 = rankingSongs.length >= 8
+          ? sanitizeFilename(`${rankingSongs[7]?.artist} - ${rankingSongs[7]?.title}.mp3`)
+          : 'mus';
+        const pos9 = rankingSongs.length >= 9
+          ? sanitizeFilename(`${rankingSongs[8]?.artist} - ${rankingSongs[8]?.title}.mp3`)
+          : 'mus';
+        return `${time} (${format.programPrefix}MISTURADAO) "${bloco03}",vht,"${pos8}",vht,"${bloco04}",vht,"${pos9}"`;
+      }
+    }
+
+    // Madrugada (00:00-04:30) - mix from all stations
+    if (hour >= 0 && hour <= 4) {
+      const songs = demoSongs.map(formatSong).join(format.separator);
+      return `${time} (${format.programPrefix}Nossa Madrugada) ${songs}`;
+    }
+
+    // Sertanejo Nossa (05:00-07:30) - alternates Liberdade/Positiva
+    if (hour >= 5 && hour <= 7) {
+      const songs = demoSongs.map(formatSong).join(format.separator);
+      return `${time} (${format.programPrefix}Sertanejo Nossa) ${songs}`;
     }
 
     if (isFixed) {
@@ -448,6 +486,9 @@ export function GradeBuilderView() {
                     [0, 30].map((minute) => {
                       const isFixed = hour === 19;
                       const isVozBrasil = hour === 21 && minute === 0;
+                      const isMisturadao = hour === 20 && (minute === 0 || minute === 30);
+                      const isMadrugada = hour >= 0 && hour <= 4;
+                      const isSertanejo = hour >= 5 && hour <= 7;
                       const line = isVozBrasil 
                         ? generateLine(hour, minute, true, 'vozbrasil')
                         : generateLine(hour, minute, isFixed);
@@ -455,7 +496,12 @@ export function GradeBuilderView() {
                         <div
                           key={`${hour}-${minute}`}
                           className={`py-1 px-2 rounded hover:bg-secondary/30 ${
-                            isVozBrasil ? 'text-green-400' : isFixed ? 'text-muted-foreground' : 'text-foreground'
+                            isVozBrasil ? 'text-green-400' 
+                              : isMisturadao ? 'text-amber-400'
+                              : isMadrugada ? 'text-blue-400'
+                              : isSertanejo ? 'text-orange-400'
+                              : isFixed ? 'text-muted-foreground' 
+                              : 'text-foreground'
                           }`}
                         >
                           {line}
