@@ -304,6 +304,8 @@ const defaultConfig: SystemConfig = {
     'Mengão', 'Timão', 'Verdão', 'Tricolor', 'Peixe', 'Cruzmaltino',
   ],
   funkWords: ['funk', 'mc ', 'sequencia', 'proibidão', 'baile', 'kondzilla', 'gr6'],
+  // Default characters to filter from filenames (encoding artifacts, special chars)
+  filterCharacters: ['â€™', 'Ã©', 'Ã£', 'Ã§', 'â€"', 'â€œ', 'â€', 'Â', '´', '`', '~', '^', '$', '#', '@'],
   // Power saving mode
   powerSavingMode: false,
   // Similarity threshold for music library matching (0.5 to 0.95)

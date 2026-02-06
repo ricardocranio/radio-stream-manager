@@ -41,6 +41,9 @@ export function SettingsView() {
   const [funkWords, setFunkWords] = useState(
     config.funkWords?.join(', ') || 'funk, mc , sequencia, proibidão, baile, kondzilla, gr6'
   );
+  const [filterCharacters, setFilterCharacters] = useState(
+    config.filterCharacters?.join(', ') || 'â€™, Ã©, Ã£, Ã§, â€", â€œ, â€, Â, ´, `, ~, ^, $, #, @'
+  );
   
   // Refs to track if filters have changed
   const filtersSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -95,7 +98,10 @@ export function SettingsView() {
     if (config.funkWords) {
       setFunkWords(config.funkWords.join(', '));
     }
-  }, [config.forbiddenWords, config.funkWords]);
+    if (config.filterCharacters) {
+      setFilterCharacters(config.filterCharacters.join(', '));
+    }
+  }, [config.forbiddenWords, config.funkWords, config.filterCharacters]);
   
   // Auto-save filter words with debounce
   const autoSaveFilters = useCallback(() => {
@@ -106,14 +112,16 @@ export function SettingsView() {
     filtersSaveTimeoutRef.current = setTimeout(() => {
       const parsedForbidden = forbiddenWords.split(',').map(w => w.trim()).filter(Boolean);
       const parsedFunk = funkWords.split(',').map(w => w.trim()).filter(Boolean);
+      const parsedFilterChars = filterCharacters.split(',').map(w => w.trim()).filter(Boolean);
       
       setConfig({ 
         forbiddenWords: parsedForbidden, 
-        funkWords: parsedFunk 
+        funkWords: parsedFunk,
+        filterCharacters: parsedFilterChars,
       });
-      console.log('[SETTINGS] ✓ Auto-saved filters:', { forbiddenWords: parsedForbidden.length, funkWords: parsedFunk.length });
+      console.log('[SETTINGS] ✓ Auto-saved filters:', { forbiddenWords: parsedForbidden.length, funkWords: parsedFunk.length, filterCharacters: parsedFilterChars.length });
     }, 800);
-  }, [forbiddenWords, funkWords, setConfig]);
+  }, [forbiddenWords, funkWords, filterCharacters, setConfig]);
   
   // Trigger auto-save when filter words change (skip initial mount)
   const isFiltersMounted = useRef(false);
@@ -130,7 +138,7 @@ export function SettingsView() {
         clearTimeout(filtersSaveTimeoutRef.current);
       }
     };
-  }, [forbiddenWords, funkWords, autoSaveFilters]);
+  }, [forbiddenWords, funkWords, filterCharacters, autoSaveFilters]);
 
   const handleReset = () => {
     setLocalConfig(config);
@@ -798,6 +806,20 @@ export function SettingsView() {
               />
               <p className="text-xs text-muted-foreground mt-2">
                 Termos usados para identificar e bloquear funk
+              </p>
+            </div>
+
+            <div>
+              <Label className="text-sm">Caracteres para Filtrar (Nomes de Arquivo)</Label>
+              <Textarea
+                value={filterCharacters}
+                onChange={(e) => setFilterCharacters(e.target.value)}
+                className="mt-2 font-mono text-xs h-24"
+                placeholder="Caracteres separados por vírgula (ex: â€™, Ã©, ´, ~, ^)..."
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                Caracteres que serão removidos dos nomes de arquivos na grade. Útil para remover artefatos de encoding (â€™, Ã©, etc.) e caracteres especiais.
+                Os nomes originais do monitoramento são preservados no banco de dados.
               </p>
             </div>
           </CardContent>

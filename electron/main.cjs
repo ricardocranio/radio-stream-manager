@@ -2130,3 +2130,85 @@ ipcMain.handle('list-folder-files', async (event, params) => {
     return { success: false, error: error.message, files: [] };
   }
 });
+
+// IPC handler to rename a music file (remove special characters from filename)
+// Searches for the original file by matching against the sanitized target name,
+// then renames the physical file on disk so the grade TXT matches the actual file.
+ipcMain.handle('rename-music-file', async (event, params) => {
+  const { musicFolders, currentFilename, newFilename } = params;
+  
+  // Helper: normalize a filename for comparison (lowercase, no accents, no special chars)
+  const normalizeForComparison = (name) => {
+    return name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/&/g, 'e')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toLowerCase();
+  };
+  
+  const normalizedTarget = normalizeForComparison(newFilename);
+  
+  console.log(`[RENAME] Looking for file matching "${newFilename}" (normalized: "${normalizedTarget}")`);
+  
+  try {
+    // Search for any file in music folders whose normalized name matches the target
+    let foundPath = null;
+    let foundName = null;
+    
+    const searchRecursive = (dir) => {
+      if (foundPath) return;
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (foundPath) return;
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            searchRecursive(fullPath);
+          } else {
+            const normalizedEntry = normalizeForComparison(entry.name);
+            if (normalizedEntry === normalizedTarget) {
+              foundPath = fullPath;
+              foundName = entry.name;
+            }
+          }
+        }
+      } catch (e) {
+        // Skip inaccessible directories
+      }
+    };
+    
+    for (const folder of musicFolders) {
+      if (foundPath) break;
+      if (fs.existsSync(folder)) {
+        searchRecursive(folder);
+      }
+    }
+    
+    if (!foundPath) {
+      return { success: false, renamed: false, reason: 'File not found in music folders' };
+    }
+    
+    // If the found file already has the correct name, no rename needed
+    if (foundName === newFilename) {
+      return { success: true, renamed: false, reason: 'File already has correct name', path: foundPath };
+    }
+    
+    const newPath = path.join(path.dirname(foundPath), newFilename);
+    
+    // Check if destination already exists (different file with same sanitized name)
+    if (fs.existsSync(newPath) && foundPath !== newPath) {
+      console.log(`[RENAME] Destination already exists: "${newFilename}"`);
+      return { success: true, renamed: false, reason: 'Destination file already exists', path: newPath };
+    }
+    
+    // Rename the file
+    fs.renameSync(foundPath, newPath);
+    console.log(`[RENAME] ✅ Renamed: "${foundName}" → "${newFilename}"`);
+    
+    return { success: true, renamed: true, oldPath: foundPath, newPath, oldName: foundName };
+  } catch (error) {
+    console.error('[RENAME] Error:', error);
+    return { success: false, renamed: false, error: error.message };
+  }
+});

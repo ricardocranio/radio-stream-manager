@@ -57,6 +57,8 @@ export interface SystemConfig {
   monitorInterval?: number;
   forbiddenWords?: string[];
   funkWords?: string[];
+  // Characters to filter/remove from filenames (user-configurable)
+  filterCharacters?: string[];
   // Performance
   powerSavingMode?: boolean;
   // Similarity threshold for music library matching (0.5 to 0.95)

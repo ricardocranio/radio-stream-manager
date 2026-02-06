@@ -142,6 +142,21 @@ interface GradeFileResult {
   error?: string;
 }
 
+interface RenameMusicFileParams {
+  musicFolders: string[];
+  currentFilename: string;
+  newFilename: string;
+}
+
+interface RenameMusicFileResult {
+  success: boolean;
+  renamed: boolean;
+  oldPath?: string;
+  newPath?: string;
+  reason?: string;
+  error?: string;
+}
+
 interface FolderListParams {
   folder: string;
   extension?: string;
@@ -235,6 +250,7 @@ interface ElectronAPI {
   saveGradeFile: (params: GradeFileParams) => Promise<GradeFileResult>;
   readGradeFile: (params: Omit<GradeFileParams, 'content'>) => Promise<GradeFileResult>;
   listFolderFiles: (params: FolderListParams) => Promise<FolderListResult>;
+  renameMusicFile: (params: RenameMusicFileParams) => Promise<RenameMusicFileResult>;
   
   // Station folder management
   ensureStationFolders: (params: EnsureStationFoldersParams) => Promise<EnsureStationFoldersResult>;
