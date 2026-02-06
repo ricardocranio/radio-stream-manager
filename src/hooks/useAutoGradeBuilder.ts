@@ -27,6 +27,7 @@ import {
 } from '@/lib/gradeBuilder/specialPrograms';
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
 import { batchFindSongsInLibrary, findSongInLibrary as findSongInLibraryFn } from '@/lib/gradeBuilder/batchLibrary';
+import { isFolderBasedBlock, generateFolderBasedBlock } from '@/lib/gradeBuilder/folderPrograms';
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
@@ -379,6 +380,11 @@ export function useAutoGradeBuilder() {
     // Misturadão (20:00, 20:30 weekdays)
     if ((hour === 20 && (minute === 0 || minute === 30)) && isWeekday(targetDay)) {
       return generateMisturadao(hour, minute, ctx, targetDay);
+    }
+
+    // Folder-based blocks (17:00-18:30 Happy Hour)
+    if (isFolderBasedBlock(hour, minute)) {
+      return generateFolderBasedBlock(hour, minute, stats, isFullDay, ctx);
     }
 
     // TOP50 blocks
