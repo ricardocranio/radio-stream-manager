@@ -37,7 +37,7 @@ export const HAPPY_HOUR_CONFIG: FolderBlockConfig = {
   ],
   folderLabels: ['Mix FM', 'Positiva FM', 'Metropolitana FM'],
   targetSongs: 10,
-  coringa: 'mus',
+  coringa: 'jov',
 };
 
 /**
