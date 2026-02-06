@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 // OPTIMIZED: Dashboard is eagerly loaded (most used), others are lazy
 import { DashboardView } from '@/components/views/DashboardView';
-import { useRadioStore, MissingSong } from '@/store/radioStore';
-import { CapturedSong } from '@/types/radio';
-import { useCheckMusicLibrary } from '@/hooks/useCheckMusicLibrary';
+import { useRadioStore } from '@/store/radioStore';
 import { useInitializeFolders } from '@/hooks/useInitializeFolders';
 import { useAutoCleanup } from '@/hooks/useAutoCleanup';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -37,249 +35,23 @@ const ViewSkeleton = () => (
   </div>
 );
 
-// Style mapping for stations (for ranking integration)
-const stationStyles: Record<string, string> = {
-  'BH FM': 'SERTANEJO',
-  'Band FM': 'PAGODE',
-  'Clube FM': 'SERTANEJO',
-};
-
-// Check if running in Electron
-const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
-
-// Extended song database for realistic simulation - Updated with real radio songs
-const simulatedSongsDatabase = {
-  'BH FM': [
-    { title: 'Ciumeira', artist: 'Marilia Mendonca' },
-    { title: 'Mete Um Block Nele', artist: 'Joao Gomes' },
-    { title: 'Entregador de Flor', artist: 'Diego e Victor Hugo' },
-    { title: 'Depois do Prazer', artist: 'Alexandre Pires' },
-    { title: 'Saudade Sua', artist: 'Joao Gomes' },
-    { title: 'Facas', artist: 'Diego e Victor Hugo' },
-    { title: 'Radar', artist: 'Joao Gomes' },
-    { title: 'Menos e Mais', artist: 'Jorge e Mateus' },
-    { title: 'Dengo', artist: 'Joao Gomes' },
-    { title: 'Enquanto Eu Brindo Ce Chora', artist: 'Matheus e Kauan' },
-    { title: 'Gostoso Demais', artist: 'Marilia Mendonca' },
-    { title: 'Infiel', artist: 'Marilia Mendonca' },
-    { title: 'Se For Amor', artist: 'Joao Gomes' },
-    { title: 'Lapada Dela', artist: 'Joao Gomes' },
-    { title: 'Aquelas Coisas', artist: 'Gusttavo Lima' },
-  ],
-  'Band FM': [
-    { title: 'Sorte', artist: 'Thiaguinho' },
-    { title: 'Fatalmente', artist: 'Turma do Pagode' },
-    { title: 'Ta Vendo Aquela Lua', artist: 'Exaltasamba' },
-    { title: 'Deixa Acontecer', artist: 'Grupo Revelacao' },
-    { title: 'Samba de Roda', artist: 'Sorriso Maroto' },
-    { title: 'Temporal', artist: 'Dilsinho' },
-    { title: 'Vitamina', artist: 'Ludmilla' },
-    { title: 'Acelera e Pisa', artist: 'Menos e Menos' },
-    { title: 'Eu Vacilei', artist: 'Tiee' },
-    { title: 'A Gente Fez Amor', artist: 'Mumuzinho' },
-    { title: 'Deixa Eu Te Querer', artist: 'Ferrugem' },
-    { title: 'Pirata e Tesouro', artist: 'Sorriso Maroto' },
-    { title: 'Te Esperando', artist: 'Luan Santana' },
-    { title: 'Onde Nasce o Sol', artist: 'Diogo Nogueira' },
-    { title: 'Dona de Mim', artist: 'IZA' },
-  ],
-  'Clube FM': [
-    { title: 'Shallow', artist: 'Lady Gaga' },
-    { title: 'Blinding Lights', artist: 'The Weeknd' },
-    { title: 'Dance Monkey', artist: 'Tones and I' },
-    { title: 'Watermelon Sugar', artist: 'Harry Styles' },
-    { title: 'Hear Me Now', artist: 'Alok' },
-    { title: 'Lean On', artist: 'Major Lazer' },
-    { title: 'Shape of You', artist: 'Ed Sheeran' },
-    { title: 'Uptown Funk', artist: 'Bruno Mars' },
-    { title: 'Bad Guy', artist: 'Billie Eilish' },
-    { title: 'Happier', artist: 'Marshmello' },
-    { title: 'Something Just Like This', artist: 'Coldplay' },
-    { title: 'Closer', artist: 'The Chainsmokers' },
-    { title: 'Despacito', artist: 'Luis Fonsi' },
-    { title: 'Perfect', artist: 'Ed Sheeran' },
-    { title: 'Havana', artist: 'Camila Cabello' },
-  ],
-};
-
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const { 
-    addCapturedSong, 
-    setIsRunning, 
-    setLastUpdate, 
-    stations,
-    clearCapturedSongs,
-    addMissingSong,
-    addOrUpdateRankingSong,
-    deezerConfig,
-    config,
-    missingSongs,
-  } = useRadioStore();
+  const { setIsRunning, setLastUpdate } = useRadioStore();
   
-  // NOTE: Auto-download is handled by GlobalServicesContext (runs at App level)
+  // NOTE: All background services (scraping, downloads, grade builder) 
+  // are handled by GlobalServicesContext at App level
   
   // Initialize required folders on startup (Electron only)
   useInitializeFolders();
   
   // Auto cleanup of old data (>24h) - runs every hour
   useAutoCleanup();
-  
-  // Hook for checking songs in local music library (Electron IPC)
-  const { checkSongExists } = useCheckMusicLibrary();
-  
-  // Check if song is already in missing list (avoid duplicates)
-  const isSongAlreadyMissing = useCallback((artist: string, title: string): boolean => {
-    return missingSongs.some(
-      s => s.artist.toLowerCase() === artist.toLowerCase() && 
-           s.title.toLowerCase() === title.toLowerCase()
-    );
-  }, [missingSongs]);
-  
-  const songIndexRef = useRef<Record<string, number>>({
-    'BH FM': 0,
-    'Band FM': 0,
-    'Clube FM': 0,
-  });
-  const scrapeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Real scraping function for Electron
-  const performRealScrape = useCallback(async () => {
-    if (!isElectron || !window.electronAPI?.scrapeStations) return;
-    
-    try {
-      const enabledStations = stations.filter(s => s.enabled);
-      if (enabledStations.length === 0) return;
-      
-      console.log('[SCRAPE] Starting real scrape for', enabledStations.length, 'stations');
-      const result = await window.electronAPI.scrapeStations(enabledStations);
-      
-      if (result.songs && result.songs.length > 0) {
-        for (const song of result.songs) {
-          const capturedSong: CapturedSong = {
-            id: song.id,
-            title: song.title,
-            artist: song.artist,
-            station: song.station,
-            timestamp: new Date(song.timestamp),
-            status: song.status,
-          };
-          addCapturedSong(capturedSong);
-        }
-        console.log('[SCRAPE] Added', result.songs.length, 'new songs');
-      }
-      
-      if (result.errors && result.errors.length > 0) {
-        console.warn('[SCRAPE] Errors:', result.errors);
-      }
-      
-      setLastUpdate(new Date());
-    } catch (error) {
-      console.error('[SCRAPE] Error:', error);
-    }
-  }, [stations, addCapturedSong, setLastUpdate]);
-
-  // Capture handler - checks music library and adds to missing if needed
-  const performCapture = useCallback(async () => {
-    const stationNames = ['BH FM', 'Band FM', 'Clube FM'];
-    const randomStation = stationNames[Math.floor(Math.random() * stationNames.length)];
-    const stationSongs = simulatedSongsDatabase[randomStation as keyof typeof simulatedSongsDatabase];
-    
-    // Get next song index for this station
-    const currentIndex = songIndexRef.current[randomStation] || 0;
-    const song = stationSongs[currentIndex % stationSongs.length];
-    
-    // Update index for next time
-    songIndexRef.current[randomStation] = (currentIndex + 1) % stationSongs.length;
-    
-    // Check if song exists in local music library using Electron IPC (or fallback)
-    const libraryCheck = await checkSongExists(song.artist, song.title);
-    const existsInLibrary = libraryCheck.exists;
-    const alreadyMissing = isSongAlreadyMissing(song.artist, song.title);
-    
-    const capturedSong: CapturedSong = {
-      id: `cap-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      title: song.title,
-      artist: song.artist,
-      station: randomStation,
-      timestamp: new Date(),
-      status: existsInLibrary ? 'found' : 'missing',
-    };
-    
-    addCapturedSong(capturedSong);
-    
-    // UPDATE RANKING - Integração com TOP50 (silent - no log)
-    const stationStyle = stationStyles[randomStation] || 'POP/VARIADO';
-    addOrUpdateRankingSong(song.title, song.artist, stationStyle);
-    
-    // If song is missing AND not already in missing list, add to missing songs for auto-download
-    if (!existsInLibrary && !alreadyMissing) {
-      const missingSong: MissingSong = {
-        id: capturedSong.id,
-        title: song.title,
-        artist: song.artist,
-        station: randomStation,
-        timestamp: new Date(),
-        status: 'missing',
-      };
-      addMissingSong(missingSong);
-      console.log(`[AUTO-FLOW] ➕ Faltando: ${song.artist} - ${song.title}`);
-    }
-    // Removed verbose logs for "already missing" and "found" cases to reduce console spam
-    
-    setLastUpdate(new Date());
-  }, [addCapturedSong, addMissingSong, addOrUpdateRankingSong, setLastUpdate, checkSongExists, isSongAlreadyMissing]);
-
-  // Start capture system
+  // Mark system as running on mount
   useEffect(() => {
     setIsRunning(true);
     setLastUpdate(new Date());
-    
-    // Clear old songs on mount
-    clearCapturedSongs();
-    
-    // Add initial songs
-    const initialCount = 5;
-    for (let i = 0; i < initialCount; i++) {
-      setTimeout(() => {
-        performCapture();
-      }, i * 500);
-    }
-
-    if (isElectron) {
-      // In Electron: Use real scraping + music library check
-      console.log('[CAPTURE] Modo Electron - Verificação real do banco musical ativa');
-      
-      // Initial scrape
-      performRealScrape();
-      
-      // Scrape every 20 minutes (1200000ms)
-      scrapeIntervalRef.current = setInterval(() => {
-        performRealScrape();
-      }, 20 * 60 * 1000);
-      
-      // Also run capture between scrapes for continuous monitoring
-      const captureInterval = setInterval(() => {
-        performCapture();
-      }, 8000);
-      
-      return () => {
-        if (scrapeIntervalRef.current) {
-          clearInterval(scrapeIntervalRef.current);
-        }
-        clearInterval(captureInterval);
-      };
-    } else {
-      // In Web: Use simulation only (no real music library check)
-      console.log('[CAPTURE] Modo Web - Simulação de verificação do banco musical');
-      
-      // Add new captured song every 5-10 seconds
-      const interval = setInterval(() => {
-        performCapture();
-      }, 5000 + Math.random() * 5000);
-
-      return () => clearInterval(interval);
-    }
   }, []);
 
   const renderView = () => {
