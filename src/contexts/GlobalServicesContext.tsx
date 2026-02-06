@@ -627,6 +627,8 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
 
   // Track if we already downloaded today
   const lastVozDownloadDateRef = useRef<string | null>(null);
+  // Track if we already cleaned up today
+  const lastVozCleanupDateRef = useRef<string | null>(null);
 
   const scheduleVozBrasil = useCallback(() => {
     if (!isElectron || !window.electronAPI?.downloadVozBrasil) {
@@ -638,6 +640,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     let config = {
       enabled: true,
       scheduleTime: '20:35',
+      cleanupTime: '23:59',
       downloadFolder: 'C:\\Playlist\\A Voz do Brasil',
     };
     
@@ -657,11 +660,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
 
     const isWeekday = (d: Date) => d.getDay() >= 1 && d.getDay() <= 5;
     
-    // Check every minute if it's time to download
-    // This is more robust than setTimeout because it handles:
-    // 1. System sleep/suspend
-    // 2. Long JavaScript pauses
-    // 3. Browser tab inactivity
+    // Check every minute if it's time to download or cleanup
     const checkAndDownload = async () => {
       const now = new Date();
       const todayStr = now.toDateString();
@@ -672,7 +671,54 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         return;
       }
       
-      // Skip if not a weekday
+      // Re-read config (in case it changed)
+      let currentConfig = { enabled: true, scheduleTime: '20:35', cleanupTime: '23:59', downloadFolder: 'C:\\Playlist\\A Voz do Brasil' };
+      try {
+        const saved = localStorage.getItem('vozBrasilConfig');
+        if (saved) currentConfig = { ...currentConfig, ...JSON.parse(saved) };
+      } catch (e) { /* use default */ }
+      
+      if (!currentConfig.enabled) {
+        return;
+      }
+
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const currentTotalMinutes = currentHour * 60 + currentMinute;
+
+      // === AUTOMATIC CLEANUP at configured cleanupTime ===
+      if (lastVozCleanupDateRef.current !== todayStr && window.electronAPI?.cleanupVozBrasil) {
+        const cleanupParts = (currentConfig.cleanupTime || '23:59').split(':');
+        const cleanupHour = parseInt(cleanupParts[0], 10);
+        const cleanupMinute = parseInt(cleanupParts[1], 10);
+        const cleanupTotalMinutes = cleanupHour * 60 + cleanupMinute;
+        
+        // Trigger cleanup within a 5-minute window
+        if (currentTotalMinutes >= cleanupTotalMinutes && currentTotalMinutes <= cleanupTotalMinutes + 5) {
+          console.log('[VOZ-SVC] 🗑️ Horário de limpeza automática atingido!');
+          lastVozCleanupDateRef.current = todayStr;
+          
+          try {
+            const result = await window.electronAPI.cleanupVozBrasil({
+              folder: currentConfig.downloadFolder,
+              maxAgeDays: 0, // Delete all files
+            });
+            
+            if (result.success) {
+              const count = result.deletedCount || 0;
+              console.log(`[VOZ-SVC] 🗑️ Limpeza automática concluída: ${count} arquivo(s) removido(s)`);
+            } else {
+              console.log(`[VOZ-SVC] ⚠️ Limpeza automática falhou: ${result.error}`);
+              lastVozCleanupDateRef.current = null; // Allow retry
+            }
+          } catch (error) {
+            console.error('[VOZ-SVC] ❌ Erro na limpeza automática:', error);
+            lastVozCleanupDateRef.current = null; // Allow retry
+          }
+        }
+      }
+
+      // === DOWNLOAD at configured scheduleTime (weekdays only) ===
       if (!isWeekday(now)) {
         return;
       }
@@ -682,27 +728,10 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         return;
       }
       
-      // Re-read config (in case it changed)
-      let currentConfig = { enabled: true, scheduleTime: '20:35' };
-      try {
-        const saved = localStorage.getItem('vozBrasilConfig');
-        if (saved) currentConfig = { ...currentConfig, ...JSON.parse(saved) };
-      } catch (e) { /* use default */ }
-      
-      if (!currentConfig.enabled) {
-        return;
-      }
-      
       const timeParts = (currentConfig.scheduleTime || '20:35').split(':');
       const scheduleHour = parseInt(timeParts[0], 10) || 20;
       const scheduleMinute = parseInt(timeParts[1], 10) || 35;
-      
-      const currentHour = now.getHours();
-      const currentMinute = now.getMinutes();
-      
-      // Check if we're within the download window (schedule time to +30 minutes)
       const scheduleTotalMinutes = scheduleHour * 60 + scheduleMinute;
-      const currentTotalMinutes = currentHour * 60 + currentMinute;
       const windowEndMinutes = scheduleTotalMinutes + 30;
       
       if (currentTotalMinutes >= scheduleTotalMinutes && currentTotalMinutes <= windowEndMinutes) {
@@ -730,8 +759,10 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     const timeParts = (config.scheduleTime || '20:35').split(':');
     const scheduleHour = parseInt(timeParts[0], 10) || 20;
     const scheduleMinute = parseInt(timeParts[1], 10) || 35;
+    const cleanupParts = (config.cleanupTime || '23:59').split(':');
     console.log(`[VOZ-SVC] 📻 Monitoramento ativo: verificando a cada 1 minuto`);
-    console.log(`[VOZ-SVC] ⏰ Horário alvo: ${scheduleHour.toString().padStart(2, '0')}:${scheduleMinute.toString().padStart(2, '0')} (Seg-Sex)`);
+    console.log(`[VOZ-SVC] ⏰ Download: ${scheduleHour.toString().padStart(2, '0')}:${scheduleMinute.toString().padStart(2, '0')} (Seg-Sex)`);
+    console.log(`[VOZ-SVC] 🗑️ Limpeza: ${cleanupParts[0]}:${cleanupParts[1]} (automática)`);
 
     // Check immediately
     checkAndDownload();
