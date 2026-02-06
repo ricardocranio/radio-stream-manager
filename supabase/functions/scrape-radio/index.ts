@@ -133,9 +133,9 @@ const MYTUNER_SELECTORS = {
 
 // Retry configuration
 const RETRY_CONFIG = {
-  maxRetries: 2,
-  retryDelay: 1000,
-  timeout: 45000, // 45 seconds - more time for dynamic content
+  maxRetries: 1, // Single attempt per URL (was 2 - prevents edge function timeout)
+  retryDelay: 500,
+  timeout: 20000, // 20 seconds (was 45s - edge functions have ~60s limit)
 };
 
 async function scrapeWithRetry(
@@ -158,14 +158,13 @@ async function scrapeWithRetry(
         },
         body: JSON.stringify({
           url,
-          formats: ['markdown', 'html'],
+          formats: ['markdown', 'html'], // Need both - markdown is more reliable for parsing
           onlyMainContent: false,
-          // Based on Python monitor script wait times
-          waitFor: 6000, // Wait for page to load
+          // Reduced wait times to fit within edge function timeout
+          waitFor: 4000, // Wait for page to load (was 6s)
           actions: [
-            { type: 'wait', milliseconds: 4000 }, // Wait for dynamic content (Playwright uses 3s)
+            { type: 'wait', milliseconds: 3000 }, // Wait for dynamic content (was 4s)
             { type: 'scroll', direction: 'down', amount: 400 }, // Scroll to trigger lazy load
-            { type: 'wait', milliseconds: 2000 }, // Wait after scroll for content
           ],
         }),
         signal: controller.signal,
@@ -200,8 +199,8 @@ async function tryFallbackSources(
   stationName: string,
   primaryUrl: string
 ): Promise<{ success: boolean; data?: any; source?: string; error?: string }> {
-  // Try primary URL first
-  const primaryResult = await scrapeWithRetry(apiKey, primaryUrl, 2);
+  // Try primary URL first (single attempt)
+  const primaryResult = await scrapeWithRetry(apiKey, primaryUrl, 1);
   if (primaryResult.success && primaryResult.data) {
     const parsed = parseRadioContent(primaryResult.data, stationName, primaryUrl);
     if (parsed.nowPlaying) {
@@ -209,21 +208,13 @@ async function tryFallbackSources(
     }
   }
 
-  console.log('[Fallback] Primary source failed or returned no data, trying fallbacks...');
+  console.log('[Fallback] Primary source failed or returned no data, trying one fallback...');
 
-  // Try alternative MyTuner URL formats
-  const mytunerVariations = [
-    primaryUrl.replace('/pt/', '/'),
-    primaryUrl.replace('mytuner-radio.com/pt', 'mytuner-radio.com'),
-    `https://mytuner-radio.com/radio/${stationName.toLowerCase().replace(/\s+/g, '-')}/`,
-  ];
-
-  for (const altUrl of mytunerVariations) {
-    if (altUrl !== primaryUrl) {
-      // Validate fallback URLs too
-      const validation = isValidRadioUrl(altUrl);
-      if (!validation.valid) continue;
-      
+  // Try only ONE fallback: remove /pt/ from URL (most effective variation)
+  const altUrl = primaryUrl.replace('/pt/', '/');
+  if (altUrl !== primaryUrl) {
+    const validation = isValidRadioUrl(altUrl);
+    if (validation.valid) {
       console.log(`[Fallback] Trying MyTuner variation`);
       const result = await scrapeWithRetry(apiKey, altUrl, 1);
       if (result.success && result.data) {
@@ -235,7 +226,7 @@ async function tryFallbackSources(
     }
   }
 
-  return { success: false, error: 'No fallback sources returned valid data' };
+  return { success: false, error: 'No sources returned valid data' };
 }
 
 Deno.serve(async (req) => {
@@ -288,6 +279,7 @@ Deno.serve(async (req) => {
 
     if (!scrapeResult.success || !scrapeResult.data) {
       console.error('All scrape attempts failed');
+      // Return success:false with 200 instead of 500 to prevent edge function error spam
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -295,7 +287,7 @@ Deno.serve(async (req) => {
           error: 'Failed to retrieve station data',
           scrapedAt: new Date().toISOString(),
         }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -454,36 +446,62 @@ function parseRadioContent(data: any, stationName: string, url: string): RadioSc
       }
     }
     
-    // Method 3: Fallback to markdown parsing
+    // Method 3: Fallback to markdown parsing (updated for current MyTuner format)
     if (!nowPlaying && songs.length === 0) {
-      // Look for patterns after "Tocando agora" text
-      const afterNowPlaying = markdown.match(/Tocando agora:?\s*\n+([\s\S]*?)(?:\n\s*\n|As últimas|Playlist)/i);
-      if (afterNowPlaying) {
-        const section = afterNowPlaying[1];
-        const songMatch = section.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/);
-        if (songMatch) {
-          const title = cleanText(songMatch[1]);
-          const artist = cleanText(songMatch[2]);
-          if (isValidSongPart(title) && isValidSongPart(artist)) {
-            nowPlaying = { title, artist, timestamp: new Date().toISOString() };
+      // Method 3a: Extract from image alt text "Artist - Title" pattern
+      // Format: ![Artist - Title](image_url) or [![Artist - Title](image_url)
+      const afterHistory = markdown.match(/As últimas tocadas[\s\S]*$/i);
+      const historySection = afterHistory ? afterHistory[0] : markdown;
+      
+      // Pattern: image alt text contains "Artist - Title", followed by Title\nArtistXX min ago
+      const altTextSongs = historySection.match(/!\[([^\]]+)\]\(https:\/\/is\d+-ssl\.mzstatic[^)]+\)/g) || [];
+      
+      for (const imgTag of altTextSongs.slice(0, 8)) {
+        const altMatch = imgTag.match(/!\[([^\]]+)\]/);
+        if (!altMatch) continue;
+        
+        const altText = altMatch[1];
+        // Alt text format: "Artist - Title" (e.g., "Jorge & Mateus - Todo Seu (Ao Vivo)")
+        const dashParts = altText.match(/^(.+?)\s*[-–]\s*(.+)$/);
+        if (dashParts) {
+          const artist = cleanText(dashParts[1]);
+          const title = cleanText(dashParts[2]);
+          if (isValidSongPart(title) && isValidSongPart(artist) && 
+              !songs.some(s => s.title.toLowerCase() === title.toLowerCase() && s.artist.toLowerCase() === artist.toLowerCase())) {
+            songs.push({ title, artist, timestamp: new Date().toISOString() });
           }
         }
       }
       
-      // Look for patterns after "As últimas tocadas"
-      const afterHistory = markdown.match(/As últimas tocadas:?\s*\n+([\s\S]*?)(?:\n\s*\n\s*\n|$)/i);
-      if (afterHistory) {
-        const section = afterHistory[1];
-        const songPatterns = section.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/g) || [];
+      // Method 3b: Legacy **bold** pattern fallback
+      if (songs.length === 0) {
+        const afterNowPlaying = markdown.match(/Tocando agora:?\s*\n+([\s\S]*?)(?:\n\s*\n|As últimas|Playlist)/i);
+        if (afterNowPlaying) {
+          const section = afterNowPlaying[1];
+          const songMatch = section.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/);
+          if (songMatch) {
+            const title = cleanText(songMatch[1]);
+            const artist = cleanText(songMatch[2]);
+            if (isValidSongPart(title) && isValidSongPart(artist)) {
+              nowPlaying = { title, artist, timestamp: new Date().toISOString() };
+            }
+          }
+        }
         
-        for (const pattern of songPatterns.slice(0, 5)) {
-          const match = pattern.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/);
-          if (match) {
-            const title = cleanText(match[1]);
-            const artist = cleanText(match[2]);
-            if (isValidSongPart(title) && isValidSongPart(artist) && 
-                !songs.some(s => s.title === title && s.artist === artist)) {
-              songs.push({ title, artist, timestamp: new Date().toISOString() });
+        const afterHistoryLegacy = markdown.match(/As últimas tocadas:?\s*\n+([\s\S]*?)(?:\n\s*\n\s*\n|$)/i);
+        if (afterHistoryLegacy) {
+          const section = afterHistoryLegacy[1];
+          const songPatterns = section.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/g) || [];
+          
+          for (const pattern of songPatterns.slice(0, 5)) {
+            const match = pattern.match(/\*\*([^*\n]+)\*\*\s*\n+([^\n*]+)/);
+            if (match) {
+              const title = cleanText(match[1]);
+              const artist = cleanText(match[2]);
+              if (isValidSongPart(title) && isValidSongPart(artist) && 
+                  !songs.some(s => s.title === title && s.artist === artist)) {
+                songs.push({ title, artist, timestamp: new Date().toISOString() });
+              }
             }
           }
         }
