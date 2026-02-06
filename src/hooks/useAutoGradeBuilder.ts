@@ -290,8 +290,8 @@ export function useAutoGradeBuilder() {
       const blockTime = new Date(baseDate);
       blockTime.setHours(blockHour, blockMinute, 0, 0);
       const windowEnd = blockTime.toISOString();
-      const windowStart = new Date(blockTime.getTime() - 30 * 60 * 1000).toISOString();
-      console.log(`[AUTO-GRADE] 🕐 Buscando músicas para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')}`);
+      const windowStart = new Date(blockTime.getTime() - 60 * 60 * 1000).toISOString();
+      console.log(`[AUTO-GRADE] 🕐 Buscando músicas para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')} (janela de 1h)`);
 
       const { data, error } = await supabase
         .from('scraped_songs')

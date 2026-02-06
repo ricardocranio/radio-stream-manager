@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 const CLEANUP_INTERVAL = 60 * 60 * 1000; // Run every hour
 const MAX_DATA_AGE_HOURS = 24; // Data older than 24h gets cleaned
-const MAX_SONGS_PER_STATION = 25; // Maximum songs to keep per station
+const MAX_SONGS_PER_STATION = 40; // Maximum songs to keep per station
 
 /**
  * Hook that performs automatic cleanup of old data
