@@ -11,11 +11,23 @@ import type { WeekDay, ScheduledSequence, SequenceConfig } from '@/types/radio';
  * PRESERVES parentheses and brackets (e.g., "(Ao Vivo)", "[Remix]") because
  * these are part of the actual filename on disk returned by library matching.
  * Only removes accents, &→e, special chars, forces UPPERCASE, ensures .MP3.
+ * Also removes any user-configured filter characters.
  */
-function sanitizeGradeFilename(filename: string): string {
+function sanitizeGradeFilename(filename: string, filterCharacters?: string[]): string {
   if (!filename) return '';
   
   let result = filename;
+  
+  // Remove user-configured filter characters first (encoding artifacts, etc.)
+  if (filterCharacters && filterCharacters.length > 0) {
+    for (const char of filterCharacters) {
+      if (char) {
+        // Escape special regex characters in the filter string
+        const escaped = char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        result = result.replace(new RegExp(escaped, 'g'), '');
+      }
+    }
+  }
   
   // Replace & with "e"
   result = result.replace(/&/g, 'e');
@@ -47,9 +59,9 @@ function sanitizeGradeFilename(filename: string): string {
  * Sanitize all quoted filenames in a grade line for radio automation compatibility.
  * Uses light sanitization that PRESERVES parentheses/brackets from real library filenames.
  */
-function sanitizeGradeLine(line: string): string {
+function sanitizeGradeLine(line: string, filterCharacters?: string[]): string {
   return line.replace(/"([^"]+)"/g, (_match, filename: string) => {
-    return `"${sanitizeGradeFilename(filename)}"`;
+    return `"${sanitizeGradeFilename(filename, filterCharacters)}"`;
   });
 }
 
@@ -59,6 +71,7 @@ interface SongEntry {
   station: string;
   style: string;
   filename: string;
+  originalFilename?: string; // Original filename as it came from the source (monitoring)
   existsInLibrary?: boolean;
 }
 
@@ -136,6 +149,9 @@ export function useAutoGradeBuilder() {
   } = useRadioStore();
   
   const { addBlockLogs } = useGradeLogStore();
+  
+  // Cache filterCharacters from config
+  const filterChars = config.filterCharacters;
 
   const [state, setState] = useState<AutoGradeState>({
     isBuilding: false,
@@ -396,6 +412,48 @@ export function useAutoGradeBuilder() {
            s.title.toLowerCase() === title.toLowerCase()
     );
   }, [existingMissingSongs]);
+
+  /**
+   * Rename physical files on disk before writing to grade.
+   * Extracts all quoted filenames from grade content, computes sanitized version,
+   * and renames the physical file if the names differ.
+   * This ensures the grade TXT references match the actual files on disk.
+   */
+  const renameFilesInGradeContent = useCallback(async (gradeContent: string): Promise<void> => {
+    if (!isElectronEnv || !window.electronAPI?.renameMusicFile) return;
+    
+    // Extract all unique quoted filenames
+    const filenameMatches = gradeContent.match(/"([^"]+\.(?:mp3|MP3))"/g);
+    if (!filenameMatches) return;
+    
+    const uniqueFilenames = new Set<string>();
+    filenameMatches.forEach(match => {
+      // Remove surrounding quotes
+      const filename = match.slice(1, -1);
+      uniqueFilenames.add(filename);
+    });
+    
+    // For each sanitized filename in the grade, check if the original needs renaming
+    for (const sanitizedName of uniqueFilenames) {
+      // Skip fixed content filenames (all uppercase, underscore-separated)
+      if (/^[A-Z0-9_]+\.MP3$/.test(sanitizedName)) continue;
+      // Skip coringa
+      if (sanitizedName.toLowerCase() === 'mus' || sanitizedName.toLowerCase() === 'rom' || sanitizedName.toLowerCase() === 'clas') continue;
+      
+      try {
+        // The sanitized name is already uppercase - check if a file with the original
+        // (unsanitized) name exists that needs renaming
+        await window.electronAPI.renameMusicFile({
+          musicFolders: config.musicFolders,
+          currentFilename: sanitizedName, // Will search case-insensitively in the backend
+          newFilename: sanitizedName,
+        });
+      } catch (err) {
+        // Silently skip rename errors - the grade will still be written
+        console.warn(`[RENAME] Warning: Could not process "${sanitizedName}":`, err);
+      }
+    }
+  }, [config.musicFolders]);
 
   // Fetch songs from Supabase for a specific 30-minute window BEFORE the block time
   // Block 17:30 → uses songs from 17:00-17:30
@@ -698,7 +756,7 @@ export function useAutoGradeBuilder() {
         });
         
         return {
-          line: sanitizeGradeLine(`${timeStr} (ID=MISTURADAO) "${misturadao01}",vht,"${posicao05}",vht,"${misturadao02}",vht,"${posicao02}"`),
+          line: sanitizeGradeLine(`${timeStr} (ID=MISTURADAO) "${misturadao01}",vht,"${posicao05}",vht,"${misturadao02}",vht,"${posicao02}"`, filterChars),
           logs: blockLogs,
         };
       } else {
@@ -718,7 +776,7 @@ export function useAutoGradeBuilder() {
         });
         
         return {
-          line: sanitizeGradeLine(`${timeStr} (ID=MISTURADAO) "${misturadao03}",vht,"${posicao08}",vht,"${misturadao04}",vht,"${posicao09}"`),
+          line: sanitizeGradeLine(`${timeStr} (ID=MISTURADAO) "${misturadao03}",vht,"${posicao08}",vht,"${misturadao04}",vht,"${posicao09}"`, filterChars),
           logs: blockLogs,
         };
       }
@@ -746,7 +804,7 @@ export function useAutoGradeBuilder() {
         });
         // Songs are already real filenames like "Shallow - Lady Gaga.mp3"
         return { 
-          line: sanitizeGradeLine(`${timeStr} (ID=TOP50) ${top50Songs.map(s => `"${s}"`).join(',vht,')}`),
+          line: sanitizeGradeLine(`${timeStr} (ID=TOP50) ${top50Songs.map(s => `"${s}"`).join(',vht,')}`, filterChars),
           logs: blockLogs,
         };
       }
@@ -816,7 +874,7 @@ export function useAutoGradeBuilder() {
       
       const programName = getProgramForHour(hour);
       return {
-        line: sanitizeGradeLine(`${timeStr} (ID=${programName}) ${mixSongs.join(',vht,')}`),
+        line: sanitizeGradeLine(`${timeStr} (ID=${programName}) ${mixSongs.join(',vht,')}`, filterChars),
         logs: blockLogs,
       };
     }
@@ -907,7 +965,7 @@ export function useAutoGradeBuilder() {
       }
       
       return {
-        line: sanitizeGradeLine(`${timeStr} (ID=Sertanejo Nossa) ${sertanejoSongs.join(',vht,')}`),
+        line: sanitizeGradeLine(`${timeStr} (ID=Sertanejo Nossa) ${sertanejoSongs.join(',vht,')}`, filterChars),
         logs: blockLogs,
       };
     }
@@ -1542,7 +1600,7 @@ export function useAutoGradeBuilder() {
     
     const lineContent = allContent.join(',vht,');
     return {
-      line: sanitizeGradeLine(`${timeStr} (ID=${programName}) ${lineContent}`),
+      line: sanitizeGradeLine(`${timeStr} (ID=${programName}) ${lineContent}`, filterChars),
       logs: blockLogs,
     };
   }, [
@@ -1550,7 +1608,7 @@ export function useAutoGradeBuilder() {
     stations, getActiveSequenceForBlock, getStationStyle, isRecentlyUsed, findSubstitute,
     markSongAsUsed, config.coringaCode, checkSongInLibrary, isSongAlreadyMissing,
     addMissingSong, addCarryOverSong, getCarryOverSongs, findSongInLibrary,
-    processFixedContentFilename, getDayCode, fixedContent, rankingSongs
+    processFixedContentFilename, getDayCode, fixedContent, rankingSongs, filterChars
   ]);
 
   // Calculate current and next block times
@@ -1682,6 +1740,11 @@ export function useAutoGradeBuilder() {
 
       // Final save (redundant but ensures complete save)
       const finalContent = lines.join('\n');
+      
+      // RENAME: Rename physical files on disk before final save
+      // This ensures filenames on disk match what's written in the grade TXT
+      await renameFilesInGradeContent(finalContent);
+      
       const result = await window.electronAPI.saveGradeFile({
         folder: config.gradeFolder,
         filename,
@@ -1744,7 +1807,7 @@ export function useAutoGradeBuilder() {
       });
     }
   }, [
-    clearUsedSongs, fetchAllRecentSongs, generateBlockLine,
+    clearUsedSongs, fetchAllRecentSongs, generateBlockLine, renameFilesInGradeContent,
     getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, toast, addBlockLogs
   ]);
 
@@ -1840,6 +1903,10 @@ export function useAutoGradeBuilder() {
         .map(t => lineMap.get(t))
         .join('\n');
 
+      // RENAME: Rename physical files on disk before saving
+      // This ensures filenames on disk match what's written in the grade TXT
+      await renameFilesInGradeContent(sortedContent);
+
       const result = await window.electronAPI.saveGradeFile({
         folder: config.gradeFolder,
         filename,
@@ -1890,7 +1957,7 @@ export function useAutoGradeBuilder() {
       });
     }
   }, [
-    getBlockTimes, fetchSongsForBlock, fetchAllRecentSongs, generateBlockLine,
+    getBlockTimes, fetchSongsForBlock, fetchAllRecentSongs, generateBlockLine, renameFilesInGradeContent,
     getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length,
     getProgramForHour, toast, addBlockLogs
   ]);
