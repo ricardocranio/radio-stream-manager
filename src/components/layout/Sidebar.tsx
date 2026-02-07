@@ -1,4 +1,4 @@
-import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic, Music, Database, Calendar } from 'lucide-react';
+import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic, Music, Database, Calendar, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useRadioStore } from '@/store/radioStore';
@@ -28,6 +28,7 @@ const staticNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'export', label: 'Exportar Config', icon: Download },
   { id: 'folders', label: 'Pastas', icon: FolderOpen },
   { id: 'missing', label: 'Faltando', icon: AlertTriangle },
+  { id: 'tools', label: 'Ferramentas', icon: Wrench },
   { id: 'settings', label: 'Configurações', icon: Settings },
 ];
 

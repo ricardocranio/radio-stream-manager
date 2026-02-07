@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readGradeFile: (params) => ipcRenderer.invoke('read-grade-file', params),
   listFolderFiles: (params) => ipcRenderer.invoke('list-folder-files', params),
   renameMusicFile: (params) => ipcRenderer.invoke('rename-music-file', params),
+  scanBpmTags: (params) => ipcRenderer.invoke('scan-bpm-tags', params),
   
   // Window management
   showWindow: () => ipcRenderer.invoke('show-window'),

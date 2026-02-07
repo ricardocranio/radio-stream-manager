@@ -174,6 +174,20 @@ interface FolderListResult {
   error?: string;
 }
 
+interface BpmScanParams {
+  folder: string;
+}
+
+interface BpmScanResult {
+  success: boolean;
+  total: number;
+  withBpm: number;
+  withoutBpm: number;
+  samples: { filename: string; bpm: number }[];
+  bpmDistribution: { range: string; count: number }[];
+  error?: string;
+}
+
 interface StationConfig {
   id: string;
   name: string;
@@ -252,6 +266,7 @@ interface ElectronAPI {
   readGradeFile: (params: Omit<GradeFileParams, 'content'>) => Promise<GradeFileResult>;
   listFolderFiles: (params: FolderListParams) => Promise<FolderListResult>;
   renameMusicFile: (params: RenameMusicFileParams) => Promise<RenameMusicFileResult>;
+  scanBpmTags: (params: BpmScanParams) => Promise<BpmScanResult>;
   
   // Station folder management
   ensureStationFolders: (params: EnsureStationFoldersParams) => Promise<EnsureStationFoldersResult>;
