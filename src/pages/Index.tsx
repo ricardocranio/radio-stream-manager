@@ -25,6 +25,7 @@ const RankingView = lazy(() => import('@/components/views/RankingView').then(m =
 const LogsView = lazy(() => import('@/components/views/LogsView').then(m => ({ default: m.LogsView })));
 const ExportView = lazy(() => import('@/components/views/ExportView').then(m => ({ default: m.ExportView })));
 const GradeBuilderView = lazy(() => import('@/components/views/GradeBuilderView').then(m => ({ default: m.GradeBuilderView })));
+const ToolsView = lazy(() => import('@/components/views/ToolsView').then(m => ({ default: m.ToolsView })));
 
 // Loading fallback for lazy components
 const ViewSkeleton = () => (
@@ -86,6 +87,8 @@ const Index = () => {
         return <Suspense fallback={<ViewSkeleton />}><FoldersView /></Suspense>;
       case 'missing':
         return <Suspense fallback={<ViewSkeleton />}><MissingView /></Suspense>;
+      case 'tools':
+        return <Suspense fallback={<ViewSkeleton />}><ToolsView /></Suspense>;
       case 'settings':
         return <Suspense fallback={<ViewSkeleton />}><SettingsView /></Suspense>;
       default:
