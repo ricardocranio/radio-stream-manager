@@ -1,41 +1,30 @@
 import { useState } from 'react';
 import { Wrench, Music, Search, Loader2, BarChart3, FolderOpen, Plus, X } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
+import { useBpmScanStore } from '@/store/bpmScanStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
-
-interface BpmScanResultData {
-  success: boolean;
-  total: number;
-  withBpm: number;
-  withoutBpm: number;
-  samples: { filename: string; bpm: number }[];
-  bpmDistribution: { range: string; count: number }[];
-  error?: string;
-}
 
 export function ToolsView() {
   const { config } = useRadioStore();
   const { toast } = useToast();
   
-  // Initialize with all configured music folders
+  const { isScanning, scanResult, error, startScan, finishScan, failScan } = useBpmScanStore();
+  
+  // Local folder management state
   const [scanFolders, setScanFolders] = useState<string[]>(() => {
     const folders = config.musicFolders?.filter(Boolean) || [];
     return folders.length > 0 ? folders : ['C:\\Playlist\\Músicas'];
   });
   const [newFolder, setNewFolder] = useState('');
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<BpmScanResultData | null>(null);
-  const [scanProgress, setScanProgress] = useState(0);
 
-  const handleAddFolder = async (folderPath?: string) => {
+  const handleAddFolder = (folderPath?: string) => {
     const folder = folderPath || newFolder.trim();
     if (!folder) return;
     if (scanFolders.includes(folder)) {
@@ -67,7 +56,7 @@ export function ToolsView() {
     setScanFolders(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleScanBpm = async () => {
+  const handleScanBpm = () => {
     if (!isElectron) {
       toast({
         title: '🖥️ Recurso Desktop',
@@ -95,36 +84,29 @@ export function ToolsView() {
       return;
     }
 
-    setIsScanning(true);
-    setScanResult(null);
-    setScanProgress(0);
+    // Start scan in background (fire-and-forget)
+    startScan();
+    toast({
+      title: '🔍 Scanner iniciado',
+      description: `Escaneando ${scanFolders.length} pasta${scanFolders.length !== 1 ? 's' : ''} em segundo plano...`,
+    });
 
-    try {
-      const result = await window.electronAPI.scanBpmTags({ folders: scanFolders });
-      
-      if (result.success) {
-        setScanResult(result);
-        toast({
-          title: '✅ Scan concluído!',
-          description: `${result.withBpm} de ${result.total} arquivos têm BPM nas tags.`,
-        });
-      } else {
-        toast({
-          title: 'Erro no scan',
-          description: result.error || 'Erro desconhecido.',
-          variant: 'destructive',
-        });
-      }
-    } catch (err) {
-      console.error('BPM scan error:', err);
-      toast({
-        title: 'Erro no scan',
-        description: 'Falha ao escanear as pastas.',
-        variant: 'destructive',
+    // Run async without blocking
+    window.electronAPI.scanBpmTags({ folders: scanFolders })
+      .then((result) => {
+        if (result.success) {
+          finishScan(result);
+          // Only toast if still on this view - user may have navigated away
+          console.log(`[BPM-SCAN] ✅ Concluído: ${result.withBpm}/${result.total} com BPM`);
+        } else {
+          failScan(result.error || 'Erro desconhecido');
+          console.error('[BPM-SCAN] ❌ Erro:', result.error);
+        }
+      })
+      .catch((err) => {
+        console.error('[BPM-SCAN] ❌ Falha:', err);
+        failScan('Falha ao escanear as pastas.');
       });
-    } finally {
-      setIsScanning(false);
-    }
   };
 
   const bpmPercentage = scanResult && scanResult.total > 0
@@ -147,12 +129,22 @@ export function ToolsView() {
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-primary" />
             Scanner de BPM (Tags ID3)
+            {isScanning && (
+              <span className="ml-2 px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full animate-pulse">
+                Em andamento...
+              </span>
+            )}
+            {scanResult && !isScanning && (
+              <span className="ml-2 px-2 py-0.5 text-xs bg-green-500/10 text-green-500 rounded-full">
+                Concluído
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
           <p className="text-sm text-muted-foreground">
-            Escaneia arquivos MP3 nas pastas e verifica quais possuem informação de BPM nas tags ID3. 
-            Útil para decidir se vale a pena usar BPM como critério na montagem da grade de sábado.
+            Escaneia arquivos MP3 nas pastas em segundo plano e verifica quais possuem informação de BPM nas tags ID3. 
+            Você pode navegar para outras telas enquanto o scan roda.
           </p>
 
           {/* Folders list */}
@@ -170,6 +162,7 @@ export function ToolsView() {
                       size="icon"
                       className="h-6 w-6 flex-shrink-0"
                       onClick={() => handleRemoveFolder(index)}
+                      disabled={isScanning}
                     >
                       <X className="w-3 h-3" />
                     </Button>
@@ -186,11 +179,12 @@ export function ToolsView() {
                 placeholder="Adicionar pasta..."
                 className="flex-1"
                 onKeyDown={(e) => e.key === 'Enter' && handleAddFolder()}
+                disabled={isScanning}
               />
               <Button
                 variant="outline"
                 onClick={() => handleAddFolder()}
-                disabled={!newFolder.trim()}
+                disabled={!newFolder.trim() || isScanning}
                 title="Adicionar pasta digitada"
               >
                 <Plus className="w-4 h-4" />
@@ -199,6 +193,7 @@ export function ToolsView() {
                 variant="outline"
                 onClick={handleSelectFolder}
                 title="Selecionar pasta"
+                disabled={isScanning}
               >
                 <FolderOpen className="w-4 h-4" />
               </Button>
@@ -214,7 +209,7 @@ export function ToolsView() {
             {isScanning ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Escaneando {scanFolders.length} pasta{scanFolders.length !== 1 ? 's' : ''}...
+                Escaneando em segundo plano...
               </>
             ) : (
               <>
@@ -225,14 +220,28 @@ export function ToolsView() {
           </Button>
 
           {isScanning && (
-            <div className="space-y-2">
-              <Progress value={scanProgress} className="h-2" />
-              <p className="text-xs text-muted-foreground text-center">Analisando tags ID3...</p>
+            <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                <span className="text-sm text-primary font-medium">
+                  Analisando tags ID3 em segundo plano...
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Você pode navegar para outras telas. Os resultados aparecerão quando voltar.
+              </p>
+            </div>
+          )}
+
+          {/* Error */}
+          {error && !isScanning && (
+            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30">
+              <p className="text-sm text-destructive">❌ {error}</p>
             </div>
           )}
 
           {/* Results */}
-          {scanResult && (
+          {scanResult && !isScanning && (
             <div className="space-y-4 animate-fade-in">
               {/* Summary stats */}
               <div className="grid grid-cols-3 gap-4">
