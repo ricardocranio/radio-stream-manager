@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listFolderFiles: (params) => ipcRenderer.invoke('list-folder-files', params),
   renameMusicFile: (params) => ipcRenderer.invoke('rename-music-file', params),
   scanBpmTags: (params) => ipcRenderer.invoke('scan-bpm-tags', params),
+  saveBpmCache: (params) => ipcRenderer.invoke('save-bpm-cache', params),
+  loadBpmCache: (params) => ipcRenderer.invoke('load-bpm-cache', params),
   
   // Window management
   showWindow: () => ipcRenderer.invoke('show-window'),
