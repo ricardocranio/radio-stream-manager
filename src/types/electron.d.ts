@@ -188,6 +188,30 @@ interface BpmScanResult {
   error?: string;
 }
 
+interface BpmCacheEntry {
+  bpm: number;
+  scannedAt: string;
+}
+
+interface BpmCacheData {
+  [filename: string]: BpmCacheEntry;
+}
+
+interface BpmCacheSaveParams {
+  folder: string;
+  data: BpmCacheData;
+}
+
+interface BpmCacheLoadParams {
+  folder: string;
+}
+
+interface BpmCacheResult {
+  success: boolean;
+  data?: BpmCacheData;
+  error?: string;
+}
+
 interface StationConfig {
   id: string;
   name: string;
@@ -267,6 +291,8 @@ interface ElectronAPI {
   listFolderFiles: (params: FolderListParams) => Promise<FolderListResult>;
   renameMusicFile: (params: RenameMusicFileParams) => Promise<RenameMusicFileResult>;
   scanBpmTags: (params: BpmScanParams) => Promise<BpmScanResult>;
+  saveBpmCache: (params: BpmCacheSaveParams) => Promise<{ success: boolean; error?: string }>;
+  loadBpmCache: (params: BpmCacheLoadParams) => Promise<BpmCacheResult>;
   
   // Station folder management
   ensureStationFolders: (params: EnsureStationFoldersParams) => Promise<EnsureStationFoldersResult>;
