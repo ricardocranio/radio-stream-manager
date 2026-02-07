@@ -10,12 +10,14 @@ import { useToast } from '@/hooks/use-toast';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
-interface BpmScanResult {
+interface BpmScanResultData {
+  success: boolean;
   total: number;
   withBpm: number;
   withoutBpm: number;
   samples: { filename: string; bpm: number }[];
   bpmDistribution: { range: string; count: number }[];
+  error?: string;
 }
 
 export function ToolsView() {
@@ -23,7 +25,7 @@ export function ToolsView() {
   const { toast } = useToast();
   const [scanFolder, setScanFolder] = useState(config.musicFolders?.[0] || 'C:\\Playlist\\Músicas');
   const [isScanning, setIsScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<BpmScanResult | null>(null);
+  const [scanResult, setScanResult] = useState<BpmScanResultData | null>(null);
   const [scanProgress, setScanProgress] = useState(0);
 
   const handleSelectFolder = async () => {
