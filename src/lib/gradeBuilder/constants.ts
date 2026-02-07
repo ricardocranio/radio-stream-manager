@@ -26,7 +26,7 @@ export const DAY_CODE_MAP: Record<WeekDay, string> = {
   'qua': 'QUA',
   'qui': 'QUI',
   'sex': 'SEX',
-  'sab': 'SAB',
+  'sab': 'SÁB',
 };
 
 /** Full day name mapping for fixed content filenames */
@@ -37,12 +37,12 @@ export const FULL_DAY_NAME_MAP: Record<WeekDay, string> = {
   'qua': 'QUARTA',
   'qui': 'QUINTA',
   'sex': 'SEXTA',
-  'sab': 'SABADO',
+  'sab': 'SÁBADO',
 };
 
 /** Day names indexed by Date.getDay() */
-export const DAY_CODES_BY_INDEX = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
-export const FULL_DAY_NAMES_BY_INDEX = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SABADO'];
+export const DAY_CODES_BY_INDEX = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+export const FULL_DAY_NAMES_BY_INDEX = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO'];
 export const WEEKDAY_KEYS: WeekDay[] = ['seg', 'ter', 'qua', 'qui', 'sex'];
 
 export const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
