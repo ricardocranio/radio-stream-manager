@@ -175,7 +175,7 @@ interface FolderListResult {
 }
 
 interface BpmScanParams {
-  folder: string;
+  folders: string[];
 }
 
 interface BpmScanResult {

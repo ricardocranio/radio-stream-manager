@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Wrench, Music, Search, Loader2, BarChart3, FolderOpen } from 'lucide-react';
+import { Wrench, Music, Search, Loader2, BarChart3, FolderOpen, Plus, X } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -23,10 +24,27 @@ interface BpmScanResultData {
 export function ToolsView() {
   const { config } = useRadioStore();
   const { toast } = useToast();
-  const [scanFolder, setScanFolder] = useState(config.musicFolders?.[0] || 'C:\\Playlist\\Músicas');
+  
+  // Initialize with all configured music folders
+  const [scanFolders, setScanFolders] = useState<string[]>(() => {
+    const folders = config.musicFolders?.filter(Boolean) || [];
+    return folders.length > 0 ? folders : ['C:\\Playlist\\Músicas'];
+  });
+  const [newFolder, setNewFolder] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<BpmScanResultData | null>(null);
   const [scanProgress, setScanProgress] = useState(0);
+
+  const handleAddFolder = async (folderPath?: string) => {
+    const folder = folderPath || newFolder.trim();
+    if (!folder) return;
+    if (scanFolders.includes(folder)) {
+      toast({ title: 'Pasta já adicionada', variant: 'destructive' });
+      return;
+    }
+    setScanFolders(prev => [...prev, folder]);
+    setNewFolder('');
+  };
 
   const handleSelectFolder = async () => {
     if (!isElectron || !window.electronAPI?.selectFolder) {
@@ -39,10 +57,14 @@ export function ToolsView() {
     }
     try {
       const folder = await window.electronAPI.selectFolder();
-      if (folder) setScanFolder(folder);
+      if (folder) handleAddFolder(folder);
     } catch (err) {
       console.error('Error selecting folder:', err);
     }
+  };
+
+  const handleRemoveFolder = (index: number) => {
+    setScanFolders(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleScanBpm = async () => {
@@ -64,10 +86,10 @@ export function ToolsView() {
       return;
     }
 
-    if (!scanFolder) {
+    if (scanFolders.length === 0) {
       toast({
-        title: 'Pasta não informada',
-        description: 'Selecione uma pasta para escanear.',
+        title: 'Nenhuma pasta',
+        description: 'Adicione pelo menos uma pasta para escanear.',
         variant: 'destructive',
       });
       return;
@@ -78,7 +100,7 @@ export function ToolsView() {
     setScanProgress(0);
 
     try {
-      const result = await window.electronAPI.scanBpmTags({ folder: scanFolder });
+      const result = await window.electronAPI.scanBpmTags({ folders: scanFolders });
       
       if (result.success) {
         setScanResult(result);
@@ -97,7 +119,7 @@ export function ToolsView() {
       console.error('BPM scan error:', err);
       toast({
         title: 'Erro no scan',
-        description: 'Falha ao escanear a pasta.',
+        description: 'Falha ao escanear as pastas.',
         variant: 'destructive',
       });
     } finally {
@@ -105,7 +127,7 @@ export function ToolsView() {
     }
   };
 
-  const bpmPercentage = scanResult
+  const bpmPercentage = scanResult && scanResult.total > 0
     ? Math.round((scanResult.withBpm / scanResult.total) * 100)
     : 0;
 
@@ -129,20 +151,50 @@ export function ToolsView() {
         </CardHeader>
         <CardContent className="p-6 space-y-6">
           <p className="text-sm text-muted-foreground">
-            Escaneia arquivos MP3 na pasta e verifica quais possuem informação de BPM nas tags ID3. 
+            Escaneia arquivos MP3 nas pastas e verifica quais possuem informação de BPM nas tags ID3. 
             Útil para decidir se vale a pena usar BPM como critério na montagem da grade de sábado.
           </p>
 
-          {/* Folder selection */}
-          <div className="space-y-2">
-            <Label>Pasta para escanear</Label>
+          {/* Folders list */}
+          <div className="space-y-3">
+            <Label>Pastas para escanear ({scanFolders.length})</Label>
+            
+            {scanFolders.length > 0 && (
+              <div className="space-y-2">
+                {scanFolders.map((folder, index) => (
+                  <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/30 border border-border">
+                    <FolderOpen className="w-4 h-4 text-primary flex-shrink-0" />
+                    <span className="text-sm text-foreground truncate flex-1">{folder}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 flex-shrink-0"
+                      onClick={() => handleRemoveFolder(index)}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add folder */}
             <div className="flex gap-2">
               <Input
-                value={scanFolder}
-                onChange={(e) => setScanFolder(e.target.value)}
-                placeholder="C:\Playlist\Músicas"
+                value={newFolder}
+                onChange={(e) => setNewFolder(e.target.value)}
+                placeholder="Adicionar pasta..."
                 className="flex-1"
+                onKeyDown={(e) => e.key === 'Enter' && handleAddFolder()}
               />
+              <Button
+                variant="outline"
+                onClick={() => handleAddFolder()}
+                disabled={!newFolder.trim()}
+                title="Adicionar pasta digitada"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
               <Button
                 variant="outline"
                 onClick={handleSelectFolder}
@@ -156,18 +208,18 @@ export function ToolsView() {
           {/* Scan button */}
           <Button
             onClick={handleScanBpm}
-            disabled={isScanning || !scanFolder}
+            disabled={isScanning || scanFolders.length === 0}
             className="w-full"
           >
             {isScanning ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Escaneando...
+                Escaneando {scanFolders.length} pasta{scanFolders.length !== 1 ? 's' : ''}...
               </>
             ) : (
               <>
                 <Search className="w-4 h-4 mr-2" />
-                Escanear BPM nos Arquivos
+                Escanear BPM em {scanFolders.length} pasta{scanFolders.length !== 1 ? 's' : ''}
               </>
             )}
           </Button>
