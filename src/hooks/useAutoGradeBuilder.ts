@@ -27,7 +27,7 @@ import {
 } from '@/lib/gradeBuilder/specialPrograms';
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
 import { batchFindSongsInLibrary, findSongInLibrary as findSongInLibraryFn } from '@/lib/gradeBuilder/batchLibrary';
-import { isFolderBasedBlock, generateFolderBasedBlock } from '@/lib/gradeBuilder/folderPrograms';
+import { isFolderBasedBlock, generateFolderBasedBlock, isRomanceBlock, generateRomanceBlock } from '@/lib/gradeBuilder/folderPrograms';
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
@@ -385,6 +385,11 @@ export function useAutoGradeBuilder() {
     // Folder-based blocks (17:00-18:30 Happy Hour)
     if (isFolderBasedBlock(hour, minute)) {
       return generateFolderBasedBlock(hour, minute, stats, isFullDay, ctx);
+    }
+
+    // Romance blocks (22:00-00:00) - folder-based with fixed content
+    if (isRomanceBlock(hour, minute) && isWeekday(targetDay)) {
+      return generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay);
     }
 
     // TOP50 blocks
