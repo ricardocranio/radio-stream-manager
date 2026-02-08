@@ -603,7 +603,7 @@ export const useRadioStore = create<RadioState>()(
         sequence: state.sequence,
         scheduledSequences: state.scheduledSequences,
         fixedContent: state.fixedContent,
-        blockSongs: state.blockSongs,
+        // blockSongs excluded — regenerated every cycle, saves ~50KB+ localStorage I/O
         missingSongs: state.missingSongs,
         downloadHistory: state.downloadHistory,
         gradeHistory: state.gradeHistory,
