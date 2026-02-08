@@ -136,9 +136,12 @@ export function useAutoGradeBuilder() {
       })
       .sort((a, b) => b.priority - a.priority);
     if (activeScheduled.length > 0) {
-      console.log(`[SEQUENCE] Usando sequência agendada "${activeScheduled[0].name}" para ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} (${currentDay})`);
-      return activeScheduled[0].sequence;
+      const seq = activeScheduled[0];
+      const stationsList = seq.sequence.map(s => s.radioSource).join(', ');
+      console.log(`[SEQUENCE] ✅ Sequência agendada "${seq.name}" para ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} (${currentDay}) | Estações: ${stationsList}`);
+      return seq.sequence;
     }
+    console.log(`[SEQUENCE] 📋 Sequência PADRÃO para ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} (${currentDay}) | Nenhuma agendada ativa`);
     return defaultSequence;
   }, [scheduledSequences, defaultSequence]);
 

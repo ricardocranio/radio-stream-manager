@@ -1,14 +1,14 @@
 /**
- * Song Selection Logic (Priority 0-6)
+ * Song Selection Logic
  * 
- * Handles the hierarchical selection of songs for normal blocks:
- * P0: Carry-over (songs from previous blocks, now downloaded)
- * P1: Station Pool (songs from configured station)
- * P2: TOP50 substitute
- * P3: DNA/Style match from other stations
- * P4: General Pool (sorted by freshness - most recent first)
- * P5: Curadoria (random from ranking)
- * P6: Coringa wildcard
+ * Handles the selection of songs for normal blocks with STRICT station loyalty:
+ * P0: Carry-over (songs from same station, now downloaded)
+ * P1: Station Pool (all songs from configured station)
+ * CORINGA: If no song from the target station is available in the library
+ * 
+ * Songs MUST come from the station configured in the sequence position.
+ * No cross-station substitution occurs — this ensures the grade respects
+ * the sequence rotation exactly as the user programmed it.
  */
 
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
@@ -30,14 +30,15 @@ interface SelectionContext {
 }
 
 /**
- * Select a song for one sequence position following Priority 0-6 hierarchy.
+ * Select a song for one sequence position with STRICT station loyalty.
+ * Only picks songs from the target station — never substitutes from other stations.
  */
 export async function selectSongForSlot(
   seq: SequenceConfig,
   selCtx: SelectionContext,
   ctx: GradeContext
 ): Promise<string> {
-  const { timeStr, isFullDay, usedInBlock, usedArtistsInBlock, songsByStation, allSongsPool, carryOverByStation, stationSongIndex, logs, stats } = selCtx;
+  const { timeStr, isFullDay, usedInBlock, usedArtistsInBlock, songsByStation, carryOverByStation, stationSongIndex, logs, stats } = selCtx;
 
   // Resolve station name
   let stationName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()] || '';
@@ -72,7 +73,7 @@ export async function selectSongForSlot(
 
   let selectedSong: SongEntry | null = null;
 
-  // PRIORITY 0: Carry-over songs
+  // PRIORITY 0: Carry-over songs (from same station, previously missing, now downloaded)
   const carryOverForStation = carryOverByStation[stationName] || [];
   for (const carryOverSong of carryOverForStation) {
     const key = `${carryOverSong.title.toLowerCase()}-${carryOverSong.artist.toLowerCase()}`;
@@ -85,13 +86,13 @@ export async function selectSongForSlot(
         blockTime: timeStr, type: 'used',
         title: carryOverSong.title, artist: carryOverSong.artist,
         station: carryOverSong.station, style: carryOverSong.style,
-        reason: '✅ Carry-over do bloco anterior (já baixada)',
+        reason: `✅ Carry-over (${stationName})`,
       });
       break;
     }
   }
 
-  // PRIORITY 1: Station pool
+  // PRIORITY 1: Station pool — STRICT: only songs from this station
   if (!selectedSong) {
     let startIndex = stationSongIndex[stationName] || 0;
     let checkedCount = 0;
@@ -109,7 +110,7 @@ export async function selectSongForSlot(
           stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
           break;
         } else {
-          // Mark as missing + carry-over
+          // Mark as missing for download + carry-over to next block
           if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
             ctx.addMissingSong({
               id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -129,150 +130,34 @@ export async function selectSongForSlot(
     }
   }
 
-  // PRIORITY 2: TOP50 substitute
-  if (!selectedSong) {
-    const sortedRanking = [...ctx.rankingSongs].sort((a, b) => b.plays - a.plays);
-    for (const rankSong of sortedRanking) {
-      const key = `${rankSong.title.toLowerCase()}-${rankSong.artist.toLowerCase()}`;
-      const normalizedArtist = rankSong.artist.toLowerCase().trim();
-      if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
-        const libraryResult = await ctx.findSongInLibrary(rankSong.artist, rankSong.title);
-        if (libraryResult.exists) {
-          const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
-          selectedSong = {
-            title: rankSong.title, artist: rankSong.artist,
-            station: 'TOP50', style: rankSong.style,
-            filename: correctFilename, existsInLibrary: true,
-          };
-          stats.substituted++;
-          logs.push({
-            blockTime: timeStr, type: 'substituted',
-            title: rankSong.title, artist: rankSong.artist,
-            station: 'TOP50', style: rankSong.style,
-            reason: `TOP50 substituto (posição ${sortedRanking.indexOf(rankSong) + 1})`,
-            substituteFor: stationName || 'UNKNOWN',
-          });
-          break;
-        }
-      }
-    }
-  }
-
-  // PRIORITY 3: DNA/Style match
-  if (!selectedSong) {
-    for (const [otherStation, songs] of Object.entries(songsByStation)) {
-      if (otherStation === stationName) continue;
-      for (const candidate of songs) {
-        if (candidate.style !== stationStyle) continue;
-        const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
-        const normalizedArtist = candidate.artist.toLowerCase().trim();
-        if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-          const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
-          if (libraryResult.exists) {
-            const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-            selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-            stats.substituted++;
-            logs.push({
-              blockTime: timeStr, type: 'substituted',
-              title: candidate.title, artist: candidate.artist,
-              station: candidate.station, style: candidate.style,
-              reason: `DNA similar: ${stationStyle}`, substituteFor: stationName || 'UNKNOWN',
-            });
-            break;
-          }
-        }
-      }
-      if (selectedSong) break;
-    }
-  }
-
-  // PRIORITY 4: General Pool (sorted by freshness - most recent captures first)
-  if (!selectedSong) {
-    // Sort by freshness: most recently captured songs first
-    const freshSortedPool = [...allSongsPool].sort((a, b) => {
-      if (a.scrapedAt && b.scrapedAt) {
-        return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
-      }
-      if (a.scrapedAt) return -1;
-      if (b.scrapedAt) return 1;
-      return 0;
-    });
-
-    for (const candidate of freshSortedPool) {
-      const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
-      const normalizedArtist = candidate.artist.toLowerCase().trim();
-      if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-        const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
-        if (libraryResult.exists) {
-          const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-          selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-          stats.substituted++;
-          logs.push({
-            blockTime: timeStr, type: 'substituted',
-            title: candidate.title, artist: candidate.artist,
-            station: candidate.station, style: candidate.style,
-            reason: 'Pool geral (priorizado por frescor)',
-          });
-          break;
-        }
-      }
-    }
-  }
-
-  // PRIORITY 5: Curadoria (random ranking song)
-  if (!selectedSong) {
-    const shuffledRanking = [...ctx.rankingSongs].sort(() => Math.random() - 0.5);
-    for (const rankSong of shuffledRanking) {
-      const key = `${rankSong.title.toLowerCase()}-${rankSong.artist.toLowerCase()}`;
-      const normalizedArtist = rankSong.artist.toLowerCase().trim();
-      if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
-        const libraryResult = await ctx.findSongInLibrary(rankSong.artist, rankSong.title);
-        if (libraryResult.exists) {
-          const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
-          selectedSong = {
-            title: rankSong.title, artist: rankSong.artist,
-            station: 'CURADORIA', style: rankSong.style,
-            filename: correctFilename, existsInLibrary: true,
-          };
-          stats.substituted++;
-          logs.push({
-            blockTime: timeStr, type: 'substituted',
-            title: rankSong.title, artist: rankSong.artist,
-            station: 'CURADORIA', style: rankSong.style,
-            reason: 'Curadoria automática do ranking',
-          });
-          break;
-        }
-      }
-    }
-  }
-
-  // If a song was selected
+  // If a song was selected from the target station
   if (selectedSong) {
     usedInBlock.add(`${selectedSong.title.toLowerCase()}-${selectedSong.artist.toLowerCase()}`);
     usedArtistsInBlock.add(selectedSong.artist.toLowerCase().trim());
     ctx.markSongAsUsed(selectedSong.title, selectedSong.artist, timeStr);
 
-    // Add 'used' log if not already logged by a priority level
+    // Add 'used' log if not already logged
     const hasLog = logs.some(l => l.title === selectedSong!.title && l.artist === selectedSong!.artist && l.blockTime === timeStr);
     if (!hasLog) {
       logs.push({
         blockTime: timeStr, type: 'used',
         title: selectedSong.title, artist: selectedSong.artist,
         station: selectedSong.station, style: selectedSong.style,
+        reason: `✅ ${stationName}`,
       });
     }
 
     return `"${selectedSong.filename}"`;
   }
 
-  // PRIORITY 6: Coringa
+  // CORINGA: No song from the target station is available in the library
+  // This position will be filled when missing songs are downloaded and the grade regenerates
   stats.missing++;
   logs.push({
-    blockTime: timeStr, type: 'substituted',
+    blockTime: timeStr, type: 'missing',
     title: ctx.coringaCode, artist: 'CORINGA',
-    station: 'FALLBACK',
-    reason: 'Nenhuma música válida encontrada, usando coringa para curadoria manual',
+    station: stationName || seq.radioSource,
+    reason: `⚠️ Nenhuma música de ${stationName || seq.radioSource} disponível na biblioteca`,
   });
   return ctx.coringaCode;
 }
