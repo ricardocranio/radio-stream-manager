@@ -282,7 +282,7 @@ export function SequenceView() {
       weekDays: formWeekDays,
       sequence: formSequence,
       enabled: editingSchedule?.enabled ?? true,
-      priority: formPriority,
+      priority: 1, // Always 1 - scheduled sequences override default by definition
     };
 
     // Log for debugging
@@ -509,9 +509,6 @@ export function SequenceView() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      P{schedule.priority}
-                    </Badge>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -809,7 +806,6 @@ export function SequenceView() {
                 <p className="text-xs text-muted-foreground">
                   Sequências programadas substituem a sequência padrão nos horários configurados.
                   <br />
-                  <span className="text-yellow-400">Prioridade:</span> Se houver conflito de horários, a sequência com maior prioridade (P) será usada.
                   <br />
                   <span className="text-emerald-400">FIXO:</span> Insere conteúdo fixo configurado na posição selecionada.
                 </p>
@@ -936,25 +932,7 @@ export function SequenceView() {
               </div>
             </div>
 
-            {/* Priority */}
-            <div className="space-y-2">
-              <Label>Prioridade (maior = mais importante)</Label>
-              <Select
-                value={formPriority.toString()}
-                onValueChange={(v) => setFormPriority(parseInt(v))}
-              >
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3, 4, 5].map((p) => (
-                    <SelectItem key={p} value={p.toString()}>
-                      Prioridade {p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Priority is always 1 - scheduled sequences override default by definition */}
 
             {/* Sequence Config */}
             <div className="space-y-2">
