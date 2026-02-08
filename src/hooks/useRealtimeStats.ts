@@ -98,26 +98,23 @@ export function useRealtimeStats() {
           const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
           const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
 
+          // Fetch data — 6 parallel queries (removed separate stationSongs query)
           const [totalResult, last24hResult, lastHourResult, stationsResult, lastSongResult, recentSongsResult] = await Promise.all([
             supabase.from('scraped_songs').select('*', { count: 'exact', head: true }),
             supabase.from('scraped_songs').select('*', { count: 'exact', head: true }).gte('scraped_at', last24h.toISOString()),
             supabase.from('scraped_songs').select('*', { count: 'exact', head: true }).gte('scraped_at', lastHour.toISOString()),
             supabase.from('radio_stations').select('name, enabled').eq('enabled', true),
             supabase.from('scraped_songs').select('title, artist, station_name, scraped_at').order('scraped_at', { ascending: false }).limit(1).single(),
-            supabase.from('scraped_songs').select('title, artist, station_name, scraped_at').order('scraped_at', { ascending: false }).limit(100),
+            supabase.from('scraped_songs').select('title, artist, station_name, scraped_at').order('scraped_at', { ascending: false }).limit(200),
           ]);
 
           if (totalResult.error && totalResult.error.code !== 'PGRST116') {
             throw new Error(`Query failed: ${totalResult.error.message}`);
           }
 
-          const { data: stationSongs } = await supabase
-            .from('scraped_songs')
-            .select('station_name')
-            .gte('scraped_at', last24h.toISOString());
-
+          // Compute station counts from recentSongsResult (eliminates extra DB round-trip)
           const newStationCounts: Record<string, number> = {};
-          stationSongs?.forEach(song => {
+          recentSongsResult.data?.forEach(song => {
             newStationCounts[song.station_name] = (newStationCounts[song.station_name] || 0) + 1;
           });
 

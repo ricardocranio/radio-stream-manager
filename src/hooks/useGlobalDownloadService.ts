@@ -245,7 +245,7 @@ export function useGlobalDownloadService() {
       const downloadKey = getDownloadKey(s);
       const inQueue = downloadQueueRef.current.some(
         item => item.song.artist.toLowerCase().trim() === s.artist.toLowerCase().trim() &&
-                item.song.title.toLowerCase().trim() === s.title.toLowerCase().trim()
+               item.song.title.toLowerCase().trim() === s.title.toLowerCase().trim()
       );
       const alreadyDownloaded = processedSongsRef.current.has(downloadKey);
       return !inQueue && !alreadyDownloaded;
@@ -258,6 +258,13 @@ export function useGlobalDownloadService() {
     if (shouldLog && pendingMissing.length > 0 && newToQueue.length > 0) {
       console.log(`[DL-SVC] 🎵 Fila: ${pendingMissing.length} faltando | ${newToQueue.length} novas`);
       lastLogTimeRef.current = now;
+    }
+
+    // Cap processedSongsRef to prevent unbounded memory growth
+    if (processedSongsRef.current.size > 500) {
+      const entries = Array.from(processedSongsRef.current);
+      processedSongsRef.current = new Set(entries.slice(-250)); // Keep most recent 250
+      console.log('[DL-SVC] 🧹 processedSongs trimmed (500 → 250)');
     }
 
     if (!deezerConfig.autoDownload || !deezerConfig.enabled || !deezerConfig.arl) {
@@ -345,13 +352,13 @@ export function useGlobalDownloadService() {
 
   /** Start the download check interval. Returns cleanup function. */
   const start = useCallback(() => {
-    // Download check every 30 seconds (lightweight memory-only check)
+    // Download check every 60 seconds (was 30s — reactive subscription handles immediate detection)
     downloadIntervalRef.current = setInterval(() => {
       const { isRunning } = useRadioStore.getState();
       if (isRunning) {
         checkNewMissingSongs();
       }
-    }, 30000);
+    }, 60000);
     
     // Initial check
     const { isRunning } = useRadioStore.getState();

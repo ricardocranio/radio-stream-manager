@@ -22,6 +22,8 @@ interface SimilarityLogState {
     noMatch: number;
     errors: number;
     averageSimilarity: number;
+    _similaritySum: number;
+    _similarityCount: number;
   };
   
   // Actions
@@ -38,6 +40,8 @@ const initialStats = {
   noMatch: 0,
   errors: 0,
   averageSimilarity: 0,
+  _similaritySum: 0, // Running sum to avoid O(n) recalculation
+  _similarityCount: 0,
 };
 
 export const useSimilarityLogStore = create<SimilarityLogState>((set) => ({
@@ -72,10 +76,11 @@ export const useSimilarityLogStore = create<SimilarityLogState>((set) => ({
         }
       }
 
-      // Calculate average similarity (only for matches found)
-      const matchLogs = newLogs.filter(l => l.similarity > 0);
-      if (matchLogs.length > 0) {
-        newStats.averageSimilarity = matchLogs.reduce((sum, l) => sum + l.similarity, 0) / matchLogs.length;
+      // Track running average via sum (O(1) instead of O(n) filter+reduce)
+      if (entry.similarity > 0) {
+        newStats._similaritySum += entry.similarity;
+        newStats._similarityCount++;
+        newStats.averageSimilarity = newStats._similaritySum / newStats._similarityCount;
       }
 
       // OPTIMIZED: Reduced logging - only log summary every 25 checks (was 10)
