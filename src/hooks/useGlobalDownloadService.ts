@@ -8,6 +8,7 @@
 import { useRef, useCallback, useState, useEffect } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
+import { useGradeLogStore } from '@/store/gradeLogStore';
 import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -154,6 +155,16 @@ export function useGlobalDownloadService() {
         });
         setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
         useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
+      } else if (!success && item.retryCount >= 2) {
+        // All retries exhausted: remove from missing list and log the error
+        useRadioStore.getState().removeMissingSong(item.song.id);
+        useGradeLogStore.getState().addSystemError({
+          category: 'DOWNLOAD',
+          level: 'error',
+          message: `Download falhou: ${item.song.artist} - ${item.song.title}`,
+          details: `Estação: ${item.song.station || 'N/A'} | Tentativas: ${item.retryCount + 1} | Removido da fila de faltantes`,
+        });
+        console.log(`[DL-SVC] 🗑️ Removido da fila de faltantes após ${item.retryCount + 1} tentativas: ${item.song.artist} - ${item.song.title}`);
       }
 
       // Small delay between downloads (5 seconds)
