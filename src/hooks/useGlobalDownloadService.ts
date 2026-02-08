@@ -253,13 +253,13 @@ export function useGlobalDownloadService() {
 
   /** Start the download check interval. Returns cleanup function. */
   const start = useCallback(() => {
-    // Download check every 100 seconds
+    // Download check every 30 seconds (lightweight memory-only check)
     downloadIntervalRef.current = setInterval(() => {
       const { isRunning } = useRadioStore.getState();
       if (isRunning) {
         checkNewMissingSongs();
       }
-    }, 100000);
+    }, 30000);
     
     // Initial check
     const { isRunning } = useRadioStore.getState();
