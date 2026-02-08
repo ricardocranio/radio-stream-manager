@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
+import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { sanitizeFilename, processFixedContentTemplate } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -852,6 +853,21 @@ export function useAutoGradeBuilder() {
 
     return () => { if (buildIntervalRef.current) clearInterval(buildIntervalRef.current); };
   }, [state.isAutoEnabled, state.minutesBeforeBlock, buildGrade]);
+
+  // Reactive: rebuild grade immediately when a download completes (coringa replacement)
+  useEffect(() => {
+    if (!isElectronEnv) return;
+    const unsubscribe = useAutoDownloadStore.subscribe((s, prev) => {
+      if (s.gradeRebuildSignal > prev.gradeRebuildSignal) {
+        const { isRunning } = useRadioStore.getState();
+        if (isRunning && state.isAutoEnabled && !state.isBuilding) {
+          console.log('[AUTO-GRADE] ⚡ Download concluído — reconstruindo grade imediatamente (substituir coringas)');
+          buildGrade();
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [buildGrade, state.isAutoEnabled, state.isBuilding]);
 
   // Countdown update effect
   useEffect(() => {

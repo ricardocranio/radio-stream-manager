@@ -136,6 +136,9 @@ export function useGlobalDownloadService() {
         };
         useRadioStore.getState().addDownloadHistory(historyEntry);
 
+        // Signal grade builder to immediately rebuild unlocked blocks
+        useAutoDownloadStore.getState().signalGradeRebuild();
+
         console.log(`[DL-SVC] ✅ Downloaded: ${song.artist} - ${song.title}`);
         return true;
       } else {
