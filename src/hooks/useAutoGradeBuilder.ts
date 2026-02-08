@@ -382,8 +382,8 @@ export function useAutoGradeBuilder() {
       return await generateMisturadao(hour, minute, ctx, targetDay);
     }
 
-    // Folder-based blocks (17:00-18:30 Happy Hour)
-    if (isFolderBasedBlock(hour, minute)) {
+    // Folder-based blocks (17:00-18:30 Happy Hour) - weekdays only
+    if (isFolderBasedBlock(hour, minute) && isWeekday(targetDay)) {
       return generateFolderBasedBlock(hour, minute, stats, isFullDay, ctx);
     }
 
@@ -392,25 +392,19 @@ export function useAutoGradeBuilder() {
       return generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay);
     }
 
-    // TOP50 blocks
+    // TOP50 blocks (all days)
     const top50Item = fixedItems.find(fc => fc.type === 'top50');
     if (top50Item) {
       return await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx);
     }
 
-    // Madrugada (00:00-04:30)
-    if (hour >= 0 && hour <= 5) {
-      // Hour 5 is Sertanejo Nossa, check below
-      if (hour <= 4 || (hour === 5 && minute === 0 && !(hour >= 5 && hour <= 7))) {
-        // Actually hours 0-4 only for madrugada
-      }
-    }
-    if (hour >= 0 && hour <= 4) {
+    // Madrugada (00:00-04:30) - weekdays only
+    if (hour >= 0 && hour <= 4 && isWeekday(targetDay)) {
       return generateMadrugada(hour, minute, songsByStation, stats, isFullDay, ctx, programName);
     }
 
-    // Sertanejo Nossa (05:00-07:30)
-    if (hour >= 5 && hour <= 7) {
+    // Sertanejo Nossa (05:00-07:30) - weekdays only
+    if (hour >= 5 && hour <= 7 && isWeekday(targetDay)) {
       return generateSertanejoNossa(hour, minute, songsByStation, stats, isFullDay, ctx);
     }
 
