@@ -827,11 +827,10 @@ export function useAutoGradeBuilder() {
       }
 
       // Build when within minutesBeforeBlock window
-      // The next block will be regenerated each cycle until 10 min before start (handled in buildGrade)
+      // Next block regenerates every 6 min (~3 cycles before lock at 10 min), avoiding system lag
       const shouldBuild = minutesUntilBlock <= state.minutesBeforeBlock;
       
       if (shouldBuild) {
-        // Track the block cycle but don't prevent rebuilds (next block regeneration is managed by buildGrade's lock logic)
         if (lastBuiltBlock !== blockKey) {
           console.log(`[AUTO-GRADE] 🔄 Novo ciclo: atualizando grade para bloco ${blockKey}`);
           lastBuiltBlock = blockKey;
@@ -840,7 +839,7 @@ export function useAutoGradeBuilder() {
         }
         buildGrade();
       }
-    }, 60 * 1000);
+    }, 6 * 60 * 1000); // 6 minutos entre ciclos (~3 regenerações antes da trava)
 
     const { isRunning } = useRadioStore.getState();
     if (isRunning) {
