@@ -10,6 +10,8 @@ import { useRadioStore, MissingSong, DownloadHistoryEntry } from '@/store/radioS
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useGradeLogStore } from '@/store/gradeLogStore';
 import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
+import { STATION_ID_TO_DB_NAME } from '@/lib/gradeBuilder/constants';
+import type { ScheduledSequence, SequenceConfig, RadioStation } from '@/types/radio';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -20,10 +22,60 @@ interface DownloadQueueItem {
 }
 
 const PRIORITY_STATION_BOOST = 100;
+const PRIORITY_SEQUENCE_BOOST = 200; // Higher than station boost - sequence stations are critical
+const DELAY_NORMAL_MS = 5000; // 5s between normal downloads
+const DELAY_PRIORITY_MS = 2000; // 2s between priority downloads
 
 export interface DownloadServiceState {
   queueLength: number;
   isProcessing: boolean;
+}
+
+/**
+ * Detect which stations are in the currently active sequence.
+ * Returns a Set of lowercase station names for quick lookup.
+ */
+function getActiveSequenceStationNames(
+  scheduledSequences: ScheduledSequence[],
+  defaultSequence: SequenceConfig[],
+  stations: RadioStation[]
+): Set<string> {
+  const now = new Date();
+  const timeMinutes = now.getHours() * 60 + now.getMinutes();
+  const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
+  const currentDay = dayMap[now.getDay()];
+
+  // Find active scheduled sequence (same logic as getActiveSequenceForBlock)
+  const activeScheduled = scheduledSequences
+    .filter(s => s.enabled)
+    .filter(s => s.weekDays.length === 0 || s.weekDays.includes(currentDay))
+    .filter(s => {
+      const startMin = s.startHour * 60 + s.startMinute;
+      const endMin = s.endHour * 60 + s.endMinute;
+      if (endMin <= startMin) return timeMinutes >= startMin || timeMinutes < endMin;
+      return timeMinutes >= startMin && timeMinutes < endMin;
+    })
+    .sort((a, b) => b.priority - a.priority);
+
+  const activeSequence = activeScheduled.length > 0 ? activeScheduled[0].sequence : defaultSequence;
+
+  // Collect station names from the sequence
+  const stationNames = new Set<string>();
+  for (const seq of activeSequence) {
+    if (seq.radioSource.startsWith('fixo') || seq.radioSource === 'top50' || seq.radioSource === 'random_pop') continue;
+    // Resolve via explicit mapping
+    const dbName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()];
+    if (dbName) {
+      stationNames.add(dbName.toLowerCase());
+      continue;
+    }
+    // Resolve via station config
+    const stationConfig = stations.find(s => s.id === seq.radioSource || s.id.toLowerCase() === seq.radioSource.toLowerCase());
+    if (stationConfig) {
+      stationNames.add(stationConfig.name.toLowerCase());
+    }
+  }
+  return stationNames;
 }
 
 export function useGlobalDownloadService() {
@@ -167,8 +219,9 @@ export function useGlobalDownloadService() {
         console.log(`[DL-SVC] 🗑️ Removido da fila de faltantes após ${item.retryCount + 1} tentativas: ${item.song.artist} - ${item.song.title}`);
       }
 
-      // Small delay between downloads (5 seconds)
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Dynamic delay: faster for priority downloads
+      const delay = item.priority >= PRIORITY_SEQUENCE_BOOST ? DELAY_PRIORITY_MS : DELAY_NORMAL_MS;
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
 
     isProcessingRef.current = false;
@@ -178,7 +231,7 @@ export function useGlobalDownloadService() {
 
   const checkNewMissingSongs = useCallback(() => {
     const storeState = useRadioStore.getState();
-    const { deezerConfig, missingSongs, rankingSongs, stations: allStations } = storeState;
+    const { deezerConfig, missingSongs, rankingSongs, stations: allStations, scheduledSequences, sequence: defaultSequence } = storeState;
 
     const pendingMissing = missingSongs.filter(s => s.status === 'missing');
     
@@ -222,6 +275,9 @@ export function useGlobalDownloadService() {
           .map(s => s.name.toLowerCase())
       );
 
+      // Detect active sequence stations for priority boost
+      const sequenceStationNames = getActiveSequenceStationNames(scheduledSequences, defaultSequence, allStations);
+
       for (const song of newToQueue) {
         const downloadKey = getDownloadKey(song);
         processedSongsRef.current.add(downloadKey);
@@ -229,10 +285,17 @@ export function useGlobalDownloadService() {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
         let priority = rankingMap.get(key) || 0;
         
-        const isPriorityStation = priorityStationNames.has(song.station?.toLowerCase() || '');
-        if (isPriorityStation) {
+        const songStationLower = song.station?.toLowerCase() || '';
+        
+        // Sequence station boost (highest priority)
+        if (sequenceStationNames.has(songStationLower)) {
+          priority += PRIORITY_SEQUENCE_BOOST;
+          console.log(`[DL-SVC] 🎯 Prioridade SEQUÊNCIA (${song.station}): ${song.artist} - ${song.title}`);
+        }
+        // Station-level priority boost
+        else if (priorityStationNames.has(songStationLower)) {
           priority += PRIORITY_STATION_BOOST;
-          console.log(`[DL-SVC] 📂 Prioridade ALTA (${song.station}): ${song.artist} - ${song.title}`);
+          console.log(`[DL-SVC] 📂 Prioridade ESTAÇÃO (${song.station}): ${song.artist} - ${song.title}`);
         }
 
         downloadQueueRef.current.push({ song, retryCount: 0, priority });
@@ -261,6 +324,21 @@ export function useGlobalDownloadService() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Reactive: immediately detect new missing songs (no polling delay)
+  useEffect(() => {
+    let prevCount = useRadioStore.getState().missingSongs.filter(s => s.status === 'missing').length;
+    const unsubscribe = useRadioStore.subscribe((state) => {
+      const currentCount = state.missingSongs.filter(s => s.status === 'missing').length;
+      if (currentCount > prevCount && state.isRunning) {
+        // New missing songs detected - trigger immediate queue check
+        console.log(`[DL-SVC] ⚡ Nova faltante detectada (${prevCount} → ${currentCount}), verificação imediata`);
+        checkNewMissingSongs();
+      }
+      prevCount = currentCount;
+    });
+    return () => unsubscribe();
+  }, [checkNewMissingSongs]);
 
   /** Start the download check interval. Returns cleanup function. */
   const start = useCallback(() => {
