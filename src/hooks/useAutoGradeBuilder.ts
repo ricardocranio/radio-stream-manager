@@ -657,12 +657,21 @@ export function useAutoGradeBuilder() {
       const dayCode = getDayCode();
       const filename = `${dayCode}.txt`;
 
-      // Check which blocks are already locked (already built)
+      // Check lock status: current block locks once built, next block only locks 10 min before start
       const currentLocked = builtBlocksRef.current.has(currentTimeKey);
-      const nextLocked = builtBlocksRef.current.has(nextTimeKey);
-
+      
+      // Next block: calculate minutes until it starts
+      const now = new Date();
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+      const nextBlockMinutes = blocks.next.hour * 60 + blocks.next.minute;
+      let minutesUntilNextBlock = nextBlockMinutes - nowMinutes;
+      if (minutesUntilNextBlock < 0) minutesUntilNextBlock += 24 * 60; // wrap around midnight
+      
+      // Next block is only locked if it was built AND we're within 10 minutes of its start
+      const nextLocked = builtBlocksRef.current.has(nextTimeKey) && minutesUntilNextBlock <= 10;
+      
       if (currentLocked && nextLocked) {
-        console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já montados, pulando`);
+        console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} (travado) e ${nextTimeKey} (travado, ${minutesUntilNextBlock}min restantes) já montados, pulando`);
         return;
       }
 
@@ -690,7 +699,7 @@ export function useAutoGradeBuilder() {
       const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: BlockLogItem[] = [];
 
-      // Only generate blocks that are NOT locked
+      // Current block: lock after first build (never regenerate)
       if (!currentLocked) {
         const songsCurrent = await fetchSongsForBlock(blocks.current.hour, blocks.current.minute);
         let currentPool = songsCurrent;
@@ -706,6 +715,7 @@ export function useAutoGradeBuilder() {
         console.log(`[AUTO-GRADE] ⏭️ Bloco ${currentTimeKey} já travado, mantendo`);
       }
 
+      // Next block: always regenerate UNLESS locked (within 10 min of start)
       if (!nextLocked) {
         const songsNext = await fetchSongsForBlock(blocks.next.hour, blocks.next.minute);
         let nextPool = songsNext;
@@ -715,10 +725,18 @@ export function useAutoGradeBuilder() {
         const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, nextPool, stats);
         lineMap.set(nextTimeKey, nextResult.line);
         allLogs.push(...nextResult.logs);
-        builtBlocksRef.current.add(nextTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} montado e travado`);
+        
+        // Only lock when within 10 minutes of the block start
+        if (minutesUntilNextBlock <= 10) {
+          builtBlocksRef.current.add(nextTimeKey);
+          console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} montado e TRAVADO (${minutesUntilNextBlock}min para início)`);
+        } else {
+          // Remove from locks so it can be regenerated next cycle
+          builtBlocksRef.current.delete(nextTimeKey);
+          console.log(`[AUTO-GRADE] 🔄 Bloco ${nextTimeKey} montado (sem trava, ${minutesUntilNextBlock}min para início, trava aos 10min)`);
+        }
       } else {
-        console.log(`[AUTO-GRADE] ⏭️ Bloco ${nextTimeKey} já travado, mantendo`);
+        console.log(`[AUTO-GRADE] ⏭️ Bloco ${nextTimeKey} já travado (${minutesUntilNextBlock}min para início), mantendo`);
       }
 
       if (allLogs.length > 0) addBlockLogs(allLogs);
@@ -808,14 +826,20 @@ export function useAutoGradeBuilder() {
         builtBlocksRef.current.clear();
       }
 
-      const shouldBuild = minutesUntilBlock <= state.minutesBeforeBlock && lastBuiltBlock !== blockKey;
-
+      // Build when within minutesBeforeBlock window
+      // The next block will be regenerated each cycle until 10 min before start (handled in buildGrade)
+      const shouldBuild = minutesUntilBlock <= state.minutesBeforeBlock;
+      
       if (shouldBuild) {
-        console.log(`[AUTO-GRADE] 🔄 Atualizando grade para bloco ${blockKey}`);
-        lastBuiltBlock = blockKey;
+        // Track the block cycle but don't prevent rebuilds (next block regeneration is managed by buildGrade's lock logic)
+        if (lastBuiltBlock !== blockKey) {
+          console.log(`[AUTO-GRADE] 🔄 Novo ciclo: atualizando grade para bloco ${blockKey}`);
+          lastBuiltBlock = blockKey;
+        } else {
+          console.log(`[AUTO-GRADE] 🔄 Regenerando próximo bloco (${minutesUntilBlock}min para ${blockKey})`);
+        }
         buildGrade();
       }
-      // Removed: periodic 10-min save that was causing unwanted block regeneration
     }, 60 * 1000);
 
     const { isRunning } = useRadioStore.getState();
