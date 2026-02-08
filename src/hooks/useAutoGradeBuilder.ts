@@ -398,10 +398,7 @@ export function useAutoGradeBuilder() {
       return await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx);
     }
 
-    // Madrugada (00:00-04:30) - weekdays only
-    if (hour >= 0 && hour <= 4 && isWeekday(targetDay)) {
-      return generateMadrugada(hour, minute, songsByStation, stats, isFullDay, ctx, programName);
-    }
+    // Madrugada (00:00-04:30) - now follows sequence like normal blocks
 
     // Sertanejo Nossa (05:00-07:30) - weekdays only
     if (hour >= 5 && hour <= 7 && isWeekday(targetDay)) {
