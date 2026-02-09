@@ -96,6 +96,13 @@ export async function selectSongForSlot(
   if (!selectedSong) {
     let startIndex = stationSongIndex[stationName] || 0;
     let checkedCount = 0;
+    let libraryCheckCount = 0;
+    
+    if (!stationSongs || stationSongs.length === 0) {
+      console.warn(`[SONG-SELECT] ⚠️ Nenhuma música no pool para estação "${stationName}" (radioSource: ${seq.radioSource})`);
+      console.warn(`[SONG-SELECT] 📋 Estações disponíveis no pool: ${Object.keys(songsByStation).join(', ')}`);
+    }
+    
     while (checkedCount < (stationSongs?.length || 0) && !selectedSong) {
       const songIdx = (startIndex + checkedCount) % stationSongs.length;
       const candidate = stationSongs[songIdx];
@@ -104,6 +111,13 @@ export async function selectSongForSlot(
       
       if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
         const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+        libraryCheckCount++;
+        
+        // Log first 3 library checks per block for diagnostics
+        if (libraryCheckCount <= 3) {
+          console.log(`[SONG-SELECT] 🔍 Check ${libraryCheckCount}: "${candidate.artist} - ${candidate.title}" → exists=${libraryResult.exists}, filename=${libraryResult.filename || 'N/A'}`);
+        }
+        
         if (libraryResult.exists) {
           const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
           selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
@@ -127,6 +141,10 @@ export async function selectSongForSlot(
         }
       }
       checkedCount++;
+    }
+    
+    if (!selectedSong && libraryCheckCount > 0) {
+      console.warn(`[SONG-SELECT] ⚠️ ${stationName}: Verificou ${libraryCheckCount} músicas na biblioteca, NENHUMA encontrada. Verifique as pastas de música e o threshold de similaridade.`);
     }
   }
 
