@@ -28,6 +28,7 @@ import {
 } from '@/lib/gradeBuilder/specialPrograms';
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
 import { batchFindSongsInLibrary, findSongInLibrary as findSongInLibraryFn } from '@/lib/gradeBuilder/batchLibrary';
+import { buildDnaProfiles } from '@/lib/gradeBuilder/stationDna';
 import { isFolderBasedBlock, generateFolderBasedBlock, isRomanceBlock, generateRomanceBlock } from '@/lib/gradeBuilder/folderPrograms';
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
@@ -484,9 +485,17 @@ export function useAutoGradeBuilder() {
     const stationSongIndex: Record<string, number> = {};
     const songs: string[] = [];
 
+    // Build DNA profiles for cross-station fallback
+    const dnaProfiles = buildDnaProfiles(songsByStation);
+    const dnaStations = Object.keys(dnaProfiles).length;
+    if (dnaStations > 1) {
+      console.log(`[AUTO-GRADE] 🧬 DNA profiles built for ${dnaStations} stations`);
+    }
+
     const selCtx = {
       timeStr, isFullDay, usedInBlock, usedArtistsInBlock,
       songsByStation, allSongsPool, carryOverByStation, freshSongsByStation,
+      dnaProfiles,
       stationSongIndex,
       logs: blockLogs, stats,
       libraryCache, // Pass pre-checked results
