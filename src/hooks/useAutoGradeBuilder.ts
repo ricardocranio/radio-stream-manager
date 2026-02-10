@@ -666,31 +666,13 @@ export function useAutoGradeBuilder() {
     }
 
     try {
-      // === DIAGNOSTIC: Check prerequisites ===
       const musicFolders = config.musicFolders;
-      console.log(`[AUTO-GRADE] 🔍 DIAGNÓSTICO: musicFolders = ${JSON.stringify(musicFolders)}`);
-      console.log(`[AUTO-GRADE] 🔍 DIAGNÓSTICO: findSongMatch disponível = ${!!window.electronAPI?.findSongMatch}`);
       
       if (!musicFolders || musicFolders.length === 0) {
-        console.error('[AUTO-GRADE] ❌ ERRO: Nenhuma pasta de música configurada! Configure em Configurações > Banco Musical.');
+        console.error('[AUTO-GRADE] ❌ Nenhuma pasta de música configurada!');
         logSystemError('GRADE', 'error', 'Nenhuma pasta de música configurada', 'Vá em Configurações > Banco Musical e adicione pelo menos uma pasta.');
         toast({ title: '❌ Pastas de Música', description: 'Nenhuma pasta configurada. Vá em Configurações > Banco Musical.', variant: 'destructive' });
         return;
-      }
-
-      // Test a single library check to verify the bridge is working
-      if (window.electronAPI?.findSongMatch) {
-        try {
-          const testResult = await window.electronAPI.findSongMatch({
-            artist: 'TEST_DIAGNOSTIC',
-            title: 'TEST_DIAGNOSTIC',
-            musicFolders,
-          });
-          console.log(`[AUTO-GRADE] 🔍 DIAGNÓSTICO: teste findSongMatch retornou: ${JSON.stringify(testResult)}`);
-        } catch (testErr) {
-          console.error(`[AUTO-GRADE] ❌ DIAGNÓSTICO: findSongMatch FALHOU:`, testErr);
-          logSystemError('GRADE', 'error', 'Bridge findSongMatch falhou', String(testErr));
-        }
       }
 
       const blocks = getBlockTimes();
