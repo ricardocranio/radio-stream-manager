@@ -24,6 +24,7 @@ interface SelectionContext {
   songsByStation: Record<string, SongEntry[]>;
   allSongsPool: SongEntry[];
   carryOverByStation: Record<string, SongEntry[]>;
+  freshSongsByStation?: Record<string, SongEntry[]>; // P0.5: songs captured in the last 30min
   stationSongIndex: Record<string, number>;
   logs: BlockLogItem[];
   stats: BlockStats;
@@ -90,6 +91,32 @@ export async function selectSongForSlot(
         reason: `✅ Carry-over (${stationName})`,
       });
       break;
+    }
+  }
+
+  // PRIORITY 0.5: Fresh songs — captured in the last 30 minutes, same station
+  if (!selectedSong) {
+    const freshForStation = selCtx.freshSongsByStation?.[stationName] || [];
+    for (const freshSong of freshForStation) {
+      const key = `${freshSong.title.toLowerCase()}-${freshSong.artist.toLowerCase()}`;
+      const normalizedArtist = freshSong.artist.toLowerCase().trim();
+      if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(freshSong.title, freshSong.artist, timeStr, isFullDay)) {
+        const cacheKey = `${freshSong.artist.toLowerCase().trim()}|${freshSong.title.toLowerCase().trim()}`;
+        const libraryResult = selCtx.libraryCache?.get(cacheKey) ?? await ctx.findSongInLibrary(freshSong.artist, freshSong.title);
+        if (libraryResult.exists) {
+          const correctFilename = libraryResult.filename || sanitizeFilename(`${freshSong.artist} - ${freshSong.title}.mp3`);
+          selectedSong = { ...freshSong, filename: correctFilename, existsInLibrary: true };
+          usedInBlock.add(key);
+          usedArtistsInBlock.add(normalizedArtist);
+          logs.push({
+            blockTime: timeStr, type: 'used',
+            title: freshSong.title, artist: freshSong.artist,
+            station: freshSong.station, style: freshSong.style,
+            reason: `🔥 Captura fresca (${stationName})`,
+          });
+          break;
+        }
+      }
     }
   }
 

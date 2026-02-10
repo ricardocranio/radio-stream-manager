@@ -436,6 +436,20 @@ export function useAutoGradeBuilder() {
       allSongsPool.push(...stationSongs);
     }
 
+    // Build fresh songs pool (captured in last 30 minutes) for P0.5 priority
+    const freshCutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const freshSongsByStation: Record<string, SongEntry[]> = {};
+    for (const [stName, stSongs] of Object.entries(songsByStation)) {
+      const fresh = stSongs.filter(s => s.scrapedAt && s.scrapedAt >= freshCutoff);
+      if (fresh.length > 0) {
+        freshSongsByStation[stName] = fresh.sort((a, b) => (b.scrapedAt || '').localeCompare(a.scrapedAt || ''));
+      }
+    }
+    const freshCount = Object.values(freshSongsByStation).reduce((sum, arr) => sum + arr.length, 0);
+    if (freshCount > 0) {
+      console.log(`[AUTO-GRADE] 🔥 Fresh songs (last 30min): ${freshCount} across ${Object.keys(freshSongsByStation).length} stations`);
+    }
+
     // === PRE-BATCH: Check all songs in library at once to avoid individual IPC calls ===
     const allSongsToCheck = allSongsPool.map(s => ({ artist: s.artist, title: s.title }));
     const carryOverAvailable = getCarryOverSongs(timeStr);
@@ -472,7 +486,8 @@ export function useAutoGradeBuilder() {
 
     const selCtx = {
       timeStr, isFullDay, usedInBlock, usedArtistsInBlock,
-      songsByStation, allSongsPool, carryOverByStation, stationSongIndex,
+      songsByStation, allSongsPool, carryOverByStation, freshSongsByStation,
+      stationSongIndex,
       logs: blockLogs, stats,
       libraryCache, // Pass pre-checked results
     };
