@@ -24,6 +24,8 @@ class RankingBatcher {
   /**
    * Initialize the batcher with a callback to apply accumulated updates
    */
+  private visibilityHandler: (() => void) | null = null;
+
   init(onFlush: (updates: PendingUpdate[]) => void) {
     this.flushCallback = onFlush;
     
@@ -36,17 +38,22 @@ class RankingBatcher {
       this.flush();
     }, this.FLUSH_INTERVAL_MS);
     
+    // Remove previous listener if exists (prevent leak on re-init)
+    if (this.visibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+    }
+    
     // Also flush on visibility change (when user returns to tab)
     if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', () => {
+      this.visibilityHandler = () => {
         if (!document.hidden && this.pendingUpdates.size > 0) {
-          // Only flush if there are pending updates and enough time has passed
           const timeSinceLastFlush = Date.now() - this.lastFlush;
-          if (timeSinceLastFlush > 60000) { // At least 1 minute
+          if (timeSinceLastFlush > 60000) {
             this.flush();
           }
         }
-      });
+      };
+      document.addEventListener('visibilitychange', this.visibilityHandler);
     }
   }
 
@@ -115,6 +122,10 @@ class RankingBatcher {
     if (this.flushIntervalId) {
       clearInterval(this.flushIntervalId);
       this.flushIntervalId = null;
+    }
+    if (this.visibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      this.visibilityHandler = null;
     }
     this.flush(); // Final flush
     this.flushCallback = null;

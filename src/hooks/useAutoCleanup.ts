@@ -38,6 +38,7 @@ export function useAutoCleanup() {
     
     if (recentCaptured.length < currentCaptured.length) {
       cleanedCount += currentCaptured.length - recentCaptured.length;
+      useRadioStore.setState({ capturedSongs: recentCaptured });
     }
 
     // Clean old download history
@@ -49,6 +50,7 @@ export function useAutoCleanup() {
     
     if (recentHistory.length < currentHistory.length) {
       cleanedCount += currentHistory.length - recentHistory.length;
+      useRadioStore.setState({ downloadHistory: recentHistory });
     }
 
     // Clean old scraped songs from Supabase (>24h) — excess per station
