@@ -482,7 +482,7 @@ export function DashboardView() {
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={gradeBuilder.buildFullDayGrade}
+                    onClick={() => gradeBuilder.buildFullDayGrade()}
                     disabled={gradeBuilder.isBuilding}
                     className="gap-2 bg-emerald-600 hover:bg-emerald-700"
                   >
@@ -492,6 +492,20 @@ export function DashboardView() {
                       <Calendar className="w-4 h-4" />
                     )}
                     Grade Completa
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => gradeBuilder.buildFullDayGrade(13)}
+                    disabled={gradeBuilder.isBuilding}
+                    className="gap-2"
+                  >
+                    {gradeBuilder.isBuilding ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Calendar className="w-4 h-4" />
+                    )}
+                    Até 13h (Teste)
                   </Button>
                   <Button
                     variant="ghost"
