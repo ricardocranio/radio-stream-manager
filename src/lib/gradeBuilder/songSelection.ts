@@ -116,11 +116,6 @@ export async function selectSongForSlot(
         const libraryResult = selCtx.libraryCache?.get(cacheKey) ?? await ctx.findSongInLibrary(candidate.artist, candidate.title);
         libraryCheckCount++;
         
-        // Log first 3 library checks per block for diagnostics
-        if (libraryCheckCount <= 3) {
-          console.log(`[SONG-SELECT] 🔍 Check ${libraryCheckCount}: "${candidate.artist} - ${candidate.title}" → exists=${libraryResult.exists}, filename=${libraryResult.filename || 'N/A'}, cached=${!!selCtx.libraryCache?.has(cacheKey)}`);
-        }
-        
         if (libraryResult.exists) {
           const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
           selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
