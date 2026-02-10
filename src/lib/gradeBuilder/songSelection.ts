@@ -1,19 +1,22 @@
 /**
  * Song Selection Logic
  * 
- * Handles the selection of songs for normal blocks with STRICT station loyalty:
+ * Handles the selection of songs for normal blocks with DNA-aware priorities:
  * P0: Carry-over (songs from same station, now downloaded)
+ * P0.5: Fresh captures (songs captured in the last 30min from same station)
  * P1: Station Pool (all songs from configured station)
- * CORINGA: If no song from the target station is available in the library
+ * P2: DNA Fallback (songs from other stations with similar DNA/shared artists)
+ * CORINGA: Last resort if no compatible song is available
  * 
- * Songs MUST come from the station configured in the sequence position.
- * No cross-station substitution occurs — this ensures the grade respects
- * the sequence rotation exactly as the user programmed it.
+ * The DNA system learns each station's identity dynamically from captures,
+ * enabling intelligent cross-station substitution that preserves the
+ * programming style even when the target station's cache is empty.
  */
 
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import type { SongEntry, BlockLogItem, BlockStats, GradeContext, CarryOverSong } from './types';
 import { STATION_ID_TO_DB_NAME } from './constants';
+import { findDnaCompatibleSongs, type DnaProfiles } from './stationDna';
 import type { WeekDay, SequenceConfig } from '@/types/radio';
 
 interface SelectionContext {
@@ -25,6 +28,7 @@ interface SelectionContext {
   allSongsPool: SongEntry[];
   carryOverByStation: Record<string, SongEntry[]>;
   freshSongsByStation?: Record<string, SongEntry[]>; // P0.5: songs captured in the last 30min
+  dnaProfiles?: DnaProfiles; // DNA profiles for cross-station fallback
   stationSongIndex: Record<string, number>;
   logs: BlockLogItem[];
   stats: BlockStats;
@@ -193,14 +197,49 @@ export async function selectSongForSlot(
     return `"${selectedSong.filename}"`;
   }
 
-  // CORINGA: No song from the target station is available in the library
-  // This position will be filled when missing songs are downloaded and the grade regenerates
+  // PRIORITY 2: DNA Fallback — find songs from other stations with similar DNA
+  if (selCtx.dnaProfiles) {
+    const dnaCandidates = findDnaCompatibleSongs(
+      stationName || seq.radioSource,
+      songsByStation,
+      selCtx.dnaProfiles,
+      usedInBlock,
+      usedArtistsInBlock,
+    );
+
+    for (const candidate of dnaCandidates) {
+      if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
+
+      const cacheKey = `${candidate.artist.toLowerCase().trim()}|${candidate.title.toLowerCase().trim()}`;
+      const libraryResult = selCtx.libraryCache?.get(cacheKey) ?? await ctx.findSongInLibrary(candidate.artist, candidate.title);
+
+      if (libraryResult.exists) {
+        const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+        const dnaSong: SongEntry = { ...candidate, filename: correctFilename, existsInLibrary: true };
+        const key = `${dnaSong.title.toLowerCase()}-${dnaSong.artist.toLowerCase()}`;
+        usedInBlock.add(key);
+        usedArtistsInBlock.add(dnaSong.artist.toLowerCase().trim());
+        ctx.markSongAsUsed(dnaSong.title, dnaSong.artist, timeStr);
+        logs.push({
+          blockTime: timeStr, type: 'substituted',
+          title: dnaSong.title, artist: dnaSong.artist,
+          station: dnaSong.station, style: dnaSong.style,
+          reason: `🧬 DNA similar a ${stationName} (via ${dnaSong.station})`,
+          substituteFor: stationName || seq.radioSource,
+        });
+        stats.substituted++;
+        return `"${correctFilename}"`;
+      }
+    }
+  }
+
+  // CORINGA: No song from the target station or DNA-compatible stations is available
   stats.missing++;
   logs.push({
     blockTime: timeStr, type: 'missing',
     title: ctx.coringaCode, artist: 'CORINGA',
     station: stationName || seq.radioSource,
-    reason: `⚠️ Nenhuma música de ${stationName || seq.radioSource} disponível na biblioteca`,
+    reason: `⚠️ Nenhuma música de ${stationName || seq.radioSource} (nem DNA similar) disponível`,
   });
   return ctx.coringaCode;
 }

@@ -8,3 +8,4 @@ export * from './specialPrograms';
 export * from './folderPrograms';
 export * from './songSelection';
 export * from './batchLibrary';
+export * from './stationDna';
