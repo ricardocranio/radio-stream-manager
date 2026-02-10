@@ -436,11 +436,21 @@ export function useAutoGradeBuilder() {
       allSongsPool.push(...stationSongs);
     }
 
-    // Carry-over
+    // === PRE-BATCH: Check all songs in library at once to avoid individual IPC calls ===
+    const allSongsToCheck = allSongsPool.map(s => ({ artist: s.artist, title: s.title }));
     const carryOverAvailable = getCarryOverSongs(timeStr);
+    for (const co of carryOverAvailable) {
+      allSongsToCheck.push({ artist: co.artist, title: co.title });
+    }
+    
+    const libraryCache = await batchFind(allSongsToCheck);
+    console.log(`[AUTO-GRADE] 📦 Batch library check: ${allSongsToCheck.length} songs → ${[...libraryCache.values()].filter(r => r.exists).length} found`);
+
+    // Build carry-over using cached results
     const carryOverByStation: Record<string, SongEntry[]> = {};
     for (const carryOver of carryOverAvailable) {
-      const libraryResult = await findSongInLibrary(carryOver.artist, carryOver.title);
+      const key = `${carryOver.artist.toLowerCase().trim()}|${carryOver.title.toLowerCase().trim()}`;
+      const libraryResult = libraryCache.get(key) || { exists: false };
       if (libraryResult.exists) {
         const correctFilename = libraryResult.filename || sanitizeFilename(`${carryOver.artist} - ${carryOver.title}.mp3`);
         const songEntry: SongEntry = {
@@ -464,6 +474,7 @@ export function useAutoGradeBuilder() {
       timeStr, isFullDay, usedInBlock, usedArtistsInBlock,
       songsByStation, allSongsPool, carryOverByStation, stationSongIndex,
       logs: blockLogs, stats,
+      libraryCache, // Pass pre-checked results
     };
 
     for (const seq of activeSequence) {
@@ -476,7 +487,7 @@ export function useAutoGradeBuilder() {
         continue;
       }
 
-      // Normal station selection (P0-P6)
+      // Normal station selection — uses pre-cached library results
       const songStr = await selectSongForSlot(seq, selCtx, ctx);
       songs.push(songStr);
     }
@@ -504,7 +515,7 @@ export function useAutoGradeBuilder() {
     };
   }, [
     getProgramForHour, getFixedContentForTime, isWeekday,
-    getActiveSequenceForBlock, findSongInLibrary,
+    getActiveSequenceForBlock, findSongInLibrary, batchFind,
     processFixedContentFilename, getDayCode, getCarryOverSongs,
     buildGradeContext, filterChars, stations,
   ]);

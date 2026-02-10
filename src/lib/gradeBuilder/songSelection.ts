@@ -27,6 +27,7 @@ interface SelectionContext {
   stationSongIndex: Record<string, number>;
   logs: BlockLogItem[];
   stats: BlockStats;
+  libraryCache?: Map<string, { exists: boolean; filename?: string }>; // Pre-checked results
 }
 
 /**
@@ -110,12 +111,14 @@ export async function selectSongForSlot(
       const normalizedArtist = candidate.artist.toLowerCase().trim();
       
       if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-        const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+        // Use pre-cached library result if available, otherwise fall back to individual check
+        const cacheKey = `${candidate.artist.toLowerCase().trim()}|${candidate.title.toLowerCase().trim()}`;
+        const libraryResult = selCtx.libraryCache?.get(cacheKey) ?? await ctx.findSongInLibrary(candidate.artist, candidate.title);
         libraryCheckCount++;
         
         // Log first 3 library checks per block for diagnostics
         if (libraryCheckCount <= 3) {
-          console.log(`[SONG-SELECT] 🔍 Check ${libraryCheckCount}: "${candidate.artist} - ${candidate.title}" → exists=${libraryResult.exists}, filename=${libraryResult.filename || 'N/A'}`);
+          console.log(`[SONG-SELECT] 🔍 Check ${libraryCheckCount}: "${candidate.artist} - ${candidate.title}" → exists=${libraryResult.exists}, filename=${libraryResult.filename || 'N/A'}, cached=${!!selCtx.libraryCache?.has(cacheKey)}`);
         }
         
         if (libraryResult.exists) {
@@ -275,7 +278,9 @@ export async function handleSpecialSequenceType(
       const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
       const normalizedArtist = candidate.artist.toLowerCase().trim();
       if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-        const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+        // Use pre-cached library result if available
+        const cacheKey = `${candidate.artist.toLowerCase().trim()}|${candidate.title.toLowerCase().trim()}`;
+        const libraryResult = selCtx.libraryCache?.get(cacheKey) ?? await ctx.findSongInLibrary(candidate.artist, candidate.title);
         if (libraryResult.exists) {
           const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
           usedInBlock.add(key);

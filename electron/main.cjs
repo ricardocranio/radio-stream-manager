@@ -1675,6 +1675,7 @@ function scanMusicLibrary(musicFolders) {
 
 // Find best matching file in library using similarity
 // IMPORTANT: Artist matching is STRICT to avoid confusing different artists with same song title
+// OPTIMIZED: Pre-filters by word overlap to avoid expensive Levenshtein on every file
 function findBestMatch(artist, title, musicFolders) {
   const files = scanMusicLibrary(musicFolders);
   const normalizedArtist = normalizeText(artist);
@@ -1682,10 +1683,13 @@ function findBestMatch(artist, title, musicFolders) {
   const searchQuery = normalizeText(`${artist} ${title}`);
   
   // Create "clean" versions with ALL parenthetical content removed
-  // This handles: library has "(Ao Vivo Em Brasília)" but capture has "(Ao Vivo)" or no suffix
   const cleanArtist = cleanNormalize(artist);
   const cleanTitle = cleanNormalize(title);
   const cleanQuery = cleanNormalize(`${artist} ${title}`);
+  
+  // Extract significant words (>= 3 chars) from artist for pre-filtering
+  const artistWords = normalizedArtist.split(/\s+/).filter(w => w.length >= 3);
+  const titleWords = normalizedTitle.split(/\s+/).filter(w => w.length >= 3);
   
   let bestMatch = null;
   let bestScore = 0;
@@ -1694,7 +1698,6 @@ function findBestMatch(artist, title, musicFolders) {
   
   for (const file of files) {
     // PRIORITY 1: Direct match - both artist AND title present in filename
-    // Check BOTH full normalized AND clean (no parenthetical) versions
     if (
       (file.normalized.includes(normalizedArtist) && file.normalized.includes(normalizedTitle)) ||
       (file.cleanNormalized.includes(cleanArtist) && file.cleanNormalized.includes(cleanTitle))
@@ -1708,19 +1711,21 @@ function findBestMatch(artist, title, musicFolders) {
       };
     }
     
+    // OPTIMIZATION: Skip files that don't share ANY word with the artist
+    // This avoids running expensive Levenshtein on clearly unrelated files
+    const hasArtistWord = artistWords.length === 0 || artistWords.some(w => file.normalized.includes(w));
+    if (!hasArtistWord) continue;
+    
     // PRIORITY 2: Similarity-based matching with ARTIST VERIFICATION
-    // Check artist similarity using BOTH original and clean versions
     const artistScore = Math.max(
       calculateSimilarity(normalizedArtist, file.normalized),
       calculateSimilarity(cleanArtist, file.cleanNormalized)
     );
     
-    // Only consider this file if artist has some presence in filename
     if (artistScore < ARTIST_MIN_SIMILARITY) {
       continue;
     }
     
-    // Check overall similarity using BOTH original and clean versions
     const score = Math.max(
       calculateSimilarity(searchQuery, file.normalized),
       calculateSimilarity(cleanQuery, file.cleanNormalized)
