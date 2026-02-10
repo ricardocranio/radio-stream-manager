@@ -19,16 +19,19 @@ export async function batchFindSongsInLibrary(
   songs: Array<{ artist: string; title: string }>,
   musicFolders: string[]
 ): Promise<Map<string, LibraryCheckResult>> {
-  const results = new Map<string, LibraryCheckResult>();
-  
+  // Web mode: return empty map with a flag-based proxy that assumes all exist
   if (!isElectronEnv || !window.electronAPI?.findSongMatch) {
-    // Web mode: assume all exist
-    for (const song of songs) {
-      const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
-      results.set(key, { exists: true });
-    }
-    return results;
+    return new Proxy(new Map<string, LibraryCheckResult>(), {
+      get(target, prop) {
+        if (prop === 'get') return () => ({ exists: true } as LibraryCheckResult);
+        if (prop === 'has') return () => true;
+        if (prop === 'size') return 0;
+        return Reflect.get(target, prop);
+      }
+    });
   }
+
+  const results = new Map<string, LibraryCheckResult>();
 
   // Deduplicate by key
   const uniqueSongs = new Map<string, { artist: string; title: string }>();
