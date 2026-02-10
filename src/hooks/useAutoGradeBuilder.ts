@@ -537,15 +537,19 @@ export function useAutoGradeBuilder() {
 
   // ==================== Full Day Grade ====================
 
-  const buildFullDayGrade = useCallback(async () => {
+  const buildFullDayGrade = useCallback(async (upToHour?: number) => {
     if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
       toast({ title: '⚠️ Modo Web', description: 'Geração de grade disponível apenas no aplicativo desktop.' });
       return;
     }
 
+    const maxHour = upToHour !== undefined ? Math.min(Math.max(0, upToHour), 24) : 24;
+    const totalBlocks = maxHour * 2;
+    const isPartial = maxHour < 24;
+
     setState(prev => ({
       ...prev, isBuilding: true, error: null,
-      fullDayProgress: 0, fullDayTotal: 48,
+      fullDayProgress: 0, fullDayTotal: totalBlocks,
       skippedSongs: 0, substitutedSongs: 0, missingSongs: 0,
       currentProcessingSong: null, currentProcessingBlock: null, lastSaveProgress: 0,
     }));
@@ -556,8 +560,8 @@ export function useAutoGradeBuilder() {
     const filename = `${dayCode}.txt`;
 
     try {
-      console.log('[AUTO-GRADE] 🚀 Building full day grade with progressive saving...');
-      logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
+      console.log(`[AUTO-GRADE] 🚀 Building ${isPartial ? `partial (00:00-${maxHour.toString().padStart(2,'0')}:00)` : 'full day'} grade...`);
+      logSystemError('GRADE', 'info', `Iniciando geração da grade ${isPartial ? `parcial (até ${maxHour}h)` : 'completa'}`);
       clearUsedSongs();
 
       const songsByStation = await fetchAllRecentSongs();
@@ -569,7 +573,7 @@ export function useAutoGradeBuilder() {
       // Full-day carry-over: pass missing songs between consecutive blocks
       const fullDayCarryOver: CarryOverSong[] = [];
 
-      for (let hour = 0; hour < 24; hour++) {
+      for (let hour = 0; hour < maxHour; hour++) {
         for (const minute of [0, 30]) {
           const blockTimeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
           setState(prev => ({
@@ -578,15 +582,14 @@ export function useAutoGradeBuilder() {
           }));
 
           // Inject carry-over songs from previous block into the ref
-          // so generateBlockLine's carry-over logic picks them up
           if (fullDayCarryOver.length > 0) {
             for (const co of fullDayCarryOver) {
               carryOverSongsRef.current.push({
                 ...co,
-                addedAt: new Date(Date.now() - 120000), // Simulate 2 min ago to pass the 1-min threshold
+                addedAt: new Date(Date.now() - 120000),
               });
             }
-            fullDayCarryOver.length = 0; // Clear after injecting
+            fullDayCarryOver.length = 0;
           }
 
           const result = await generateBlockLine(hour, minute, songsByStation, stats, true, targetDay);
@@ -596,7 +599,7 @@ export function useAutoGradeBuilder() {
 
           // Collect any new carry-over songs added during this block for next block
           const newCarryOvers = carryOverSongsRef.current.filter(
-            co => (Date.now() - co.addedAt.getTime()) < 60000 // Recently added (within 1 min)
+            co => (Date.now() - co.addedAt.getTime()) < 60000
           );
           fullDayCarryOver.push(...newCarryOvers);
 
@@ -608,11 +611,11 @@ export function useAutoGradeBuilder() {
           }));
 
           // Progressive save every 4 blocks
-          if (blockCount % 4 === 0 || blockCount === 48) {
+          if (blockCount % 4 === 0 || blockCount === totalBlocks) {
             try {
               const saveResult = await window.electronAPI.saveGradeFile({ folder: config.gradeFolder, filename, content: lines.join('\n') });
               if (saveResult.success) {
-                console.log(`[AUTO-GRADE] 💾 Progressive save: ${blockCount}/48 blocos`);
+                console.log(`[AUTO-GRADE] 💾 Progressive save: ${blockCount}/${totalBlocks} blocos`);
                 setState(prev => ({ ...prev, lastSaveProgress: blockCount, lastSavedFile: filename }));
               }
             } catch (saveError) {
@@ -620,7 +623,7 @@ export function useAutoGradeBuilder() {
             }
           }
 
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
 
@@ -630,25 +633,25 @@ export function useAutoGradeBuilder() {
 
       const result = await window.electronAPI.saveGradeFile({ folder: config.gradeFolder, filename, content: finalContent });
       if (result.success) {
-        console.log(`[AUTO-GRADE] ✅ Full day grade saved: ${result.filePath}`);
-        logSystemError('GRADE', 'info', `Grade completa salva: ${filename}`, `${lines.length} blocos, ${stats.skipped} puladas, ${stats.substituted} substituídas, ${stats.missing} faltando`);
+        console.log(`[AUTO-GRADE] ✅ Grade saved: ${result.filePath}`);
+        logSystemError('GRADE', 'info', `Grade ${isPartial ? 'parcial' : 'completa'} salva: ${filename}`, `${lines.length} blocos, ${stats.skipped} puladas, ${stats.substituted} substituídas, ${stats.missing} faltando`);
         addGradeHistory({
-          id: `grade-fullday-${Date.now()}`, timestamp: new Date(), blockTime: 'COMPLETA',
-          songsProcessed: 48 * defaultSequence.length, songsFound: lines.length, songsMissing: stats.missing, programName: 'Grade Completa',
+          id: `grade-fullday-${Date.now()}`, timestamp: new Date(), blockTime: isPartial ? `ATÉ ${maxHour}H` : 'COMPLETA',
+          songsProcessed: totalBlocks * defaultSequence.length, songsFound: lines.length, songsMissing: stats.missing, programName: isPartial ? `Grade Parcial (até ${maxHour}h)` : 'Grade Completa',
         });
         setState(prev => ({
           ...prev, isBuilding: false, lastBuildTime: new Date(), lastSavedFile: filename,
-          blocksGenerated: prev.blocksGenerated + 48, fullDayProgress: 48, fullDayTotal: 0,
+          blocksGenerated: prev.blocksGenerated + totalBlocks, fullDayProgress: totalBlocks, fullDayTotal: 0,
           skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
           currentProcessingSong: null, currentProcessingBlock: null,
         }));
-        toast({ title: '✅ Grade Completa Gerada!', description: `${filename} salvo com 48 blocos. ${stats.skipped} puladas, ${stats.substituted} substituídas, ${stats.missing} faltando.` });
+        toast({ title: `✅ Grade ${isPartial ? 'Parcial' : 'Completa'} Gerada!`, description: `${filename} salvo com ${lines.length} blocos. ${stats.missing} faltando.` });
       } else {
         throw new Error(result.error || 'Erro ao salvar grade');
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      logSystemError('GRADE', 'error', 'Erro na geração da grade completa', errorMessage);
+      logSystemError('GRADE', 'error', 'Erro na geração da grade', errorMessage);
       setState(prev => ({ ...prev, isBuilding: false, error: errorMessage, fullDayTotal: 0, currentProcessingSong: null, currentProcessingBlock: null }));
       toast({ title: '❌ Erro na Grade', description: errorMessage, variant: 'destructive' });
     }
