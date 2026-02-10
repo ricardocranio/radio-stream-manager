@@ -396,17 +396,18 @@ export function VozBrasilView() {
   const handleCleanup = async () => {
     if (window.electronAPI?.cleanupVozBrasil) {
       try {
+        // Delete ALL files in the folder (maxAgeDays: 0 forces deletion of everything)
         const result = await window.electronAPI.cleanupVozBrasil({
           folder: config.downloadFolder,
-          maxAgeDays: 7, // Delete files older than 7 days
+          maxAgeDays: 0,
         });
         
         if (result.success) {
           toast({
             title: '🗑️ Limpeza executada',
             description: result.deletedCount && result.deletedCount > 0
-              ? `${result.deletedCount} arquivo(s) antigo(s) removido(s).`
-              : 'Nenhum arquivo antigo encontrado.',
+              ? `${result.deletedCount} arquivo(s) removido(s).`
+              : 'Nenhum arquivo encontrado na pasta.',
           });
         } else {
           toast({
