@@ -617,6 +617,30 @@ export function CapturedSongsView() {
     });
   }, [filteredSongs, deezerConfig, config, toast, addDownloadHistory, autoDownloadMode]);
 
+  // Auto-trigger download when mode is "auto" and songs are loaded
+  const [autoDownloadLastTrigger, setAutoDownloadLastTrigger] = useState<string>('');
+  
+  useEffect(() => {
+    if (autoDownloadMode !== 'auto') return;
+    if (!isElectron) return;
+    if (isDownloadingAll) return;
+    if (filteredSongs.length === 0) return;
+    if (!deezerConfig.enabled || !deezerConfig.arl) return;
+    
+    // Build a fingerprint of current filtered songs to avoid re-triggering on same set
+    const fingerprint = `${filteredSongs.length}-${selectedStation}-${dateRange}`;
+    if (fingerprint === autoDownloadLastTrigger) return;
+    
+    // Small delay to let UI settle, then auto-start
+    const timer = setTimeout(() => {
+      console.log('[CAPTURED-SONGS] Auto-download triggered for', filteredSongs.length, 'songs');
+      setAutoDownloadLastTrigger(fingerprint);
+      handleDownloadAll();
+    }, 3000);
+    
+    return () => clearTimeout(timer);
+  }, [autoDownloadMode, filteredSongs.length, isDownloadingAll, deezerConfig.enabled, deezerConfig.arl, selectedStation, dateRange, handleDownloadAll, autoDownloadLastTrigger]);
+
   // Export songs as JSON
   const handleExport = () => {
     const exportData = {
