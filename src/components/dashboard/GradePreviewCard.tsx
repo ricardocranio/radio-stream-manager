@@ -1,11 +1,11 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Eye, Music, TrendingUp, Radio, Clock, Sparkles, Loader2 } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Eye, Music, TrendingUp, Radio, Clock, Sparkles, Loader2, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { sanitizeGradeFilename } from '@/lib/gradeBuilder/sanitize';
-import { STATION_ID_TO_DB_NAME } from '@/lib/gradeBuilder/constants';
+import { STATION_ID_TO_DB_NAME, DAY_CODES_BY_INDEX, isElectronEnv } from '@/lib/gradeBuilder/constants';
 import { supabase } from '@/integrations/supabase/client';
 import type { SequenceConfig } from '@/types/radio';
 
@@ -26,10 +26,82 @@ interface PreviewSong {
   filename: string;
 }
 
+/** Parse a grade TXT block line into individual song entries */
+function parseTxtBlockLine(line: string, blockTime: string): PreviewSong[] {
+  const results: PreviewSong[] = [];
+  // Line format: "HH:MM vht "FILENAME.MP3" vht "FILENAME.MP3" ..."
+  const timeMatch = line.match(/^(\d{2}:\d{2})\s+(.+)$/);
+  if (!timeMatch) return results;
+
+  const content = timeMatch[2];
+  // Extract quoted filenames and non-quoted tokens (like vht, mus, rom)
+  const tokenRegex = /"([^"]+)"|(\S+)/g;
+  let match: RegExpExecArray | null;
+  let position = 1;
+
+  while ((match = tokenRegex.exec(content)) !== null) {
+    const quoted = match[1]; // filename inside quotes
+    const unquoted = match[2]; // token without quotes (vht, mus, etc.)
+
+    if (quoted) {
+      // It's a music file: "ARTIST - TITLE.MP3"
+      const cleanName = quoted.replace(/\.MP3$/i, '');
+      const dashIdx = cleanName.indexOf(' - ');
+      const artist = dashIdx >= 0 ? cleanName.substring(0, dashIdx) : '';
+      const title = dashIdx >= 0 ? cleanName.substring(dashIdx + 3) : cleanName;
+
+      results.push({
+        position,
+        title: title || cleanName,
+        artist: artist || 'ARQUIVO',
+        source: 'TXT',
+        isFromRanking: false,
+        isFixed: false,
+        filename: quoted,
+      });
+      position++;
+    } else if (unquoted) {
+      const lower = unquoted.toLowerCase();
+      // Skip separators like vht
+      if (lower === 'vht') continue;
+      // Fixed content markers (mus, rom, clas, etc.)
+      if (['mus', 'rom', 'clas'].includes(lower)) {
+        results.push({
+          position,
+          title: unquoted.toUpperCase(),
+          artist: 'CORINGA',
+          source: 'CORINGA',
+          isFromRanking: false,
+          isFixed: true,
+          filename: unquoted,
+        });
+        position++;
+      } else if (lower.endsWith('.mp3')) {
+        // Unquoted .mp3 file (fixed content)
+        const cleanName = unquoted.replace(/\.MP3$/i, '');
+        results.push({
+          position,
+          title: cleanName,
+          artist: 'CONTEÚDO FIXO',
+          source: 'FIXO',
+          isFromRanking: false,
+          isFixed: true,
+          filename: unquoted,
+        });
+        position++;
+      }
+    }
+  }
+
+  return results;
+}
+
 export function GradePreviewCard() {
   const { stations, rankingSongs, gradeHistory, scheduledSequences, sequence: defaultSequence, fixedContent, config } = useRadioStore();
   const [songs, setSongs] = useState<SongPool[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [txtSongs, setTxtSongs] = useState<PreviewSong[] | null>(null);
+  const [txtSource, setTxtSource] = useState<string>('');
   const filterChars = config.filterCharacters;
 
   // Calculate next block time
@@ -47,7 +119,60 @@ export function GradePreviewCard() {
   const nextBlock = getNextBlockTime();
   const nextBlockTime = `${nextBlock.hour.toString().padStart(2, '0')}:${nextBlock.minute.toString().padStart(2, '0')}`;
 
-  // Fetch songs from Supabase - same source as grade builder
+  // === PRIMARY: Read real TXT file (Electron only) ===
+  const readTxtGrade = useCallback(async () => {
+    if (!isElectronEnv || !window.electronAPI?.readGradeFile || !config.gradeFolder) return;
+
+    try {
+      const dayCode = DAY_CODES_BY_INDEX[new Date().getDay()];
+      const filename = `${dayCode}.txt`;
+
+      const result = await window.electronAPI.readGradeFile({
+        folder: config.gradeFolder,
+        filename,
+      });
+
+      if (!result.success || !result.content) {
+        setTxtSongs(null);
+        return;
+      }
+
+      // Find the line matching the next block time
+      const lines = result.content.split('\n');
+      const targetLine = lines.find(l => l.trim().startsWith(nextBlockTime));
+
+      if (targetLine) {
+        const parsed = parseTxtBlockLine(targetLine.trim(), nextBlockTime);
+        if (parsed.length > 0) {
+          // Enrich with ranking data
+          const enriched = parsed.map(song => ({
+            ...song,
+            isFromRanking: rankingSongs.some(
+              r => sanitizeGradeFilename(`${r.artist} - ${r.title}.MP3`, filterChars).toLowerCase() === song.filename.toLowerCase()
+            ),
+          }));
+          setTxtSongs(enriched);
+          setTxtSource(filename);
+          return;
+        }
+      }
+
+      // No matching block found in the TXT
+      setTxtSongs(null);
+    } catch (err) {
+      console.warn('[PREVIEW] Could not read TXT file:', err);
+      setTxtSongs(null);
+    }
+  }, [config.gradeFolder, nextBlockTime, rankingSongs, filterChars]);
+
+  // Read TXT on mount and periodically
+  useEffect(() => {
+    readTxtGrade();
+    const interval = setInterval(readTxtGrade, 30 * 1000); // Every 30s
+    return () => clearInterval(interval);
+  }, [readTxtGrade]);
+
+  // === FALLBACK: Fetch songs from Supabase for simulation ===
   useEffect(() => {
     const fetchSongs = async () => {
       setIsLoading(true);
@@ -67,7 +192,6 @@ export function GradePreviewCard() {
 
         if (error) throw error;
 
-        // If no songs in the 1h window, fetch the most recent ones (like the grade builder fallback)
         if (!data || data.length === 0) {
           const { data: fallbackData, error: fallbackError } = await supabase
             .from('scraped_songs')
@@ -88,12 +212,11 @@ export function GradePreviewCard() {
     };
 
     fetchSongs();
-    // Refresh every 2 minutes
     const interval = setInterval(fetchSongs, 2 * 60 * 1000);
     return () => clearInterval(interval);
   }, [nextBlock.hour, nextBlock.minute]);
 
-  // Build songs by station - same logic as grade builder's buildSongsByStation
+  // Build songs by station (for simulation fallback)
   const songsByStation = useMemo(() => {
     const result: Record<string, SongPool[]> = {};
     const seen = new Set<string>();
@@ -109,7 +232,7 @@ export function GradePreviewCard() {
     return result;
   }, [songs]);
 
-  // Get active sequence for the next block - same as getActiveSequenceForBlock
+  // Get active sequence for the next block
   const activeSequence = useMemo((): SequenceConfig[] => {
     const timeMinutes = nextBlock.hour * 60 + nextBlock.minute;
     const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
@@ -132,15 +255,14 @@ export function GradePreviewCard() {
     return defaultSequence;
   }, [nextBlock.hour, nextBlock.minute, scheduledSequences, defaultSequence]);
 
-  // Generate preview using same logic as grade builder
-  const previewSongs = useMemo((): PreviewSong[] => {
+  // Simulation fallback preview (same logic as before)
+  const simulatedSongs = useMemo((): PreviewSong[] => {
     const result: PreviewSong[] = [];
     const usedInBlock = new Set<string>();
     const usedArtistsInBlock = new Set<string>();
     const stationSongIndex: Record<string, number> = {};
 
     for (const seq of activeSequence) {
-      // Handle fixo items
       if (seq.radioSource.startsWith('fixo_') || seq.radioSource === 'fixo') {
         let fixedName = seq.radioSource;
         if (seq.radioSource.startsWith('fixo_')) {
@@ -160,7 +282,6 @@ export function GradePreviewCard() {
         continue;
       }
 
-      // Handle top50
       if (seq.radioSource === 'top50') {
         const sortedRanking = [...rankingSongs].sort((a, b) => b.plays - a.plays);
         let found = false;
@@ -199,17 +320,13 @@ export function GradePreviewCard() {
         continue;
       }
 
-      // Normal station: resolve via STATION_ID_TO_DB_NAME (same as grade builder)
       const stationDbName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()] || '';
       let stationName = stationDbName;
-
-      // Fallback: find in stations config
       if (!stationName) {
         const stationConfig = stations.find(s => s.id === seq.radioSource || s.id.toLowerCase() === seq.radioSource.toLowerCase());
         stationName = stationConfig?.name || '';
       }
 
-      // Find matching pool (with fuzzy matching like the grade builder)
       let poolSongs: SongPool[] = songsByStation[stationName] || [];
       if (poolSongs.length === 0) {
         const normalizedSource = seq.radioSource.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -223,24 +340,19 @@ export function GradePreviewCard() {
         }
       }
 
-      // Select song with anti-repetition (no same title or artist in this block)
       const startIdx = stationSongIndex[stationName] || 0;
       let selected = false;
-
       for (let i = 0; i < poolSongs.length; i++) {
         const idx = (startIdx + i) % poolSongs.length;
         const song = poolSongs[idx];
         const key = `${song.title.toLowerCase()}-${song.artist.toLowerCase()}`;
         const artistKey = song.artist.toLowerCase().trim();
-
         if (!usedInBlock.has(key) && !usedArtistsInBlock.has(artistKey)) {
           usedInBlock.add(key);
           usedArtistsInBlock.add(artistKey);
           stationSongIndex[stationName] = (idx + 1) % poolSongs.length;
-
           const filename = sanitizeGradeFilename(`${song.artist} - ${song.title}.MP3`, filterChars);
           const parts = filename.replace(/\.MP3$/i, '').split(' - ');
-
           result.push({
             position: seq.position,
             title: parts.slice(1).join(' - ') || song.title,
@@ -274,10 +386,12 @@ export function GradePreviewCard() {
     return result;
   }, [activeSequence, songsByStation, rankingSongs, stations, fixedContent, filterChars]);
 
-  // Count songs from ranking
+  // Use TXT data when available, otherwise fall back to simulation
+  const previewSongs = txtSongs || simulatedSongs;
+  const isFromTxt = txtSongs !== null;
+
   const songsFromRanking = previewSongs.filter(s => s.isFromRanking).length;
 
-  // Last grade TOP50 usage
   const lastGradeTop50Count = useMemo(() => {
     if (gradeHistory.length === 0) return 0;
     const top50Blocks = gradeHistory.filter(g => g.programName.includes('TOP'));
@@ -296,7 +410,18 @@ export function GradePreviewCard() {
             Preview da Próxima Grade
           </CardTitle>
           <div className="flex items-center gap-2">
-            {isLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+            {isLoading && !isFromTxt && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+            {isFromTxt && (
+              <Badge variant="outline" className="border-green-500/50 text-green-500 text-xs">
+                <FileText className="w-3 h-3 mr-1" />
+                {txtSource}
+              </Badge>
+            )}
+            {!isFromTxt && (
+              <Badge variant="outline" className="border-orange-500/50 text-orange-500 text-xs">
+                Simulação
+              </Badge>
+            )}
             <Badge variant="outline" className="border-amber-500/50 text-amber-500">
               <Clock className="w-3 h-3 mr-1" />
               {nextBlockTime}
@@ -327,7 +452,7 @@ export function GradePreviewCard() {
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
-              Músicas que serão usadas:
+              {isFromTxt ? 'Grade real (do arquivo TXT):' : 'Músicas que serão usadas:'}
             </p>
             <Badge variant="secondary" className="text-xs">
               {songsFromRanking} no ranking
