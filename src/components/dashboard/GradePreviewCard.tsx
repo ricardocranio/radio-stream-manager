@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Eye, Music, TrendingUp, Radio, Clock, Sparkles, Loader2, FileText } from 'lucide-react';
+import { Eye, Music, TrendingUp, Radio, Clock, Sparkles, Loader2, FileText, Flame, AlertTriangle, Snowflake } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -24,6 +24,19 @@ interface PreviewSong {
   isFromRanking: boolean;
   isFixed: boolean;
   filename: string;
+  scrapedAt?: string; // ISO timestamp for freshness
+}
+
+/** Get freshness icon and label based on minutes since capture */
+function getFreshnessInfo(scrapedAt?: string): { icon: 'fire' | 'alert' | 'cold' | null; label: string; minutes: number } {
+  if (!scrapedAt) return { icon: null, label: '', minutes: -1 };
+  const diffMs = Date.now() - new Date(scrapedAt).getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes <= 20) return { icon: 'fire', label: `há ${minutes} min`, minutes };
+  if (minutes <= 39) return { icon: 'alert', label: `há ${minutes} min`, minutes };
+  if (minutes < 60) return { icon: 'cold', label: `há ${minutes} min`, minutes };
+  const hours = Math.floor(minutes / 60);
+  return { icon: 'cold', label: `há ${hours}h${minutes % 60 > 0 ? `${(minutes % 60).toString().padStart(2, '0')}` : ''}`, minutes };
 }
 
 /** Parse a grade TXT block line into individual song entries */
@@ -144,13 +157,21 @@ export function GradePreviewCard() {
       if (targetLine) {
         const parsed = parseTxtBlockLine(targetLine.trim(), nextBlockTime);
         if (parsed.length > 0) {
-          // Enrich with ranking data
-          const enriched = parsed.map(song => ({
-            ...song,
-            isFromRanking: rankingSongs.some(
-              r => sanitizeGradeFilename(`${r.artist} - ${r.title}.MP3`, filterChars).toLowerCase() === song.filename.toLowerCase()
-            ),
-          }));
+          // Enrich with ranking + scraped_at from pool
+          const enriched = parsed.map(song => {
+            // Try to find matching song in supabase pool to get scraped_at
+            const poolMatch = songs.find(
+              s => s.title.toLowerCase() === song.title.toLowerCase() && 
+                   s.artist.toLowerCase() === song.artist.toLowerCase()
+            );
+            return {
+              ...song,
+              isFromRanking: rankingSongs.some(
+                r => sanitizeGradeFilename(`${r.artist} - ${r.title}.MP3`, filterChars).toLowerCase() === song.filename.toLowerCase()
+              ),
+              scrapedAt: poolMatch?.scraped_at,
+            };
+          });
           setTxtSongs(enriched);
           setTxtSource(filename);
           return;
@@ -163,7 +184,7 @@ export function GradePreviewCard() {
       console.warn('[PREVIEW] Could not read TXT file:', err);
       setTxtSongs(null);
     }
-  }, [config.gradeFolder, nextBlockTime, rankingSongs, filterChars]);
+  }, [config.gradeFolder, nextBlockTime, rankingSongs, filterChars, songs]);
 
   // Read TXT on mount and periodically
   useEffect(() => {
@@ -364,6 +385,7 @@ export function GradePreviewCard() {
             ),
             isFixed: false,
             filename,
+            scrapedAt: song.scraped_at,
           });
           selected = true;
           break;
@@ -461,7 +483,9 @@ export function GradePreviewCard() {
           
           <ScrollArea className="h-[200px]">
             <div className="space-y-1">
-              {previewSongs.map((song, index) => (
+              {previewSongs.map((song, index) => {
+                const freshness = !song.isFixed ? getFreshnessInfo(song.scrapedAt) : null;
+                return (
                 <div
                   key={index}
                   className={`p-2 rounded-lg flex items-center gap-3 ${
@@ -482,14 +506,34 @@ export function GradePreviewCard() {
                         <TrendingUp className="w-3 h-3 inline ml-1 text-purple-500" />
                       )}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {song.artist}
+                      {!song.isFixed && song.source && song.source !== 'CORINGA' && (
+                        <span className="ml-1 opacity-60">· {song.source}</span>
+                      )}
+                    </p>
                   </div>
-                  <Badge variant="outline" className="text-xs shrink-0">
-                    <Radio className="w-3 h-3 mr-1" />
-                    {song.source}
-                  </Badge>
+                  {/* Freshness indicator */}
+                  {freshness && freshness.icon && (
+                    <div className={`flex items-center gap-1 shrink-0 text-xs font-medium ${
+                      freshness.icon === 'fire' ? 'text-green-400' :
+                      freshness.icon === 'alert' ? 'text-amber-400' :
+                      'text-blue-400'
+                    }`}>
+                      {freshness.icon === 'fire' && <Flame className="w-3.5 h-3.5" />}
+                      {freshness.icon === 'alert' && <AlertTriangle className="w-3.5 h-3.5" />}
+                      {freshness.icon === 'cold' && <Snowflake className="w-3.5 h-3.5" />}
+                      <span className="hidden sm:inline">{freshness.label}</span>
+                    </div>
+                  )}
+                  {song.isFixed && (
+                    <Badge variant="outline" className="text-xs shrink-0 border-amber-500/50 text-amber-500">
+                      FIXO
+                    </Badge>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </ScrollArea>
         </div>
