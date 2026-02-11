@@ -154,10 +154,20 @@ export function useCapturedDownloadProcessor() {
     processingRef.current = false;
 
     if (successCount + existsCount + errorCount > 0) {
+      const msg = `✅ ${successCount} baixadas | ⏭️ ${existsCount} já existiam | ❌ ${errorCount} erros`;
       toast({
         title: '📥 Download em lote concluído!',
-        description: `✅ ${successCount} baixadas | ⏭️ ${existsCount} já existiam | ❌ ${errorCount} erros`,
+        description: msg,
       });
+
+      // Native OS notification (Electron only, non-blocking)
+      try {
+        if (isElectron && 'Notification' in window && Notification.permission === 'granted') {
+          new Notification('Download em lote concluído!', { body: msg });
+        }
+      } catch {
+        // Silently ignore if not supported
+      }
     }
   }
 }
