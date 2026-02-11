@@ -35,7 +35,7 @@
       }
     ],
     "icon": "public/favicon.ico",
-    "artifactName": "AudioSolutions-Setup.${ext}"
+    "artifactName": "Programador Radio-Setup-1 beta.${ext}"
   },
   "nsis": {
     "oneClick": false,
