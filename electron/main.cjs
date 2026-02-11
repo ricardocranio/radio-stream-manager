@@ -1,4 +1,7 @@
 const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification, dialog } = require('electron');
+
+// Set app name so AppData folder becomes "AudioSolutions" instead of default
+app.setName('AudioSolutions');
 const path = require('path');
 const { spawn, exec } = require('child_process');
 const fs = require('fs');
