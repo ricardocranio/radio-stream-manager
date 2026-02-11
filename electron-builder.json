@@ -35,7 +35,7 @@
       }
     ],
     "icon": "public/favicon.ico",
-    "artifactName": "${productName}-Setup-${version}.${ext}"
+    "artifactName": "AudioSolutions-Setup.${ext}"
   },
   "nsis": {
     "oneClick": false,
