@@ -42,67 +42,55 @@ function getFreshnessInfo(scrapedAt?: string): { icon: 'fire' | 'alert' | 'cold'
 /** Parse a grade TXT block line into individual song entries */
 function parseTxtBlockLine(line: string, blockTime: string): PreviewSong[] {
   const results: PreviewSong[] = [];
-  // Line format: "HH:MM vht "FILENAME.MP3" vht "FILENAME.MP3" ..."
+  // Line format: "HH:MM (ID=ProgramName) "ARTIST - TITLE.mp3",vht,"ARTIST - TITLE.mp3",vht,FIXED.MP3"
   const timeMatch = line.match(/^(\d{2}:\d{2})\s+(.+)$/);
   if (!timeMatch) return results;
 
-  const content = timeMatch[2];
-  // Extract quoted filenames and non-quoted tokens (like vht, mus, rom)
-  const tokenRegex = /"([^"]+)"|(\S+)/g;
-  let match: RegExpExecArray | null;
+  let content = timeMatch[2];
+  // Strip (ID=...) prefix if present
+  content = content.replace(/^\(ID=[^)]*\)\s*/, '');
+
+  // Split by comma to get individual tokens
+  const tokens = content.split(',');
   let position = 1;
 
-  while ((match = tokenRegex.exec(content)) !== null) {
-    const quoted = match[1]; // filename inside quotes
-    const unquoted = match[2]; // token without quotes (vht, mus, etc.)
+  for (const raw of tokens) {
+    const token = raw.trim();
+    if (!token) continue;
+    const lower = token.toLowerCase();
 
-    if (quoted) {
-      // It's a music file: "ARTIST - TITLE.MP3"
-      const cleanName = quoted.replace(/\.MP3$/i, '');
+    // Skip vht separators
+    if (lower === 'vht') continue;
+
+    // Coringa codes
+    if (['mus', 'rom', 'clas'].includes(lower)) {
+      results.push({ position, title: token.toUpperCase(), artist: 'CORINGA', source: 'CORINGA', isFromRanking: false, isFixed: true, filename: token });
+      position++;
+      continue;
+    }
+
+    // Quoted filename: "ARTIST - TITLE.mp3"
+    const quotedMatch = token.match(/^"([^"]+)"$/);
+    if (quotedMatch) {
+      const filename = quotedMatch[1];
+      const cleanName = filename.replace(/\.mp3$/i, '');
       const dashIdx = cleanName.indexOf(' - ');
       const artist = dashIdx >= 0 ? cleanName.substring(0, dashIdx) : '';
       const title = dashIdx >= 0 ? cleanName.substring(dashIdx + 3) : cleanName;
-
-      results.push({
-        position,
-        title: title || cleanName,
-        artist: artist || 'ARQUIVO',
-        source: 'TXT',
-        isFromRanking: false,
-        isFixed: false,
-        filename: quoted,
-      });
+      results.push({ position, title: title || cleanName, artist: artist || 'ARQUIVO', source: 'TXT', isFromRanking: false, isFixed: false, filename });
       position++;
-    } else if (unquoted) {
-      const lower = unquoted.toLowerCase();
-      // Skip separators like vht
-      if (lower === 'vht') continue;
-      // Fixed content markers (mus, rom, clas, etc.)
-      if (['mus', 'rom', 'clas'].includes(lower)) {
-        results.push({
-          position,
-          title: unquoted.toUpperCase(),
-          artist: 'CORINGA',
-          source: 'CORINGA',
-          isFromRanking: false,
-          isFixed: true,
-          filename: unquoted,
-        });
-        position++;
-      } else if (lower.endsWith('.mp3')) {
-        // Unquoted .mp3 file (fixed content)
-        const cleanName = unquoted.replace(/\.MP3$/i, '');
-        results.push({
-          position,
-          title: cleanName,
-          artist: 'CONTEÚDO FIXO',
-          source: 'FIXO',
-          isFromRanking: false,
-          isFixed: true,
-          filename: unquoted,
-        });
-        position++;
-      }
+      continue;
+    }
+
+    // Unquoted file (fixed content)
+    if (lower.endsWith('.mp3')) {
+      const cleanName = token.replace(/\.mp3$/i, '');
+      results.push({ position, title: cleanName, artist: 'CONTEÚDO FIXO', source: 'FIXO', isFromRanking: false, isFixed: true, filename: token });
+      position++;
+    } else if (token.length > 3) {
+      // Bare name without extension (fixed content)
+      results.push({ position, title: token, artist: 'CONTEÚDO FIXO', source: 'FIXO', isFromRanking: false, isFixed: true, filename: token });
+      position++;
     }
   }
 
