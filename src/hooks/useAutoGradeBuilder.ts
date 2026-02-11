@@ -296,8 +296,9 @@ export function useAutoGradeBuilder() {
       const blockTime = new Date(baseDate);
       blockTime.setHours(blockHour, blockMinute, 0, 0);
       const windowEnd = blockTime.toISOString();
-      const windowStart = new Date(blockTime.getTime() - 60 * 60 * 1000).toISOString();
-      console.log(`[AUTO-GRADE] 🕐 Buscando músicas para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')} (janela de 1h)`);
+      // Use 24-hour window to capture full monitoring history
+      const windowStart = new Date(blockTime.getTime() - 24 * 60 * 60 * 1000).toISOString();
+      console.log(`[AUTO-GRADE] 🕐 Buscando músicas para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')} (janela de 24h)`);
 
       const { data, error } = await supabase
         .from('scraped_songs')
@@ -305,10 +306,10 @@ export function useAutoGradeBuilder() {
         .gte('scraped_at', windowStart)
         .lte('scraped_at', windowEnd)
         .order('scraped_at', { ascending: false })
-        .limit(500);
+        .limit(1500);
       if (error) throw error;
 
-      return buildSongsByStation(data || []);
+      return buildSongsByStation(data || [], 100);
     } catch (error) {
       console.error('[AUTO-GRADE] Error fetching songs for block:', error);
       logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
