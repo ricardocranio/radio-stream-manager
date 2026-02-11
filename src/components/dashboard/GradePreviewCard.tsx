@@ -506,15 +506,19 @@ export function GradePreviewCard() {
                 return (
                 <div
                   key={index}
-                  className={`p-2 rounded-lg flex items-center gap-3 ${
+                  className={`p-2 rounded-lg flex items-center gap-3 transition-all ${
                     song.isFixed
                       ? 'bg-amber-500/10 border border-amber-500/20'
                       : song.isFromRanking 
-                        ? 'bg-purple-500/10 border border-purple-500/20' 
+                        ? 'bg-gradient-to-r from-purple-500/15 via-purple-500/5 to-transparent border border-purple-500/30 shadow-[inset_0_0_12px_rgba(168,85,247,0.08)]' 
                         : 'bg-secondary/50'
                   }`}
                 >
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                    song.isFromRanking 
+                      ? 'bg-purple-500/20 text-purple-400 ring-1 ring-purple-500/40' 
+                      : 'bg-primary/10 text-primary'
+                  }`}>
                     {song.position}
                   </div>
                   <div className="flex-1 min-w-0">
