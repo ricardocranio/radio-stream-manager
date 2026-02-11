@@ -290,7 +290,7 @@ export function useAutoGradeBuilder() {
 
   // ==================== Data Fetching ====================
 
-  const fetchSongsForBlock = useCallback(async (blockHour: number, blockMinute: number, targetDate?: Date): Promise<Record<string, SongEntry[]>> => {
+  const fetchSongsForBlock = useCallback(async (blockHour: number, blockMinute: number, targetDate?: Date, retryCount = 0): Promise<Record<string, SongEntry[]>> => {
     try {
       const baseDate = targetDate || new Date();
       const blockTime = new Date(baseDate);
@@ -298,7 +298,7 @@ export function useAutoGradeBuilder() {
       const windowEnd = blockTime.toISOString();
       // Use 24-hour window to capture full monitoring history
       const windowStart = new Date(blockTime.getTime() - 24 * 60 * 60 * 1000).toISOString();
-      console.log(`[AUTO-GRADE] 🕐 Buscando músicas para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')} (janela de 24h)`);
+      console.log(`[AUTO-GRADE] 🕐 Buscando músicas para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')} (janela: ${windowStart.substring(11, 16)} → ${windowEnd.substring(11, 16)} UTC)`);
 
       const { data, error } = await supabase
         .from('scraped_songs')
@@ -309,15 +309,26 @@ export function useAutoGradeBuilder() {
         .limit(1500);
       if (error) throw error;
 
-      return buildSongsByStation(data || [], 100);
+      const result = buildSongsByStation(data || [], 100);
+      const totalSongs = Object.values(result).reduce((sum, arr) => sum + arr.length, 0);
+      if (totalSongs === 0) {
+        console.warn(`[AUTO-GRADE] ⚠️ POOL VAZIO para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')}! Nenhuma música encontrada na janela de 24h. Dados retornados: ${data?.length || 0} registros.`);
+      }
+      return result;
     } catch (error) {
-      console.error('[AUTO-GRADE] Error fetching songs for block:', error);
-      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
+      console.error(`[AUTO-GRADE] ❌ Erro ao buscar músicas (tentativa ${retryCount + 1}):`, error);
+      // Retry up to 2 times on fetch errors (AbortError, network issues)
+      if (retryCount < 2) {
+        console.log(`[AUTO-GRADE] 🔄 Retentando busca em 3 segundos... (tentativa ${retryCount + 2}/3)`);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        return fetchSongsForBlock(blockHour, blockMinute, targetDate, retryCount + 1);
+      }
+      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase (3 tentativas falharam)', String(error));
       return {};
     }
   }, [stations]);
 
-  const fetchAllRecentSongs = useCallback(async (): Promise<Record<string, SongEntry[]>> => {
+  const fetchAllRecentSongs = useCallback(async (retryCount = 0): Promise<Record<string, SongEntry[]>> => {
     try {
       const { data, error } = await supabase
         .from('scraped_songs')
@@ -325,10 +336,20 @@ export function useAutoGradeBuilder() {
         .order('scraped_at', { ascending: false })
         .limit(2000);
       if (error) throw error;
-      return buildSongsByStation(data || [], 150);
+      const result = buildSongsByStation(data || [], 150);
+      const totalSongs = Object.values(result).reduce((sum, arr) => sum + arr.length, 0);
+      if (totalSongs === 0) {
+        console.warn(`[AUTO-GRADE] ⚠️ POOL VAZIO no fetchAllRecentSongs! Dados retornados: ${data?.length || 0} registros.`);
+      }
+      return result;
     } catch (error) {
-      console.error('[AUTO-GRADE] Error fetching all songs:', error);
-      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
+      console.error(`[AUTO-GRADE] ❌ Erro ao buscar todas as músicas (tentativa ${retryCount + 1}):`, error);
+      if (retryCount < 2) {
+        console.log(`[AUTO-GRADE] 🔄 Retentando busca geral em 3 segundos... (tentativa ${retryCount + 2}/3)`);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        return fetchAllRecentSongs(retryCount + 1);
+      }
+      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase (3 tentativas falharam)', String(error));
       return {};
     }
   }, [stations]);
@@ -459,8 +480,20 @@ export function useAutoGradeBuilder() {
       allSongsToCheck.push({ artist: co.artist, title: co.title });
     }
     
+    if (allSongsToCheck.length === 0) {
+      console.error(`[AUTO-GRADE] ❌ DIAGNÓSTICO: Pool de músicas completamente VAZIO para bloco ${timeStr}! Estações no pool: ${Object.keys(songsByStation).join(', ') || 'NENHUMA'}. Verifique a conexão com o banco de dados.`);
+    }
+    
     const libraryCache = await batchFind(allSongsToCheck);
-    console.log(`[AUTO-GRADE] 📦 Batch library check: ${allSongsToCheck.length} songs → ${[...libraryCache.values()].filter(r => r.exists).length} found`);
+    const foundCount = [...libraryCache.entries()].filter(([, r]) => r.exists).length;
+    console.log(`[AUTO-GRADE] 📦 Batch library check: ${allSongsToCheck.length} songs → ${foundCount} found`);
+    
+    if (allSongsToCheck.length > 0 && foundCount === 0) {
+      console.error(`[AUTO-GRADE] ❌ DIAGNÓSTICO: ${allSongsToCheck.length} músicas verificadas, NENHUMA encontrada na biblioteca local!`);
+      console.error(`[AUTO-GRADE] 📋 Pastas configuradas: ${config.musicFolders?.join(', ') || 'NENHUMA'}`);
+      console.error(`[AUTO-GRADE] 📋 Primeiras 5 músicas buscadas: ${allSongsToCheck.slice(0, 5).map(s => `${s.artist} - ${s.title}`).join(' | ')}`);
+      console.error(`[AUTO-GRADE] 💡 Verifique: 1) As pastas existem? 2) Há MP3s nelas? 3) O threshold de similaridade está muito alto?`);
+    }
 
     // Build carry-over using cached results
     const carryOverByStation: Record<string, SongEntry[]> = {};
