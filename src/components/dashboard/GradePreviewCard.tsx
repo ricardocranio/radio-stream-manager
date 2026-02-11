@@ -397,8 +397,38 @@ export function GradePreviewCard() {
   }, [activeSequence, songsByStation, rankingSongs, stations, fixedContent, filterChars]);
 
   // Use TXT data when available, otherwise fall back to simulation
-  const previewSongs = txtSongs || simulatedSongs;
+  const rawPreviewSongs = txtSongs || simulatedSongs;
   const isFromTxt = txtSongs !== null;
+
+  // Sort: monitoring songs by freshness (most recent first), fixed content keeps position
+  const previewSongs = useMemo(() => {
+    const fixed = rawPreviewSongs.filter(s => s.isFixed);
+    const monitoring = rawPreviewSongs.filter(s => !s.isFixed).sort((a, b) => {
+      if (!a.scrapedAt && !b.scrapedAt) return 0;
+      if (!a.scrapedAt) return 1;
+      if (!b.scrapedAt) return -1;
+      return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
+    });
+    // Rebuild: place fixed content at original positions, fill rest with sorted monitoring
+    const result: PreviewSong[] = [];
+    let monIdx = 0;
+    const fixedPositions = new Set(fixed.map(f => f.position));
+    for (let pos = 1; pos <= rawPreviewSongs.length; pos++) {
+      const fixedItem = fixed.find(f => f.position === pos);
+      if (fixedItem) {
+        result.push(fixedItem);
+      } else if (monIdx < monitoring.length) {
+        result.push({ ...monitoring[monIdx], position: pos });
+        monIdx++;
+      }
+    }
+    // Add remaining monitoring songs
+    while (monIdx < monitoring.length) {
+      result.push({ ...monitoring[monIdx], position: result.length + 1 });
+      monIdx++;
+    }
+    return result;
+  }, [rawPreviewSongs]);
 
   const songsFromRanking = previewSongs.filter(s => s.isFromRanking).length;
 
