@@ -19,6 +19,7 @@ import { useBackgroundCacheCleanup } from '@/hooks/useBackgroundCacheCleanup';
 import { useGlobalDownloadService, DownloadServiceState } from '@/hooks/useGlobalDownloadService';
 import { useGlobalScrapingService, ScrapeStats } from '@/hooks/useGlobalScrapingService';
 import { useVozBrasilService } from '@/hooks/useVozBrasilService';
+import { useCapturedDownloadProcessor } from '@/hooks/useCapturedDownloadProcessor';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -52,6 +53,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     downloadService.downloadQueueRef,
   );
   const vozBrasilService = useVozBrasilService();
+  useCapturedDownloadProcessor();
 
   // ============= INITIALIZATION (runs once) =============
   useEffect(() => {
