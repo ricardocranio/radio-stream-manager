@@ -171,7 +171,6 @@ export function VozBrasilView() {
     // Multiple EBC URL formats as fallback
     const shortYear = year.toString().slice(-2);
     return [
-      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}-1/@@download/file`,
       `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
       `https://audios.ebc.com.br/radiogov/${year}/${month}/${day}-${month}-${shortYear}-a-voz-do-brasil.mp3`,
       `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/voz_${day}${month}${year}.mp3`,
