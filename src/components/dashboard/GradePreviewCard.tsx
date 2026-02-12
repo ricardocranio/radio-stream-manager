@@ -408,8 +408,13 @@ export function GradePreviewCard() {
   const rawPreviewSongs = txtSongs || simulatedSongs;
   const isFromTxt = txtSongs !== null;
 
-  // Sort: monitoring songs by freshness (most recent first), fixed content keeps position
+  // Sort: for TXT data, sort monitoring songs by freshness; for simulation, keep sequence order
   const previewSongs = useMemo(() => {
+    if (!isFromTxt) {
+      // Simulation: keep sequence order as-is (already built following activeSequence)
+      return rawPreviewSongs;
+    }
+    // TXT: sort monitoring songs by freshness, keep fixed at original positions
     const fixed = rawPreviewSongs.filter(s => s.isFixed);
     const monitoring = rawPreviewSongs.filter(s => !s.isFixed).sort((a, b) => {
       if (!a.scrapedAt && !b.scrapedAt) return 0;
@@ -417,10 +422,8 @@ export function GradePreviewCard() {
       if (!b.scrapedAt) return -1;
       return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
     });
-    // Rebuild: place fixed content at original positions, fill rest with sorted monitoring
     const result: PreviewSong[] = [];
     let monIdx = 0;
-    const fixedPositions = new Set(fixed.map(f => f.position));
     for (let pos = 1; pos <= rawPreviewSongs.length; pos++) {
       const fixedItem = fixed.find(f => f.position === pos);
       if (fixedItem) {
@@ -430,13 +433,12 @@ export function GradePreviewCard() {
         monIdx++;
       }
     }
-    // Add remaining monitoring songs
     while (monIdx < monitoring.length) {
       result.push({ ...monitoring[monIdx], position: result.length + 1 });
       monIdx++;
     }
     return result;
-  }, [rawPreviewSongs]);
+  }, [rawPreviewSongs, isFromTxt]);
 
   const songsFromRanking = previewSongs.filter(s => s.isFromRanking).length;
 
@@ -467,6 +469,7 @@ export function GradePreviewCard() {
             )}
             {!isFromTxt && (
               <Badge variant="outline" className="border-orange-500/50 text-orange-500 text-xs">
+                <Radio className="w-3 h-3 mr-1" />
                 Simulação
               </Badge>
             )}
