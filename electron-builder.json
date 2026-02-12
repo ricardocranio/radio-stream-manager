@@ -35,7 +35,7 @@
       }
     ],
     "icon": "public/favicon.ico",
-    "artifactName": "AudioSolutions-Setup beta 02.${ext}"
+    "artifactName": "AudioSolutions-Setup beta 03.${ext}"
   },
   "nsis": {
     "oneClick": false,
