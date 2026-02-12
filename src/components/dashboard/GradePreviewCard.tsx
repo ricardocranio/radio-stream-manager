@@ -145,19 +145,27 @@ export function GradePreviewCard() {
       if (targetLine) {
         const parsed = parseTxtBlockLine(targetLine.trim(), nextBlockTime);
         if (parsed.length > 0) {
-          // Enrich with ranking + scraped_at from pool
+          // Enrich with ranking + scraped_at + station from pool
           const enriched = parsed.map(song => {
-            // Try to find matching song in supabase pool to get scraped_at
+            if (song.isFixed) return song;
+            // Try to find matching song in supabase pool to get scraped_at and station
             const poolMatch = songs.find(
               s => s.title.toLowerCase() === song.title.toLowerCase() && 
                    s.artist.toLowerCase() === song.artist.toLowerCase()
             );
+            // Also try matching by filename pattern (artist - title)
+            const filenameMatch = !poolMatch ? songs.find(s => {
+              const expected = sanitizeGradeFilename(`${s.artist} - ${s.title}.MP3`, filterChars).toLowerCase();
+              return expected === song.filename.toLowerCase();
+            }) : null;
+            const match = poolMatch || filenameMatch;
             return {
               ...song,
+              source: match?.station_name || song.source,
               isFromRanking: rankingSongs.some(
                 r => sanitizeGradeFilename(`${r.artist} - ${r.title}.MP3`, filterChars).toLowerCase() === song.filename.toLowerCase()
               ),
-              scrapedAt: poolMatch?.scraped_at,
+              scrapedAt: match?.scraped_at,
             };
           });
           setTxtSongs(enriched);
