@@ -390,6 +390,15 @@ export function useAutoGradeBuilder() {
         });
       }
     });
+    // Sort each station's songs by freshness (most recent first)
+    for (const stName of Object.keys(songsByStation)) {
+      songsByStation[stName].sort((a, b) => {
+        if (!a.scrapedAt && !b.scrapedAt) return 0;
+        if (!a.scrapedAt) return 1;
+        if (!b.scrapedAt) return -1;
+        return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
+      });
+    }
     const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
     console.log(`[AUTO-GRADE] Pool: ${stationList}`);
     return songsByStation;
