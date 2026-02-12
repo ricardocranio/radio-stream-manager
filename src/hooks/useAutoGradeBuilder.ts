@@ -299,6 +299,11 @@ export function useAutoGradeBuilder() {
       // Use 24-hour window to capture full monitoring history
       const windowStart = new Date(blockTime.getTime() - 24 * 60 * 60 * 1000).toISOString();
       console.log(`[AUTO-GRADE] 🕐 Buscando músicas para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')} (janela: ${windowStart.substring(11, 16)} → ${windowEnd.substring(11, 16)} UTC)`);
+      
+      // Diagnostic: verify Supabase connection
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      console.log(`[AUTO-GRADE] 🔗 Supabase URL: ${supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : '❌ NÃO CONFIGURADA'}`);
+      console.log(`[AUTO-GRADE] 🔑 Supabase Key: ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ? 'OK' : '❌ NÃO CONFIGURADA'}`);
 
       const { data, error } = await supabase
         .from('scraped_songs')
@@ -307,6 +312,8 @@ export function useAutoGradeBuilder() {
         .lte('scraped_at', windowEnd)
         .order('scraped_at', { ascending: false })
         .limit(1500);
+      
+      console.log(`[AUTO-GRADE] 📊 Supabase retornou: ${data?.length ?? 'null'} registros, erro: ${error ? JSON.stringify(error) : 'nenhum'}`);
       if (error) throw error;
 
       const result = buildSongsByStation(data || [], 100);
@@ -330,11 +337,16 @@ export function useAutoGradeBuilder() {
 
   const fetchAllRecentSongs = useCallback(async (retryCount = 0): Promise<Record<string, SongEntry[]>> => {
     try {
+      console.log(`[AUTO-GRADE] 🌐 fetchAllRecentSongs: Iniciando busca...`);
+      console.log(`[AUTO-GRADE] 🔗 Supabase URL: ${import.meta.env.VITE_SUPABASE_URL ? 'OK' : '❌ NÃO CONFIGURADA'}`);
+      
       const { data, error } = await supabase
         .from('scraped_songs')
         .select('title, artist, station_name, scraped_at')
         .order('scraped_at', { ascending: false })
         .limit(2000);
+      
+      console.log(`[AUTO-GRADE] 📊 fetchAllRecentSongs: ${data?.length ?? 'null'} registros, erro: ${error ? JSON.stringify(error) : 'nenhum'}`);
       if (error) throw error;
       const result = buildSongsByStation(data || [], 150);
       const totalSongs = Object.values(result).reduce((sum, arr) => sum + arr.length, 0);
