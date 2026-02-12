@@ -253,7 +253,7 @@ export function useGlobalScrapingService(
   const start = useCallback(() => {
     const scrapeAllRef = { current: scrapeAllStations };
 
-    // Scraping every 15 minutes
+    // Scraping every 6 minutes (synchronized with grade builder regeneration)
     scrapeIntervalRef.current = setInterval(() => {
       const currentState = useRadioStore.getState();
       if (!currentState.isRunning) return;
@@ -261,7 +261,7 @@ export function useGlobalScrapingService(
       if (hasStations) {
         scrapeAllRef.current();
       }
-    }, 15 * 60 * 1000);
+    }, 6 * 60 * 1000);
 
     // Initial scrape
     const state = useRadioStore.getState();
