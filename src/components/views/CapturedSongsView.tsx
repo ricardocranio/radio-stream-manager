@@ -86,15 +86,12 @@ export function CapturedSongsView() {
     return result;
   }, [capturedDl.processed]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [autoDownloadMode, setAutoDownloadMode] = useState<'manual' | 'auto'>(() => {
-    const saved = localStorage.getItem('captured-songs-download-mode');
-    return saved === 'auto' ? 'auto' : 'manual';
-  });
+  const [autoDownloadMode] = useState<'manual' | 'auto'>('auto');
 
-  // Auto-save download mode preference
+  // Persist as auto always
   useEffect(() => {
-    localStorage.setItem('captured-songs-download-mode', autoDownloadMode);
-  }, [autoDownloadMode]);
+    localStorage.setItem('captured-songs-download-mode', 'auto');
+  }, []);
 
   // Load songs from Supabase
   const loadSongs = useCallback(async () => {
@@ -562,19 +559,10 @@ export function CapturedSongsView() {
           {/* Download Mode Toggle - Always visible, disabled in browser */}
           <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-secondary/50 border border-border">
             <Download className="w-3.5 h-3.5 text-muted-foreground" />
-            <Select 
-              value={autoDownloadMode} 
-              onValueChange={(v: 'manual' | 'auto') => setAutoDownloadMode(v)}
-              disabled={!isElectron}
-            >
-              <SelectTrigger className="h-6 w-[90px] text-xs border-0 bg-transparent p-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="manual">Manual</SelectItem>
-                <SelectItem value="auto">Automático</SelectItem>
-              </SelectContent>
-            </Select>
+            <Badge variant="outline" className="text-xs border-green-500/50 text-green-500">
+              <Zap className="w-3 h-3 mr-1" />
+              Automático
+            </Badge>
             {!isElectron && (
               <Badge variant="outline" className="text-[9px] px-1 py-0">Desktop</Badge>
             )}
