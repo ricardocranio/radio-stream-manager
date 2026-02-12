@@ -279,9 +279,10 @@ export function useGlobalDownloadService() {
         rankingMap.set(key, 50 - index);
       });
 
+      // All stations are prioritized by default
       const priorityStationNames = new Set(
         allStations
-          .filter(s => s.prioritizeDownloads)
+          .filter(s => s.enabled)
           .map(s => s.name.toLowerCase())
       );
 
