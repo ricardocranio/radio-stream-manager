@@ -84,7 +84,8 @@ export function useAutoGradeBuilder() {
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
   /** Tracks which block time keys (e.g. "18:00") have already been assembled and locked */
   const builtBlocksRef = useRef<Set<string>>(new Set());
-
+  /** Tracks freshness (scrapedAt timestamps) of songs in each block slot for rebuild comparison */
+  const blockFreshnessRef = useRef<Map<string, string[]>>(new Map());
   // ==================== Utility Helpers ====================
 
   const getDayCode = useCallback((targetDay?: WeekDay) => {
@@ -178,6 +179,7 @@ export function useAutoGradeBuilder() {
     usedSongsRef.current = [];
     carryOverSongsRef.current = [];
     builtBlocksRef.current.clear();
+    blockFreshnessRef.current.clear();
   }, []);
 
   const addCarryOverSong = useCallback((song: Omit<CarryOverSong, 'addedAt'>) => {
@@ -600,9 +602,33 @@ export function useAutoGradeBuilder() {
     }
 
     const lineContent = allContent.join(',vht,');
+    
+    // Build freshness array from selected songs for rebuild comparison
+    // Each entry is the scrapedAt timestamp of the song in that slot
+    const songFreshness: string[] = [];
+    for (const song of songs) {
+      // Find the matching log entry to get the song's freshness
+      const songFile = song.replace(/^"|"$/g, '');
+      const matchingLog = blockLogs.find(l => 
+        (l.type === 'used' || l.type === 'substituted') && 
+        sanitizeFilename(`${l.artist} - ${l.title}.mp3`) === songFile
+      );
+      if (matchingLog) {
+        // Look up scrapedAt from the pool
+        const poolSong = allSongsPool.find(s => 
+          s.title.toLowerCase() === matchingLog.title.toLowerCase() && 
+          s.artist.toLowerCase() === matchingLog.artist.toLowerCase()
+        );
+        songFreshness.push(poolSong?.scrapedAt || '');
+      } else {
+        songFreshness.push('');
+      }
+    }
+    
     return {
       line: sanitizeGradeLine(`${timeStr} (ID=${programName}) ${lineContent}`, filterChars),
       logs: blockLogs,
+      songFreshness,
     };
   }, [
     getProgramForHour, getFixedContentForTime, isWeekday,
@@ -831,6 +857,7 @@ export function useAutoGradeBuilder() {
       }
 
       // Next block: always regenerate UNLESS locked (within 10 min of start)
+      // FRESHNESS GUARD: only replace slots with fresher songs
       if (!nextLocked) {
         const songsNext = await fetchSongsForBlock(blocks.next.hour, blocks.next.minute);
         let nextPool = songsNext;
@@ -838,17 +865,57 @@ export function useAutoGradeBuilder() {
           nextPool = await fetchAllRecentSongs();
         }
         const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, nextPool, stats);
-        lineMap.set(nextTimeKey, nextResult.line);
-        allLogs.push(...nextResult.logs);
+        
+        // Freshness comparison: only accept new block if songs are fresher
+        const previousFreshness = blockFreshnessRef.current.get(nextTimeKey);
+        const existingLine = lineMap.get(nextTimeKey);
+        
+        if (previousFreshness && existingLine && nextResult.songFreshness) {
+          // Compare slot-by-slot: count how many slots got fresher vs older
+          let fresherSlots = 0;
+          let olderSlots = 0;
+          const mergedFreshness = [...(previousFreshness || [])];
+          
+          for (let i = 0; i < Math.min(previousFreshness.length, nextResult.songFreshness.length); i++) {
+            const oldTs = previousFreshness[i];
+            const newTs = nextResult.songFreshness[i];
+            
+            // New song is fresher if it has a timestamp and it's more recent
+            if (newTs && (!oldTs || newTs > oldTs)) {
+              fresherSlots++;
+              mergedFreshness[i] = newTs;
+            } else if (oldTs && (!newTs || newTs < oldTs)) {
+              olderSlots++;
+              // Keep old freshness
+            }
+          }
+          
+          if (fresherSlots > 0) {
+            // Accept new block — it has fresher songs
+            lineMap.set(nextTimeKey, nextResult.line);
+            allLogs.push(...nextResult.logs);
+            blockFreshnessRef.current.set(nextTimeKey, nextResult.songFreshness);
+            console.log(`[AUTO-GRADE] 🔥 Bloco ${nextTimeKey} regenerado com ${fresherSlots} músicas mais frescas (${olderSlots} mantidas)`);
+          } else {
+            // Keep existing block — no improvement in freshness
+            console.log(`[AUTO-GRADE] 🧊 Bloco ${nextTimeKey} mantido (nenhuma música mais fresca encontrada)`);
+          }
+        } else {
+          // First build or no previous data — always accept
+          lineMap.set(nextTimeKey, nextResult.line);
+          allLogs.push(...nextResult.logs);
+          if (nextResult.songFreshness) {
+            blockFreshnessRef.current.set(nextTimeKey, nextResult.songFreshness);
+          }
+          console.log(`[AUTO-GRADE] 🆕 Bloco ${nextTimeKey} montado (primeira geração)`);
+        }
         
         // Only lock when within 10 minutes of the block start
         if (minutesUntilNextBlock <= 10) {
           builtBlocksRef.current.add(nextTimeKey);
-          console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} montado e TRAVADO (${minutesUntilNextBlock}min para início)`);
+          console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} TRAVADO (${minutesUntilNextBlock}min para início)`);
         } else {
-          // Remove from locks so it can be regenerated next cycle
           builtBlocksRef.current.delete(nextTimeKey);
-          console.log(`[AUTO-GRADE] 🔄 Bloco ${nextTimeKey} montado (sem trava, ${minutesUntilNextBlock}min para início, trava aos 10min)`);
         }
       } else {
         console.log(`[AUTO-GRADE] ⏭️ Bloco ${nextTimeKey} já travado (${minutesUntilNextBlock}min para início), mantendo`);
