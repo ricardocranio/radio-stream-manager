@@ -50,6 +50,7 @@ export interface BlockLogItem {
 export interface BlockResult {
   line: string;
   logs: BlockLogItem[];
+  songFreshness?: string[]; // ISO timestamps for each song slot (for freshness comparison on rebuild)
 }
 
 export interface LibraryCheckResult {
