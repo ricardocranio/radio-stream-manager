@@ -498,6 +498,43 @@ export function GradePreviewCard() {
           </div>
         </div>
 
+        {/* Block Freshness Summary */}
+        {(() => {
+          const monitoringSongs = previewSongs.filter(s => !s.isFixed);
+          const freshCount = monitoringSongs.filter(s => {
+            const f = getFreshnessInfo(s.scrapedAt);
+            return f.icon === 'fire';
+          }).length;
+          const coldCount = monitoringSongs.filter(s => {
+            const f = getFreshnessInfo(s.scrapedAt);
+            return f.icon === 'cold';
+          }).length;
+          const alertCount = monitoringSongs.length - freshCount - coldCount;
+          const avgMinutes = monitoringSongs.reduce((sum, s) => {
+            const f = getFreshnessInfo(s.scrapedAt);
+            return sum + (f.minutes >= 0 ? f.minutes : 0);
+          }, 0) / (monitoringSongs.length || 1);
+
+          return (
+            <div className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 border border-border/50">
+              <div className="flex items-center gap-3 text-xs">
+                <span className="flex items-center gap-1 text-green-400">
+                  <Flame className="w-3.5 h-3.5" /> {freshCount}
+                </span>
+                <span className="flex items-center gap-1 text-amber-400">
+                  <AlertTriangle className="w-3.5 h-3.5" /> {alertCount}
+                </span>
+                <span className="flex items-center gap-1 text-blue-400">
+                  <Snowflake className="w-3.5 h-3.5" /> {coldCount}
+                </span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                Média: {Math.round(avgMinutes)} min
+              </span>
+            </div>
+          );
+        })()}
+
         {/* Songs Preview */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
