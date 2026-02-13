@@ -540,11 +540,23 @@ export function useAutoGradeBuilder() {
     const stationSongIndex: Record<string, number> = {};
     const songs: string[] = [];
 
-    // Build DNA profiles for cross-station fallback
-    const dnaProfiles = buildDnaProfiles(songsByStation);
+    // Build DNA profiles ONLY for stations in the active sequence
+    // This prevents songs from stations like Metropolitana/Blink appearing when they're not in the sequence
+    const sequenceStationNames = new Set<string>();
+    for (const seq of activeSequence) {
+      const dbName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()];
+      if (dbName) sequenceStationNames.add(dbName);
+    }
+    const filteredSongsByStation: Record<string, SongEntry[]> = {};
+    for (const [stName, songs_] of Object.entries(songsByStation)) {
+      if (sequenceStationNames.has(stName)) {
+        filteredSongsByStation[stName] = songs_;
+      }
+    }
+    const dnaProfiles = buildDnaProfiles(filteredSongsByStation);
     const dnaStations = Object.keys(dnaProfiles).length;
     if (dnaStations > 1) {
-      console.log(`[AUTO-GRADE] 🧬 DNA profiles built for ${dnaStations} stations`);
+      console.log(`[AUTO-GRADE] 🧬 DNA profiles built for ${dnaStations} stations (filtered to sequence)`);
     }
 
     const selCtx = {
