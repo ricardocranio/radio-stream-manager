@@ -6,9 +6,10 @@
  */
 
 import { useRef, useCallback, useState } from 'react';
-import { useRadioStore, MissingSong } from '@/store/radioStore';
+import { useRadioStore, MissingSong, getActiveSequence } from '@/store/radioStore';
 import { radioScraperApi } from '@/lib/api/radioScraper';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
+import { STATION_ID_TO_DB_NAME } from '@/lib/gradeBuilder/constants';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -159,6 +160,15 @@ export function useGlobalScrapingService(
       const alreadyQueued = isSongContentAlreadyQueued(songArtist, songTitle);
       
       if (!existsInLibrary && !alreadyMissing && !alreadyQueued && isElectron) {
+        // Only add to Missing if station is in the active sequence
+        const activeSeq = getActiveSequence();
+        const sequenceStationNames = new Set(
+          activeSeq.map(s => STATION_ID_TO_DB_NAME[s.radioSource] || STATION_ID_TO_DB_NAME[s.radioSource.toLowerCase()]).filter(Boolean)
+        );
+        if (!sequenceStationNames.has(stationName)) {
+          return { isNew: true, isMissing: false };
+        }
+        
         console.log(`[SCRAPE-SVC] 📥 Faltando: ${songArtist} - ${songTitle} (${stationName})`);
         addMissingSong({
           id: songId,
@@ -323,6 +333,15 @@ export function useGlobalScrapingService(
       addOrUpdateRankingSong(songTitle, songArtist, stationStyle);
 
       if (!existsInLibrary && !isSongAlreadyMissing(songArtist, songTitle) && !isSongContentAlreadyQueued(songArtist, songTitle) && isElectron) {
+        // Only add to Missing if station is in the active sequence
+        const activeSeq = getActiveSequence();
+        const sequenceStationNames = new Set(
+          activeSeq.map(s => STATION_ID_TO_DB_NAME[s.radioSource] || STATION_ID_TO_DB_NAME[s.radioSource.toLowerCase()]).filter(Boolean)
+        );
+        if (!sequenceStationNames.has(stationName)) {
+          return { isNew: true, isMissing: false };
+        }
+        
         addMissingSong({ id: songId, title: songTitle, artist: songArtist, station: stationName, timestamp: new Date(), status: 'missing' });
         return { isNew: true, isMissing: true };
       }
