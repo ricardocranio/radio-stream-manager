@@ -101,7 +101,7 @@ export function useRealtimeStats() {
           // Fetch data — 4 parallel queries (optimized: removed separate total count, derive from recent)
           const [last24hResult, lastHourResult, stationsResult, recentSongsResult] = await Promise.all([
             supabase.from('scraped_songs').select('*', { count: 'exact', head: true }).gte('scraped_at', last24h.toISOString()),
-            supabase.from('scraped_songs').select('*', { count: 'exact', head: true }).gte('scraped_at', lastHour.toISOString()),
+            supabase.from('scraped_songs').select('artist, title').gte('scraped_at', lastHour.toISOString()).limit(500),
             supabase.from('radio_stations').select('name, enabled').eq('enabled', true),
             supabase.from('scraped_songs').select('title, artist, station_name, scraped_at').order('scraped_at', { ascending: false }).limit(200),
           ]);
@@ -153,11 +153,17 @@ export function useRealtimeStats() {
             }
           });
 
+          // Count unique songs in last hour (deduplicated by artist+title)
+          const lastHourSongs = lastHourResult.data || [];
+          const uniqueLastHour = new Set(
+            lastHourSongs.map(s => `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`)
+          );
+
           // Update persisted store - use last24h count as approximate total (DB has auto-cleanup to 40/station)
           persistedStore.setStats({
             totalSongs: last24hResult.count || recentData.length,
             songsLast24h: last24hResult.count || 0,
-            songsLastHour: lastHourResult.count || 0,
+            songsLastHour: uniqueLastHour.size,
             activeStations: stationsResult.data?.length || 0,
             allStations: allStationsList,
             lastSong: firstSong ? {
