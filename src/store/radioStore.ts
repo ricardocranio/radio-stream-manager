@@ -384,7 +384,16 @@ export const useRadioStore = create<RadioState>()(
         set((state) => ({ deezerConfig: { ...state.deezerConfig, ...config } })),
 
       sequence: defaultSequence,
-      setSequence: (sequence) => set({ sequence }),
+      setSequence: (sequence) => set((state) => {
+        // Auto-clear missing songs from stations no longer in the new sequence
+        const newStationIds = new Set(sequence.map(s => s.radioSource));
+        const cleanedMissing = state.missingSongs.filter(song => {
+          // Find station ID by name
+          const stationEntry = state.stations.find(s => s.name === song.station);
+          return stationEntry ? newStationIds.has(stationEntry.id) : true;
+        });
+        return { sequence, missingSongs: cleanedMissing };
+      }),
 
       // Scheduled Sequences
       scheduledSequences: [],
@@ -429,9 +438,9 @@ export const useRadioStore = create<RadioState>()(
             return true;
           });
 
-          // Cap at 500 entries - remove oldest first
-          if (cleaned.length >= 500) {
-            cleaned = cleaned.slice(-499);
+          // Cap at 200 entries - remove oldest first
+          if (cleaned.length >= 200) {
+            cleaned = cleaned.slice(-199);
           }
 
           return { missingSongs: [...cleaned, song] };
