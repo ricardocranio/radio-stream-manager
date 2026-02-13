@@ -413,7 +413,29 @@ export const useRadioStore = create<RadioState>()(
       missingSongs: [],
       setMissingSongs: (missingSongs) => set({ missingSongs }),
       addMissingSong: (song) =>
-        set((state) => ({ missingSongs: [...state.missingSongs, song] })),
+        set((state) => {
+          // Deduplication: check if same artist+title already exists
+          const isDuplicate = state.missingSongs.some(
+            s => s.artist.toLowerCase().trim() === song.artist.toLowerCase().trim() &&
+                 s.title.toLowerCase().trim() === song.title.toLowerCase().trim()
+          );
+          if (isDuplicate) return state;
+
+          // Auto-purge: remove 'downloaded' entries and old 'error' entries (>1h)
+          const oneHourAgo = Date.now() - 60 * 60 * 1000;
+          let cleaned = state.missingSongs.filter(s => {
+            if (s.status === 'downloaded') return false;
+            if (s.status === 'error' && new Date(s.timestamp).getTime() < oneHourAgo) return false;
+            return true;
+          });
+
+          // Cap at 500 entries - remove oldest first
+          if (cleaned.length >= 500) {
+            cleaned = cleaned.slice(-499);
+          }
+
+          return { missingSongs: [...cleaned, song] };
+        }),
       updateMissingSong: (id, updates) =>
         set((state) => ({
           missingSongs: state.missingSongs.map((s) =>
