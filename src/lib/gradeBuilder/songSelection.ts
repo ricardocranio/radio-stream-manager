@@ -197,11 +197,17 @@ export async function selectSongForSlot(
     return `"${selectedSong.filename}"`;
   }
 
-  // PRIORITY 2: DNA Fallback — find songs from other stations with similar DNA
+  // PRIORITY 2: DNA Fallback — find songs from other stations IN THE SEQUENCE with similar DNA
   if (selCtx.dnaProfiles) {
+    // Only search within stations that have DNA profiles (already filtered to sequence stations)
+    const dnaStationNames = new Set(Object.keys(selCtx.dnaProfiles));
+    const filteredPoolForDna: Record<string, SongEntry[]> = {};
+    for (const [st, songs] of Object.entries(songsByStation)) {
+      if (dnaStationNames.has(st)) filteredPoolForDna[st] = songs;
+    }
     const dnaCandidates = findDnaCompatibleSongs(
       stationName || seq.radioSource,
-      songsByStation,
+      filteredPoolForDna,
       selCtx.dnaProfiles,
       usedInBlock,
       usedArtistsInBlock,
