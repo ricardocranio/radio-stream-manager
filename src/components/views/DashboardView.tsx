@@ -336,7 +336,42 @@ export function DashboardView() {
           </CardContent>
         </Card>
 
-        <Card className="glass-card border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5">
+        <Card className="glass-card border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5 cursor-pointer" onClick={async () => {
+          // Diagnostic: log folder status to help debug
+          const folders = config.musicFolders;
+          const isElectron = !!window.electronAPI;
+          const hasFindMatch = !!window.electronAPI?.findSongMatch;
+          const hasGetStats = !!window.electronAPI?.getMusicLibraryStats;
+          
+          let diagnosticMsg = `🔍 DIAGNÓSTICO BANCO MUSICAL\n\n`;
+          diagnosticMsg += `Electron detectado: ${isElectron ? '✅ Sim' : '❌ Não'}\n`;
+          diagnosticMsg += `findSongMatch: ${hasFindMatch ? '✅' : '❌'}\n`;
+          diagnosticMsg += `getMusicLibraryStats: ${hasGetStats ? '✅' : '❌'}\n`;
+          diagnosticMsg += `Pastas configuradas (${folders.length}):\n`;
+          folders.forEach((f, i) => {
+            diagnosticMsg += `  ${i + 1}. "${f}" ${f ? '' : '⚠️ VAZIA'}\n`;
+          });
+          
+          if (hasGetStats) {
+            try {
+              const result = await window.electronAPI!.getMusicLibraryStats({ musicFolders: folders });
+              diagnosticMsg += `\nResultado do scan: ${result.success ? '✅' : '❌'}\n`;
+              diagnosticMsg += `Arquivos encontrados: ${result.count}\n`;
+              diagnosticMsg += `Pastas válidas: ${result.folders}\n`;
+            } catch (e: any) {
+              diagnosticMsg += `\n❌ Erro no scan: ${e.message}\n`;
+            }
+          }
+          
+          console.log(diagnosticMsg);
+          toast({
+            title: isElectron ? '🔍 Diagnóstico do Banco Musical' : '⚠️ Modo Web',
+            description: isElectron 
+              ? `${folders.length} pasta(s) configurada(s). ${libraryStats.count} arquivos. Veja o console (F12) para detalhes.`
+              : 'O banco musical só funciona no Desktop (Electron). No preview web, o contador sempre mostra 0.',
+            duration: 8000,
+          });
+        }}>
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
@@ -347,6 +382,7 @@ export function DashboardView() {
                 <p className="text-[10px] md:text-xs text-amber-500 flex items-center gap-1">
                   <HardDrive className="w-3 h-3" />
                   <span className="hidden sm:inline">Local</span>
+                  {!window.electronAPI && <Badge variant="outline" className="ml-1 text-[8px] px-1 py-0">Web</Badge>}
                 </p>
               </div>
               <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
