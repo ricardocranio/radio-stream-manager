@@ -343,6 +343,9 @@ const defaultFixedContent: FixedContent[] = [
   { id: '15', name: 'TOP50 Bloco 19h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 19, minute: 30 }], enabled: true, top50Count: 10 },
   // A Voz do Brasil às 21:00
   { id: '16', name: 'A Voz do Brasil', fileName: 'VOZ_DO_BRASIL', type: 'vozbrasil', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 21, minute: 0 }], enabled: true },
+  // Weekend - 60 Minutos (sábado e domingo)
+  { id: '17', name: '60 Minutos Bloco 01', fileName: '60_MINUTOS_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 11, minute: 0 }], enabled: true, position: 'start' },
+  { id: '18', name: '60 Minutos Bloco 02', fileName: '60_MINUTOS_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 11, minute: 30 }], enabled: true, position: 'start' },
 ];
 
 export const useRadioStore = create<RadioState>()(
