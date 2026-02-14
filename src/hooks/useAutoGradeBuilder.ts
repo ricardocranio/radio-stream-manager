@@ -1127,6 +1127,7 @@ export function useAutoGradeBuilder() {
     console.log(`[AUTO-GRADE] ⏰ Modo automático ATIVO - atualiza ${state.minutesBeforeBlock} min antes de cada bloco`);
     let lastBuiltBlock = '';
     let lastSundayBuildHour = -1;
+    let saturdayFullDayBuilt = false;
 
     buildIntervalRef.current = setInterval(() => {
       const { isRunning } = useRadioStore.getState();
@@ -1148,11 +1149,23 @@ export function useAutoGradeBuilder() {
         builtBlocksRef.current.clear();
       }
 
-      // === Saturday ≥ 11:00: Pre-build Sunday grade ===
-      if (currentDay === 6 && currentHour >= 11 && lastSundayBuildHour !== currentHour) {
-        lastSundayBuildHour = currentHour;
-        console.log(`[AUTO-GRADE] 📅 Sábado ${currentHour}h — gerando/atualizando grade de domingo...`);
-        buildFullDayGrade('dom');
+      // === Saturday: First build Saturday full-day grade, THEN pre-build Sunday ===
+      if (currentDay === 6 && currentHour >= 11) {
+        if (!saturdayFullDayBuilt) {
+          // Step 1: Build Saturday's own full-day grade first
+          saturdayFullDayBuilt = true;
+          console.log(`[AUTO-GRADE] 📅 Sábado ${currentHour}h — gerando grade COMPLETA de sábado (SÁB.txt) primeiro...`);
+          buildFullDayGrade('sab').then(() => {
+            console.log(`[AUTO-GRADE] ✅ Grade de sábado concluída! Agora gerando grade de domingo...`);
+            buildFullDayGrade('dom');
+          });
+          return; // Don't run incremental build while full-day is running
+        } else if (lastSundayBuildHour !== currentHour) {
+          // Step 2: Subsequent hours, refresh Sunday grade
+          lastSundayBuildHour = currentHour;
+          console.log(`[AUTO-GRADE] 📅 Sábado ${currentHour}h — atualizando grade de domingo...`);
+          buildFullDayGrade('dom');
+        }
       }
 
       // === Sunday: Refresh grade with fresh captures (3:1 ratio) ===
@@ -1181,11 +1194,17 @@ export function useAutoGradeBuilder() {
       console.log(`[AUTO-GRADE] 🚀 Build inicial`);
       buildGrade();
 
-      // If it's Saturday ≥ 11:00, also trigger Sunday build on startup
+      // If it's Saturday ≥ 11:00, build Saturday first then Sunday
       const now = new Date();
       if (now.getDay() === 6 && now.getHours() >= 11) {
-        console.log(`[AUTO-GRADE] 📅 Sábado ${now.getHours()}h (startup) — gerando grade de domingo...`);
-        setTimeout(() => buildFullDayGrade('dom'), 10000); // Delay to avoid race with today's build
+        console.log(`[AUTO-GRADE] 📅 Sábado ${now.getHours()}h (startup) — gerando grade de sábado primeiro, depois domingo...`);
+        saturdayFullDayBuilt = true;
+        setTimeout(() => {
+          buildFullDayGrade('sab').then(() => {
+            console.log(`[AUTO-GRADE] ✅ Grade de sábado (startup) concluída! Agora gerando domingo...`);
+            buildFullDayGrade('dom');
+          });
+        }, 10000);
       }
 
       // If it's Sunday, refresh with fresh captures
