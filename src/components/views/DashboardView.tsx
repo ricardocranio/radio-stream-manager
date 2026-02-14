@@ -322,7 +322,7 @@ export function DashboardView() {
               <div className="min-w-0">
                 <p className="text-[10px] md:text-xs text-muted-foreground truncate">Emissoras</p>
                 <p className="text-lg md:text-2xl font-bold text-foreground">
-                  {realtimeStats.isLoading ? '...' : realtimeStats.activeStations}
+                  {stations.filter(s => s.enabled).length}
                 </p>
                 <p className="text-[10px] md:text-xs text-cyan-500 flex items-center gap-1">
                   <Radio className="w-3 h-3" />
