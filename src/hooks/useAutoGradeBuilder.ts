@@ -442,10 +442,22 @@ export function useAutoGradeBuilder() {
       return generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay);
     }
 
-    // TOP50 blocks (all days)
+    // TOP50 blocks (all days) — filtered to only include songs from active sequence stations
     const top50Item = fixedItems.find(fc => fc.type === 'top50');
     if (top50Item) {
-      return await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx);
+      // Build set of station names from the active sequence
+      const top50Sequence = getActiveSequenceForBlock(hour, minute, targetDay);
+      const seqStationNames = new Set<string>();
+      for (const seq of top50Sequence) {
+        const dbName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()];
+        if (dbName) seqStationNames.add(dbName);
+      }
+      // Filter ranking to only include songs from sequence stations
+      const filteredCtx = seqStationNames.size > 0 ? {
+        ...ctx,
+        rankingSongs: ctx.rankingSongs.filter(s => !s.station || seqStationNames.has(s.station)),
+      } : ctx;
+      return await generateTop50Block(hour, minute, top50Item.top50Count || 10, filteredCtx);
     }
 
     // Madrugada (00:00-04:30) - now follows sequence like normal blocks
