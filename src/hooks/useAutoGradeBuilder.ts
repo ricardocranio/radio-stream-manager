@@ -104,7 +104,12 @@ export function useAutoGradeBuilder() {
     return day >= 1 && day <= 5;
   }, []);
 
-  const getProgramForHour = useCallback((hour: number) => {
+  const getProgramForHour = useCallback((hour: number, targetDay?: WeekDay) => {
+    // Weekend: all blocks use a unified ID
+    const dayToCheck = targetDay || (['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const)[new Date().getDay()];
+    if (dayToCheck === 'sab') return 'Nossa Sabado';
+    if (dayToCheck === 'dom') return 'Nossa Domingo';
+
     for (const prog of programs) {
       const [start, end] = prog.timeRange.split('-').map(Number);
       if (hour >= start && hour <= end) return prog.programName;
@@ -416,7 +421,7 @@ export function useAutoGradeBuilder() {
     targetDay?: WeekDay
   ): Promise<BlockResult> => {
     const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-    const programName = getProgramForHour(hour);
+    const programName = getProgramForHour(hour, targetDay);
     const fixedItems = getFixedContentForTime(hour, minute);
     const ctx = buildGradeContext();
 
@@ -457,7 +462,12 @@ export function useAutoGradeBuilder() {
         ...ctx,
         rankingSongs: ctx.rankingSongs.filter(s => !s.station || seqStationNames.has(s.station)),
       } : ctx;
-      return await generateTop50Block(hour, minute, top50Item.top50Count || 10, filteredCtx);
+      const top50Result = await generateTop50Block(hour, minute, top50Item.top50Count || 10, filteredCtx);
+      // Override ID on weekends
+      if (!isWeekday(targetDay)) {
+        top50Result.line = top50Result.line.replace(/\(ID=[^)]*\)/, `(ID=${programName})`);
+      }
+      return top50Result;
     }
 
     // Madrugada (00:00-04:30) - now follows sequence like normal blocks
