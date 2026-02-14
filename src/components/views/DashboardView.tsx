@@ -482,7 +482,7 @@ export function DashboardView() {
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={gradeBuilder.buildFullDayGrade}
+                    onClick={() => gradeBuilder.buildFullDayGrade()}
                     disabled={gradeBuilder.isBuilding}
                     className="gap-2 bg-emerald-600 hover:bg-emerald-700"
                   >
