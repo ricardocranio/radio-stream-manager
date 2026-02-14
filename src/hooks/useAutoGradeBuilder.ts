@@ -481,16 +481,17 @@ export function useAutoGradeBuilder() {
 
     const blockLogs: BlockLogItem[] = [];
 
-    // Fixed content handling
-    const fixedItem = fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil');
-    let fixedContentFile: string | null = null;
-    let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
+    // Fixed content handling — supports multiple fixed items per slot
+    const fixedItemsList = fixedItems.filter(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil');
+    const fixedContentFiles: Array<{ file: string; position: 'start' | 'middle' | 'end' | number }> = [];
 
-    if (fixedItem) {
+    for (const fixedItem of fixedItemsList) {
       const processedFileName = processFixedContentFilename(fixedItem.fileName, hour, minute, 0, targetDay);
       const finalFileName = processedFileName.toLowerCase().endsWith('.mp3') ? processedFileName : `${processedFileName}.mp3`;
-      fixedContentFile = `"${finalFileName}"`;
-      fixedPosition = fixedItem.position || 'start';
+      fixedContentFiles.push({
+        file: `"${finalFileName}"`,
+        position: fixedItem.position || 'start',
+      });
       blockLogs.push({
         blockTime: timeStr, type: 'fixed',
         title: fixedItem.name, artist: finalFileName,
@@ -607,19 +608,27 @@ export function useAutoGradeBuilder() {
       songs.push(songStr);
     }
 
-    // Insert fixed content at configured position
+    // Insert fixed content at configured positions (supports multiple items)
     let allContent: string[] = [...songs];
-    if (fixedContentFile) {
-      if (fixedPosition === 'start') {
-        allContent = [fixedContentFile, ...songs];
-      } else if (fixedPosition === 'end') {
-        allContent = [...songs, fixedContentFile];
-      } else if (fixedPosition === 'middle') {
-        const midIndex = Math.floor(songs.length / 2);
-        allContent = [...songs.slice(0, midIndex), fixedContentFile, ...songs.slice(midIndex)];
-      } else if (typeof fixedPosition === 'number') {
-        const insertIndex = Math.max(0, Math.min(fixedPosition - 1, songs.length));
-        allContent = [...songs.slice(0, insertIndex), fixedContentFile, ...songs.slice(insertIndex)];
+    if (fixedContentFiles.length > 0) {
+      // Sort by position: 'start' first, then numbers, then 'middle', then 'end'
+      const sorted = [...fixedContentFiles].sort((a, b) => {
+        const order = (p: typeof a.position) => p === 'start' ? -1 : p === 'end' ? 999 : p === 'middle' ? 500 : p;
+        return (order(a.position) as number) - (order(b.position) as number);
+      });
+      // Insert in reverse order to maintain correct indices
+      for (const fc of sorted.reverse()) {
+        if (fc.position === 'start') {
+          allContent = [fc.file, ...allContent];
+        } else if (fc.position === 'end') {
+          allContent = [...allContent, fc.file];
+        } else if (fc.position === 'middle') {
+          const midIndex = Math.floor(allContent.length / 2);
+          allContent = [...allContent.slice(0, midIndex), fc.file, ...allContent.slice(midIndex)];
+        } else if (typeof fc.position === 'number') {
+          const insertIndex = Math.max(0, Math.min(fc.position - 1, allContent.length));
+          allContent = [...allContent.slice(0, insertIndex), fc.file, ...allContent.slice(insertIndex)];
+        }
       }
     }
 

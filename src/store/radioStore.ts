@@ -363,6 +363,11 @@ const defaultFixedContent: FixedContent[] = [
   { id: '29', name: 'Parada Pop Bloco 01', fileName: 'PARADA_POP_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 19, minute: 0 }], enabled: true, position: 'start' },
   { id: '30', name: 'Parada Pop Bloco 02', fileName: 'PARADA_POP_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 19, minute: 30 }], enabled: true, position: 'start' },
   { id: '31', name: 'Parada Pop Bloco 03', fileName: 'PARADA_POP_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 20, minute: 0 }], enabled: true, position: 'start' },
+  // Weekend - Mega Funk (sábado e domingo) - 2 arquivos fixos por bloco
+  { id: '29b', name: 'Mega Funk Bloco 01', fileName: 'MEGA_FUNK_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 18, minute: 0 }], enabled: true, position: 1 },
+  { id: '29c', name: 'Mega Funk Bloco 02', fileName: 'MEGA_FUNK_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 18, minute: 0 }], enabled: true, position: 3 },
+  { id: '29d', name: 'Mega Funk Bloco 03', fileName: 'MEGA_FUNK_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 18, minute: 30 }], enabled: true, position: 1 },
+  { id: '29e', name: 'Mega Funk Bloco 04', fileName: 'MEGA_FUNK_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 18, minute: 30 }], enabled: true, position: 3 },
 ];
 
 export const useRadioStore = create<RadioState>()(
