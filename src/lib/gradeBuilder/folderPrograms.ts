@@ -93,7 +93,9 @@ export function isFolderBasedBlock(hour: number, minute: number): boolean {
  * Check if a given hour:minute falls within the Nossa Balada range (21:00-23:30).
  */
 export function isNossaBaladaBlock(hour: number, minute: number): boolean {
+  // 21:00, 21:30, 22:00, 22:30, 23:00, 23:30, 00:00
   if (hour >= 21 && hour <= 23 && (minute === 0 || minute === 30)) return true;
+  if (hour === 0 && minute === 0) return true;
   return false;
 }
 
