@@ -343,31 +343,31 @@ const defaultFixedContent: FixedContent[] = [
   { id: '15', name: 'TOP50 Bloco 19h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 19, minute: 30 }], enabled: true, top50Count: 10 },
   // A Voz do Brasil às 21:00
   { id: '16', name: 'A Voz do Brasil', fileName: 'VOZ_DO_BRASIL', type: 'vozbrasil', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 21, minute: 0 }], enabled: true },
-  // Weekend - 60 Minutos (sábado e domingo)
-  { id: '17', name: '60 Minutos Bloco 01', fileName: '60_MINUTOS_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 11, minute: 0 }], enabled: true, position: 'start' },
-  { id: '18', name: '60 Minutos Bloco 02', fileName: '60_MINUTOS_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 11, minute: 30 }], enabled: true, position: 'start' },
-  // Weekend - Shake Mix (sábado e domingo)
-  { id: '19', name: 'Shake Mix Bloco 01', fileName: 'SHAKE_MIX_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 13, minute: 0 }], enabled: true, position: 'start' },
-  { id: '20', name: 'Shake Mix Bloco 02', fileName: 'SHAKE_MIX_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 13, minute: 30 }], enabled: true, position: 'start' },
-  { id: '21', name: 'Shake Mix Bloco 03', fileName: 'SHAKE_MIX_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 14, minute: 0 }], enabled: true, position: 'start' },
-  { id: '22', name: 'Shake Mix Bloco 04', fileName: 'SHAKE_MIX_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 14, minute: 30 }], enabled: true, position: 'start' },
-  // Weekend - Sem Parar (sábado e domingo)
-  { id: '23', name: 'Sem Parar Bloco 01', fileName: 'SEM_PARAR_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 15, minute: 0 }], enabled: true, position: 'start' },
-  { id: '24', name: 'Sem Parar Bloco 02', fileName: 'SEM_PARAR_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 15, minute: 30 }], enabled: true, position: 'start' },
-  { id: '25', name: 'Sem Parar Bloco 03', fileName: 'SEM_PARAR_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 16, minute: 0 }], enabled: true, position: 'start' },
-  { id: '26', name: 'Sem Parar Bloco 04', fileName: 'SEM_PARAR_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 16, minute: 30 }], enabled: true, position: 'start' },
-  // Weekend - TOP50 às 17:00 e 17:30
-  { id: '27', name: 'TOP50 Weekend 17h', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 17, minute: 0 }], enabled: true, top50Count: 10 },
-  { id: '28', name: 'TOP50 Weekend 17h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 17, minute: 30 }], enabled: true, top50Count: 10 },
-  // Weekend - Parada Pop (sábado e domingo)
-  { id: '29', name: 'Parada Pop Bloco 01', fileName: 'PARADA_POP_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 19, minute: 0 }], enabled: true, position: 'start' },
-  { id: '30', name: 'Parada Pop Bloco 02', fileName: 'PARADA_POP_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 19, minute: 30 }], enabled: true, position: 'start' },
-  { id: '31', name: 'Parada Pop Bloco 03', fileName: 'PARADA_POP_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 20, minute: 0 }], enabled: true, position: 'start' },
-  // Weekend - Mega Funk (sábado e domingo) - 2 arquivos fixos por bloco
-  { id: '29b', name: 'Mega Funk Bloco 01', fileName: 'MEGA_FUNK_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 18, minute: 0 }], enabled: true, position: 1 },
-  { id: '29c', name: 'Mega Funk Bloco 02', fileName: 'MEGA_FUNK_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 18, minute: 0 }], enabled: true, position: 3 },
-  { id: '29d', name: 'Mega Funk Bloco 03', fileName: 'MEGA_FUNK_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 18, minute: 30 }], enabled: true, position: 1 },
-  { id: '29e', name: 'Mega Funk Bloco 04', fileName: 'MEGA_FUNK_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 18, minute: 30 }], enabled: true, position: 3 },
+  // Sábado - 60 Minutos
+  { id: '17', name: '60 Minutos Bloco 01', fileName: '60_MINUTOS_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 11, minute: 0 }], enabled: true, position: 'start' },
+  { id: '18', name: '60 Minutos Bloco 02', fileName: '60_MINUTOS_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 11, minute: 30 }], enabled: true, position: 'start' },
+  // Sábado - Shake Mix
+  { id: '19', name: 'Shake Mix Bloco 01', fileName: 'SHAKE_MIX_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 13, minute: 0 }], enabled: true, position: 'start' },
+  { id: '20', name: 'Shake Mix Bloco 02', fileName: 'SHAKE_MIX_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 13, minute: 30 }], enabled: true, position: 'start' },
+  { id: '21', name: 'Shake Mix Bloco 03', fileName: 'SHAKE_MIX_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 14, minute: 0 }], enabled: true, position: 'start' },
+  { id: '22', name: 'Shake Mix Bloco 04', fileName: 'SHAKE_MIX_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 14, minute: 30 }], enabled: true, position: 'start' },
+  // Sábado - Sem Parar
+  { id: '23', name: 'Sem Parar Bloco 01', fileName: 'SEM_PARAR_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 15, minute: 0 }], enabled: true, position: 'start' },
+  { id: '24', name: 'Sem Parar Bloco 02', fileName: 'SEM_PARAR_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 15, minute: 30 }], enabled: true, position: 'start' },
+  { id: '25', name: 'Sem Parar Bloco 03', fileName: 'SEM_PARAR_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 16, minute: 0 }], enabled: true, position: 'start' },
+  { id: '26', name: 'Sem Parar Bloco 04', fileName: 'SEM_PARAR_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 16, minute: 30 }], enabled: true, position: 'start' },
+  // Sábado - TOP50 às 17:00 e 17:30
+  { id: '27', name: 'TOP50 Weekend 17h', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'SATURDAY', timeSlots: [{ hour: 17, minute: 0 }], enabled: true, top50Count: 10 },
+  { id: '28', name: 'TOP50 Weekend 17h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'SATURDAY', timeSlots: [{ hour: 17, minute: 30 }], enabled: true, top50Count: 10 },
+  // Sábado - Parada Pop
+  { id: '29', name: 'Parada Pop Bloco 01', fileName: 'PARADA_POP_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 19, minute: 0 }], enabled: true, position: 'start' },
+  { id: '30', name: 'Parada Pop Bloco 02', fileName: 'PARADA_POP_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 19, minute: 30 }], enabled: true, position: 'start' },
+  { id: '31', name: 'Parada Pop Bloco 03', fileName: 'PARADA_POP_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 20, minute: 0 }], enabled: true, position: 'start' },
+  // Sábado - Mega Funk - 2 arquivos fixos por bloco
+  { id: '29b', name: 'Mega Funk Bloco 01', fileName: 'MEGA_FUNK_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 18, minute: 0 }], enabled: true, position: 1 },
+  { id: '29c', name: 'Mega Funk Bloco 02', fileName: 'MEGA_FUNK_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 18, minute: 0 }], enabled: true, position: 3 },
+  { id: '29d', name: 'Mega Funk Bloco 03', fileName: 'MEGA_FUNK_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 18, minute: 30 }], enabled: true, position: 1 },
+  { id: '29e', name: 'Mega Funk Bloco 04', fileName: 'MEGA_FUNK_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'SATURDAY', timeSlots: [{ hour: 18, minute: 30 }], enabled: true, position: 3 },
 ];
 
 export const useRadioStore = create<RadioState>()(
