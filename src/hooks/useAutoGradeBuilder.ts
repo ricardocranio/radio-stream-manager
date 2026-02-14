@@ -29,7 +29,7 @@ import {
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
 import { batchFindSongsInLibrary, findSongInLibrary as findSongInLibraryFn } from '@/lib/gradeBuilder/batchLibrary';
 import { buildDnaProfiles } from '@/lib/gradeBuilder/stationDna';
-import { isFolderBasedBlock, generateFolderBasedBlock, isRomanceBlock, generateRomanceBlock } from '@/lib/gradeBuilder/folderPrograms';
+import { isFolderBasedBlock, generateFolderBasedBlock, isRomanceBlock, generateRomanceBlock, isNossaBaladaBlock, NOSSA_BALADA_CONFIG } from '@/lib/gradeBuilder/folderPrograms';
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
@@ -442,9 +442,14 @@ export function useAutoGradeBuilder() {
       return generateFolderBasedBlock(hour, minute, stats, isFullDay, ctx);
     }
 
-    // Romance blocks (22:00-00:00) - folder-based with fixed content
+    // Romance blocks (22:00-00:00) - folder-based with fixed content (weekdays only)
     if (isRomanceBlock(hour, minute) && isWeekday(targetDay)) {
       return generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay);
+    }
+
+    // Nossa Balada (21:00-23:30 weekends) - folder-based from network paths
+    if (isNossaBaladaBlock(hour, minute) && !isWeekday(targetDay)) {
+      return generateFolderBasedBlock(hour, minute, stats, isFullDay, ctx, NOSSA_BALADA_CONFIG);
     }
 
     // TOP50 blocks (all days) — filtered to only include songs from active sequence stations
