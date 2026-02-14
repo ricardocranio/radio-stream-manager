@@ -346,6 +346,11 @@ const defaultFixedContent: FixedContent[] = [
   // Weekend - 60 Minutos (sábado e domingo)
   { id: '17', name: '60 Minutos Bloco 01', fileName: '60_MINUTOS_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 11, minute: 0 }], enabled: true, position: 'start' },
   { id: '18', name: '60 Minutos Bloco 02', fileName: '60_MINUTOS_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 11, minute: 30 }], enabled: true, position: 'start' },
+  // Weekend - Shake Mix (sábado e domingo)
+  { id: '19', name: 'Shake Mix Bloco 01', fileName: 'SHAKE_MIX_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 13, minute: 0 }], enabled: true, position: 'start' },
+  { id: '20', name: 'Shake Mix Bloco 02', fileName: 'SHAKE_MIX_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 13, minute: 30 }], enabled: true, position: 'start' },
+  { id: '21', name: 'Shake Mix Bloco 03', fileName: 'SHAKE_MIX_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 14, minute: 0 }], enabled: true, position: 'start' },
+  { id: '22', name: 'Shake Mix Bloco 04', fileName: 'SHAKE_MIX_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 14, minute: 30 }], enabled: true, position: 'start' },
 ];
 
 export const useRadioStore = create<RadioState>()(
