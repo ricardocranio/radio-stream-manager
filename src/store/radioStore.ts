@@ -351,6 +351,11 @@ const defaultFixedContent: FixedContent[] = [
   { id: '20', name: 'Shake Mix Bloco 02', fileName: 'SHAKE_MIX_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 13, minute: 30 }], enabled: true, position: 'start' },
   { id: '21', name: 'Shake Mix Bloco 03', fileName: 'SHAKE_MIX_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 14, minute: 0 }], enabled: true, position: 'start' },
   { id: '22', name: 'Shake Mix Bloco 04', fileName: 'SHAKE_MIX_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 14, minute: 30 }], enabled: true, position: 'start' },
+  // Weekend - Sem Parar (sábado e domingo)
+  { id: '23', name: 'Sem Parar Bloco 01', fileName: 'SEM_PARAR_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 15, minute: 0 }], enabled: true, position: 'start' },
+  { id: '24', name: 'Sem Parar Bloco 02', fileName: 'SEM_PARAR_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 15, minute: 30 }], enabled: true, position: 'start' },
+  { id: '25', name: 'Sem Parar Bloco 03', fileName: 'SEM_PARAR_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 16, minute: 0 }], enabled: true, position: 'start' },
+  { id: '26', name: 'Sem Parar Bloco 04', fileName: 'SEM_PARAR_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 16, minute: 30 }], enabled: true, position: 'start' },
 ];
 
 export const useRadioStore = create<RadioState>()(
