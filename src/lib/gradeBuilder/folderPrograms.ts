@@ -27,6 +27,8 @@ export interface FolderBlockConfig {
   targetSongs: number;
   /** Coringa/fallback code */
   coringa: string;
+  /** Separator between songs (default: 'vht') */
+  separator?: string;
 }
 
 /** Default configuration for the 17:00-18:30 Happy Hour blocks */
@@ -54,6 +56,7 @@ export const NOSSA_BALADA_CONFIG: FolderBlockConfig = {
   folderLabels: ['Metropolitana FM', 'Energia 97', 'Mix FM', 'Positividade FM'],
   targetSongs: 10,
   coringa: 'jov',
+  separator: 'vhtn',
 };
 
 /** Configuration for the 22:00-00:00 Romance blocks */
@@ -269,7 +272,7 @@ export async function generateFolderBasedBlock(
   console.log(`[FOLDER-BLOCK] ✅ Bloco ${timeStr}: ${selectedSongs.length} músicas selecionadas de pastas locais`);
 
   return {
-    line: ctx.sanitizeGradeLine(`${timeStr} (ID=${cfg.programName}) ${selectedSongs.join(',vht,')}`),
+    line: ctx.sanitizeGradeLine(`${timeStr} (ID=${cfg.programName}) ${selectedSongs.join(`,${cfg.separator || 'vht'},`)}`),
     logs,
   };
 }
