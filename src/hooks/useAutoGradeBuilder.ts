@@ -121,14 +121,10 @@ export function useAutoGradeBuilder() {
     const dayToCheck = targetDay || (['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const)[new Date().getDay()];
     const isWeekdayDay = WEEKDAY_KEYS.includes(dayToCheck);
     const isWeekendDay = dayToCheck === 'sab' || dayToCheck === 'dom';
-    const isSaturdayDay = dayToCheck === 'sab';
-    const isSundayDay = dayToCheck === 'dom';
     return fixedContent.filter(fc => {
       if (!fc.enabled) return false;
       if (fc.dayPattern === 'WEEKDAYS' && !isWeekdayDay) return false;
       if (fc.dayPattern === 'WEEKEND' && !isWeekendDay) return false;
-      if (fc.dayPattern === 'SATURDAY' && !isSaturdayDay) return false;
-      if (fc.dayPattern === 'SUNDAY' && !isSundayDay) return false;
       return fc.timeSlots.some(ts => ts.hour === hour && ts.minute === minute);
     });
   }, [fixedContent]);
@@ -451,9 +447,8 @@ export function useAutoGradeBuilder() {
       return generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay);
     }
 
-    // Nossa Balada (21:00-23:30 sábado only) - folder-based from network paths
-    const isSaturday = targetDay === 'sab' || (!targetDay && new Date().getDay() === 6);
-    if (isNossaBaladaBlock(hour, minute) && isSaturday) {
+    // Nossa Balada (21:00-23:30 weekends) - folder-based from network paths
+    if (isNossaBaladaBlock(hour, minute) && !isWeekday(targetDay)) {
       return generateFolderBasedBlock(hour, minute, stats, isFullDay, ctx, NOSSA_BALADA_CONFIG);
     }
 

@@ -51,8 +51,6 @@ const typeColors: Record<string, string> = {
 const dayPatterns = [
   { value: 'WEEKDAYS', label: 'Dias úteis (Seg-Sex)' },
   { value: 'WEEKEND', label: 'Fim de semana (Sáb-Dom)' },
-  { value: 'SATURDAY', label: 'Sábado' },
-  { value: 'SUNDAY', label: 'Domingo' },
   { value: 'ALL', label: 'Todos os dias' },
   { value: 'MONDAY', label: 'Segunda-feira' },
   { value: 'TUESDAY', label: 'Terça-feira' },
