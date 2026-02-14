@@ -191,12 +191,19 @@ export function GradeScheduleCard() {
       
       const timeKey = `${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')}`;
       
-      // Get program name for this hour
+      // Get program name for this hour (filter weekday-only programs on weekends)
+      const isWeekend = [0, 6].includes(new Date().getDay());
+      const WEEKDAY_ONLY_PROGRAMS = ['Happy Hour', 'Sertanejo Nossa', 'FIXO', 'VOZ_BRASIL', 'Romance'];
       let programName = 'PROGRAMA';
       for (const prog of programs) {
         const [start, end] = prog.timeRange.split('-').map(Number);
         if (blockHour >= start && blockHour <= end) {
-          programName = prog.programName;
+          // Skip weekday-only programs on weekends
+          if (isWeekend && WEEKDAY_ONLY_PROGRAMS.includes(prog.programName)) {
+            programName = 'Rotação';
+          } else {
+            programName = prog.programName;
+          }
           break;
         }
       }
