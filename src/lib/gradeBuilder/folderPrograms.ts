@@ -42,6 +42,20 @@ export const HAPPY_HOUR_CONFIG: FolderBlockConfig = {
   coringa: 'jov',
 };
 
+/** Configuration for the 21:00-00:00 Nossa Balada (weekend) blocks */
+export const NOSSA_BALADA_CONFIG: FolderBlockConfig = {
+  programName: 'Nossa Balada',
+  folders: [
+    '\\\\DESKTOP-DPOUD22\\Playlist\\Downloads\\Metropolitana FM',
+    '\\\\DESKTOP-DPOUD22\\Playlist\\Downloads\\Energia 97',
+    '\\\\DESKTOP-DPOUD22\\Playlist\\Downloads\\Mix FM',
+    '\\\\DESKTOP-DPOUD22\\Playlist\\Downloads\\Positividade FM',
+  ],
+  folderLabels: ['Metropolitana FM', 'Energia 97', 'Mix FM', 'Positividade FM'],
+  targetSongs: 10,
+  coringa: 'jov',
+};
+
 /** Configuration for the 22:00-00:00 Romance blocks */
 export const ROMANCE_CONFIG: FolderBlockConfig = {
   programName: 'Romance',
@@ -69,6 +83,14 @@ export function isFolderBasedBlock(hour: number, minute: number): boolean {
   // 17:00, 17:30, 18:00
   if (hour === 17 && (minute === 0 || minute === 30)) return true;
   if (hour === 18 && minute === 0) return true;
+  return false;
+}
+
+/**
+ * Check if a given hour:minute falls within the Nossa Balada range (21:00-23:30).
+ */
+export function isNossaBaladaBlock(hour: number, minute: number): boolean {
+  if (hour >= 21 && hour <= 23 && (minute === 0 || minute === 30)) return true;
   return false;
 }
 
