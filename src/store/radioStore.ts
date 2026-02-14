@@ -359,6 +359,10 @@ const defaultFixedContent: FixedContent[] = [
   // Weekend - TOP50 às 17:00 e 17:30
   { id: '27', name: 'TOP50 Weekend 17h', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 17, minute: 0 }], enabled: true, top50Count: 10 },
   { id: '28', name: 'TOP50 Weekend 17h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 17, minute: 30 }], enabled: true, top50Count: 10 },
+  // Weekend - Parada Pop (sábado e domingo)
+  { id: '29', name: 'Parada Pop Bloco 01', fileName: 'PARADA_POP_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 19, minute: 0 }], enabled: true, position: 'start' },
+  { id: '30', name: 'Parada Pop Bloco 02', fileName: 'PARADA_POP_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 19, minute: 30 }], enabled: true, position: 'start' },
+  { id: '31', name: 'Parada Pop Bloco 03', fileName: 'PARADA_POP_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 20, minute: 0 }], enabled: true, position: 'start' },
 ];
 
 export const useRadioStore = create<RadioState>()(
