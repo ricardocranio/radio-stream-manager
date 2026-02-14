@@ -356,6 +356,9 @@ const defaultFixedContent: FixedContent[] = [
   { id: '24', name: 'Sem Parar Bloco 02', fileName: 'SEM_PARAR_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 15, minute: 30 }], enabled: true, position: 'start' },
   { id: '25', name: 'Sem Parar Bloco 03', fileName: 'SEM_PARAR_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 16, minute: 0 }], enabled: true, position: 'start' },
   { id: '26', name: 'Sem Parar Bloco 04', fileName: 'SEM_PARAR_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 16, minute: 30 }], enabled: true, position: 'start' },
+  // Weekend - TOP50 às 17:00 e 17:30
+  { id: '27', name: 'TOP50 Weekend 17h', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 17, minute: 0 }], enabled: true, top50Count: 10 },
+  { id: '28', name: 'TOP50 Weekend 17h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 17, minute: 30 }], enabled: true, top50Count: 10 },
 ];
 
 export const useRadioStore = create<RadioState>()(
