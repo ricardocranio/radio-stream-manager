@@ -690,7 +690,7 @@ export function useAutoGradeBuilder() {
 
   // ==================== Full Day Grade ====================
 
-  const buildFullDayGrade = useCallback(async () => {
+  const buildFullDayGrade = useCallback(async (overrideTargetDay?: WeekDay) => {
     if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
       toast({ title: '⚠️ Modo Web', description: 'Geração de grade disponível apenas no aplicativo desktop.' });
       return;
@@ -704,13 +704,13 @@ export function useAutoGradeBuilder() {
     }));
 
     const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
-    const targetDay = dayMap[new Date().getDay()];
+    const targetDay = overrideTargetDay || dayMap[new Date().getDay()];
     const dayCode = getDayCode(targetDay);
     const filename = `${dayCode}.txt`;
 
     try {
-      console.log('[AUTO-GRADE] 🚀 Building full day grade with progressive saving...');
-      logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
+      console.log(`[AUTO-GRADE] 🚀 Building full day grade for ${targetDay} (${filename}) with progressive saving...`);
+      logSystemError('GRADE', 'info', `Iniciando geração da grade completa para ${targetDay}`);
       clearUsedSongs();
 
       const songsByStation = await fetchAllRecentSongs();
@@ -731,15 +731,14 @@ export function useAutoGradeBuilder() {
           }));
 
           // Inject carry-over songs from previous block into the ref
-          // so generateBlockLine's carry-over logic picks them up
           if (fullDayCarryOver.length > 0) {
             for (const co of fullDayCarryOver) {
               carryOverSongsRef.current.push({
                 ...co,
-                addedAt: new Date(Date.now() - 120000), // Simulate 2 min ago to pass the 1-min threshold
+                addedAt: new Date(Date.now() - 120000),
               });
             }
-            fullDayCarryOver.length = 0; // Clear after injecting
+            fullDayCarryOver.length = 0;
           }
 
           const result = await generateBlockLine(hour, minute, songsByStation, stats, true, targetDay);
@@ -747,9 +746,8 @@ export function useAutoGradeBuilder() {
           allLogs.push(...result.logs);
           blockCount++;
 
-          // Collect any new carry-over songs added during this block for next block
           const newCarryOvers = carryOverSongsRef.current.filter(
-            co => (Date.now() - co.addedAt.getTime()) < 60000 // Recently added (within 1 min)
+            co => (Date.now() - co.addedAt.getTime()) < 60000
           );
           fullDayCarryOver.push(...newCarryOvers);
 
@@ -787,7 +785,7 @@ export function useAutoGradeBuilder() {
         logSystemError('GRADE', 'info', `Grade completa salva: ${filename}`, `${lines.length} blocos, ${stats.skipped} puladas, ${stats.substituted} substituídas, ${stats.missing} faltando`);
         addGradeHistory({
           id: `grade-fullday-${Date.now()}`, timestamp: new Date(), blockTime: 'COMPLETA',
-          songsProcessed: 48 * defaultSequence.length, songsFound: lines.length, songsMissing: stats.missing, programName: 'Grade Completa',
+          songsProcessed: 48 * defaultSequence.length, songsFound: lines.length, songsMissing: stats.missing, programName: `Grade Completa (${targetDay.toUpperCase()})`,
         });
         setState(prev => ({
           ...prev, isBuilding: false, lastBuildTime: new Date(), lastSavedFile: filename,
@@ -809,6 +807,109 @@ export function useAutoGradeBuilder() {
     clearUsedSongs, fetchAllRecentSongs, generateBlockLine, renameFilesInGradeContent,
     getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, toast, addBlockLogs,
   ]);
+
+  // ==================== Sunday Pre-Build (Saturday ≥ 11:00) ====================
+
+  /**
+   * On Sunday, refresh existing grade by substituting oldest songs with fresh captures.
+   * Ratio: 3:1 (keep 3, replace 1 with fresh capture per 4 songs).
+   */
+  const refreshSundayGrade = useCallback(async () => {
+    if (!isElectronEnv || !window.electronAPI?.saveGradeFile) return;
+
+    const filename = `${getDayCode('dom')}.txt`;
+    console.log(`[AUTO-GRADE] 🔄 Atualizando grade de domingo com capturas frescas (proporção 3:1)...`);
+
+    try {
+      // Read existing Sunday grade
+      let existingContent = '';
+      if (window.electronAPI?.readGradeFile) {
+        const readResult = await window.electronAPI.readGradeFile({ folder: config.gradeFolder, filename });
+        if (readResult.success && readResult.content) existingContent = readResult.content;
+      }
+
+      if (!existingContent) {
+        console.log('[AUTO-GRADE] 📋 Nenhuma grade de domingo existente, gerando do zero...');
+        await buildFullDayGrade('dom');
+        return;
+      }
+
+      // Fetch fresh songs captured today (Sunday)
+      const freshSongs = await fetchAllRecentSongs();
+      const freshPool: SongEntry[] = [];
+      for (const stationSongs of Object.values(freshSongs)) {
+        freshPool.push(...stationSongs);
+      }
+
+      if (freshPool.length === 0) {
+        console.log('[AUTO-GRADE] ⚠️ Nenhuma música fresca disponível, mantendo grade existente');
+        return;
+      }
+
+      // Shuffle fresh pool
+      const shuffledFresh = [...freshPool].sort(() => Math.random() - 0.5);
+      let freshIndex = 0;
+
+      const ctx = buildGradeContext();
+      const lines = existingContent.split('\n');
+      const updatedLines: string[] = [];
+      let replacements = 0;
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) { updatedLines.push(trimmed); continue; }
+
+        // Extract songs from line: everything between quotes
+        const songMatches = trimmed.match(/"([^"]+)"/g);
+        if (!songMatches || songMatches.length < 4) {
+          updatedLines.push(trimmed);
+          continue;
+        }
+
+        // Apply 3:1 ratio: for every 4 songs, replace the 4th with a fresh one
+        let songCounter = 0;
+        let updatedLine = trimmed;
+
+        for (let i = 0; i < songMatches.length; i++) {
+          songCounter++;
+          if (songCounter % 4 === 0 && freshIndex < shuffledFresh.length) {
+            const fresh = shuffledFresh[freshIndex];
+            const batchKey = `${fresh.artist.toLowerCase().trim()}|${fresh.title.toLowerCase().trim()}`;
+
+            // Verify fresh song exists in library
+            const libraryResult = await ctx.findSongInLibrary(fresh.artist, fresh.title);
+            if (libraryResult.exists) {
+              const freshFilename = libraryResult.filename || sanitizeFilename(`${fresh.artist} - ${fresh.title}.mp3`);
+
+              // Don't replace fixed content files (uppercase patterns like ROMANCE_BLOCO, PARADA_POP, etc.)
+              const originalSong = songMatches[i].replace(/"/g, '');
+              if (!/^[A-Z0-9_]+\.MP3$/i.test(originalSong)) {
+                updatedLine = updatedLine.replace(songMatches[i], `"${freshFilename}"`);
+                replacements++;
+                freshIndex++;
+              }
+            }
+          }
+        }
+
+        updatedLines.push(updatedLine);
+      }
+
+      if (replacements > 0) {
+        const finalContent = updatedLines.join('\n');
+        await renameFilesInGradeContent(finalContent);
+        const result = await window.electronAPI.saveGradeFile({ folder: config.gradeFolder, filename, content: finalContent });
+        if (result.success) {
+          console.log(`[AUTO-GRADE] ✅ Grade de domingo atualizada: ${replacements} músicas substituídas por capturas frescas`);
+          toast({ title: '🔄 Grade Domingo Atualizada', description: `${replacements} músicas substituídas por capturas frescas (3:1)` });
+        }
+      } else {
+        console.log('[AUTO-GRADE] ℹ️ Nenhuma substituição possível na grade de domingo');
+      }
+    } catch (error) {
+      console.error('[AUTO-GRADE] Erro ao atualizar grade de domingo:', error);
+    }
+  }, [getDayCode, config.gradeFolder, fetchAllRecentSongs, buildGradeContext, renameFilesInGradeContent, buildFullDayGrade, toast]);
 
   // ==================== Incremental Build ====================
 
@@ -1024,6 +1125,7 @@ export function useAutoGradeBuilder() {
     if (!isElectronEnv || !state.isAutoEnabled) return;
     console.log(`[AUTO-GRADE] ⏰ Modo automático ATIVO - atualiza ${state.minutesBeforeBlock} min antes de cada bloco`);
     let lastBuiltBlock = '';
+    let lastSundayBuildHour = -1;
 
     buildIntervalRef.current = setInterval(() => {
       const { isRunning } = useRadioStore.getState();
@@ -1031,6 +1133,7 @@ export function useAutoGradeBuilder() {
       const now = new Date();
       const currentMinute = now.getMinutes();
       const currentHour = now.getHours();
+      const currentDay = now.getDay(); // 0=dom, 6=sab
       let targetBlockHour = currentHour;
       let targetBlockMinute = 0;
       if (currentMinute < 30) targetBlockMinute = 30;
@@ -1044,8 +1147,21 @@ export function useAutoGradeBuilder() {
         builtBlocksRef.current.clear();
       }
 
+      // === Saturday ≥ 11:00: Pre-build Sunday grade ===
+      if (currentDay === 6 && currentHour >= 11 && lastSundayBuildHour !== currentHour) {
+        lastSundayBuildHour = currentHour;
+        console.log(`[AUTO-GRADE] 📅 Sábado ${currentHour}h — gerando/atualizando grade de domingo...`);
+        buildFullDayGrade('dom');
+      }
+
+      // === Sunday: Refresh grade with fresh captures (3:1 ratio) ===
+      if (currentDay === 0 && currentMinute < 6) {
+        // Run once per hour on Sunday (when minute < 6, aligns with 6-min interval)
+        console.log(`[AUTO-GRADE] 🔄 Domingo ${currentHour}h — atualizando grade com capturas frescas (3:1)...`);
+        refreshSundayGrade();
+      }
+
       // Build when within minutesBeforeBlock window
-      // Next block regenerates every 6 min (~3 cycles before lock at 10 min), avoiding system lag
       const shouldBuild = minutesUntilBlock <= state.minutesBeforeBlock;
       
       if (shouldBuild) {
@@ -1057,16 +1173,29 @@ export function useAutoGradeBuilder() {
         }
         buildGrade();
       }
-    }, 6 * 60 * 1000); // 6 minutos entre ciclos (~3 regenerações antes da trava)
+    }, 6 * 60 * 1000); // 6 minutos entre ciclos
 
     const { isRunning } = useRadioStore.getState();
     if (isRunning) {
       console.log(`[AUTO-GRADE] 🚀 Build inicial`);
       buildGrade();
+
+      // If it's Saturday ≥ 11:00, also trigger Sunday build on startup
+      const now = new Date();
+      if (now.getDay() === 6 && now.getHours() >= 11) {
+        console.log(`[AUTO-GRADE] 📅 Sábado ${now.getHours()}h (startup) — gerando grade de domingo...`);
+        setTimeout(() => buildFullDayGrade('dom'), 10000); // Delay to avoid race with today's build
+      }
+
+      // If it's Sunday, refresh with fresh captures
+      if (now.getDay() === 0) {
+        console.log(`[AUTO-GRADE] 🔄 Domingo (startup) — atualizando grade com capturas frescas...`);
+        setTimeout(() => refreshSundayGrade(), 15000);
+      }
     }
 
     return () => { if (buildIntervalRef.current) clearInterval(buildIntervalRef.current); };
-  }, [state.isAutoEnabled, state.minutesBeforeBlock, buildGrade]);
+  }, [state.isAutoEnabled, state.minutesBeforeBlock, buildGrade, buildFullDayGrade, refreshSundayGrade]);
 
   // Reactive: rebuild grade immediately when a download completes (coringa replacement)
   useEffect(() => {
