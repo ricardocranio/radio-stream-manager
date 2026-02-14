@@ -117,14 +117,14 @@ export function useAutoGradeBuilder() {
     return 'PROGRAMA';
   }, [programs]);
 
-  const getFixedContentForTime = useCallback((hour: number, minute: number) => {
-    const dayOfWeek = new Date().getDay();
-    const isWeekdayNow = dayOfWeek >= 1 && dayOfWeek <= 5;
-    const isWeekendNow = dayOfWeek === 0 || dayOfWeek === 6;
+  const getFixedContentForTime = useCallback((hour: number, minute: number, targetDay?: WeekDay) => {
+    const dayToCheck = targetDay || (['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const)[new Date().getDay()];
+    const isWeekdayDay = WEEKDAY_KEYS.includes(dayToCheck);
+    const isWeekendDay = dayToCheck === 'sab' || dayToCheck === 'dom';
     return fixedContent.filter(fc => {
       if (!fc.enabled) return false;
-      if (fc.dayPattern === 'WEEKDAYS' && !isWeekdayNow) return false;
-      if (fc.dayPattern === 'WEEKEND' && !isWeekendNow) return false;
+      if (fc.dayPattern === 'WEEKDAYS' && !isWeekdayDay) return false;
+      if (fc.dayPattern === 'WEEKEND' && !isWeekendDay) return false;
       return fc.timeSlots.some(ts => ts.hour === hour && ts.minute === minute);
     });
   }, [fixedContent]);
@@ -422,7 +422,7 @@ export function useAutoGradeBuilder() {
   ): Promise<BlockResult> => {
     const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     const programName = getProgramForHour(hour, targetDay);
-    const fixedItems = getFixedContentForTime(hour, minute);
+    const fixedItems = getFixedContentForTime(hour, minute, targetDay);
     const ctx = buildGradeContext();
 
     // === Special Programs ===
