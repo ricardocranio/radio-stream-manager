@@ -250,7 +250,8 @@ export function useAutoGradeBuilder() {
       .replace(/\{DD\}/gi, fullDayName)
       .replace(/\{ED\}/gi, edition);
     const hasFullDayName = FULL_DAY_NAMES_BY_INDEX.some(day => result.toUpperCase().includes(`_${day}`));
-    if (!result.toLowerCase().includes('_{dia}') && !result.toLowerCase().includes('_{dd}') && !hasFullDayName) {
+    const hasWeekendSuffix = result.toUpperCase().includes('FINAL_DE_SEMANA');
+    if (!result.toLowerCase().includes('_{dia}') && !result.toLowerCase().includes('_{dd}') && !hasFullDayName && !hasWeekendSuffix) {
       if (result.toLowerCase().endsWith('.mp3')) {
         result = result.slice(0, -4) + `_${fullDayName}.mp3`;
       } else {
