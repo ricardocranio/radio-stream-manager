@@ -75,6 +75,7 @@ export interface RankingSong {
   style: string;
   trend: 'up' | 'down' | 'stable';
   lastPlayed: Date;
+  station?: string; // Station that contributed this song to the ranking
 }
 
 interface RadioState {
@@ -164,8 +165,8 @@ interface RadioState {
   rankingSongs: RankingSong[];
   setRankingSongs: (songs: RankingSong[]) => void;
   addRankingPlay: (songId: string) => void;
-  addOrUpdateRankingSong: (title: string, artist: string, style: string) => void;
-  applyRankingBatch: (updates: Array<{ title: string; artist: string; style: string; count: number }>) => void;
+  addOrUpdateRankingSong: (title: string, artist: string, style: string, station?: string) => void;
+  applyRankingBatch: (updates: Array<{ title: string; artist: string; style: string; count: number; station?: string }>) => void;
   clearRanking: () => void;
 
   // Auto Scrape Setting (persisted)
@@ -516,7 +517,7 @@ export const useRadioStore = create<RadioState>()(
           ),
         })),
       // Optimized: processes batch updates from rankingBatcher
-      addOrUpdateRankingSong: (title, artist, style) =>
+      addOrUpdateRankingSong: (title, artist, style, station) =>
         set((state) => {
           const normalizedTitle = title.toLowerCase().trim();
           const normalizedArtist = artist.toLowerCase().trim();
@@ -558,6 +559,7 @@ export const useRadioStore = create<RadioState>()(
               style: style || 'POP/VARIADO',
               trend: 'stable',
               lastPlayed: new Date(),
+              station: station,
             };
             
             // Limit ranking to 25 songs for memory optimization
@@ -572,7 +574,7 @@ export const useRadioStore = create<RadioState>()(
           }
         }),
       // Batch update: applies multiple ranking updates at once (from batcher)
-      applyRankingBatch: (updates: Array<{ title: string; artist: string; style: string; count: number }>) =>
+      applyRankingBatch: (updates: Array<{ title: string; artist: string; style: string; count: number; station?: string }>) =>
         set((state) => {
           let updatedSongs = [...state.rankingSongs];
           
@@ -597,6 +599,7 @@ export const useRadioStore = create<RadioState>()(
                 plays: existing.plays + update.count,
                 lastPlayed: new Date(),
                 trend: existing.plays + update.count > 5 ? 'up' : existing.trend,
+                station: update.station || existing.station,
               };
             } else {
               updatedSongs.push({
@@ -607,6 +610,7 @@ export const useRadioStore = create<RadioState>()(
                 style: update.style,
                 trend: 'stable',
                 lastPlayed: new Date(),
+                station: update.station,
               });
             }
           }

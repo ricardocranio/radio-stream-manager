@@ -88,6 +88,7 @@ export interface GradeContext {
     style: string;
     trend: 'up' | 'down' | 'stable';
     lastPlayed: Date;
+    station?: string;
   }>;
   filterChars?: string[];
   fixedContent: Array<{

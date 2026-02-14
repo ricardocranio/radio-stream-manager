@@ -46,3 +46,24 @@ export const FULL_DAY_NAMES_BY_INDEX = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA',
 export const WEEKDAY_KEYS: WeekDay[] = ['seg', 'ter', 'qua', 'qui', 'sex'];
 
 export const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
+
+/** Short abbreviation map for station names (used in UI badges) */
+export const STATION_ABBREVIATIONS: Record<string, string> = {
+  'BH FM': 'BH',
+  'Band FM': 'BD',
+  'Clube FM': 'CL',
+  'Rádio Globo RJ': 'GL',
+  'Blink 102 FM': 'BK',
+  'Positiva FM': 'PS',
+  'Liberdade FM': 'LB',
+  'Mix FM': 'MX',
+  'Metropolitana FM': 'MT',
+  'Energia 97': 'EN',
+  'Positividade FM': 'PV',
+  '105 FM': '105',
+};
+
+/** Get short abbreviation for a station name */
+export function getStationAbbreviation(stationName: string): string {
+  return STATION_ABBREVIATIONS[stationName] || stationName.substring(0, 2).toUpperCase();
+}

@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { sanitizeGradeFilename } from '@/lib/gradeBuilder/sanitize';
-import { STATION_ID_TO_DB_NAME, DAY_CODES_BY_INDEX, isElectronEnv } from '@/lib/gradeBuilder/constants';
+import { STATION_ID_TO_DB_NAME, DAY_CODES_BY_INDEX, isElectronEnv, getStationAbbreviation } from '@/lib/gradeBuilder/constants';
 import { supabase } from '@/integrations/supabase/client';
 import type { SequenceConfig } from '@/types/radio';
 
@@ -300,7 +300,16 @@ export function GradePreviewCard() {
       }
 
       if (seq.radioSource === 'top50') {
-        const sortedRanking = [...rankingSongs].sort((a, b) => b.plays - a.plays);
+        // Filter ranking to only include songs from stations in the active sequence
+        const seqStationNames = new Set(
+          activeSequence
+            .map(s => STATION_ID_TO_DB_NAME[s.radioSource] || STATION_ID_TO_DB_NAME[s.radioSource.toLowerCase()])
+            .filter(Boolean)
+        );
+        const filteredRanking = seqStationNames.size > 0
+          ? rankingSongs.filter(r => !r.station || seqStationNames.has(r.station))
+          : rankingSongs;
+        const sortedRanking = [...filteredRanking].sort((a, b) => b.plays - a.plays);
         let found = false;
         for (const r of sortedRanking) {
           const key = `${r.title.toLowerCase()}-${r.artist.toLowerCase()}`;
@@ -578,11 +587,14 @@ export function GradePreviewCard() {
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
                       {song.artist}
-                      {!song.isFixed && song.source && song.source !== 'CORINGA' && (
-                        <span className="ml-1 opacity-60">· {song.source}</span>
-                      )}
                     </p>
                   </div>
+                  {/* Station abbreviation badge */}
+                  {!song.isFixed && song.source && song.source !== 'CORINGA' && song.source !== 'TXT' && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 shrink-0 font-bold border-primary/30 text-primary">
+                      {getStationAbbreviation(song.source)}
+                    </Badge>
+                  )}
                   {/* Freshness indicator */}
                   {freshness && freshness.icon && (
                     <div className={`flex items-center gap-1 shrink-0 text-xs font-medium ${
