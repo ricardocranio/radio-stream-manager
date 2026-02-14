@@ -148,17 +148,29 @@ export function GradePreviewCard() {
           // Enrich with ranking + scraped_at + station from pool
           const enriched = parsed.map(song => {
             if (song.isFixed) return song;
-            // Try to find matching song in supabase pool to get scraped_at and station
-            const poolMatch = songs.find(
-              s => s.title.toLowerCase() === song.title.toLowerCase() && 
-                   s.artist.toLowerCase() === song.artist.toLowerCase()
+            const songTitleNorm = song.title.toLowerCase().trim();
+            const songArtistNorm = song.artist.toLowerCase().trim();
+            // Try exact match first
+            let match = songs.find(
+              s => s.title.toLowerCase().trim() === songTitleNorm && 
+                   s.artist.toLowerCase().trim() === songArtistNorm
             );
-            // Also try matching by filename pattern (artist - title)
-            const filenameMatch = !poolMatch ? songs.find(s => {
-              const expected = sanitizeGradeFilename(`${s.artist} - ${s.title}.MP3`, filterChars).toLowerCase();
-              return expected === song.filename.toLowerCase();
-            }) : null;
-            const match = poolMatch || filenameMatch;
+            // Try filename-based match
+            if (!match) {
+              match = songs.find(s => {
+                const expected = sanitizeGradeFilename(`${s.artist} - ${s.title}.MP3`, filterChars).toLowerCase();
+                return expected === song.filename.toLowerCase();
+              });
+            }
+            // Try partial/contains match (handles truncated names)
+            if (!match) {
+              match = songs.find(s => {
+                const t = s.title.toLowerCase().trim();
+                const a = s.artist.toLowerCase().trim();
+                return (t.includes(songTitleNorm) || songTitleNorm.includes(t)) &&
+                       (a.includes(songArtistNorm) || songArtistNorm.includes(a));
+              });
+            }
             return {
               ...song,
               source: match?.station_name || song.source,
@@ -194,10 +206,9 @@ export function GradePreviewCard() {
     const fetchSongs = async () => {
       setIsLoading(true);
       try {
-        const blockTime = new Date();
-        blockTime.setHours(nextBlock.hour, nextBlock.minute, 0, 0);
-        const windowEnd = blockTime.toISOString();
-        const windowStart = new Date(blockTime.getTime() - 60 * 60 * 1000).toISOString();
+        // Use 24h window to match grade builder's pool and ensure enrichment works
+        const windowEnd = new Date().toISOString();
+        const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
         const { data, error } = await supabase
           .from('scraped_songs')
@@ -205,7 +216,7 @@ export function GradePreviewCard() {
           .gte('scraped_at', windowStart)
           .lte('scraped_at', windowEnd)
           .order('scraped_at', { ascending: false })
-          .limit(500);
+          .limit(1500);
 
         if (error) throw error;
 
@@ -242,7 +253,7 @@ export function GradePreviewCard() {
       if (seen.has(key)) continue;
       seen.add(key);
       if (!result[song.station_name]) result[song.station_name] = [];
-      if (result[song.station_name].length < 50) {
+      if (result[song.station_name].length < 100) {
         result[song.station_name].push(song);
       }
     }
