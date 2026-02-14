@@ -601,9 +601,9 @@ export function GradePreviewCard() {
                     </p>
                   </div>
                   {/* Station abbreviation badge */}
-                  {!song.isFixed && song.source && song.source !== 'CORINGA' && song.source !== 'TXT' && (
+                  {!song.isFixed && song.source && song.source !== 'CORINGA' && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 shrink-0 font-bold border-primary/30 text-primary">
-                      {getStationAbbreviation(song.source)}
+                      {song.source === 'TXT' ? 'TXT' : getStationAbbreviation(song.source)}
                     </Badge>
                   )}
                   {/* Freshness indicator */}
