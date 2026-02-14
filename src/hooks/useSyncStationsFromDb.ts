@@ -34,11 +34,14 @@ export function useSyncStationsFromDb() {
           localStationsByName.set(s.name.trim().toLowerCase(), s);
         });
 
-        // Merge: DB stations take priority, add new ones
+        // Merge: DB is the source of truth — only include enabled DB stations
         const mergedStations: RadioStation[] = [];
         const seenNames = new Set<string>();
 
         for (const dbStation of dbStations) {
+          // Skip disabled stations entirely — they should not appear in the local store
+          if (dbStation.enabled === false) continue;
+
           const normalizedName = dbStation.name.trim().toLowerCase();
           
           if (seenNames.has(normalizedName)) continue;
@@ -52,18 +55,9 @@ export function useSyncStationsFromDb() {
             urls: localStation?.urls || [],
             scrapeUrl: dbStation.scrape_url,
             styles: dbStation.styles || localStation?.styles || [],
-            enabled: dbStation.enabled ?? true,
+            enabled: true,
             monitoringSchedules: localStation?.monitoringSchedules,
           });
-        }
-
-        // Add local-only stations that aren't in DB
-        for (const localStation of stations) {
-          const normalizedName = localStation.name.trim().toLowerCase();
-          if (!seenNames.has(normalizedName)) {
-            seenNames.add(normalizedName);
-            mergedStations.push(localStation);
-          }
         }
 
         // Only update if there are changes
