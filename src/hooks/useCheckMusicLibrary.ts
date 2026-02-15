@@ -59,7 +59,12 @@ export function useCheckMusicLibrary() {
    * This prevents duplicate downloads when library has base version
    */
   const checkSongExists = useCallback(async (artist: string, title: string): Promise<CheckResult> => {
-    const threshold = config.similarityThreshold || 0.75;
+    const threshold = config.similarityThreshold ?? 0.75;
+    
+    // If similarity threshold is disabled (0), treat all songs as found
+    if (threshold === 0) {
+      return { exists: true, path: `${artist} - ${title}.mp3`, similarity: 1.0 };
+    }
     
     // Normalize to match base versions (e.g., "Song (Ao Vivo)" -> "Song")
     const normalizedArtist = normalizeArtist(artist);
@@ -196,6 +201,11 @@ export async function checkSongInLibrary(
   musicFolders: string[],
   threshold: number = 0.75
 ): Promise<CheckResult> {
+  // If threshold is 0 (disabled), skip verification entirely
+  if (threshold === 0) {
+    return { exists: true, filename: `${artist} - ${title}.mp3`, similarity: 1.0 };
+  }
+
   // Check cache first
   const cached = getCachedVerification(artist, title);
   if (cached !== null) {
