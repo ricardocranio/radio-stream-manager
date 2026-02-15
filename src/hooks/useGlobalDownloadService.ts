@@ -23,6 +23,7 @@ interface DownloadQueueItem {
 
 const PRIORITY_STATION_BOOST = 100;
 const PRIORITY_SEQUENCE_BOOST = 200; // Higher than station boost - sequence stations are critical
+const PRIORITY_GRADE_BOOST = 500; // Highest priority — song is selected for the on-air grade
 const DELAY_NORMAL_MS = 5000; // 5s between normal downloads
 const DELAY_PRIORITY_MS = 2000; // 2s between priority downloads
 
@@ -222,8 +223,8 @@ export function useGlobalDownloadService() {
         console.log(`[DL-SVC] 🗑️ Removido da fila de faltantes após ${item.retryCount + 1} tentativas: ${item.song.artist} - ${item.song.title}`);
       }
 
-      // Dynamic delay: faster for priority downloads
-      const delay = item.priority >= PRIORITY_SEQUENCE_BOOST ? DELAY_PRIORITY_MS : DELAY_NORMAL_MS;
+      // Dynamic delay: fastest for grade songs, fast for sequence, normal for others
+      const delay = item.priority >= PRIORITY_GRADE_BOOST ? 1000 : item.priority >= PRIORITY_SEQUENCE_BOOST ? DELAY_PRIORITY_MS : DELAY_NORMAL_MS;
       await new Promise(resolve => setTimeout(resolve, delay));
     }
 
@@ -298,8 +299,13 @@ export function useGlobalDownloadService() {
         
         const songStationLower = song.station?.toLowerCase() || '';
         
-        // Sequence station boost (highest priority)
-        if (sequenceStationNames.has(songStationLower)) {
+        // Grade-urgent boost (highest priority — song is in the on-air grade)
+        if (song.gradeUrgent) {
+          priority += PRIORITY_GRADE_BOOST;
+          console.log(`[DL-SVC] 🔴 Prioridade GRADE (${song.station}): ${song.artist} - ${song.title}`);
+        }
+        // Sequence station boost
+        else if (sequenceStationNames.has(songStationLower)) {
           priority += PRIORITY_SEQUENCE_BOOST;
           console.log(`[DL-SVC] 🎯 Prioridade SEQUÊNCIA (${song.station}): ${song.artist} - ${song.title}`);
         }
