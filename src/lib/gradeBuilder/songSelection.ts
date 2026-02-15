@@ -160,13 +160,14 @@ export async function selectSongForSlot(
             bestCandidate = candidate;
             stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
           }
-          // Mark as missing for download + carry-over to next block
+          // Mark as missing for priority download (gradeUrgent = true)
           if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
             ctx.addMissingSong({
               id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               title: candidate.title, artist: candidate.artist,
               station: stationName || 'UNKNOWN',
               timestamp: new Date(), status: 'missing', dna: stationStyle,
+              gradeUrgent: true,
             });
           }
           ctx.addCarryOverSong({
@@ -275,6 +276,7 @@ export async function selectSongForSlot(
           title: bestDnaCandidate.title, artist: bestDnaCandidate.artist,
           station: bestDnaCandidate.station || 'DNA',
           timestamp: new Date(), status: 'missing', dna: stationStyle,
+          gradeUrgent: true,
         });
       }
       logs.push({

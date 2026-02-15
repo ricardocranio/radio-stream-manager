@@ -42,6 +42,7 @@ export interface MissingSong {
   timestamp: Date;
   status: 'missing' | 'downloading' | 'downloaded' | 'error';
   dna?: string;
+  gradeUrgent?: boolean; // Song selected for the grade — highest download priority
 }
 
 export interface DownloadHistoryEntry {
