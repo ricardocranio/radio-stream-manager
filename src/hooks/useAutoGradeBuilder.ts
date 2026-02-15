@@ -1133,6 +1133,7 @@ export function useAutoGradeBuilder() {
     let lastBuiltBlock = '';
     let lastSundayBuildHour = -1;
     let saturdayFullDayBuilt = false;
+    let isFirstCycle = true; // Flag to force build on first interval cycle
 
     buildIntervalRef.current = setInterval(() => {
       const { isRunning } = useRadioStore.getState();
@@ -1180,23 +1181,26 @@ export function useAutoGradeBuilder() {
         refreshSundayGrade();
       }
 
-      // Build when within minutesBeforeBlock window
-      const shouldBuild = minutesUntilBlock <= state.minutesBeforeBlock;
+      // Build when within minutesBeforeBlock window OR on first cycle after startup
+      const shouldBuild = minutesUntilBlock <= state.minutesBeforeBlock || isFirstCycle;
       
       if (shouldBuild) {
-        if (lastBuiltBlock !== blockKey) {
+        if (isFirstCycle) {
+          console.log(`[AUTO-GRADE] 🔄 Primeiro ciclo pós-startup: montando bloco ${blockKey} imediatamente (${minutesUntilBlock}min restantes)`);
+          isFirstCycle = false;
+        } else if (lastBuiltBlock !== blockKey) {
           console.log(`[AUTO-GRADE] 🔄 Novo ciclo: atualizando grade para bloco ${blockKey}`);
-          lastBuiltBlock = blockKey;
         } else {
           console.log(`[AUTO-GRADE] 🔄 Regenerando próximo bloco (${minutesUntilBlock}min para ${blockKey})`);
         }
+        lastBuiltBlock = blockKey;
         buildGrade();
       }
     }, 6 * 60 * 1000); // 6 minutos entre ciclos
 
     const { isRunning } = useRadioStore.getState();
     if (isRunning) {
-      console.log(`[AUTO-GRADE] 🚀 Build inicial`);
+      console.log(`[AUTO-GRADE] 🚀 Build inicial imediato (independente do tempo restante)`);
       buildGrade();
 
       // If it's Saturday ≥ 11:00, build Saturday first then Sunday
