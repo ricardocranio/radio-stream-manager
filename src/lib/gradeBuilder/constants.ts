@@ -63,6 +63,7 @@ export const STATION_ABBREVIATIONS: Record<string, string> = {
   '105 FM': '105',
   // Extras comuns
   'Jovem Pan': 'JP',
+  'Jovem Pan Florianópolis': 'JPF',
   'Nativa FM': 'NT',
   'Transamérica': 'TR',
   'Antena 1': 'A1',

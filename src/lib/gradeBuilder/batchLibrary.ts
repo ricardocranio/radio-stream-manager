@@ -17,10 +17,11 @@ const BATCH_CONCURRENCY = 5; // Max parallel Electron IPC calls
  */
 export async function batchFindSongsInLibrary(
   songs: Array<{ artist: string; title: string }>,
-  musicFolders: string[]
+  musicFolders: string[],
+  similarityThreshold?: number
 ): Promise<Map<string, LibraryCheckResult>> {
-  // Web mode: return empty map with a flag-based proxy that assumes all exist
-  if (!isElectronEnv || !window.electronAPI?.findSongMatch) {
+  // Web mode OR threshold disabled (0): assume all songs exist (simulation-like behavior)
+  if (!isElectronEnv || !window.electronAPI?.findSongMatch || similarityThreshold === 0) {
     return new Proxy(new Map<string, LibraryCheckResult>(), {
       get(target, prop) {
         if (prop === 'get') return () => ({ exists: true } as LibraryCheckResult);
@@ -84,10 +85,12 @@ export async function batchFindSongsInLibrary(
 export async function findSongInLibrary(
   artist: string,
   title: string,
-  musicFolders: string[]
+  musicFolders: string[],
+  similarityThreshold?: number
 ): Promise<LibraryCheckResult> {
-  if (!isElectronEnv || !window.electronAPI?.findSongMatch) {
-    return { exists: true }; // Web mode: assume exists
+  // Web mode OR threshold disabled (0): assume exists (simulation-like behavior)
+  if (!isElectronEnv || !window.electronAPI?.findSongMatch || similarityThreshold === 0) {
+    return { exists: true }; // Assume exists
   }
   
   try {
