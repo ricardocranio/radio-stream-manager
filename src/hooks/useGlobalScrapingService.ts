@@ -111,6 +111,16 @@ export function useGlobalScrapingService(
       );
     };
 
+    // Helper: check if song matches any forbidden/funk words
+    const isSongForbidden = (artist: string, title: string): boolean => {
+      const combined = `${artist} ${title}`.toLowerCase();
+      const allForbidden = [
+        ...(config.forbiddenWords || []),
+        ...(config.funkWords || []),
+      ];
+      return allForbidden.some(word => word && combined.includes(word.toLowerCase().trim()));
+    };
+
     const processSong = async (
       songTitle: string,
       songArtist: string,
@@ -121,6 +131,12 @@ export function useGlobalScrapingService(
     ) => {
       const alreadyProcessedForStation = isSongAlreadyProcessedForStation(songArtist, songTitle, stationName);
       if (alreadyProcessedForStation) {
+        return { isNew: false, isMissing: false };
+      }
+
+      // Block songs matching forbidden/funk words
+      if (isSongForbidden(songArtist, songTitle)) {
+        console.log(`[SCRAPE-SVC] 🚫 Blocked: ${songArtist} - ${songTitle}`);
         return { isNew: false, isMissing: false };
       }
       
@@ -308,11 +324,27 @@ export function useGlobalScrapingService(
       );
     };
 
+    // Helper: check if song matches any forbidden/funk words
+    const isSongForbidden = (artist: string, title: string): boolean => {
+      const combined = `${artist} ${title}`.toLowerCase();
+      const allForbidden = [
+        ...(config.forbiddenWords || []),
+        ...(config.funkWords || []),
+      ];
+      return allForbidden.some(word => word && combined.includes(word.toLowerCase().trim()));
+    };
+
     const processSong = async (
       songTitle: string, songArtist: string, stationName: string,
       stationStyle: string, scrapeUrl: string, timestamp: Date = new Date()
     ) => {
       if (isSongAlreadyProcessedForStation(songArtist, songTitle, stationName)) {
+        return { isNew: false, isMissing: false };
+      }
+
+      // Block songs matching forbidden/funk words
+      if (isSongForbidden(songArtist, songTitle)) {
+        console.log(`[SCRAPE-SVC] 🚫 Blocked: ${songArtist} - ${songTitle}`);
         return { isNew: false, isMissing: false };
       }
       const processKey = `${stationName.toLowerCase().trim()}|${songArtist.toLowerCase().trim()}|${songTitle.toLowerCase().trim()}`;
