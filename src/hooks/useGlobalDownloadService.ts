@@ -180,7 +180,13 @@ export function useGlobalDownloadService() {
     setState(prev => ({ ...prev, isProcessing: true }));
     useAutoDownloadStore.getState().setIsProcessing(true);
 
+    let iterationCount = 0;
     while (downloadQueueRef.current.length > 0) {
+      // Yield to event loop every 3 iterations to prevent UI freezing
+      if (++iterationCount % 3 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
       const currentState = useRadioStore.getState();
       
       if (!currentState.isRunning) {
@@ -197,8 +203,11 @@ export function useGlobalDownloadService() {
       downloadQueueRef.current.sort((a, b) => b.priority - a.priority);
 
       const item = downloadQueueRef.current.shift();
-      setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
-      useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
+      // Throttle state updates: only update every 3 iterations or on last item
+      if (iterationCount % 3 === 0 || downloadQueueRef.current.length === 0) {
+        setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
+        useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
+      }
       if (!item) break;
 
       const success = await downloadSong(item.song);
@@ -209,8 +218,6 @@ export function useGlobalDownloadService() {
           retryCount: item.retryCount + 1,
           priority: item.priority,
         });
-        setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
-        useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
       } else if (!success && item.retryCount >= 2) {
         // All retries exhausted: remove from missing list and log the error
         useRadioStore.getState().removeMissingSong(item.song.id);
@@ -342,19 +349,27 @@ export function useGlobalDownloadService() {
     return () => unsubscribe();
   }, []);
 
-  // Reactive: immediately detect new missing songs (no polling delay)
+  // Reactive: detect new missing songs with debounce to prevent cascading triggers
   useEffect(() => {
     let prevCount = useRadioStore.getState().missingSongs.filter(s => s.status === 'missing').length;
+    let debounceTimer: NodeJS.Timeout | null = null;
     const unsubscribe = useRadioStore.subscribe((state) => {
       const currentCount = state.missingSongs.filter(s => s.status === 'missing').length;
       if (currentCount > prevCount && state.isRunning) {
-        // New missing songs detected - trigger immediate queue check
-        console.log(`[DL-SVC] ⚡ Nova faltante detectada (${prevCount} → ${currentCount}), verificação imediata`);
-        checkNewMissingSongs();
+        // Debounce: wait 500ms before triggering to batch rapid additions (e.g. during grade building)
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          console.log(`[DL-SVC] ⚡ Novas faltantes detectadas (${prevCount} → ${currentCount}), verificação`);
+          prevCount = currentCount;
+          checkNewMissingSongs();
+        }, 500);
       }
       prevCount = currentCount;
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
   }, [checkNewMissingSongs]);
 
   /** Start the download check interval. Returns cleanup function. */

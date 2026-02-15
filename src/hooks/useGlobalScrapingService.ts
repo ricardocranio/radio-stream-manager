@@ -146,15 +146,14 @@ export function useGlobalScrapingService(
       let existsInLibrary = false;
       if (isElectron && config.musicFolders?.length > 0) {
         try {
-          const result = await checkSongInLibrary(
-            songArtist,
-            songTitle,
-            config.musicFolders,
-            config.similarityThreshold || 0.75
-          );
+          // Timeout guard: abort library check after 10s to prevent hanging on network drives
+          const result = await Promise.race([
+            checkSongInLibrary(songArtist, songTitle, config.musicFolders, config.similarityThreshold || 0.75),
+            new Promise<{ exists: false }>((_, reject) => setTimeout(() => reject(new Error('Library check timeout (10s)')), 10000)),
+          ]);
           existsInLibrary = result.exists;
         } catch (error) {
-          console.error('[SCRAPE-SVC] Library check failed:', error);
+          console.error('[SCRAPE-SVC] Library check failed/timeout:', error);
         }
       }
 
@@ -353,10 +352,13 @@ export function useGlobalScrapingService(
       let existsInLibrary = false;
       if (isElectron && config.musicFolders?.length > 0) {
         try {
-          const result = await checkSongInLibrary(songArtist, songTitle, config.musicFolders, config.similarityThreshold || 0.75);
+          const result = await Promise.race([
+            checkSongInLibrary(songArtist, songTitle, config.musicFolders, config.similarityThreshold || 0.75),
+            new Promise<{ exists: false }>((_, reject) => setTimeout(() => reject(new Error('Library check timeout (10s)')), 10000)),
+          ]);
           existsInLibrary = result.exists;
         } catch (error) {
-          console.error('[SCRAPE-SVC] Library check failed:', error);
+          console.error('[SCRAPE-SVC] Library check failed/timeout:', error);
         }
       }
 

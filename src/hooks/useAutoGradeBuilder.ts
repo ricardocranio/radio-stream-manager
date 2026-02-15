@@ -726,10 +726,13 @@ export function useAutoGradeBuilder() {
       for (let hour = 0; hour < 24; hour++) {
         for (const minute of [0, 30]) {
           const blockTimeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-          setState(prev => ({
-            ...prev, currentProcessingBlock: blockTimeStr,
-            currentProcessingSong: `Processando bloco ${blockTimeStr}...`,
-          }));
+          // Throttle UI updates: only update every 4 blocks to reduce render pressure
+          if (blockCount % 4 === 0) {
+            setState(prev => ({
+              ...prev, currentProcessingBlock: blockTimeStr,
+              currentProcessingSong: `Processando bloco ${blockTimeStr}...`,
+            }));
+          }
 
           // Inject carry-over songs from previous block into the ref
           if (fullDayCarryOver.length > 0) {
@@ -752,12 +755,14 @@ export function useAutoGradeBuilder() {
           );
           fullDayCarryOver.push(...newCarryOvers);
 
-          const lastLog = result.logs.filter(l => l.type === 'used' || l.type === 'substituted').pop();
-          setState(prev => ({
-            ...prev, fullDayProgress: blockCount,
-            skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
-            currentProcessingSong: lastLog ? `${lastLog.artist} - ${lastLog.title}` : 'Processando...',
-          }));
+          // Throttle progress updates: every 4 blocks
+          if (blockCount % 4 === 0 || blockCount === 48) {
+            setState(prev => ({
+              ...prev, fullDayProgress: blockCount,
+              skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
+              currentProcessingSong: `Bloco ${blockCount}/48`,
+            }));
+          }
 
           // Progressive save every 4 blocks
           if (blockCount % 4 === 0 || blockCount === 48) {
