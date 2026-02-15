@@ -51,6 +51,11 @@ export const knownStations: Record<string, StationConfig> = {
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-jovem-pan-fm-sao-paulo-485604/',
     aliases: ['JP', 'Jovem Pan FM', 'Pan'],
   },
+  'Jovem Pan Florianópolis': {
+    name: 'Jovem Pan Florianópolis',
+    scrapeUrl: 'https://mytuner-radio.com/pt/radio/jovem-pan-fm-florianopolis-421197/',
+    aliases: ['JP Floripa', 'Jovem Pan Floripa', 'Pan Florianópolis'],
+  },
   'Mix FM': {
     name: 'Mix FM',
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/mix-fm-sao-paulo-485616/',
