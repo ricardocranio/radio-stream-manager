@@ -275,7 +275,7 @@ const defaultSequence: SequenceConfig[] = [
 
 // V21 System Config
 const defaultConfig: SystemConfig = {
-  musicFolders: ['C:\\Users\\Radio\\Music\\PGM-FM', 'C:\\Playlist\\Músicas'],
+  musicFolders: ['C:\\Users\\Radio\\Music\\PGM-FM', 'C:\\Playlist\\Músicas', 'C:\\Playlist\\Downloads'],
   gradeFolder: 'C:\\Playlist\\pgm\\Grades',
   contentFolder: 'G:\\Outros computadores\\Meu computador\\Conteudos KF',
   rankingFile: 'C:\\Playlist\\pgm\\Grades\\ranking_sucessos.json',
