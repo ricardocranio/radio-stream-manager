@@ -47,8 +47,8 @@ export const WEEKDAY_KEYS: WeekDay[] = ['seg', 'ter', 'qua', 'qui', 'sex'];
 
 export const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
 
-/** Short abbreviation map for station names (used in UI badges) */
-export const STATION_ABBREVIATIONS: Record<string, string> = {
+/** Manual overrides for station abbreviations (used in UI badges) */
+const STATION_ABBREVIATION_OVERRIDES: Record<string, string> = {
   'BH FM': 'BH',
   'Band FM': 'BD',
   'Clube FM': 'CL',
@@ -60,38 +60,42 @@ export const STATION_ABBREVIATIONS: Record<string, string> = {
   'Metropolitana FM': 'MT',
   'Energia 97': 'EN',
   'Positividade FM': 'PV',
-  '105 FM': '105',
-  // Extras comuns
-  'Jovem Pan': 'JP',
-  'Jovem Pan Florianópolis': 'JPF',
-  'Nativa FM': 'NT',
-  'Transamérica': 'TR',
-  'Antena 1': 'A1',
-  'Disney FM': 'DS',
   'Rádio Disney': 'DS',
-  'Alpha FM': 'AL',
-  'Kiss FM': 'KS',
-  'Nova Brasil FM': 'NB',
-  'Tupi FM': 'TP',
-  'Cidade FM': 'CD',
-  'Sara Brasil FM': 'SB',
-  'CBN': 'CBN',
-  'JB FM': 'JB',
-  'Roquette Pinto': 'RP',
-  'FM O Dia': 'OD',
+  'Disney FM': 'DS',
   'Super Rádio Tupi': 'ST',
-  'Rádio Nacional': 'RN',
-  'Cultura FM': 'CT',
-  'Gazeta FM': 'GZ',
-  'Itatiaia': 'IT',
-  'Rádio Globo SP': 'GS',
-  'Paradiso FM': 'PD',
-  'Massa FM': 'MS',
-  'Mais FM': 'MF',
+  'FM O Dia': 'OD',
   'Rede Aleluia': 'RA',
 };
 
-/** Get short abbreviation for a station name */
+/** Auto-generate a short abbreviation from a station name */
+function generateAbbreviation(name: string): string {
+  // Remove common suffixes/prefixes
+  const cleaned = name
+    .replace(/\b(FM|AM|Rádio|Radio)\b/gi, '')
+    .trim();
+
+  // Split into significant words
+  const words = cleaned.split(/\s+/).filter(w => w.length > 0);
+
+  if (words.length === 0) return name.substring(0, 2).toUpperCase();
+
+  // Single word: take first 2-3 chars
+  if (words.length === 1) {
+    const w = words[0];
+    // If it's a number (e.g. "105"), keep it
+    if (/^\d+$/.test(w)) return w;
+    return w.substring(0, 2).toUpperCase();
+  }
+
+  // Multiple words: take first letter of each (up to 3)
+  return words
+    .slice(0, 3)
+    .map(w => w[0])
+    .join('')
+    .toUpperCase();
+}
+
+/** Get short abbreviation for a station name (auto-generated with manual overrides) */
 export function getStationAbbreviation(stationName: string): string {
-  return STATION_ABBREVIATIONS[stationName] || stationName.substring(0, 2).toUpperCase();
+  return STATION_ABBREVIATION_OVERRIDES[stationName] || generateAbbreviation(stationName);
 }
