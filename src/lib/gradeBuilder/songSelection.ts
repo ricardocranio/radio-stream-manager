@@ -125,10 +125,12 @@ export async function selectSongForSlot(
   }
 
   // PRIORITY 1: Station pool — STRICT: only songs from this station
+  // If song doesn't exist in library, USE IT ANYWAY and trigger priority download
   if (!selectedSong) {
     let startIndex = stationSongIndex[stationName] || 0;
     let checkedCount = 0;
     let libraryCheckCount = 0;
+    let bestCandidate: SongEntry | null = null; // Best song even if not in library
     
     if (!stationSongs || stationSongs.length === 0) {
       console.warn(`[SONG-SELECT] ⚠️ Nenhuma música no pool para estação "${stationName}" (radioSource: ${seq.radioSource})`);
@@ -153,6 +155,11 @@ export async function selectSongForSlot(
           stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
           break;
         } else {
+          // Track the FIRST valid candidate even if not in library (for grade-priority download)
+          if (!bestCandidate) {
+            bestCandidate = candidate;
+            stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
+          }
           // Mark as missing for download + carry-over to next block
           if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
             ctx.addMissingSong({
@@ -170,6 +177,20 @@ export async function selectSongForSlot(
         }
       }
       checkedCount++;
+    }
+    
+    // If no song found in library but we have a valid candidate, USE IT ANYWAY
+    // This makes the grade match the simulation and triggers priority download
+    if (!selectedSong && bestCandidate) {
+      const expectedFilename = sanitizeFilename(`${bestCandidate.artist} - ${bestCandidate.title}.mp3`);
+      selectedSong = { ...bestCandidate, filename: expectedFilename, existsInLibrary: false };
+      console.log(`[SONG-SELECT] 📥 ${stationName}: Usando "${bestCandidate.artist} - ${bestCandidate.title}" na grade (download prioritário pendente)`);
+      logs.push({
+        blockTime: timeStr, type: 'used',
+        title: bestCandidate.title, artist: bestCandidate.artist,
+        station: bestCandidate.station, style: bestCandidate.style,
+        reason: `📥 Grade-priority download (${stationName})`,
+      });
     }
     
     if (!selectedSong && libraryCheckCount > 0) {
@@ -213,6 +234,7 @@ export async function selectSongForSlot(
       usedArtistsInBlock,
     );
 
+    let bestDnaCandidate: typeof dnaCandidates[0] | null = null;
     for (const candidate of dnaCandidates) {
       if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
 
@@ -235,7 +257,35 @@ export async function selectSongForSlot(
         });
         stats.substituted++;
         return `"${correctFilename}"`;
+      } else if (!bestDnaCandidate) {
+        bestDnaCandidate = candidate;
       }
+    }
+
+    // If no DNA song in library but we have a candidate, use it and trigger download
+    if (bestDnaCandidate) {
+      const expectedFilename = sanitizeFilename(`${bestDnaCandidate.artist} - ${bestDnaCandidate.title}.mp3`);
+      const key = `${bestDnaCandidate.title.toLowerCase()}-${bestDnaCandidate.artist.toLowerCase()}`;
+      usedInBlock.add(key);
+      usedArtistsInBlock.add(bestDnaCandidate.artist.toLowerCase().trim());
+      ctx.markSongAsUsed(bestDnaCandidate.title, bestDnaCandidate.artist, timeStr);
+      if (!ctx.isSongAlreadyMissing(bestDnaCandidate.artist, bestDnaCandidate.title)) {
+        ctx.addMissingSong({
+          id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          title: bestDnaCandidate.title, artist: bestDnaCandidate.artist,
+          station: bestDnaCandidate.station || 'DNA',
+          timestamp: new Date(), status: 'missing', dna: stationStyle,
+        });
+      }
+      logs.push({
+        blockTime: timeStr, type: 'substituted',
+        title: bestDnaCandidate.title, artist: bestDnaCandidate.artist,
+        station: bestDnaCandidate.station, style: bestDnaCandidate.style,
+        reason: `📥🧬 DNA download prioritário (via ${bestDnaCandidate.station})`,
+        substituteFor: stationName || seq.radioSource,
+      });
+      stats.substituted++;
+      return `"${expectedFilename}"`;
     }
   }
 
