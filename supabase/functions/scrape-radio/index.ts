@@ -19,182 +19,149 @@ interface RadioScrapeResult {
   scrapedAt?: string;
 }
 
-// Allowed domains for radio scraping (security: prevent SSRF)
-const ALLOWED_DOMAINS = [
-  'mytuner-radio.com',
-  'www.mytuner-radio.com',
-];
-
-// Validate URL to prevent SSRF attacks
-function isValidRadioUrl(urlString: string): { valid: boolean; error?: string } {
-  try {
-    const url = new URL(urlString);
-    if (!['http:', 'https:'].includes(url.protocol)) {
-      return { valid: false, error: 'Invalid URL protocol' };
-    }
-    const hostname = url.hostname.toLowerCase();
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') {
-      return { valid: false, error: 'Invalid URL' };
-    }
-    if (hostname.startsWith('192.168.') || hostname.startsWith('10.') || hostname.startsWith('169.254.')) {
-      return { valid: false, error: 'Invalid URL' };
-    }
-    if (hostname.startsWith('172.')) {
-      const parts = hostname.split('.');
-      const second = parseInt(parts[1]);
-      if (!isNaN(second) && second >= 16 && second <= 31) {
-        return { valid: false, error: 'Invalid URL' };
-      }
-    }
-    const isAllowedDomain = ALLOWED_DOMAINS.some(domain =>
-      hostname === domain || hostname.endsWith('.' + domain)
-    );
-    if (!isAllowedDomain) {
-      return { valid: false, error: 'Domain not supported' };
-    }
-    if (urlString.length > 500) {
-      return { valid: false, error: 'URL too long' };
-    }
-    return { valid: true };
-  } catch {
-    return { valid: false, error: 'Invalid URL format' };
-  }
-}
-
 function sanitizeStationName(name: string): string {
   if (!name || typeof name !== 'string') return 'Unknown';
   return name.slice(0, 100).replace(/[<>'"&\\]/g, '').trim() || 'Unknown';
 }
 
-// Decode HTML entities
-function decodeHtmlEntities(text: string): string {
-  return text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .replace(/&#39;/g, "'");
-}
-
-// Clean text for song title/artist
 function cleanText(text: string): string {
   if (!text) return '';
-  return decodeHtmlEntities(text).replace(/\s+/g, ' ').trim();
+  return text.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&#x27;/g, "'").replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
 }
 
-// Validate if text looks like a valid song part
 function isValidSongPart(text: string): boolean {
   if (!text || text.length < 2 || text.length > 150) return false;
   const alphaCount = (text.match(/[a-zA-ZÀ-ÿ]/g) || []).length;
-  if (alphaCount < text.length * 0.3) return false;
-  return true;
+  return alphaCount >= text.length * 0.3;
 }
 
-// Extract song info from a single history-song HTML block
-function extractSongFromEntry(entry: string): { title: string; artist: string } | null {
-  // Try span-based extraction
-  const songNameMatch = entry.match(/<span[^>]*class="song-name"[^>]*>[\s\S]*?<p>([^<]+)<\/p>/i);
-  const artistNameMatch = entry.match(/<span[^>]*class="artist-name"[^>]*>([^<]+)<\/span>/i);
-  if (songNameMatch && artistNameMatch) {
-    const title = cleanText(songNameMatch[1]);
-    const artist = cleanText(artistNameMatch[1]);
-    if (isValidSongPart(title) && isValidSongPart(artist)) return { title, artist };
-  }
-  // Fallback: img alt text "Artist - Title"
-  const altMatch = entry.match(/<img[^>]*alt="([^"]+)"[^>]*>/i);
-  if (altMatch) {
-    const altText = decodeHtmlEntities(altMatch[1]);
-    const dashParts = altText.match(/^(.+?)\s*[-–]\s*(.+)$/);
-    if (dashParts) {
-      const artist = cleanText(dashParts[1]);
-      const title = cleanText(dashParts[2]);
-      if (isValidSongPart(title) && isValidSongPart(artist)) return { title, artist };
+// Parse ICY metadata string: "StreamTitle='Artist - Title';StreamUrl='';"
+function parseIcyMetadata(raw: string): { artist: string; title: string } | null {
+  const titleMatch = raw.match(/StreamTitle='([^']*(?:''[^']*)*)'/);
+  if (!titleMatch) return null;
+
+  const streamTitle = titleMatch[1].replace(/''/g, "'").trim();
+  if (!streamTitle || streamTitle.length < 3) return null;
+
+  // Try "Artist - Title" format
+  const dashMatch = streamTitle.match(/^(.+?)\s*[-–—]\s*(.+)$/);
+  if (dashMatch) {
+    const artist = cleanText(dashMatch[1]);
+    const title = cleanText(dashMatch[2]);
+    if (isValidSongPart(artist) && isValidSongPart(title)) {
+      return { artist, title };
     }
   }
+
+  // Fallback: entire string as title
   return null;
 }
 
-// Parse HTML directly — no Firecrawl needed
-function parseMyTunerHtml(html: string, stationName: string): { nowPlaying?: ScrapedSong; recentSongs: ScrapedSong[] } {
-  let nowPlaying: ScrapedSong | undefined;
-  const recentSongs: ScrapedSong[] = [];
-  const now = new Date().toISOString();
-  const seen = new Set<string>();
+// Fetch ICY metadata from an audio stream URL
+async function fetchIcyMetadata(
+  streamUrl: string,
+  stationName: string,
+  timeout = 10000
+): Promise<{ success: boolean; song?: { artist: string; title: string }; error?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-  // Find ALL history-song entries globally — handle both with and without <a> wrapper
-  const allEntries = html.match(/<div[^>]*class="history-song"[^>]*>[\s\S]*?<\/span>\s*<\/div>\s*(?:<\/a>\s*)?<\/div>/gi) || [];
-  console.log(`[${stationName}] Found ${allEntries.length} history-song entries`);
-
-  for (let i = 0; i < allEntries.length && i < 8; i++) {
-    const extracted = extractSongFromEntry(allEntries[i]);
-    if (!extracted) continue;
-    const key = `${extracted.title.toLowerCase()}|${extracted.artist.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    const isLive = allEntries[i].includes('live-song') || allEntries[i].includes('>LIVE<');
-    if (!nowPlaying && (i === 0 || isLive)) {
-      nowPlaying = { title: extracted.title, artist: extracted.artist, timestamp: now };
-    } else {
-      recentSongs.push({ title: extracted.title, artist: extracted.artist, timestamp: now });
-    }
-  }
-
-  // Fallback: if no history-song divs found, try img alt text with height="100" (song artwork images)
-  if (!nowPlaying && allEntries.length === 0) {
-    const imgMatches = html.match(/<img[^>]*alt="([^"]{5,})"[^>]*height="100"[^>]*>/gi) || [];
-    for (const imgTag of imgMatches.slice(0, 6)) {
-      const altMatch = imgTag.match(/alt="([^"]+)"/i);
-      if (!altMatch) continue;
-      const altText = decodeHtmlEntities(altMatch[1]);
-      if (altText.match(/^(Rádio|Play|Pause|Error|Volume|Like|Dislike|Favorite|star|Bars|Playlist)/i)) continue;
-      const dashParts = altText.match(/^(.+?)\s*[-–]\s*(.+)$/);
-      if (!dashParts) continue;
-      const artist = cleanText(dashParts[1]);
-      const title = cleanText(dashParts[2]);
-      if (!isValidSongPart(title) || !isValidSongPart(artist)) continue;
-      const key = `${title.toLowerCase()}|${artist.toLowerCase()}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (!nowPlaying) {
-        nowPlaying = { title, artist, timestamp: now };
-      } else {
-        recentSongs.push({ title, artist, timestamp: now });
-      }
-    }
-  }
-
-  return { nowPlaying, recentSongs };
-}
-
-// Fetch HTML directly from MyTuner Radio (no Firecrawl needed!)
-async function fetchRadioHtml(url: string, timeout = 15000): Promise<{ success: boolean; html?: string; error?: string }> {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-    const response = await fetch(url, {
+    const response = await fetch(streamUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+        'Icy-MetaData': '1',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) RadioMonitor/1.0',
+        'Accept': '*/*',
       },
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      return { success: false, error: `HTTP ${response.status}` };
+    // Get the metadata interval from response headers
+    const icyMetaint = parseInt(response.headers.get('icy-metaint') || '0', 10);
+    
+    if (!icyMetaint || !response.body) {
+      // No ICY metadata support - try to get info from icy-name, icy-description headers
+      const icyName = response.headers.get('icy-name');
+      const icyDesc = response.headers.get('icy-description');
+      console.log(`[${stationName}] No icy-metaint. Headers: icy-name=${icyName}, icy-desc=${icyDesc}`);
+      
+      // Must consume the body to avoid resource leak
+      if (response.body) {
+        await response.body.cancel();
+      }
+      return { success: false, error: 'Stream does not support ICY metadata' };
     }
 
-    const html = await response.text();
-    return { success: true, html };
+    console.log(`[${stationName}] icy-metaint: ${icyMetaint}`);
+
+    // Read the stream until we find metadata
+    const reader = response.body.getReader();
+    let bytesRead = 0;
+    const maxBytes = icyMetaint + 4096 + 256; // Read one interval + metadata block
+    const buffer = new Uint8Array(maxBytes);
+    let bufferOffset = 0;
+
+    try {
+      while (bufferOffset < maxBytes) {
+        const { done, value } = await reader.read();
+        if (done || !value) break;
+
+        const remaining = maxBytes - bufferOffset;
+        const toCopy = Math.min(value.length, remaining);
+        buffer.set(value.subarray(0, toCopy), bufferOffset);
+        bufferOffset += toCopy;
+
+        if (bufferOffset >= icyMetaint + 1) {
+          // We have enough data to check for metadata
+          break;
+        }
+      }
+    } finally {
+      reader.cancel();
+    }
+
+    // Parse ICY metadata from the buffer
+    // After icyMetaint bytes of audio, there's 1 byte indicating metadata length * 16
+    if (bufferOffset > icyMetaint) {
+      const metaLength = buffer[icyMetaint] * 16;
+      if (metaLength > 0 && bufferOffset >= icyMetaint + 1 + metaLength) {
+        const metaBytes = buffer.slice(icyMetaint + 1, icyMetaint + 1 + metaLength);
+        const metaString = new TextDecoder('utf-8').decode(metaBytes).replace(/\0+$/, '');
+        console.log(`[${stationName}] ICY metadata: "${metaString}"`);
+
+        const parsed = parseIcyMetadata(metaString);
+        if (parsed) {
+          return { success: true, song: parsed };
+        } else {
+          return { success: false, error: `Could not parse: "${metaString}"` };
+        }
+      } else if (metaLength === 0) {
+        return { success: false, error: 'Metadata block is empty (stream between songs)' };
+      }
+    }
+
+    return { success: false, error: 'Not enough data read from stream' };
   } catch (error) {
+    clearTimeout(timeoutId);
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return { success: false, error: msg.includes('abort') ? 'Timeout' : msg };
+  }
+}
+
+// Validate stream URL (allow common streaming domains)
+function isValidStreamUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    if (!['http:', 'https:'].includes(url.protocol)) return false;
+    const hostname = url.hostname.toLowerCase();
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') return false;
+    if (hostname.startsWith('192.168.') || hostname.startsWith('10.') || hostname.startsWith('169.254.')) return false;
+    if (urlString.length > 500) return false;
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -205,93 +172,66 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { stationUrl, stationName } = body;
-
-    if (!stationUrl || typeof stationUrl !== 'string') {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Station URL is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    let formattedUrl = stationUrl.trim();
-    if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
-      formattedUrl = `https://${formattedUrl}`;
-    }
-
-    const urlValidation = isValidRadioUrl(formattedUrl);
-    if (!urlValidation.valid) {
-      return new Response(
-        JSON.stringify({ success: false, error: urlValidation.error || 'Invalid URL' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const { stationUrl, stationName, streamUrl } = body;
 
     const safeName = sanitizeStationName(stationName);
-    console.log(`[${safeName}] Fetching HTML: ${formattedUrl}`);
+    const now = new Date().toISOString();
 
-    // Try primary URL
-    let fetchResult = await fetchRadioHtml(formattedUrl);
+    // Prefer streamUrl (ICY metadata) over stationUrl (MyTuner HTML scraping)
+    if (streamUrl && typeof streamUrl === 'string') {
+      let formattedStreamUrl = streamUrl.trim();
+      if (!formattedStreamUrl.startsWith('http://') && !formattedStreamUrl.startsWith('https://')) {
+        formattedStreamUrl = `https://${formattedStreamUrl}`;
+      }
 
-    // Fallback: try without /pt/
-    if (!fetchResult.success && formattedUrl.includes('/pt/')) {
-      const altUrl = formattedUrl.replace('/pt/', '/');
-      console.log(`[${safeName}] Retrying without /pt/: ${altUrl}`);
-      fetchResult = await fetchRadioHtml(altUrl);
-    }
+      if (!isValidStreamUrl(formattedStreamUrl)) {
+        return new Response(
+          JSON.stringify({ success: false, stationName: safeName, error: 'Invalid stream URL', scrapedAt: now }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
-    if (!fetchResult.success || !fetchResult.html) {
+      console.log(`[${safeName}] Fetching ICY metadata from stream: ${formattedStreamUrl}`);
+      const icyResult = await fetchIcyMetadata(formattedStreamUrl, safeName);
+
+      if (icyResult.success && icyResult.song) {
+        const result: RadioScrapeResult = {
+          success: true,
+          stationName: safeName,
+          nowPlaying: { title: icyResult.song.title, artist: icyResult.song.artist, timestamp: now },
+          recentSongs: [],
+          source: 'icy-metadata',
+          scrapedAt: now,
+        };
+        console.log(`[${safeName}] ✓ ICY: ${icyResult.song.artist} - ${icyResult.song.title}`);
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.warn(`[${safeName}] ✗ ICY failed: ${icyResult.error}`);
+      // Fall through to error response (no MyTuner fallback since it doesn't work without JS)
       return new Response(
         JSON.stringify({
           success: false,
           stationName: safeName,
-          error: fetchResult.error || 'Failed to fetch station page',
-          scrapedAt: new Date().toISOString(),
+          error: icyResult.error || 'No metadata from stream',
+          source: 'icy-metadata',
+          scrapedAt: now,
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Extract radio ID
-    const radioIdMatch = fetchResult.html.match(/data-radio-id="(\d+)"/);
-    const radioId = radioIdMatch ? radioIdMatch[1] : null;
-    
-    // Find DG class - try broader search
-    const dgFuncIdx = fetchResult.html.indexOf('function DG');
-    const dgVarIdx = fetchResult.html.indexOf('DG = function');
-    const dgClassIdx = fetchResult.html.indexOf('class DG');
-    console.log(`[${safeName}] DG search: function=${dgFuncIdx}, var=${dgVarIdx}, class=${dgClassIdx}`);
-    
-    if (dgFuncIdx >= 0) {
-      console.log(`[${safeName}] DG def: ${fetchResult.html.substring(dgFuncIdx, dgFuncIdx + 1000)}`);
-    } else if (dgVarIdx >= 0) {
-      console.log(`[${safeName}] DG def: ${fetchResult.html.substring(dgVarIdx, dgVarIdx + 1000)}`);
-    } else {
-      // DG might be in an external JS file - find script srcs
-      const scriptSrcs = fetchResult.html.match(/src="([^"]*\.js[^"]*)"/gi) || [];
-      console.log(`[${safeName}] External JS files: ${scriptSrcs.slice(0, 10).join(' | ')}`);
-    }
-    
-    const parsed = parseMyTunerHtml(fetchResult.html, safeName);
-
-    const result: RadioScrapeResult = {
-      success: !!parsed.nowPlaying,
-      stationName: safeName,
-      nowPlaying: parsed.nowPlaying,
-      recentSongs: parsed.recentSongs,
-      source: 'direct-fetch',
-      scrapedAt: new Date().toISOString(),
-    };
-
-    if (parsed.nowPlaying) {
-      console.log(`[${safeName}] ✓ ${parsed.nowPlaying.artist} - ${parsed.nowPlaying.title} (+${parsed.recentSongs.length} recent)`);
-    } else {
-      console.warn(`[${safeName}] ✗ No song data found in HTML (${fetchResult.html.length} bytes)`);
-    }
-
+    // Legacy fallback: if no streamUrl, return error directing to configure stream_url
     return new Response(
-      JSON.stringify(result),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({
+        success: false,
+        stationName: safeName,
+        error: 'No stream URL configured. Add stream_url to the station.',
+        scrapedAt: now,
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error scraping radio:', error);

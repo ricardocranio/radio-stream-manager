@@ -26,6 +26,7 @@ export type Database = {
           monitoring_week_days: string[] | null
           name: string
           scrape_url: string
+          stream_url: string | null
           styles: string[] | null
           updated_at: string
         }
@@ -40,6 +41,7 @@ export type Database = {
           monitoring_week_days?: string[] | null
           name: string
           scrape_url: string
+          stream_url?: string | null
           styles?: string[] | null
           updated_at?: string
         }
@@ -54,6 +56,7 @@ export type Database = {
           monitoring_week_days?: string[] | null
           name?: string
           scrape_url?: string
+          stream_url?: string | null
           styles?: string[] | null
           updated_at?: string
         }
