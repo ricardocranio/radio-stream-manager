@@ -27,6 +27,11 @@ export async function batchFindSongsInLibrary(
         if (prop === 'get') return () => ({ exists: true } as LibraryCheckResult);
         if (prop === 'has') return () => true;
         if (prop === 'size') return 0;
+        if (prop === 'entries') return () => [][Symbol.iterator]();
+        if (prop === 'forEach') return () => {};
+        if (prop === 'keys') return () => [][Symbol.iterator]();
+        if (prop === 'values') return () => [][Symbol.iterator]();
+        if (prop === Symbol.iterator) return () => [][Symbol.iterator]();
         return Reflect.get(target, prop);
       }
     });
