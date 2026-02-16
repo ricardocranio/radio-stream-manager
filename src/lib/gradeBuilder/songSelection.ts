@@ -30,6 +30,7 @@ interface SelectionContext {
   freshSongsByStation?: Record<string, SongEntry[]>; // P0.5: songs captured in the last 30min
   dnaProfiles?: DnaProfiles; // DNA profiles for cross-station fallback
   rankingSongKeys?: Set<string>; // P0.75: keys of songs in TOP25 ranking for priority selection
+  forbiddenSongKeys?: Set<string>; // "artist|title" keys of explicitly forbidden songs
   stationSongIndex: Record<string, number>;
   logs: BlockLogItem[];
   stats: BlockStats;
@@ -78,6 +79,22 @@ export async function selectSongForSlot(
     stationSongIndex[stationName] = 0;
   }
 
+  // Helper: check if a song is in the forbidden list
+  const isForbiddenSong = (artist: string, title: string): boolean => {
+    if (!selCtx.forbiddenSongKeys || selCtx.forbiddenSongKeys.size === 0) return false;
+    const normalizedArtist = artist.toLowerCase().trim();
+    const normalizedTitle = title.toLowerCase().trim();
+    const cleanTitle = normalizedTitle.replace(/\s*\(.*?\)\s*/g, '').trim();
+    for (const fbKey of selCtx.forbiddenSongKeys) {
+      const [fbArtist, fbTitle] = fbKey.split('|');
+      const cleanFb = fbTitle.replace(/\s*\(.*?\)\s*/g, '').trim();
+      if (normalizedArtist.includes(fbArtist) && (normalizedTitle.includes(cleanFb) || cleanTitle.includes(cleanFb))) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   let selectedSong: SongEntry | null = null;
 
   // PRIORITY 0: Carry-over songs (from same station, previously missing, now downloaded)
@@ -85,7 +102,7 @@ export async function selectSongForSlot(
   for (const carryOverSong of carryOverForStation) {
     const key = `${carryOverSong.title.toLowerCase()}-${carryOverSong.artist.toLowerCase()}`;
     const normalizedArtist = carryOverSong.artist.toLowerCase().trim();
-    if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(carryOverSong.title, carryOverSong.artist, timeStr, isFullDay)) {
+    if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !isForbiddenSong(carryOverSong.artist, carryOverSong.title) && !ctx.isRecentlyUsed(carryOverSong.title, carryOverSong.artist, timeStr, isFullDay)) {
       selectedSong = carryOverSong;
       usedInBlock.add(key);
       usedArtistsInBlock.add(normalizedArtist);
@@ -105,7 +122,7 @@ export async function selectSongForSlot(
     for (const freshSong of freshForStation) {
       const key = `${freshSong.title.toLowerCase()}-${freshSong.artist.toLowerCase()}`;
       const normalizedArtist = freshSong.artist.toLowerCase().trim();
-      if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(freshSong.title, freshSong.artist, timeStr, isFullDay)) {
+      if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !isForbiddenSong(freshSong.artist, freshSong.title) && !ctx.isRecentlyUsed(freshSong.title, freshSong.artist, timeStr, isFullDay)) {
         const cacheKey = `${freshSong.artist.toLowerCase().trim()}|${freshSong.title.toLowerCase().trim()}`;
         const libraryResult = selCtx.libraryCache?.get(cacheKey) ?? await ctx.findSongInLibrary(freshSong.artist, freshSong.title);
         if (libraryResult.exists) {
@@ -134,6 +151,7 @@ export async function selectSongForSlot(
       const rankKey = `${candidate.title.toLowerCase().trim()}|${normalizedArtist}`;
       if (!selCtx.rankingSongKeys.has(rankKey)) continue;
       if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+      if (isForbiddenSong(candidate.artist, candidate.title)) continue;
       if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
 
       const cacheKey = `${normalizedArtist}|${candidate.title.toLowerCase().trim()}`;
@@ -196,7 +214,7 @@ export async function selectSongForSlot(
       const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
       const normalizedArtist = candidate.artist.toLowerCase().trim();
       
-      if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
+      if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !isForbiddenSong(candidate.artist, candidate.title) && !ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
         // Use pre-cached library result if available, otherwise fall back to individual check
         const cacheKey = `${candidate.artist.toLowerCase().trim()}|${candidate.title.toLowerCase().trim()}`;
         const libraryResult = selCtx.libraryCache?.get(cacheKey) ?? await ctx.findSongInLibrary(candidate.artist, candidate.title);

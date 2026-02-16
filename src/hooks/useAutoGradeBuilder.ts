@@ -601,11 +601,28 @@ export function useAutoGradeBuilder() {
       console.log(`[AUTO-GRADE] ⭐ ${rankingSongKeys.size} ranking songs available for P0.75 priority`);
     }
 
+    // Build forbidden song keys from config
+    const forbiddenSongKeys = new Set<string>();
+    if (config.forbiddenSongs && config.forbiddenSongs.length > 0) {
+      for (const entry of config.forbiddenSongs) {
+        const parts = entry.split(' - ');
+        if (parts.length >= 2) {
+          const artist = parts[0].toLowerCase().trim();
+          const title = parts.slice(1).join(' - ').toLowerCase().trim();
+          forbiddenSongKeys.add(`${artist}|${title}`);
+        }
+      }
+      if (forbiddenSongKeys.size > 0) {
+        console.log(`[AUTO-GRADE] 🚫 ${forbiddenSongKeys.size} forbidden songs configured`);
+      }
+    }
+
     const selCtx = {
       timeStr, isFullDay, usedInBlock, usedArtistsInBlock,
       songsByStation, allSongsPool, carryOverByStation, freshSongsByStation,
       dnaProfiles,
       rankingSongKeys,
+      forbiddenSongKeys,
       stationSongIndex,
       logs: blockLogs, stats,
       libraryCache, // Pass pre-checked results
