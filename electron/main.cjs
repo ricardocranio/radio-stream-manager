@@ -979,16 +979,34 @@ app.whenReady().then(async () => {
     }
   }
 
-  // Auto-start Radio Monitor in background
+  // Auto-start Radio Monitor: install deps then start
   if (pythonStatus.available) {
-    console.log('[INIT] 🎵 Auto-starting Radio Monitor...');
-    // Start quickly - the Python script handles its own dependency installation
-    setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('radio-monitor-log', '🚀 Iniciando monitor automaticamente...');
+    console.log('[INIT] 🎵 Preparing Radio Monitor...');
+    setTimeout(async () => {
+      try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('radio-monitor-log', '📦 Instalando dependências do monitor...');
+        }
+        
+        const depsOk = await installRadioMonitorDeps();
+        
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('radio-monitor-log', 
+            depsOk ? '✅ Dependências instaladas!' : '⚠️ Algumas dependências falharam, tentando iniciar...'
+          );
+          mainWindow.webContents.send('radio-monitor-log', '🚀 Iniciando monitor automaticamente...');
+        }
+        
+        console.log('[INIT] 🎵 Starting Radio Monitor...');
+        startRadioMonitor();
+      } catch (err) {
+        console.error('[INIT] Radio Monitor startup error:', err);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('radio-monitor-log', '❌ Erro ao iniciar: ' + err.message);
+        }
+        // Try starting anyway - script has its own auto-install
+        startRadioMonitor();
       }
-      console.log('[INIT] 🎵 Starting Radio Monitor...');
-      startRadioMonitor();
     }, 5000);
   } else {
     console.log('[INIT] ⚠️ Radio Monitor skipped - Python not available');
