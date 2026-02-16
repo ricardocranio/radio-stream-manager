@@ -60,6 +60,8 @@ export interface SystemConfig {
   funkWords?: string[];
   // Characters to filter/remove from filenames (user-configurable)
   filterCharacters?: string[];
+  // Forbidden songs — specific "artist - title" entries that must never be used
+  forbiddenSongs?: string[];
   // Performance
   powerSavingMode?: boolean;
   // Similarity threshold for music library matching (0.5 to 0.95)

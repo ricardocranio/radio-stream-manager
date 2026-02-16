@@ -118,7 +118,27 @@ export function useGlobalScrapingService(
         ...(config.forbiddenWords || []),
         ...(config.funkWords || []),
       ];
-      return allForbidden.some(word => word && combined.includes(word.toLowerCase().trim()));
+      if (allForbidden.some(word => word && combined.includes(word.toLowerCase().trim()))) return true;
+      
+      // Check forbidden songs list (exact artist-title match)
+      if (config.forbiddenSongs && config.forbiddenSongs.length > 0) {
+        const normalizedArtist = artist.toLowerCase().trim();
+        const normalizedTitle = title.toLowerCase().trim();
+        for (const entry of config.forbiddenSongs) {
+          const parts = entry.split(' - ');
+          if (parts.length >= 2) {
+            const fbArtist = parts[0].toLowerCase().trim();
+            const fbTitle = parts.slice(1).join(' - ').toLowerCase().trim();
+            // Remove parentheses content for comparison (e.g., "(Ao Vivo)")
+            const cleanTitle = normalizedTitle.replace(/\s*\(.*?\)\s*/g, '').trim();
+            const cleanFbTitle = fbTitle.replace(/\s*\(.*?\)\s*/g, '').trim();
+            if (normalizedArtist.includes(fbArtist) && (normalizedTitle.includes(cleanFbTitle) || cleanTitle.includes(cleanFbTitle))) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
     };
 
     const processSong = async (
