@@ -313,21 +313,40 @@ export function useAutoGradeBuilder() {
       console.log(`[AUTO-GRADE] 🔗 Supabase URL: ${supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : '❌ NÃO CONFIGURADA'}`);
       console.log(`[AUTO-GRADE] 🔑 Supabase Key: ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ? 'OK' : '❌ NÃO CONFIGURADA'}`);
 
-      const { data, error } = await supabase
-        .from('scraped_songs')
-        .select('title, artist, station_name, scraped_at')
-        .gte('scraped_at', windowStart)
-        .lte('scraped_at', windowEnd)
-        .order('scraped_at', { ascending: false })
-        .limit(1500);
+      // Fetch from both scraped_songs (real-time) and radio_historico (acervo) in parallel
+      const [scrapedResult, historicoResult] = await Promise.all([
+        supabase
+          .from('scraped_songs')
+          .select('title, artist, station_name, scraped_at')
+          .gte('scraped_at', windowStart)
+          .lte('scraped_at', windowEnd)
+          .order('scraped_at', { ascending: false })
+          .limit(1500),
+        supabase
+          .from('radio_historico')
+          .select('title, artist, station_name, captured_at')
+          .order('captured_at', { ascending: false })
+          .limit(500),
+      ]);
       
-      console.log(`[AUTO-GRADE] 📊 Supabase retornou: ${data?.length ?? 'null'} registros, erro: ${error ? JSON.stringify(error) : 'nenhum'}`);
-      if (error) throw error;
+      const data = scrapedResult.data || [];
+      const historicoData = (historicoResult.data || []).map(h => ({
+        title: h.title,
+        artist: h.artist,
+        station_name: h.station_name,
+        scraped_at: h.captured_at, // Normalize field name
+      }));
+      
+      // Merge: scraped_songs first (fresher), then radio_historico as supplement
+      const merged = [...data, ...historicoData];
+      
+      console.log(`[AUTO-GRADE] 📊 Supabase: ${data.length} scraped + ${historicoData.length} histórico = ${merged.length} total, erro: ${scrapedResult.error ? JSON.stringify(scrapedResult.error) : 'nenhum'}`);
+      if (scrapedResult.error) throw scrapedResult.error;
 
-      const result = buildSongsByStation(data || [], 100);
+      const result = buildSongsByStation(merged, 100);
       const totalSongs = Object.values(result).reduce((sum, arr) => sum + arr.length, 0);
       if (totalSongs === 0) {
-        console.warn(`[AUTO-GRADE] ⚠️ POOL VAZIO para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')}! Nenhuma música encontrada na janela de 24h. Dados retornados: ${data?.length || 0} registros.`);
+        console.warn(`[AUTO-GRADE] ⚠️ POOL VAZIO para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')}! Nenhuma música encontrada. Dados: ${merged.length} registros.`);
       }
       return result;
     } catch (error) {
@@ -346,20 +365,37 @@ export function useAutoGradeBuilder() {
   const fetchAllRecentSongs = useCallback(async (retryCount = 0): Promise<Record<string, SongEntry[]>> => {
     try {
       console.log(`[AUTO-GRADE] 🌐 fetchAllRecentSongs: Iniciando busca...`);
-      console.log(`[AUTO-GRADE] 🔗 Supabase URL: ${import.meta.env.VITE_SUPABASE_URL ? 'OK' : '❌ NÃO CONFIGURADA'}`);
       
-      const { data, error } = await supabase
-        .from('scraped_songs')
-        .select('title, artist, station_name, scraped_at')
-        .order('scraped_at', { ascending: false })
-        .limit(2000);
+      // Fetch from both sources in parallel
+      const [scrapedResult, historicoResult] = await Promise.all([
+        supabase
+          .from('scraped_songs')
+          .select('title, artist, station_name, scraped_at')
+          .order('scraped_at', { ascending: false })
+          .limit(2000),
+        supabase
+          .from('radio_historico')
+          .select('title, artist, station_name, captured_at')
+          .order('captured_at', { ascending: false })
+          .limit(500),
+      ]);
       
-      console.log(`[AUTO-GRADE] 📊 fetchAllRecentSongs: ${data?.length ?? 'null'} registros, erro: ${error ? JSON.stringify(error) : 'nenhum'}`);
-      if (error) throw error;
-      const result = buildSongsByStation(data || [], 150);
+      const data = scrapedResult.data || [];
+      const historicoData = (historicoResult.data || []).map(h => ({
+        title: h.title,
+        artist: h.artist,
+        station_name: h.station_name,
+        scraped_at: h.captured_at,
+      }));
+      
+      const merged = [...data, ...historicoData];
+      
+      console.log(`[AUTO-GRADE] 📊 fetchAllRecentSongs: ${data.length} scraped + ${historicoData.length} histórico = ${merged.length} total, erro: ${scrapedResult.error ? JSON.stringify(scrapedResult.error) : 'nenhum'}`);
+      if (scrapedResult.error) throw scrapedResult.error;
+      const result = buildSongsByStation(merged, 150);
       const totalSongs = Object.values(result).reduce((sum, arr) => sum + arr.length, 0);
       if (totalSongs === 0) {
-        console.warn(`[AUTO-GRADE] ⚠️ POOL VAZIO no fetchAllRecentSongs! Dados retornados: ${data?.length || 0} registros.`);
+        console.warn(`[AUTO-GRADE] ⚠️ POOL VAZIO no fetchAllRecentSongs! Dados: ${merged.length} registros.`);
       }
       return result;
     } catch (error) {
