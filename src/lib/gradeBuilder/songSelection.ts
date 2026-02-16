@@ -29,6 +29,7 @@ interface SelectionContext {
   carryOverByStation: Record<string, SongEntry[]>;
   freshSongsByStation?: Record<string, SongEntry[]>; // P0.5: songs captured in the last 30min
   dnaProfiles?: DnaProfiles; // DNA profiles for cross-station fallback
+  rankingSongKeys?: Set<string>; // P0.75: keys of songs in TOP25 ranking for priority selection
   stationSongIndex: Record<string, number>;
   logs: BlockLogItem[];
   stats: BlockStats;
@@ -120,6 +121,58 @@ export async function selectSongForSlot(
           });
           break;
         }
+      }
+    }
+  }
+
+  // PRIORITY 0.75: Ranking songs — songs in the TOP25 that belong to the target station
+  // This ensures popular/trending songs get priority in normal blocks
+  if (!selectedSong && selCtx.rankingSongKeys && selCtx.rankingSongKeys.size > 0) {
+    for (const candidate of stationSongs) {
+      const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+      const normalizedArtist = candidate.artist.toLowerCase().trim();
+      const rankKey = `${candidate.title.toLowerCase().trim()}|${normalizedArtist}`;
+      if (!selCtx.rankingSongKeys.has(rankKey)) continue;
+      if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+      if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
+
+      const cacheKey = `${normalizedArtist}|${candidate.title.toLowerCase().trim()}`;
+      const libraryResult = selCtx.libraryCache?.get(cacheKey) ?? await ctx.findSongInLibrary(candidate.artist, candidate.title);
+      if (libraryResult.exists) {
+        const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+        selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+        usedInBlock.add(key);
+        usedArtistsInBlock.add(normalizedArtist);
+        logs.push({
+          blockTime: timeStr, type: 'used',
+          title: candidate.title, artist: candidate.artist,
+          station: candidate.station, style: candidate.style,
+          reason: `⭐ Ranking TOP25 (${stationName})`,
+        });
+        break;
+      } else {
+        // Ranking song not in library — use it anyway and trigger priority download
+        const expectedFilename = sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+        selectedSong = { ...candidate, filename: expectedFilename, existsInLibrary: false };
+        usedInBlock.add(key);
+        usedArtistsInBlock.add(normalizedArtist);
+        if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
+          ctx.addMissingSong({
+            id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            title: candidate.title, artist: candidate.artist,
+            station: stationName || 'UNKNOWN',
+            timestamp: new Date(), status: 'missing', dna: stationStyle,
+            gradeUrgent: true,
+          });
+        }
+        logs.push({
+          blockTime: timeStr, type: 'used',
+          title: candidate.title, artist: candidate.artist,
+          station: candidate.station, style: candidate.style,
+          reason: `⭐📥 Ranking TOP25 + download (${stationName})`,
+        });
+        console.log(`[SONG-SELECT] ⭐ Ranking song "${candidate.artist} - ${candidate.title}" selected for ${stationName} (download pendente)`);
+        break;
       }
     }
   }

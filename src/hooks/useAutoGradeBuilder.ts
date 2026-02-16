@@ -590,10 +590,22 @@ export function useAutoGradeBuilder() {
       console.log(`[AUTO-GRADE] 🧬 DNA profiles built for ${dnaStations} stations (filtered to sequence)`);
     }
 
+    // Build ranking song keys for P0.75 priority (filtered to sequence stations)
+    const rankingSongKeys = new Set<string>();
+    for (const rs of rankingSongs) {
+      if (!rs.station || sequenceStationNames.has(rs.station)) {
+        rankingSongKeys.add(`${rs.title.toLowerCase().trim()}|${rs.artist.toLowerCase().trim()}`);
+      }
+    }
+    if (rankingSongKeys.size > 0) {
+      console.log(`[AUTO-GRADE] ⭐ ${rankingSongKeys.size} ranking songs available for P0.75 priority`);
+    }
+
     const selCtx = {
       timeStr, isFullDay, usedInBlock, usedArtistsInBlock,
       songsByStation, allSongsPool, carryOverByStation, freshSongsByStation,
       dnaProfiles,
+      rankingSongKeys,
       stationSongIndex,
       logs: blockLogs, stats,
       libraryCache, // Pass pre-checked results
