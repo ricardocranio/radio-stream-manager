@@ -189,7 +189,7 @@ export function useGlobalScrapingService(
         source: scrapeUrl,
       });
       
-      addOrUpdateRankingSong(songTitle, songArtist, stationStyle, stationName);
+      // Ranking is now fed from grade generation, not scraping
       
       const alreadyMissing = isSongAlreadyMissing(songArtist, songTitle);
       const alreadyQueued = isSongContentAlreadyQueued(songArtist, songTitle);
@@ -384,7 +384,7 @@ export function useGlobalScrapingService(
 
       const songId = `${stationName}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       addCapturedSong({ id: songId, title: songTitle, artist: songArtist, station: stationName, timestamp, status: existsInLibrary ? 'found' : 'missing', source: scrapeUrl });
-      addOrUpdateRankingSong(songTitle, songArtist, stationStyle, stationName);
+      // Ranking is now fed from grade generation, not scraping
 
       if (!existsInLibrary && !isSongAlreadyMissing(songArtist, songTitle) && !isSongContentAlreadyQueued(songArtist, songTitle) && isElectron) {
         // Only add to Missing if station is in the active sequence
