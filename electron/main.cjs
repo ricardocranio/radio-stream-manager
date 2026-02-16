@@ -30,11 +30,77 @@ let radioMonitorRunning = false;
 
 function getRadioMonitorScriptPath() {
   if (app.isPackaged) {
-    // In packaged app, the script is in resources/app/public/
     return path.join(process.resourcesPath, 'app', 'public', 'radio_monitor_supabase.py');
   }
-  // In development, it's in public/
   return path.join(__dirname, '..', 'public', 'radio_monitor_supabase.py');
+}
+
+// Install all Python dependencies for the radio monitor silently
+function installRadioMonitorDeps() {
+  return new Promise((resolve) => {
+    const packages = ['playwright', 'requests', 'beautifulsoup4', 'supabase'];
+    const pipCmd = process.platform === 'win32' ? 'pip' : 'pip3';
+    const installCmd = `${pipCmd} install ${packages.join(' ')} -q --upgrade`;
+    
+    console.log('[RADIO-MONITOR] Installing dependencies:', installCmd);
+    
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('radio-monitor-status', { 
+        running: false, 
+        installing: true,
+        message: 'Instalando dependências do monitor...' 
+      });
+    }
+
+    exec(installCmd, { timeout: 300000 }, (error, stdout, stderr) => {
+      if (error) {
+        // Try with --user flag
+        const fallbackCmd = `${pipCmd} install ${packages.join(' ')} -q --upgrade --user`;
+        console.log('[RADIO-MONITOR] Retrying with --user:', fallbackCmd);
+        
+        exec(fallbackCmd, { timeout: 300000 }, (error2, stdout2, stderr2) => {
+          if (error2) {
+            console.error('[RADIO-MONITOR] Failed to install deps:', stderr2 || error2.message);
+            resolve(false);
+            return;
+          }
+          console.log('[RADIO-MONITOR] Dependencies installed (--user)');
+          installPlaywrightChromium(resolve);
+        });
+        return;
+      }
+      
+      console.log('[RADIO-MONITOR] Dependencies installed');
+      installPlaywrightChromium(resolve);
+    });
+  });
+}
+
+// Install Playwright Chromium browser
+function installPlaywrightChromium(resolve) {
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  const cmd = `${pythonCmd} -m playwright install chromium`;
+  
+  console.log('[RADIO-MONITOR] Installing Chromium:', cmd);
+  
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('radio-monitor-status', { 
+      running: false, 
+      installing: true,
+      message: 'Instalando navegador Chromium...' 
+    });
+  }
+
+  exec(cmd, { timeout: 600000 }, (error, stdout, stderr) => {
+    if (error) {
+      console.error('[RADIO-MONITOR] Chromium install failed:', error.message);
+      // Still resolve true - the script has its own auto-install logic
+      resolve(true);
+      return;
+    }
+    console.log('[RADIO-MONITOR] ✓ Chromium installed');
+    resolve(true);
+  });
 }
 
 function startRadioMonitor() {
@@ -909,12 +975,20 @@ app.whenReady().then(async () => {
     }
   }
 
-  // Start Radio Monitor Python process after Python is confirmed available
+  // Install Radio Monitor dependencies and start it
   if (pythonStatus.available) {
-    console.log('[INIT] 🎵 Starting Radio Monitor...');
-    setTimeout(() => {
-      startRadioMonitor();
-    }, 10000); // Wait 10 seconds for app to fully initialize
+    console.log('[INIT] 🎵 Installing Radio Monitor dependencies...');
+    // Run in background - don't block app startup
+    setTimeout(async () => {
+      const depsOk = await installRadioMonitorDeps();
+      if (depsOk) {
+        console.log('[INIT] 🎵 Starting Radio Monitor...');
+        startRadioMonitor();
+      } else {
+        console.error('[INIT] ⚠️ Radio Monitor deps install failed, trying to start anyway...');
+        startRadioMonitor(); // Script has its own auto-install logic
+      }
+    }, 8000);
   } else {
     console.log('[INIT] ⚠️ Radio Monitor skipped - Python not available');
   }
