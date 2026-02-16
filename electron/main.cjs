@@ -975,22 +975,28 @@ app.whenReady().then(async () => {
     }
   }
 
-  // Install Radio Monitor dependencies and start it
+  // Auto-start Radio Monitor in background
   if (pythonStatus.available) {
-    console.log('[INIT] 🎵 Installing Radio Monitor dependencies...');
-    // Run in background - don't block app startup
-    setTimeout(async () => {
-      const depsOk = await installRadioMonitorDeps();
-      if (depsOk) {
-        console.log('[INIT] 🎵 Starting Radio Monitor...');
-        startRadioMonitor();
-      } else {
-        console.error('[INIT] ⚠️ Radio Monitor deps install failed, trying to start anyway...');
-        startRadioMonitor(); // Script has its own auto-install logic
+    console.log('[INIT] 🎵 Auto-starting Radio Monitor...');
+    // Start quickly - the Python script handles its own dependency installation
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('radio-monitor-log', '🚀 Iniciando monitor automaticamente...');
       }
-    }, 8000);
+      console.log('[INIT] 🎵 Starting Radio Monitor...');
+      startRadioMonitor();
+    }, 5000);
   } else {
     console.log('[INIT] ⚠️ Radio Monitor skipped - Python not available');
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('radio-monitor-log', '⚠️ Python não encontrado - monitor não iniciado');
+        mainWindow.webContents.send('radio-monitor-status', { 
+          running: false, 
+          error: 'Python não encontrado no sistema. Instale Python para ativar o monitor.' 
+        });
+      }
+    }, 5000);
   }
   
   // Check for updates after window is ready (only in production)
