@@ -312,6 +312,14 @@ interface ElectronAPI {
   onDeemixStatus: (callback: (status: { installed: boolean; command: string | null }) => void) => void;
   getDeemixCommand: () => Promise<string | null>;
   
+  // Radio Monitor
+  getRadioMonitorStatus: () => Promise<{ running: boolean; pid: number | null }>;
+  startRadioMonitor: () => Promise<{ success: boolean }>;
+  stopRadioMonitor: () => Promise<{ success: boolean }>;
+  restartRadioMonitor: () => Promise<{ success: boolean }>;
+  onRadioMonitorStatus: (callback: (status: { running: boolean; error?: string; exitCode?: number }) => void) => void;
+  onRadioMonitorLog: (callback: (log: string) => void) => void;
+  
   // Platform detection
   platform: string;
   isElectron: boolean;
