@@ -335,6 +335,84 @@ async function fetchTritonNowPlaying(
   return { success: false, error: 'Triton API returned no tracks' };
 }
 
+// ── MyTuner HTML scraping fallback ──
+// NOTE: MyTuner loads now-playing data via JavaScript dynamically.
+// Static HTML scraping cannot extract the current song.
+// The Python monitor (using Playwright headless browser) is the primary
+// and most reliable source for these Brazilian radio stations.
+// This function is kept as a last-resort attempt.
+async function fetchMyTunerMetadata(
+  scrapeUrl: string,
+  stationName: string,
+): Promise<{ success: boolean; song?: { artist: string; title: string }; error?: string }> {
+  if (!scrapeUrl || !scrapeUrl.includes('mytuner-radio.com')) {
+    return { success: false, error: 'Not a MyTuner URL' };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    const resp = await fetch(scrapeUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!resp.ok) {
+      await resp.body?.cancel();
+      return { success: false, error: `MyTuner HTTP ${resp.status}` };
+    }
+
+    const html = await resp.text();
+
+    // Extract radio ID from page for potential API calls
+    const radioIdMatch = html.match(/data-radio-id="(\d+)"/);
+    if (!radioIdMatch) {
+      return { success: false, error: 'MyTuner: could not find radio ID' };
+    }
+
+    // Try the MyTuner internal song history endpoint
+    const radioId = radioIdMatch[1];
+    try {
+      const histController = new AbortController();
+      const histTimeout = setTimeout(() => histController.abort(), 5000);
+      
+      const histResp = await fetch(`https://mytuner-radio.com/radio/${radioId}/song-history`, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+        signal: histController.signal,
+      });
+      clearTimeout(histTimeout);
+
+      if (histResp.ok) {
+        const histText = await histResp.text();
+        try {
+          const histData = JSON.parse(histText);
+          if (Array.isArray(histData) && histData.length > 0) {
+            const latest = histData[0];
+            const artist = cleanText(latest.artist || latest.artistName || '');
+            const title = cleanText(latest.title || latest.songTitle || latest.name || '');
+            if (isValidSongPart(artist) && isValidSongPart(title)) {
+              console.log(`[${stationName}] MyTuner API (${radioId}): ${artist} - ${title}`);
+              return { success: true, song: { artist, title } };
+            }
+          }
+        } catch { /* not JSON */ }
+      } else {
+        await histResp.body?.cancel();
+      }
+    } catch { /* endpoint not available */ }
+
+    return { success: false, error: 'MyTuner: now-playing loaded via JS (needs Python monitor)' };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown';
+    return { success: false, error: `MyTuner: ${msg.includes('abort') ? 'Timeout' : msg}` };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -342,60 +420,69 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { stationName, streamUrl } = body;
+    const { stationName, streamUrl, stationUrl } = body;
     const safeName = sanitizeStationName(stationName);
     const now = new Date().toISOString();
 
-    if (!streamUrl || typeof streamUrl !== 'string') {
+    if ((!streamUrl || typeof streamUrl !== 'string') && (!stationUrl || typeof stationUrl !== 'string')) {
       return new Response(
         JSON.stringify({ success: false, stationName: safeName, error: 'No stream URL configured', scrapedAt: now }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    let formattedUrl = streamUrl.trim();
-    if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
-      formattedUrl = `https://${formattedUrl}`;
-    }
-
-    if (!isValidStreamUrl(formattedUrl)) {
-      return new Response(
-        JSON.stringify({ success: false, stationName: safeName, error: 'Invalid stream URL', scrapedAt: now }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
-    }
-
-    console.log(`[${safeName}] Scraping: ${formattedUrl}`);
-
-    // Strategy 1: ICY metadata (works for Icecast/Shoutcast direct streams)
-    const icyResult = await fetchIcyMetadata(formattedUrl, safeName);
-    if (icyResult.success && icyResult.song) {
-      console.log(`[${safeName}] ✓ ICY: ${icyResult.song.artist} - ${icyResult.song.title}`);
-      return jsonResponse({ success: true, stationName: safeName, nowPlaying: { ...icyResult.song, timestamp: now }, recentSongs: [], source: 'icy-metadata', scrapedAt: now });
-    }
-
-    console.log(`[${safeName}] ICY failed (${icyResult.error}), trying fallbacks...`);
-
-    // Strategy 2: Triton Digital Now Playing API (for StreamTheWorld stations)
-    if (formattedUrl.includes('streamtheworld.com')) {
-      const tritonResult = await fetchTritonNowPlaying(formattedUrl, safeName);
-      if (tritonResult.success && tritonResult.song) {
-        console.log(`[${safeName}] ✓ Triton: ${tritonResult.song.artist} - ${tritonResult.song.title}`);
-        return jsonResponse({ success: true, stationName: safeName, nowPlaying: { ...tritonResult.song, timestamp: now }, recentSongs: [], source: 'triton-api', scrapedAt: now });
+    // Try stream-based strategies first if streamUrl is available
+    if (streamUrl && typeof streamUrl === 'string') {
+      let formattedUrl = streamUrl.trim();
+      if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+        formattedUrl = `https://${formattedUrl}`;
       }
-      console.log(`[${safeName}] Triton failed (${tritonResult.error})`);
+
+      if (isValidStreamUrl(formattedUrl)) {
+        console.log(`[${safeName}] Scraping stream: ${formattedUrl}`);
+
+        // Strategy 1: ICY metadata
+        const icyResult = await fetchIcyMetadata(formattedUrl, safeName);
+        if (icyResult.success && icyResult.song) {
+          console.log(`[${safeName}] ✓ ICY: ${icyResult.song.artist} - ${icyResult.song.title}`);
+          return jsonResponse({ success: true, stationName: safeName, nowPlaying: { ...icyResult.song, timestamp: now }, recentSongs: [], source: 'icy-metadata', scrapedAt: now });
+        }
+        console.log(`[${safeName}] ICY failed (${icyResult.error}), trying fallbacks...`);
+
+        // Strategy 2: Triton Digital
+        if (formattedUrl.includes('streamtheworld.com')) {
+          const tritonResult = await fetchTritonNowPlaying(formattedUrl, safeName);
+          if (tritonResult.success && tritonResult.song) {
+            console.log(`[${safeName}] ✓ Triton: ${tritonResult.song.artist} - ${tritonResult.song.title}`);
+            return jsonResponse({ success: true, stationName: safeName, nowPlaying: { ...tritonResult.song, timestamp: now }, recentSongs: [], source: 'triton-api', scrapedAt: now });
+          }
+          console.log(`[${safeName}] Triton failed (${tritonResult.error})`);
+        }
+
+        // Strategy 3: Shoutcast/Icecast stats
+        const statsResult = await fetchStatsMetadata(formattedUrl, safeName);
+        if (statsResult.success && statsResult.song) {
+          console.log(`[${safeName}] ✓ Stats: ${statsResult.song.artist} - ${statsResult.song.title}`);
+          return jsonResponse({ success: true, stationName: safeName, nowPlaying: { ...statsResult.song, timestamp: now }, recentSongs: [], source: 'stats-api', scrapedAt: now });
+        }
+      }
     }
 
-    // Strategy 3: Shoutcast/Icecast stats endpoints
-    const statsResult = await fetchStatsMetadata(formattedUrl, safeName);
-    if (statsResult.success && statsResult.song) {
-      console.log(`[${safeName}] ✓ Stats: ${statsResult.song.artist} - ${statsResult.song.title}`);
-      return jsonResponse({ success: true, stationName: safeName, nowPlaying: { ...statsResult.song, timestamp: now }, recentSongs: [], source: 'stats-api', scrapedAt: now });
+    // Strategy 4: MyTuner HTML scraping (fallback using scrape_url)
+    const mytunerUrl = stationUrl || (streamUrl && typeof streamUrl === 'string' ? undefined : undefined);
+    if (mytunerUrl) {
+      console.log(`[${safeName}] Trying MyTuner fallback: ${mytunerUrl}`);
+      const mytunerResult = await fetchMyTunerMetadata(mytunerUrl, safeName);
+      if (mytunerResult.success && mytunerResult.song) {
+        console.log(`[${safeName}] ✓ MyTuner: ${mytunerResult.song.artist} - ${mytunerResult.song.title}`);
+        return jsonResponse({ success: true, stationName: safeName, nowPlaying: { ...mytunerResult.song, timestamp: now }, recentSongs: [], source: 'mytuner-html', scrapedAt: now });
+      }
+      console.log(`[${safeName}] MyTuner failed (${mytunerResult.error})`);
     }
 
     // All strategies failed
     console.warn(`[${safeName}] ✗ All methods failed`);
-    return jsonResponse({ success: false, stationName: safeName, error: icyResult.error || 'No metadata available', source: 'none', scrapedAt: now });
+    return jsonResponse({ success: false, stationName: safeName, error: 'No metadata available from any source', source: 'none', scrapedAt: now });
   } catch (error) {
     console.error('Error scraping radio:', error);
     return new Response(

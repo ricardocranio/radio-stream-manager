@@ -220,17 +220,38 @@ export function GradePreviewCard() {
 
         if (error) throw error;
 
-        if (!data || data.length === 0) {
+        if (data && data.length > 0) {
+          setSongs(data);
+        } else {
+          // Fallback 1: any scraped_songs (no time window)
           const { data: fallbackData, error: fallbackError } = await supabase
             .from('scraped_songs')
             .select('title, artist, station_name, scraped_at')
             .order('scraped_at', { ascending: false })
             .limit(500);
-          if (!fallbackError && fallbackData) {
+
+          if (!fallbackError && fallbackData && fallbackData.length > 0) {
             setSongs(fallbackData);
+          } else {
+            // Fallback 2: radio_historico (permanent archive from Python monitor)
+            console.log('[PREVIEW] No scraped_songs, trying radio_historico...');
+            const { data: historicoData, error: historicoError } = await supabase
+              .from('radio_historico')
+              .select('title, artist, station_name, captured_at')
+              .order('captured_at', { ascending: false })
+              .limit(500);
+
+            if (!historicoError && historicoData && historicoData.length > 0) {
+              // Map radio_historico format to SongPool format
+              setSongs(historicoData.map(h => ({
+                title: h.title,
+                artist: h.artist,
+                station_name: h.station_name,
+                scraped_at: h.captured_at,
+              })));
+              console.log(`[PREVIEW] Loaded ${historicoData.length} songs from radio_historico`);
+            }
           }
-        } else {
-          setSongs(data);
         }
       } catch (err) {
         console.error('[PREVIEW] Error fetching songs:', err);
