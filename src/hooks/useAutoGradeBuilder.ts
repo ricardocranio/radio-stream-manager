@@ -512,12 +512,12 @@ export function useAutoGradeBuilder() {
     }
 
     // Build fresh songs pool (captured in last 30 minutes) for P0.5 priority
-    const freshCutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const freshCutoffMs = Date.now() - 30 * 60 * 1000;
     const freshSongsByStation: Record<string, SongEntry[]> = {};
     for (const [stName, stSongs] of Object.entries(songsByStation)) {
-      const fresh = stSongs.filter(s => s.scrapedAt && s.scrapedAt >= freshCutoff);
+      const fresh = stSongs.filter(s => s.scrapedAt && new Date(s.scrapedAt).getTime() >= freshCutoffMs);
       if (fresh.length > 0) {
-        freshSongsByStation[stName] = fresh.sort((a, b) => (b.scrapedAt || '').localeCompare(a.scrapedAt || ''));
+        freshSongsByStation[stName] = fresh.sort((a, b) => new Date(b.scrapedAt || 0).getTime() - new Date(a.scrapedAt || 0).getTime());
       }
     }
     const freshCount = Object.values(freshSongsByStation).reduce((sum, arr) => sum + arr.length, 0);
