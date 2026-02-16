@@ -336,7 +336,7 @@ class RadioMonitor:
             return [r for r in config.get('radios', []) if r.get('ativo', True)]
     
     async def _enviar_para_supabase(self, dados: Dict, radio: Dict):
-        """Envia dados capturados para o Supabase"""
+        """Envia dados capturados para o Supabase (scraped_songs + radio_historico)"""
         if not supabase:
             return
         
@@ -358,6 +358,19 @@ class RadioMonitor:
                 }
                 
                 supabase.table('scraped_songs').insert(song_data).execute()
+                
+                # Também inserir no radio_historico (acervo permanente, 30 por rádio)
+                historico_data = {
+                    'station_name': station_name,
+                    'title': song_info['title'] or dados['tocando_agora'],
+                    'artist': song_info['artist'] or 'Desconhecido',
+                    'source': 'python_monitor'
+                }
+                try:
+                    supabase.table('radio_historico').insert(historico_data).execute()
+                except:
+                    pass  # Duplicata ou erro silencioso
+                
                 print(cor(Cores.GREEN, f"     ☁️  Enviado para Supabase: {song_info['title']}"))
             
             # Enviar últimas tocadas
@@ -374,6 +387,18 @@ class RadioMonitor:
                 }
                 
                 supabase.table('scraped_songs').insert(song_data).execute()
+                
+                # Também inserir no radio_historico
+                historico_data = {
+                    'station_name': station_name,
+                    'title': song_info['title'] or song_text,
+                    'artist': song_info['artist'] or 'Desconhecido',
+                    'source': 'python_monitor'
+                }
+                try:
+                    supabase.table('radio_historico').insert(historico_data).execute()
+                except:
+                    pass  # Duplicata ou erro silencioso
                 
         except Exception as e:
             print(cor(Cores.YELLOW, f"     ⚠️  Erro Supabase: {str(e)[:50]}"))
