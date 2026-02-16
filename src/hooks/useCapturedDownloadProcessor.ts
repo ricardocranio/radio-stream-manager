@@ -7,6 +7,7 @@ import { useCapturedDownloadStore } from '@/store/capturedDownloadStore';
 import { useRadioStore } from '@/store/radioStore';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
 import { useToast } from '@/hooks/use-toast';
+import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -89,6 +90,8 @@ export function useCapturedDownloadProcessor() {
 
       const startTime = Date.now();
 
+      // Acquire global mutex — only 1 download at a time
+      await acquireDownloadLock();
       try {
         const result = await window.electronAPI?.downloadFromDeezer({
           artist: song.artist,
@@ -130,6 +133,8 @@ export function useCapturedDownloadProcessor() {
           errorMessage: error instanceof Error ? error.message : 'Erro',
           duration,
         });
+      } finally {
+        releaseDownloadLock();
       }
 
       // Delay between downloads
