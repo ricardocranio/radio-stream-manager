@@ -227,15 +227,28 @@ export function useGlobalDownloadService() {
           priority: item.priority,
         });
       } else if (!success && item.retryCount >= 2) {
-        // All retries exhausted: remove from missing list and log the error
-        useRadioStore.getState().removeMissingSong(item.song.id);
+        // All immediate retries exhausted: schedule a delayed retry in 10 minutes
+        useRadioStore.getState().updateMissingSong(item.song.id, { status: 'error' });
         useGradeLogStore.getState().addSystemError({
           category: 'DOWNLOAD',
-          level: 'error',
-          message: `Download falhou: ${item.song.artist} - ${item.song.title}`,
-          details: `Estação: ${item.song.station || 'N/A'} | Tentativas: ${item.retryCount + 1} | Removido da fila de faltantes`,
+          level: 'warning',
+          message: `Download falhou 3x: ${item.song.artist} - ${item.song.title} — tentando novamente em 10min`,
+          details: `Estação: ${item.song.station || 'N/A'}`,
         });
-        console.log(`[DL-SVC] 🗑️ Removido da fila de faltantes após ${item.retryCount + 1} tentativas: ${item.song.artist} - ${item.song.title}`);
+        console.log(`[DL-SVC] ⏳ Retry agendado em 10min: ${item.song.artist} - ${item.song.title}`);
+        
+        // Re-add to missing with 'missing' status after 10 minutes so it gets picked up again
+        const songId = item.song.id;
+        setTimeout(() => {
+          const current = useRadioStore.getState().missingSongs.find(s => s.id === songId);
+          if (current && current.status === 'error') {
+            useRadioStore.getState().updateMissingSong(songId, { status: 'missing' });
+            // Remove from processed set so it can be re-queued
+            const dlKey = `dl|${item.song.artist.toLowerCase().trim()}|${item.song.title.toLowerCase().trim()}`;
+            processedSongsRef.current.delete(dlKey);
+            console.log(`[DL-SVC] 🔄 Re-tentando download: ${item.song.artist} - ${item.song.title}`);
+          }
+        }, 10 * 60 * 1000);
       }
 
       // Dynamic delay: fastest for grade songs, fast for sequence, normal for others

@@ -25,6 +25,9 @@ let mainWindow;
 let tray = null;
 let radioMonitorProcess = null;
 let radioMonitorRunning = false;
+let radioMonitorRestartCount = 0;
+const RADIO_MONITOR_MAX_RESTARTS = 3;
+let radioMonitorWatchdog = null;
 
 // =============== PYTHON RADIO MONITOR ===============
 
@@ -134,6 +137,7 @@ function startRadioMonitor() {
   });
 
   radioMonitorRunning = true;
+  radioMonitorRestartCount = 0; // Reset on successful start
 
   radioMonitorProcess.stdout.on('data', (data) => {
     const output = data.toString().trim();
@@ -161,6 +165,7 @@ function startRadioMonitor() {
     console.log(`[RADIO-MONITOR] Process exited with code ${code}`);
     radioMonitorProcess = null;
     radioMonitorRunning = false;
+    stopRadioMonitorWatchdog();
     
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('radio-monitor-status', { 
@@ -169,14 +174,34 @@ function startRadioMonitor() {
       });
     }
 
-    // Auto-restart if app is still running and it crashed (non-zero exit)
+    // Auto-restart with limit (max 3 attempts)
     if (!app.isQuitting && code !== 0 && code !== null) {
-      console.log('[RADIO-MONITOR] Restarting in 30 seconds...');
-      setTimeout(() => {
-        if (!app.isQuitting) {
-          startRadioMonitor();
+      radioMonitorRestartCount++;
+      if (radioMonitorRestartCount <= RADIO_MONITOR_MAX_RESTARTS) {
+        const delay = radioMonitorRestartCount * 15000; // 15s, 30s, 45s
+        console.log(`[RADIO-MONITOR] Restart ${radioMonitorRestartCount}/${RADIO_MONITOR_MAX_RESTARTS} in ${delay/1000}s...`);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('radio-monitor-log', 
+            `🔄 Reiniciando automaticamente (${radioMonitorRestartCount}/${RADIO_MONITOR_MAX_RESTARTS}) em ${delay/1000}s...`
+          );
         }
-      }, 30000);
+        setTimeout(() => {
+          if (!app.isQuitting) {
+            startRadioMonitor();
+          }
+        }, delay);
+      } else {
+        console.error('[RADIO-MONITOR] Max restarts exceeded, giving up.');
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('radio-monitor-log', 
+            '❌ Monitor parou após 3 tentativas de reinício. Clique em "Iniciar" para tentar novamente.'
+          );
+          mainWindow.webContents.send('radio-monitor-status', { 
+            running: false, 
+            error: 'Monitor parou após 3 tentativas. Verifique os logs e reinicie manualmente.' 
+          });
+        }
+      }
     }
   });
 
@@ -199,16 +224,57 @@ function startRadioMonitor() {
     mainWindow.webContents.send('radio-monitor-status', { running: true });
   }
   
+  // Start watchdog - checks every 60s if process is still alive
+  startRadioMonitorWatchdog();
+  
   console.log('[RADIO-MONITOR] Process started with PID:', radioMonitorProcess.pid);
 }
 
+// Watchdog: periodically verify the Python process is alive and responsive
+function startRadioMonitorWatchdog() {
+  stopRadioMonitorWatchdog();
+  radioMonitorWatchdog = setInterval(() => {
+    if (!radioMonitorProcess || !radioMonitorRunning) {
+      stopRadioMonitorWatchdog();
+      return;
+    }
+    try {
+      // Check if process is still alive by sending signal 0
+      process.kill(radioMonitorProcess.pid, 0);
+    } catch (e) {
+      // Process is dead but we didn't get the 'close' event
+      console.error('[RADIO-MONITOR] Watchdog: process is dead (zombie detected)');
+      radioMonitorProcess = null;
+      radioMonitorRunning = false;
+      stopRadioMonitorWatchdog();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('radio-monitor-log', '⚠️ Watchdog: processo Python detectado como morto');
+        mainWindow.webContents.send('radio-monitor-status', { running: false, error: 'Processo morreu inesperadamente' });
+      }
+      // Trigger auto-restart
+      if (!app.isQuitting && radioMonitorRestartCount < RADIO_MONITOR_MAX_RESTARTS) {
+        radioMonitorRestartCount++;
+        setTimeout(() => { if (!app.isQuitting) startRadioMonitor(); }, 10000);
+      }
+    }
+  }, 60000);
+}
+
+function stopRadioMonitorWatchdog() {
+  if (radioMonitorWatchdog) {
+    clearInterval(radioMonitorWatchdog);
+    radioMonitorWatchdog = null;
+  }
+}
+
 function stopRadioMonitor() {
+  stopRadioMonitorWatchdog();
   if (radioMonitorProcess) {
     console.log('[RADIO-MONITOR] Stopping process...');
     radioMonitorRunning = false;
+    radioMonitorRestartCount = 0; // Reset counter on manual stop
     
     if (process.platform === 'win32') {
-      // On Windows, use taskkill to ensure child processes are also killed
       spawn('taskkill', ['/pid', radioMonitorProcess.pid.toString(), '/f', '/t']);
     } else {
       radioMonitorProcess.kill('SIGTERM');
