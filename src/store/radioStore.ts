@@ -544,7 +544,7 @@ export const useRadioStore = create<RadioState>()(
             s.id === songId ? { ...s, plays: s.plays + 1, lastPlayed: new Date() } : s
           ),
         })),
-      // Optimized: processes batch updates from rankingBatcher
+      // Adds or updates a song in the ranking (fed by grade generation)
       addOrUpdateRankingSong: (title, artist, style, station) =>
         set((state) => {
           const normalizedTitle = title.toLowerCase().trim();

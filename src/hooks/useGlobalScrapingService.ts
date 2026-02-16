@@ -64,7 +64,7 @@ export function useGlobalScrapingService(
   }, []);
 
   const scrapeAllStations = useCallback(async (_forceRefresh = false) => {
-    const { stations, addCapturedSong, addOrUpdateRankingSong, addMissingSong, missingSongs, config } = useRadioStore.getState();
+    const { stations, addCapturedSong, addMissingSong, missingSongs, config } = useRadioStore.getState();
     const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl);
     
     if (enabledStations.length === 0) {
@@ -321,7 +321,7 @@ export function useGlobalScrapingService(
     console.log(`[SCRAPE-SVC] 📡 Stagger batch: ${batch.map(s => s.name).join(', ')}`);
 
     // Reuse the full scraping logic but only for this batch
-    const { addCapturedSong, addOrUpdateRankingSong, addMissingSong, config } = useRadioStore.getState();
+    const { addCapturedSong, addMissingSong, config } = useRadioStore.getState();
 
     const isSongAlreadyProcessedForStation = (artist: string, title: string, stationName: string): boolean => {
       const key = `${stationName.toLowerCase().trim()}|${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`;
@@ -437,20 +437,43 @@ export function useGlobalScrapingService(
     }));
   }, [scrapeStation, processedSongsRef, downloadQueueRef]);
 
+  /** Check if Python monitor is running (skip Edge Functions scraping if so) */
+  const isPythonMonitorRunning = useCallback(async (): Promise<boolean> => {
+    if (!isElectron || !window.electronAPI?.getRadioMonitorStatus) return false;
+    try {
+      const status = await window.electronAPI.getRadioMonitorStatus();
+      return !!status?.running;
+    } catch {
+      return false;
+    }
+  }, []);
+
   /** Start the staggered scraping interval. Returns cleanup function. */
   const start = useCallback(() => {
-    // Stagger: scrape a mini-batch every 2 minutes
-    scrapeIntervalRef.current = setInterval(() => {
+    // Stagger: scrape a mini-batch every 2 minutes (only if Python monitor is NOT running)
+    scrapeIntervalRef.current = setInterval(async () => {
+      const pythonRunning = await isPythonMonitorRunning();
+      if (pythonRunning) {
+        // Python monitor is handling scraping — skip Edge Functions
+        return;
+      }
       scrapeStaggeredBatch();
     }, 2 * 60 * 1000);
 
-    // Initial full scrape on start
-    scrapeAllStations();
+    // Initial scrape on start (only if Python is not running)
+    isPythonMonitorRunning().then(running => {
+      if (!running) {
+        console.log('[SCRAPE-SVC] 📡 Python monitor inativo, usando Edge Functions como fallback');
+        scrapeAllStations();
+      } else {
+        console.log('[SCRAPE-SVC] 🐍 Python monitor ativo, Edge Functions scraping desabilitado');
+      }
+    });
 
     return () => {
       if (scrapeIntervalRef.current) clearInterval(scrapeIntervalRef.current);
     };
-  }, [scrapeAllStations, scrapeStaggeredBatch]);
+  }, [scrapeAllStations, scrapeStaggeredBatch, isPythonMonitorRunning]);
 
   return {
     stats: scrapeStats,
