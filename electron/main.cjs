@@ -150,6 +150,10 @@ function startRadioMonitor() {
     const output = data.toString().trim();
     if (output) {
       console.error('[RADIO-MONITOR-ERR]', output);
+      // Forward errors to renderer so user can see them in the log panel
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('radio-monitor-log', '⚠️ ' + output);
+      }
     }
   });
 
