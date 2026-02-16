@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Terminal, Play, Square, RotateCw, Radio, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Terminal, Play, Square, RotateCw, Radio, Loader2, Clock, Music } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,9 @@ export function RadioMonitorCard() {
   const [logs, setLogs] = useState<string[]>([]);
   const [showLogs, setShowLogs] = useState(false);
   const [isActing, setIsActing] = useState(false);
+  const [captureCount, setCaptureCount] = useState(0);
+  const [uptimeStart, setUptimeStart] = useState<number | null>(null);
+  const [uptimeText, setUptimeText] = useState('');
   const { toast } = useToast();
   const isElectron = !!window.electronAPI;
 
@@ -45,22 +48,66 @@ export function RadioMonitorCard() {
     window.electronAPI.onRadioMonitorStatus((s) => {
       setStatus(s);
       setIsActing(false);
+      if (s.running && !uptimeStart) {
+        setUptimeStart(Date.now());
+        setCaptureCount(0);
+      } else if (!s.running) {
+        setUptimeStart(null);
+      }
       if (s.error) {
         toast({ title: '⚠️ Radio Monitor', description: s.error, variant: 'destructive' });
       }
     });
-  }, [toast]);
+  }, [toast, uptimeStart]);
 
-  // Listen to log events
+  // Listen to log events & count captures
   useEffect(() => {
     if (!window.electronAPI?.onRadioMonitorLog) return;
     window.electronAPI.onRadioMonitorLog((log) => {
       setLogs(prev => [...prev.slice(-100), log]);
+      // Count captures (lines with cloud upload or music emoji)
+      if (log.includes('☁️') || log.includes('Enviado para Supabase')) {
+        setCaptureCount(prev => prev + 1);
+      }
     });
   }, []);
 
+  // Track uptime when running
+  useEffect(() => {
+    if (status.running && !uptimeStart) {
+      setUptimeStart(Date.now());
+    }
+  }, [status.running, uptimeStart]);
+
+  // Update uptime text every 30s
+  useEffect(() => {
+    if (!uptimeStart || !status.running) {
+      setUptimeText('');
+      return;
+    }
+
+    const update = () => {
+      const elapsed = Math.floor((Date.now() - uptimeStart) / 1000);
+      if (elapsed < 60) {
+        setUptimeText(`${elapsed}s`);
+      } else if (elapsed < 3600) {
+        setUptimeText(`${Math.floor(elapsed / 60)}min`);
+      } else {
+        const h = Math.floor(elapsed / 3600);
+        const m = Math.floor((elapsed % 3600) / 60);
+        setUptimeText(`${h}h${m.toString().padStart(2, '0')}min`);
+      }
+    };
+
+    update();
+    const interval = setInterval(update, 30000);
+    return () => clearInterval(interval);
+  }, [uptimeStart, status.running]);
+
   const handleStart = useCallback(async () => {
     setIsActing(true);
+    setCaptureCount(0);
+    setUptimeStart(Date.now());
     try {
       await window.electronAPI!.startRadioMonitor();
       toast({ title: '▶️ Radio Monitor', description: 'Iniciando monitor...' });
@@ -69,6 +116,7 @@ export function RadioMonitorCard() {
 
   const handleStop = useCallback(async () => {
     setIsActing(true);
+    setUptimeStart(null);
     try {
       await window.electronAPI!.stopRadioMonitor();
       toast({ title: '⏹ Radio Monitor', description: 'Monitor parado.' });
@@ -77,6 +125,8 @@ export function RadioMonitorCard() {
 
   const handleRestart = useCallback(async () => {
     setIsActing(true);
+    setCaptureCount(0);
+    setUptimeStart(Date.now());
     try {
       await window.electronAPI!.restartRadioMonitor();
       toast({ title: '🔄 Radio Monitor', description: 'Reiniciando monitor...' });
@@ -123,14 +173,30 @@ export function RadioMonitorCard() {
                   </Badge>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {isInstalling 
-                  ? (status.message || 'Instalando dependências...')
-                  : isRunning 
-                    ? 'Scraping via Playwright/Chromium • MyTuner Radio'
-                    : status.error || 'Clique em Iniciar para começar o monitoramento'
-                }
-              </p>
+              <div className="flex items-center gap-3 mt-0.5">
+                <p className="text-xs text-muted-foreground">
+                  {isInstalling 
+                    ? (status.message || 'Instalando dependências...')
+                    : isRunning 
+                      ? 'Scraping via Playwright/Chromium • MyTuner Radio'
+                      : status.error || 'Clique em Iniciar para começar o monitoramento'
+                  }
+                </p>
+                {isRunning && (
+                  <div className="flex items-center gap-3 text-xs">
+                    {uptimeText && (
+                      <span className="flex items-center gap-1 text-teal-400">
+                        <Clock className="w-3 h-3" />
+                        {uptimeText}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1 text-teal-400">
+                      <Music className="w-3 h-3" />
+                      {captureCount} capturadas
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
