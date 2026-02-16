@@ -199,7 +199,19 @@ def parse_song_text(text: str) -> Dict[str, str]:
     
     text = text.strip()
     
-    # Formatos comuns: "Artista - Título" ou "Título - Artista"
+    # MyTuner format: lines separated by newlines (Title\nArtist\nTime ago)
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    if len(lines) >= 2:
+        # Filter out time indicators (e.g. "30 min ago", "LIVE", "2 hours ago")
+        time_words = ['min ago', 'hour ago', 'hours ago', 'sec ago', 'LIVE', 'just now', 'min atrás', 'hora atrás']
+        clean_lines = [l for l in lines if not any(tw.lower() in l.lower() for tw in time_words)]
+        if len(clean_lines) >= 2:
+            return {"title": clean_lines[0], "artist": clean_lines[1]}
+        elif len(clean_lines) == 1:
+            # Only one meaningful line, try separator parsing below
+            text = clean_lines[0]
+    
+    # Standard formats: "Artista - Título" or "Título - Artista"
     separators = [" - ", " – ", " — ", " | "]
     
     for sep in separators:
