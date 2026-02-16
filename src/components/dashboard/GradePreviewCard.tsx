@@ -261,7 +261,7 @@ export function GradePreviewCard() {
     };
 
     fetchSongs();
-    const interval = setInterval(fetchSongs, 2 * 60 * 1000);
+    const interval = setInterval(fetchSongs, 30 * 1000); // Refresh every 30s
     return () => clearInterval(interval);
   }, [nextBlock.hour, nextBlock.minute]);
 
