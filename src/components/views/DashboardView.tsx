@@ -23,6 +23,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { GradePreviewCard } from '@/components/dashboard/GradePreviewCard';
 import { GradeScheduleCard } from '@/components/dashboard/GradeScheduleCard';
+import { RadioMonitorCard } from '@/components/dashboard/RadioMonitorCard';
 
 export function DashboardView() {
   const { 
@@ -615,6 +616,9 @@ export function DashboardView() {
           </CardContent>
         </Card>
       )}
+
+      {/* Radio Monitor Python Status */}
+      <RadioMonitorCard />
 
       {/* Preview da Próxima Grade & Grades Montadas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
