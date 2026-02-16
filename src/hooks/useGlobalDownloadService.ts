@@ -11,6 +11,7 @@ import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useGradeLogStore } from '@/store/gradeLogStore';
 import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 import { STATION_ID_TO_DB_NAME } from '@/lib/gradeBuilder/constants';
+import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 import type { ScheduledSequence, SequenceConfig, RadioStation } from '@/types/radio';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -210,7 +211,14 @@ export function useGlobalDownloadService() {
       }
       if (!item) break;
 
-      const success = await downloadSong(item.song);
+      // Acquire global mutex — only 1 download at a time across the entire app
+      await acquireDownloadLock();
+      let success = false;
+      try {
+        success = await downloadSong(item.song);
+      } finally {
+        releaseDownloadLock();
+      }
       
       if (!success && item.retryCount < 2) {
         downloadQueueRef.current.push({
