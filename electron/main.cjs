@@ -185,18 +185,8 @@ function startRadioMonitor() {
     radioMonitorProcess = null;
     radioMonitorRunning = false;
 
-    // If 'python' fails on non-Windows, try 'python3'
-    if (pythonCmd === 'python' && process.platform !== 'win32') {
-      console.log('[RADIO-MONITOR] Retrying with python3...');
-      radioMonitorProcess = spawn('python3', [scriptPath], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env },
-        detached: false,
-      });
-      // Re-attach listeners would be needed - simplified: just log error
-    }
-
     if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('radio-monitor-log', '❌ Erro ao iniciar Python: ' + err.message);
       mainWindow.webContents.send('radio-monitor-status', { 
         running: false, 
         error: 'Erro ao iniciar: ' + err.message 
