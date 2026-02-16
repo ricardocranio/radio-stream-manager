@@ -149,9 +149,7 @@ ARQUIVO_CONFIG = "radios_config.json"
 CONFIG_PADRAO = {
     "configuracao": {
         "intervalo_minutos": 5,
-        "mostrar_navegador": False,
-        "arquivo_historico": "radio_historico.json",
-        "arquivo_relatorio": "radio_relatorio.txt"
+        "mostrar_navegador": False
     },
     "radios": []
 }
