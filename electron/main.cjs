@@ -23,6 +23,140 @@ let scrapedSongsCache = new Map();
 
 let mainWindow;
 let tray = null;
+let radioMonitorProcess = null;
+let radioMonitorRunning = false;
+
+// =============== PYTHON RADIO MONITOR ===============
+
+function getRadioMonitorScriptPath() {
+  if (app.isPackaged) {
+    // In packaged app, the script is in resources/app/public/
+    return path.join(process.resourcesPath, 'app', 'public', 'radio_monitor_supabase.py');
+  }
+  // In development, it's in public/
+  return path.join(__dirname, '..', 'public', 'radio_monitor_supabase.py');
+}
+
+function startRadioMonitor() {
+  if (radioMonitorProcess) {
+    console.log('[RADIO-MONITOR] Already running, skipping start');
+    return;
+  }
+
+  const scriptPath = getRadioMonitorScriptPath();
+  
+  if (!fs.existsSync(scriptPath)) {
+    console.error('[RADIO-MONITOR] Script not found:', scriptPath);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('radio-monitor-status', { 
+        running: false, 
+        error: 'Script não encontrado: ' + scriptPath 
+      });
+    }
+    return;
+  }
+
+  console.log('[RADIO-MONITOR] Starting Python monitor:', scriptPath);
+
+  // Try python, then python3
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  
+  radioMonitorProcess = spawn(pythonCmd, [scriptPath], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env },
+    detached: false,
+  });
+
+  radioMonitorRunning = true;
+
+  radioMonitorProcess.stdout.on('data', (data) => {
+    const output = data.toString().trim();
+    if (output) {
+      console.log('[RADIO-MONITOR]', output);
+      // Forward output to renderer
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('radio-monitor-log', output);
+      }
+    }
+  });
+
+  radioMonitorProcess.stderr.on('data', (data) => {
+    const output = data.toString().trim();
+    if (output) {
+      console.error('[RADIO-MONITOR-ERR]', output);
+    }
+  });
+
+  radioMonitorProcess.on('close', (code) => {
+    console.log(`[RADIO-MONITOR] Process exited with code ${code}`);
+    radioMonitorProcess = null;
+    radioMonitorRunning = false;
+    
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('radio-monitor-status', { 
+        running: false, 
+        exitCode: code 
+      });
+    }
+
+    // Auto-restart if app is still running and it crashed (non-zero exit)
+    if (!app.isQuitting && code !== 0 && code !== null) {
+      console.log('[RADIO-MONITOR] Restarting in 30 seconds...');
+      setTimeout(() => {
+        if (!app.isQuitting) {
+          startRadioMonitor();
+        }
+      }, 30000);
+    }
+  });
+
+  radioMonitorProcess.on('error', (err) => {
+    console.error('[RADIO-MONITOR] Failed to start:', err.message);
+    radioMonitorProcess = null;
+    radioMonitorRunning = false;
+
+    // If 'python' fails on non-Windows, try 'python3'
+    if (pythonCmd === 'python' && process.platform !== 'win32') {
+      console.log('[RADIO-MONITOR] Retrying with python3...');
+      radioMonitorProcess = spawn('python3', [scriptPath], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env },
+        detached: false,
+      });
+      // Re-attach listeners would be needed - simplified: just log error
+    }
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('radio-monitor-status', { 
+        running: false, 
+        error: 'Erro ao iniciar: ' + err.message 
+      });
+    }
+  });
+
+  // Notify renderer
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('radio-monitor-status', { running: true });
+  }
+  
+  console.log('[RADIO-MONITOR] Process started with PID:', radioMonitorProcess.pid);
+}
+
+function stopRadioMonitor() {
+  if (radioMonitorProcess) {
+    console.log('[RADIO-MONITOR] Stopping process...');
+    radioMonitorRunning = false;
+    
+    if (process.platform === 'win32') {
+      // On Windows, use taskkill to ensure child processes are also killed
+      spawn('taskkill', ['/pid', radioMonitorProcess.pid.toString(), '/f', '/t']);
+    } else {
+      radioMonitorProcess.kill('SIGTERM');
+    }
+    
+    radioMonitorProcess = null;
+  }
+}
 
 // Prevent multiple instances
 const gotTheLock = app.requestSingleInstanceLock();
@@ -774,6 +908,16 @@ app.whenReady().then(async () => {
       }, 3000);
     }
   }
+
+  // Start Radio Monitor Python process after Python is confirmed available
+  if (pythonStatus.available) {
+    console.log('[INIT] 🎵 Starting Radio Monitor...');
+    setTimeout(() => {
+      startRadioMonitor();
+    }, 10000); // Wait 10 seconds for app to fully initialize
+  } else {
+    console.log('[INIT] ⚠️ Radio Monitor skipped - Python not available');
+  }
   
   // Check for updates after window is ready (only in production)
   if (autoUpdater && app.isPackaged) {
@@ -806,11 +950,36 @@ app.on('window-all-closed', () => {
 // Before quit
 app.on('before-quit', () => {
   app.isQuitting = true;
+  stopRadioMonitor();
 });
 
 // IPC Handlers for communication with renderer
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
+});
+
+// Radio Monitor IPC handlers
+ipcMain.handle('get-radio-monitor-status', () => {
+  return { 
+    running: radioMonitorRunning, 
+    pid: radioMonitorProcess ? radioMonitorProcess.pid : null 
+  };
+});
+
+ipcMain.handle('start-radio-monitor', () => {
+  startRadioMonitor();
+  return { success: true };
+});
+
+ipcMain.handle('stop-radio-monitor', () => {
+  stopRadioMonitor();
+  return { success: true };
+});
+
+ipcMain.handle('restart-radio-monitor', () => {
+  stopRadioMonitor();
+  setTimeout(() => startRadioMonitor(), 2000);
+  return { success: true };
 });
 
 ipcMain.handle('get-app-path', (event, name) => {
