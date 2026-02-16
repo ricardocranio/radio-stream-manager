@@ -219,57 +219,16 @@ class RadioMonitor:
         self.config = config.get('configuracao', {})
         self.radios = []  # Será carregado do Supabase
         self.intervalo = self.config.get('intervalo_minutos', 5) * 60
-        self.arquivo_historico = self.config.get('arquivo_historico', 'radio_historico.json')
-        self.arquivo_relatorio = self.config.get('arquivo_relatorio', 'radio_relatorio.txt')
         self.mostrar_navegador = self.config.get('mostrar_navegador', False)
-        self.historico = self._carregar_historico()
+        self.historico = {"radios": {}, "ultima_atualizacao": None}
         self.online = True
         self.supabase_stations = {}  # Mapa nome -> id
         
-    def _carregar_historico(self) -> Dict:
-        if Path(self.arquivo_historico).exists():
-            try:
-                with open(self.arquivo_historico, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except:
-                pass
-        return {"radios": {}, "ultima_atualizacao": None}
-    
     def _salvar_historico(self):
-        try:
-            with open(self.arquivo_historico, 'w', encoding='utf-8') as f:
-                json.dump(self.historico, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"  ⚠️  Erro ao salvar histórico: {e}")
+        pass  # Histórico salvo apenas no banco de dados
     
     def _salvar_relatorio(self):
-        try:
-            with open(self.arquivo_relatorio, 'w', encoding='utf-8') as f:
-                f.write("═" * 80 + "\n")
-                f.write("           RELATÓRIO DE MONITORAMENTO DE RÁDIOS\n")
-                f.write("═" * 80 + "\n\n")
-                f.write(f"📅 Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
-                f.write(f"📊 Total de rádios: {len(self.radios)}\n\n")
-                
-                for radio_id, dados in self.historico.get('radios', {}).items():
-                    f.write("─" * 80 + "\n")
-                    f.write(f"📻 {dados.get('nome', radio_id)}\n")
-                    f.write(f"   URL: {dados.get('url', 'N/A')}\n")
-                    f.write("─" * 80 + "\n\n")
-                    
-                    ultimo = dados.get('ultimo_dado', {})
-                    if ultimo.get('tocando_agora'):
-                        f.write(f"🎵 TOCANDO AGORA:\n   {ultimo['tocando_agora']}\n\n")
-                    
-                    if ultimo.get('ultimas_tocadas'):
-                        f.write(f"📜 ÚLTIMAS TOCADAS:\n")
-                        for i, m in enumerate(ultimo['ultimas_tocadas'][:10], 1):
-                            f.write(f"   {i}. {m}\n")
-                        f.write("\n")
-                
-                f.write("═" * 80 + "\nFim do relatório\n")
-        except Exception as e:
-            print(f"  ⚠️  Erro ao salvar relatório: {e}")
+        pass  # Relatório salvo apenas no banco de dados
     
     def _verificar_internet(self) -> bool:
         try:
@@ -568,10 +527,8 @@ class RadioMonitor:
             self._salvar_historico()
             self._salvar_relatorio()
             
-            print(cor(Cores.GREEN, f"\n  💾 Histórico local: {self.arquivo_historico}"))
-            print(cor(Cores.GREEN, f"  📄 Relatório: {self.arquivo_relatorio}"))
             if supabase:
-                print(cor(Cores.CYAN, f"  ☁️  Dados sincronizados com Supabase!"))
+                print(cor(Cores.CYAN, f"\n  ☁️  Dados sincronizados com Supabase!"))
     
     async def _aguardar_reconexao(self):
         tentativas = 0
@@ -617,8 +574,6 @@ class RadioMonitor:
                 
             except KeyboardInterrupt:
                 print(cor(Cores.YELLOW, "\n\n👋 Monitoramento encerrado."))
-                print(f"   Histórico: {self.arquivo_historico}")
-                print(f"   Relatório: {self.arquivo_relatorio}")
                 break
             except Exception as e:
                 print(cor(Cores.RED, f"\n❌ Erro: {e}"))
