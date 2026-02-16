@@ -2,13 +2,11 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRadioStore } from '@/store/radioStore';
 import { realtimeManager } from '@/lib/realtimeManager';
-import { rankingBatcher } from '@/lib/rankingBatcher';
 
 interface NotificationOptions {
   enableBrowserNotifications?: boolean;
   enableToastNotifications?: boolean;
   onNewSong?: (song: { title: string; artist: string; station_name: string }) => void;
-  onRankingUpdate?: (count: number) => void;
 }
 
 // STABLE subscriber ID - prevents channel disconnect on tab navigation
@@ -16,34 +14,14 @@ const NOTIFICATIONS_SUBSCRIBER_ID = 'realtime_notifications_global';
 
 export function useRealtimeNotifications(options: NotificationOptions = {}) {
   const { toast } = useToast();
-  const { applyRankingBatch } = useRadioStore();
   const lastSongIdRef = useRef<string | null>(null);
   const notificationPermissionRef = useRef<NotificationPermission>('default');
-  const batcherInitializedRef = useRef(false);
 
   const {
     enableBrowserNotifications = true,
     enableToastNotifications = true,
     onNewSong,
-    onRankingUpdate,
   } = options;
-
-  // Initialize ranking batcher once
-  useEffect(() => {
-    if (batcherInitializedRef.current) return;
-    batcherInitializedRef.current = true;
-    
-    rankingBatcher.init((updates) => {
-      if (updates.length > 0) {
-        applyRankingBatch(updates);
-      }
-    });
-
-    return () => {
-      // Flush on unmount
-      rankingBatcher.forceFlush();
-    };
-  }, [applyRankingBatch]);
 
   // Request browser notification permission
   useEffect(() => {
@@ -91,7 +69,6 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
   }, [enableToastNotifications, toast]);
 
   // Subscribe to realtime changes via centralized manager
-  // Using a STABLE subscriber ID prevents channel disconnect on tab navigation
   useEffect(() => {
     const unsubscribe = realtimeManager.subscribe(
       'scraped_songs',
@@ -118,29 +95,17 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
             '🎵 Nova música!',
             `${newSong.artist} - ${newSong.title}\n📻 ${newSong.station_name}`
           );
-          // Toast only for now_playing, already rate-limited
           showToastNotification(
             '🎵 Nova música!',
             `${newSong.artist} - ${newSong.title}`
           );
         }
-
-        // Queue ranking update (batched, not immediate)
-        // Use station styles from the store (synced from DB) instead of hardcoded mapping
-        const { stations } = useRadioStore.getState();
-        const matchedStation = stations.find(
-          s => s.name.toLowerCase().trim() === newSong.station_name.toLowerCase().trim()
-        );
-        const style = matchedStation?.styles?.[0] || 'POP/VARIADO';
-
-        // Use batcher instead of direct update
-        rankingBatcher.queueUpdate(newSong.title, newSong.artist, style);
-        onRankingUpdate?.(1);
+        // Ranking is now fed from grade generation, not realtime captures
       }
     );
 
     return unsubscribe;
-  }, [showToastNotification, showBrowserNotification, onNewSong, onRankingUpdate]);
+  }, [showToastNotification, showBrowserNotification, onNewSong]);
 
   // Request notification permission manually
   const requestPermission = useCallback(async () => {
