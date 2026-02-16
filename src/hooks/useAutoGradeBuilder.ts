@@ -60,7 +60,7 @@ export function useAutoGradeBuilder() {
   const {
     programs, sequence: defaultSequence, scheduledSequences,
     stations, config, fixedContent, rankingSongs,
-    addGradeHistory, addMissingSong,
+    addGradeHistory, addMissingSong, addOrUpdateRankingSong,
     missingSongs: existingMissingSongs,
   } = useRadioStore();
 
@@ -447,6 +447,24 @@ export function useAutoGradeBuilder() {
     console.log(`[AUTO-GRADE] Pool: ${stationList}`);
     return songsByStation;
   }, [stations]);
+
+  // ==================== Ranking from Grade ====================
+  
+  /** Feed the TOP25 ranking from songs actually placed in the grade (not scraping) */
+  const updateRankingFromLogs = useCallback((logs: BlockLogItem[]) => {
+    const usedSongs = logs.filter(l => l.type === 'used' || l.type === 'substituted');
+    if (usedSongs.length === 0) return;
+    
+    // Deduplicate by artist+title within this batch
+    const seen = new Set<string>();
+    for (const log of usedSongs) {
+      const key = `${log.artist.toLowerCase().trim()}|${log.title.toLowerCase().trim()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      addOrUpdateRankingSong(log.title, log.artist, log.style || 'POP/VARIADO', log.station);
+    }
+    console.log(`[AUTO-GRADE] 🏆 Ranking atualizado com ${seen.size} músicas da grade`);
+  }, [addOrUpdateRankingSong]);
 
   // ==================== Block Generation ====================
 
@@ -847,6 +865,7 @@ export function useAutoGradeBuilder() {
       }
 
       addBlockLogs(allLogs);
+      updateRankingFromLogs(allLogs);
       const finalContent = lines.join('\n');
       await renameFilesInGradeContent(finalContent);
 
@@ -876,7 +895,7 @@ export function useAutoGradeBuilder() {
     }
   }, [
     clearUsedSongs, fetchAllRecentSongs, generateBlockLine, renameFilesInGradeContent,
-    getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, toast, addBlockLogs,
+    getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, toast, addBlockLogs, updateRankingFromLogs,
   ]);
 
   // ==================== Sunday Pre-Build (Saturday ≥ 11:00) ====================
@@ -1129,7 +1148,10 @@ export function useAutoGradeBuilder() {
         console.log(`[AUTO-GRADE] ⏭️ Bloco ${nextTimeKey} já travado (${minutesUntilNextBlock}min para início), mantendo`);
       }
 
-      if (allLogs.length > 0) addBlockLogs(allLogs);
+      if (allLogs.length > 0) {
+        addBlockLogs(allLogs);
+        updateRankingFromLogs(allLogs);
+      }
 
       const sortedContent = Array.from(lineMap.keys()).sort().map(t => lineMap.get(t)).join('\n');
       await renameFilesInGradeContent(sortedContent);
@@ -1163,7 +1185,7 @@ export function useAutoGradeBuilder() {
     }
   }, [
     getBlockTimes, fetchSongsForBlock, fetchAllRecentSongs, generateBlockLine, renameFilesInGradeContent,
-    getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, getProgramForHour, toast, addBlockLogs,
+    getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, getProgramForHour, toast, addBlockLogs, updateRankingFromLogs,
   ]);
 
   // ==================== Timer & Auto Build ====================
