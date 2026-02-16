@@ -123,8 +123,8 @@ function parseMyTunerHtml(html: string, stationName: string): { nowPlaying?: Scr
   const now = new Date().toISOString();
   const seen = new Set<string>();
 
-  // Find ALL history-song entries globally (works regardless of nesting)
-  const allEntries = html.match(/<div[^>]*class="history-song"[^>]*>[\s\S]*?<\/a>\s*<\/div>/gi) || [];
+  // Find ALL history-song entries globally — handle both with and without <a> wrapper
+  const allEntries = html.match(/<div[^>]*class="history-song"[^>]*>[\s\S]*?<\/span>\s*<\/div>\s*(?:<\/a>\s*)?<\/div>/gi) || [];
   console.log(`[${stationName}] Found ${allEntries.length} history-song entries`);
 
   for (let i = 0; i < allEntries.length && i < 8; i++) {
@@ -252,6 +252,26 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Extract radio ID
+    const radioIdMatch = fetchResult.html.match(/data-radio-id="(\d+)"/);
+    const radioId = radioIdMatch ? radioIdMatch[1] : null;
+    
+    // Find DG class - try broader search
+    const dgFuncIdx = fetchResult.html.indexOf('function DG');
+    const dgVarIdx = fetchResult.html.indexOf('DG = function');
+    const dgClassIdx = fetchResult.html.indexOf('class DG');
+    console.log(`[${safeName}] DG search: function=${dgFuncIdx}, var=${dgVarIdx}, class=${dgClassIdx}`);
+    
+    if (dgFuncIdx >= 0) {
+      console.log(`[${safeName}] DG def: ${fetchResult.html.substring(dgFuncIdx, dgFuncIdx + 1000)}`);
+    } else if (dgVarIdx >= 0) {
+      console.log(`[${safeName}] DG def: ${fetchResult.html.substring(dgVarIdx, dgVarIdx + 1000)}`);
+    } else {
+      // DG might be in an external JS file - find script srcs
+      const scriptSrcs = fetchResult.html.match(/src="([^"]*\.js[^"]*)"/gi) || [];
+      console.log(`[${safeName}] External JS files: ${scriptSrcs.slice(0, 10).join(' | ')}`);
+    }
+    
     const parsed = parseMyTunerHtml(fetchResult.html, safeName);
 
     const result: RadioScrapeResult = {
