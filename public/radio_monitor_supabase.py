@@ -530,10 +530,27 @@ class RadioMonitor:
         print()
         print(cor(Cores.YELLOW, "─" * 72))
     
+    def _verificar_supabase(self):
+        """Verifica conexão Supabase e reconecta se necessário"""
+        global supabase
+        if supabase:
+            try:
+                supabase.table('radio_stations').select('id', count='exact').limit(1).execute()
+                return True
+            except:
+                print(cor(Cores.YELLOW, "  ⚠️  Conexão Supabase perdida, reconectando..."))
+                supabase = None
+        
+        if not supabase:
+            return inicializar_supabase(max_tentativas=2)
+    
     async def _atualizar_todas(self):
         if not PLAYWRIGHT_OK:
             print(cor(Cores.RED, "❌ Playwright não disponível"))
             return
+        
+        # Verificar/reconectar Supabase antes de cada ciclo
+        self._verificar_supabase()
         
         # Recarregar rádios do Supabase a cada atualização
         self.radios = self._carregar_radios_supabase()
