@@ -1,6 +1,9 @@
-import { Power, RefreshCw, Clock, Sun, Moon } from 'lucide-react';
+import { Power, RefreshCw, Clock, Sun, Moon, Download } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
+import { useAutoDownloadStore } from '@/store/autoDownloadStore';
+import { useCapturedDownloadStore } from '@/store/capturedDownloadStore';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { StatusIndicator } from '@/components/StatusIndicator';
@@ -9,6 +12,9 @@ import { useEffect, useState } from 'react';
 
 export function Header() {
   const { isRunning, setIsRunning, lastUpdate } = useRadioStore();
+  const autoDownloadQueue = useAutoDownloadStore((s) => s.queueLength);
+  const capturedDlProcessing = useCapturedDownloadStore((s) => s.isProcessing);
+  const capturedDlQueue = useCapturedDownloadStore((s) => s.queueLength);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -69,6 +75,16 @@ export function Header() {
               <Moon className="w-4 h-4 text-slate-700" />
             )}
           </Button>
+        )}
+
+        {/* Download Activity Badge */}
+        {(autoDownloadQueue > 0 || capturedDlProcessing) && (
+          <Badge variant="secondary" className="gap-1.5 animate-pulse text-xs">
+            <Download className="w-3 h-3" />
+            {autoDownloadQueue + capturedDlQueue > 0
+              ? `${autoDownloadQueue + capturedDlQueue} na fila`
+              : 'Baixando...'}
+          </Badge>
         )}
 
         {/* Status Indicator */}

@@ -8,6 +8,7 @@
  * - Auto Grade Builder (via useAutoGradeBuilder)
  * - Auto Scraping (via useGlobalScrapingService)
  * - Auto Download (via useGlobalDownloadService)
+ * - Captured Songs Download (via useCapturedDownloadService)
  * - Voz do Brasil (via useVozBrasilService)
  * - Background Cache Cleanup (via useBackgroundCacheCleanup)
  */
@@ -18,6 +19,7 @@ import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
 import { useBackgroundCacheCleanup } from '@/hooks/useBackgroundCacheCleanup';
 import { useGlobalDownloadService, DownloadServiceState } from '@/hooks/useGlobalDownloadService';
 import { useGlobalScrapingService, ScrapeStats } from '@/hooks/useGlobalScrapingService';
+import { useCapturedDownloadService } from '@/hooks/useCapturedDownloadService';
 import { useVozBrasilService } from '@/hooks/useVozBrasilService';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -51,6 +53,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     downloadService.processedSongsRef,
     downloadService.downloadQueueRef,
   );
+  const capturedDownloadService = useCapturedDownloadService();
   const vozBrasilService = useVozBrasilService();
 
   // ============= INITIALIZATION (runs once) =============
@@ -78,25 +81,12 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log(`║ 🔄 Sync Cloud:    ✅ ATIVO (Realtime)`.padEnd(65) + '║');
     console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
     console.log(`║ 📻 Voz do Brasil: ✅ ATIVO (Seg-Sex 20:35)`.padEnd(65) + '║');
+    console.log(`║ 📥 Capturadas DL: ✅ AUTOMÁTICO (2 min polling)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
-    // Initialize station folders
-    if (isElectron && deezerConfig.downloadFolder && enabledStations > 0) {
-      const stationNames = stations.filter(s => s.enabled).map(s => s.name);
-      window.electronAPI?.ensureStationFolders?.({
-        baseFolder: deezerConfig.downloadFolder,
-        stations: stationNames,
-      }).then(result => {
-        if (result?.success && result.created.length > 0) {
-          console.log(`[GLOBAL-SVC] 📁 Criadas ${result.created.length} pastas de estações`);
-        }
-      }).catch(err => {
-        console.error('[GLOBAL-SVC] Erro ao criar pastas:', err);
-      });
-    }
-
-    // Start all services - each returns its own cleanup
+    // Start all services
     const cleanupDownload = downloadService.start();
+    const cleanupCapturedDl = capturedDownloadService.start();
     const cleanupScraping = scrapingService.start();
     const cleanupVozBrasil = vozBrasilService.start();
 
@@ -105,6 +95,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     return () => {
       console.log('[GLOBAL-SVC] 🛑 Parando todos os serviços');
       cleanupDownload();
+      cleanupCapturedDl();
       cleanupScraping();
       cleanupVozBrasil();
       isGlobalServicesRunning = false;
