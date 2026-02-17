@@ -8,11 +8,7 @@
 import { useRef, useCallback, useState, useEffect } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
-import { useGradeLogStore } from '@/store/gradeLogStore';
 import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
-import { STATION_ID_TO_DB_NAME } from '@/lib/gradeBuilder/constants';
-import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
-import type { ScheduledSequence, SequenceConfig, RadioStation } from '@/types/radio';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -23,61 +19,10 @@ interface DownloadQueueItem {
 }
 
 const PRIORITY_STATION_BOOST = 100;
-const PRIORITY_SEQUENCE_BOOST = 200; // Higher than station boost - sequence stations are critical
-const PRIORITY_GRADE_BOOST = 500; // Highest priority — song is selected for the on-air grade
-const DELAY_NORMAL_MS = 5000; // 5s between normal downloads
-const DELAY_PRIORITY_MS = 2000; // 2s between priority downloads
 
 export interface DownloadServiceState {
   queueLength: number;
   isProcessing: boolean;
-}
-
-/**
- * Detect which stations are in the currently active sequence.
- * Returns a Set of lowercase station names for quick lookup.
- */
-function getActiveSequenceStationNames(
-  scheduledSequences: ScheduledSequence[],
-  defaultSequence: SequenceConfig[],
-  stations: RadioStation[]
-): Set<string> {
-  const now = new Date();
-  const timeMinutes = now.getHours() * 60 + now.getMinutes();
-  const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
-  const currentDay = dayMap[now.getDay()];
-
-  // Find active scheduled sequence (same logic as getActiveSequenceForBlock)
-  const activeScheduled = scheduledSequences
-    .filter(s => s.enabled)
-    .filter(s => s.weekDays.length === 0 || s.weekDays.includes(currentDay))
-    .filter(s => {
-      const startMin = s.startHour * 60 + s.startMinute;
-      const endMin = s.endHour * 60 + s.endMinute;
-      if (endMin <= startMin) return timeMinutes >= startMin || timeMinutes < endMin;
-      return timeMinutes >= startMin && timeMinutes < endMin;
-    })
-    .sort((a, b) => b.priority - a.priority);
-
-  const activeSequence = activeScheduled.length > 0 ? activeScheduled[0].sequence : defaultSequence;
-
-  // Collect station names from the sequence
-  const stationNames = new Set<string>();
-  for (const seq of activeSequence) {
-    if (seq.radioSource.startsWith('fixo') || seq.radioSource === 'top50' || seq.radioSource === 'random_pop') continue;
-    // Resolve via explicit mapping
-    const dbName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()];
-    if (dbName) {
-      stationNames.add(dbName.toLowerCase());
-      continue;
-    }
-    // Resolve via station config
-    const stationConfig = stations.find(s => s.id === seq.radioSource || s.id.toLowerCase() === seq.radioSource.toLowerCase());
-    if (stationConfig) {
-      stationNames.add(stationConfig.name.toLowerCase());
-    }
-  }
-  return stationNames;
 }
 
 export function useGlobalDownloadService() {
@@ -138,9 +83,6 @@ export function useGlobalDownloadService() {
         };
         useRadioStore.getState().addDownloadHistory(historyEntry);
 
-        // Signal grade builder to immediately rebuild unlocked blocks
-        useAutoDownloadStore.getState().signalGradeRebuild();
-
         console.log(`[DL-SVC] ✅ Downloaded: ${song.artist} - ${song.title}`);
         return true;
       } else {
@@ -181,13 +123,7 @@ export function useGlobalDownloadService() {
     setState(prev => ({ ...prev, isProcessing: true }));
     useAutoDownloadStore.getState().setIsProcessing(true);
 
-    let iterationCount = 0;
     while (downloadQueueRef.current.length > 0) {
-      // Yield to event loop every 3 iterations to prevent UI freezing
-      if (++iterationCount % 3 === 0) {
-        await new Promise(resolve => setTimeout(resolve, 0));
-      }
-
       const currentState = useRadioStore.getState();
       
       if (!currentState.isRunning) {
@@ -204,21 +140,11 @@ export function useGlobalDownloadService() {
       downloadQueueRef.current.sort((a, b) => b.priority - a.priority);
 
       const item = downloadQueueRef.current.shift();
-      // Throttle state updates: only update every 3 iterations or on last item
-      if (iterationCount % 3 === 0 || downloadQueueRef.current.length === 0) {
-        setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
-        useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
-      }
+      setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
+      useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
       if (!item) break;
 
-      // Acquire global mutex — only 1 download at a time across the entire app
-      await acquireDownloadLock();
-      let success = false;
-      try {
-        success = await downloadSong(item.song);
-      } finally {
-        releaseDownloadLock();
-      }
+      const success = await downloadSong(item.song);
       
       if (!success && item.retryCount < 2) {
         downloadQueueRef.current.push({
@@ -226,34 +152,12 @@ export function useGlobalDownloadService() {
           retryCount: item.retryCount + 1,
           priority: item.priority,
         });
-      } else if (!success && item.retryCount >= 2) {
-        // All immediate retries exhausted: schedule a delayed retry in 10 minutes
-        useRadioStore.getState().updateMissingSong(item.song.id, { status: 'error' });
-        useGradeLogStore.getState().addSystemError({
-          category: 'DOWNLOAD',
-          level: 'warning',
-          message: `Download falhou 3x: ${item.song.artist} - ${item.song.title} — tentando novamente em 10min`,
-          details: `Estação: ${item.song.station || 'N/A'}`,
-        });
-        console.log(`[DL-SVC] ⏳ Retry agendado em 10min: ${item.song.artist} - ${item.song.title}`);
-        
-        // Re-add to missing with 'missing' status after 10 minutes so it gets picked up again
-        const songId = item.song.id;
-        setTimeout(() => {
-          const current = useRadioStore.getState().missingSongs.find(s => s.id === songId);
-          if (current && current.status === 'error') {
-            useRadioStore.getState().updateMissingSong(songId, { status: 'missing' });
-            // Remove from processed set so it can be re-queued
-            const dlKey = `dl|${item.song.artist.toLowerCase().trim()}|${item.song.title.toLowerCase().trim()}`;
-            processedSongsRef.current.delete(dlKey);
-            console.log(`[DL-SVC] 🔄 Re-tentando download: ${item.song.artist} - ${item.song.title}`);
-          }
-        }, 10 * 60 * 1000);
+        setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
+        useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
       }
 
-      // Dynamic delay: fastest for grade songs, fast for sequence, normal for others
-      const delay = item.priority >= PRIORITY_GRADE_BOOST ? 1000 : item.priority >= PRIORITY_SEQUENCE_BOOST ? DELAY_PRIORITY_MS : DELAY_NORMAL_MS;
-      await new Promise(resolve => setTimeout(resolve, delay));
+      // Small delay between downloads (5 seconds)
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
 
     isProcessingRef.current = false;
@@ -263,7 +167,7 @@ export function useGlobalDownloadService() {
 
   const checkNewMissingSongs = useCallback(() => {
     const storeState = useRadioStore.getState();
-    const { deezerConfig, missingSongs, rankingSongs, stations: allStations, scheduledSequences, sequence: defaultSequence } = storeState;
+    const { deezerConfig, missingSongs, rankingSongs, stations: allStations } = storeState;
 
     const pendingMissing = missingSongs.filter(s => s.status === 'missing');
     
@@ -274,7 +178,7 @@ export function useGlobalDownloadService() {
       const downloadKey = getDownloadKey(s);
       const inQueue = downloadQueueRef.current.some(
         item => item.song.artist.toLowerCase().trim() === s.artist.toLowerCase().trim() &&
-               item.song.title.toLowerCase().trim() === s.title.toLowerCase().trim()
+                item.song.title.toLowerCase().trim() === s.title.toLowerCase().trim()
       );
       const alreadyDownloaded = processedSongsRef.current.has(downloadKey);
       return !inQueue && !alreadyDownloaded;
@@ -289,13 +193,6 @@ export function useGlobalDownloadService() {
       lastLogTimeRef.current = now;
     }
 
-    // Cap processedSongsRef to prevent unbounded memory growth
-    if (processedSongsRef.current.size > 500) {
-      const entries = Array.from(processedSongsRef.current);
-      processedSongsRef.current = new Set(entries.slice(-250)); // Keep most recent 250
-      console.log('[DL-SVC] 🧹 processedSongs trimmed (500 → 250)');
-    }
-
     if (!deezerConfig.autoDownload || !deezerConfig.enabled || !deezerConfig.arl) {
       return;
     }
@@ -308,15 +205,11 @@ export function useGlobalDownloadService() {
         rankingMap.set(key, 50 - index);
       });
 
-      // All stations are prioritized by default
       const priorityStationNames = new Set(
         allStations
-          .filter(s => s.enabled)
+          .filter(s => s.prioritizeDownloads)
           .map(s => s.name.toLowerCase())
       );
-
-      // Detect active sequence stations for priority boost
-      const sequenceStationNames = getActiveSequenceStationNames(scheduledSequences, defaultSequence, allStations);
 
       for (const song of newToQueue) {
         const downloadKey = getDownloadKey(song);
@@ -325,22 +218,10 @@ export function useGlobalDownloadService() {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
         let priority = rankingMap.get(key) || 0;
         
-        const songStationLower = song.station?.toLowerCase() || '';
-        
-        // Grade-urgent boost (highest priority — song is in the on-air grade)
-        if (song.gradeUrgent) {
-          priority += PRIORITY_GRADE_BOOST;
-          console.log(`[DL-SVC] 🔴 Prioridade GRADE (${song.station}): ${song.artist} - ${song.title}`);
-        }
-        // Sequence station boost
-        else if (sequenceStationNames.has(songStationLower)) {
-          priority += PRIORITY_SEQUENCE_BOOST;
-          console.log(`[DL-SVC] 🎯 Prioridade SEQUÊNCIA (${song.station}): ${song.artist} - ${song.title}`);
-        }
-        // Station-level priority boost
-        else if (priorityStationNames.has(songStationLower)) {
+        const isPriorityStation = priorityStationNames.has(song.station?.toLowerCase() || '');
+        if (isPriorityStation) {
           priority += PRIORITY_STATION_BOOST;
-          console.log(`[DL-SVC] 📂 Prioridade ESTAÇÃO (${song.station}): ${song.artist} - ${song.title}`);
+          console.log(`[DL-SVC] 📂 Prioridade ALTA (${song.station}): ${song.artist} - ${song.title}`);
         }
 
         downloadQueueRef.current.push({ song, retryCount: 0, priority });
@@ -370,38 +251,15 @@ export function useGlobalDownloadService() {
     return () => unsubscribe();
   }, []);
 
-  // Reactive: detect new missing songs with debounce to prevent cascading triggers
-  useEffect(() => {
-    let prevCount = useRadioStore.getState().missingSongs.filter(s => s.status === 'missing').length;
-    let debounceTimer: NodeJS.Timeout | null = null;
-    const unsubscribe = useRadioStore.subscribe((state) => {
-      const currentCount = state.missingSongs.filter(s => s.status === 'missing').length;
-      if (currentCount > prevCount && state.isRunning) {
-        // Debounce: wait 500ms before triggering to batch rapid additions (e.g. during grade building)
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          console.log(`[DL-SVC] ⚡ Novas faltantes detectadas (${prevCount} → ${currentCount}), verificação`);
-          prevCount = currentCount;
-          checkNewMissingSongs();
-        }, 500);
-      }
-      prevCount = currentCount;
-    });
-    return () => {
-      unsubscribe();
-      if (debounceTimer) clearTimeout(debounceTimer);
-    };
-  }, [checkNewMissingSongs]);
-
   /** Start the download check interval. Returns cleanup function. */
   const start = useCallback(() => {
-    // Download check every 60 seconds (was 30s — reactive subscription handles immediate detection)
+    // Download check every 100 seconds
     downloadIntervalRef.current = setInterval(() => {
       const { isRunning } = useRadioStore.getState();
       if (isRunning) {
         checkNewMissingSongs();
       }
-    }, 60000);
+    }, 100000);
     
     // Initial check
     const { isRunning } = useRadioStore.getState();

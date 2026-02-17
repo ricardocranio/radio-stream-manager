@@ -42,7 +42,6 @@ export interface MissingSong {
   timestamp: Date;
   status: 'missing' | 'downloading' | 'downloaded' | 'error';
   dna?: string;
-  gradeUrgent?: boolean; // Song selected for the grade — highest download priority
 }
 
 export interface DownloadHistoryEntry {
@@ -76,7 +75,6 @@ export interface RankingSong {
   style: string;
   trend: 'up' | 'down' | 'stable';
   lastPlayed: Date;
-  station?: string; // Station that contributed this song to the ranking
 }
 
 interface RadioState {
@@ -166,8 +164,8 @@ interface RadioState {
   rankingSongs: RankingSong[];
   setRankingSongs: (songs: RankingSong[]) => void;
   addRankingPlay: (songId: string) => void;
-  addOrUpdateRankingSong: (title: string, artist: string, style: string, station?: string) => void;
-  applyRankingBatch: (updates: Array<{ title: string; artist: string; style: string; count: number; station?: string }>) => void;
+  addOrUpdateRankingSong: (title: string, artist: string, style: string) => void;
+  applyRankingBatch: (updates: Array<{ title: string; artist: string; style: string; count: number }>) => void;
   clearRanking: () => void;
 
   // Auto Scrape Setting (persisted)
@@ -275,7 +273,7 @@ const defaultSequence: SequenceConfig[] = [
 
 // V21 System Config
 const defaultConfig: SystemConfig = {
-  musicFolders: ['C:\\Users\\Radio\\Music\\PGM-FM', 'C:\\Playlist\\Músicas', 'C:\\Playlist\\Downloads'],
+  musicFolders: ['C:\\Users\\Radio\\Music\\PGM-FM', 'C:\\Playlist\\Músicas'],
   gradeFolder: 'C:\\Playlist\\pgm\\Grades',
   contentFolder: 'G:\\Outros computadores\\Meu computador\\Conteudos KF',
   rankingFile: 'C:\\Playlist\\pgm\\Grades\\ranking_sucessos.json',
@@ -308,8 +306,6 @@ const defaultConfig: SystemConfig = {
   funkWords: ['funk', 'mc ', 'sequencia', 'proibidão', 'baile', 'kondzilla', 'gr6'],
   // Default characters to filter from filenames (encoding artifacts, special chars)
   filterCharacters: ['â€™', 'Ã©', 'Ã£', 'Ã§', 'â€"', 'â€œ', 'â€', 'Â', '´', '`', '~', '^', '$', '#', '@'],
-  // Forbidden songs (artist - title pairs)
-  forbiddenSongs: [],
   // Power saving mode
   powerSavingMode: false,
   // Similarity threshold for music library matching (0.5 to 0.95)
@@ -346,31 +342,6 @@ const defaultFixedContent: FixedContent[] = [
   { id: '15', name: 'TOP50 Bloco 19h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 19, minute: 30 }], enabled: true, top50Count: 10 },
   // A Voz do Brasil às 21:00
   { id: '16', name: 'A Voz do Brasil', fileName: 'VOZ_DO_BRASIL', type: 'vozbrasil', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 21, minute: 0 }], enabled: true },
-  // Weekend - 60 Minutos (sábado e domingo)
-  { id: '17', name: '60 Minutos Bloco 01', fileName: '60_MINUTOS_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 11, minute: 0 }], enabled: true, position: 'start' },
-  { id: '18', name: '60 Minutos Bloco 02', fileName: '60_MINUTOS_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 11, minute: 30 }], enabled: true, position: 'start' },
-  // Weekend - Shake Mix (sábado e domingo)
-  { id: '19', name: 'Shake Mix Bloco 01', fileName: 'SHAKE_MIX_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 13, minute: 0 }], enabled: true, position: 'start' },
-  { id: '20', name: 'Shake Mix Bloco 02', fileName: 'SHAKE_MIX_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 13, minute: 30 }], enabled: true, position: 'start' },
-  { id: '21', name: 'Shake Mix Bloco 03', fileName: 'SHAKE_MIX_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 14, minute: 0 }], enabled: true, position: 'start' },
-  { id: '22', name: 'Shake Mix Bloco 04', fileName: 'SHAKE_MIX_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 14, minute: 30 }], enabled: true, position: 'start' },
-  // Weekend - Sem Parar (sábado e domingo)
-  { id: '23', name: 'Sem Parar Bloco 01', fileName: 'SEM_PARAR_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 15, minute: 0 }], enabled: true, position: 'start' },
-  { id: '24', name: 'Sem Parar Bloco 02', fileName: 'SEM_PARAR_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 15, minute: 30 }], enabled: true, position: 'start' },
-  { id: '25', name: 'Sem Parar Bloco 03', fileName: 'SEM_PARAR_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 16, minute: 0 }], enabled: true, position: 'start' },
-  { id: '26', name: 'Sem Parar Bloco 04', fileName: 'SEM_PARAR_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 16, minute: 30 }], enabled: true, position: 'start' },
-  // Weekend - TOP50 às 17:00 e 17:30
-  { id: '27', name: 'TOP50 Weekend 17h', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 17, minute: 0 }], enabled: true, top50Count: 10 },
-  { id: '28', name: 'TOP50 Weekend 17h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 17, minute: 30 }], enabled: true, top50Count: 10 },
-  // Weekend - Parada Pop (sábado e domingo)
-  { id: '29', name: 'Parada Pop Bloco 01', fileName: 'PARADA_POP_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 19, minute: 0 }], enabled: true, position: 'start' },
-  { id: '30', name: 'Parada Pop Bloco 02', fileName: 'PARADA_POP_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 19, minute: 30 }], enabled: true, position: 'start' },
-  { id: '31', name: 'Parada Pop Bloco 03', fileName: 'PARADA_POP_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 20, minute: 0 }], enabled: true, position: 'start' },
-  // Weekend - Mega Funk (sábado e domingo) - 2 arquivos fixos por bloco
-  { id: '29b', name: 'Mega Funk Bloco 01', fileName: 'MEGA_FUNK_BLOCO01_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 18, minute: 0 }], enabled: true, position: 1 },
-  { id: '29c', name: 'Mega Funk Bloco 02', fileName: 'MEGA_FUNK_BLOCO02_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 18, minute: 0 }], enabled: true, position: 3 },
-  { id: '29d', name: 'Mega Funk Bloco 03', fileName: 'MEGA_FUNK_BLOCO03_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 18, minute: 30 }], enabled: true, position: 1 },
-  { id: '29e', name: 'Mega Funk Bloco 04', fileName: 'MEGA_FUNK_BLOCO04_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 18, minute: 30 }], enabled: true, position: 3 },
 ];
 
 export const useRadioStore = create<RadioState>()(
@@ -413,16 +384,7 @@ export const useRadioStore = create<RadioState>()(
         set((state) => ({ deezerConfig: { ...state.deezerConfig, ...config } })),
 
       sequence: defaultSequence,
-      setSequence: (sequence) => set((state) => {
-        // Auto-clear missing songs from stations no longer in the new sequence
-        const newStationIds = new Set(sequence.map(s => s.radioSource));
-        const cleanedMissing = state.missingSongs.filter(song => {
-          // Find station ID by name
-          const stationEntry = state.stations.find(s => s.name === song.station);
-          return stationEntry ? newStationIds.has(stationEntry.id) : true;
-        });
-        return { sequence, missingSongs: cleanedMissing };
-      }),
+      setSequence: (sequence) => set({ sequence }),
 
       // Scheduled Sequences
       scheduledSequences: [],
@@ -451,29 +413,7 @@ export const useRadioStore = create<RadioState>()(
       missingSongs: [],
       setMissingSongs: (missingSongs) => set({ missingSongs }),
       addMissingSong: (song) =>
-        set((state) => {
-          // Deduplication: check if same artist+title already exists
-          const isDuplicate = state.missingSongs.some(
-            s => s.artist.toLowerCase().trim() === song.artist.toLowerCase().trim() &&
-                 s.title.toLowerCase().trim() === song.title.toLowerCase().trim()
-          );
-          if (isDuplicate) return state;
-
-          // Auto-purge: remove 'downloaded' entries and old 'error' entries (>1h)
-          const oneHourAgo = Date.now() - 60 * 60 * 1000;
-          let cleaned = state.missingSongs.filter(s => {
-            if (s.status === 'downloaded') return false;
-            if (s.status === 'error' && new Date(s.timestamp).getTime() < oneHourAgo) return false;
-            return true;
-          });
-
-          // Cap at 200 entries - remove oldest first
-          if (cleaned.length >= 200) {
-            cleaned = cleaned.slice(-199);
-          }
-
-          return { missingSongs: [...cleaned, song] };
-        }),
+        set((state) => ({ missingSongs: [...state.missingSongs, song] })),
       updateMissingSong: (id, updates) =>
         set((state) => ({
           missingSongs: state.missingSongs.map((s) =>
@@ -544,8 +484,8 @@ export const useRadioStore = create<RadioState>()(
             s.id === songId ? { ...s, plays: s.plays + 1, lastPlayed: new Date() } : s
           ),
         })),
-      // Adds or updates a song in the ranking (fed by grade generation)
-      addOrUpdateRankingSong: (title, artist, style, station) =>
+      // Optimized: processes batch updates from rankingBatcher
+      addOrUpdateRankingSong: (title, artist, style) =>
         set((state) => {
           const normalizedTitle = title.toLowerCase().trim();
           const normalizedArtist = artist.toLowerCase().trim();
@@ -587,7 +527,6 @@ export const useRadioStore = create<RadioState>()(
               style: style || 'POP/VARIADO',
               trend: 'stable',
               lastPlayed: new Date(),
-              station: station,
             };
             
             // Limit ranking to 25 songs for memory optimization
@@ -602,7 +541,7 @@ export const useRadioStore = create<RadioState>()(
           }
         }),
       // Batch update: applies multiple ranking updates at once (from batcher)
-      applyRankingBatch: (updates: Array<{ title: string; artist: string; style: string; count: number; station?: string }>) =>
+      applyRankingBatch: (updates: Array<{ title: string; artist: string; style: string; count: number }>) =>
         set((state) => {
           let updatedSongs = [...state.rankingSongs];
           
@@ -627,7 +566,6 @@ export const useRadioStore = create<RadioState>()(
                 plays: existing.plays + update.count,
                 lastPlayed: new Date(),
                 trend: existing.plays + update.count > 5 ? 'up' : existing.trend,
-                station: update.station || existing.station,
               };
             } else {
               updatedSongs.push({
@@ -638,7 +576,6 @@ export const useRadioStore = create<RadioState>()(
                 style: update.style,
                 trend: 'stable',
                 lastPlayed: new Date(),
-                station: update.station,
               });
             }
           }
@@ -666,7 +603,7 @@ export const useRadioStore = create<RadioState>()(
         sequence: state.sequence,
         scheduledSequences: state.scheduledSequences,
         fixedContent: state.fixedContent,
-        // blockSongs excluded — regenerated every cycle, saves ~50KB+ localStorage I/O
+        blockSongs: state.blockSongs,
         missingSongs: state.missingSongs,
         downloadHistory: state.downloadHistory,
         gradeHistory: state.gradeHistory,

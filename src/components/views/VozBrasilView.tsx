@@ -161,15 +161,22 @@ export function VozBrasilView() {
     };
   }, [config.scheduleTime, config.cleanupTime, config.enabled]);
 
-  // Generate download URL with current local date
+  // Generate download URLs with current date - multiple fallback URLs
   const getDownloadUrls = () => {
     const now = new Date();
     const day = now.getDate().toString().padStart(2, '0');
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const year = now.getFullYear();
     
+    // Multiple EBC URL formats as fallback
+    const shortYear = year.toString().slice(-2);
     return [
+      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}-1/@@download/file`,
       `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
+      `https://audios.ebc.com.br/radiogov/${year}/${month}/${day}-${month}-${shortYear}-a-voz-do-brasil.mp3`,
+      `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/voz_${day}${month}${year}.mp3`,
+      `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/vozbrasil_${day}${month}${year}.mp3`,
+      `https://conteudo.ebcservicos.com.br/25-streaming-ebc/a-voz-do-brasil/VozDoBrasil_${day}-${month}-${year}.mp3`,
     ];
   };
   
@@ -389,18 +396,17 @@ export function VozBrasilView() {
   const handleCleanup = async () => {
     if (window.electronAPI?.cleanupVozBrasil) {
       try {
-        // Delete ALL files in the folder (maxAgeDays: 0 forces deletion of everything)
         const result = await window.electronAPI.cleanupVozBrasil({
           folder: config.downloadFolder,
-          maxAgeDays: 0,
+          maxAgeDays: 7, // Delete files older than 7 days
         });
         
         if (result.success) {
           toast({
             title: '🗑️ Limpeza executada',
             description: result.deletedCount && result.deletedCount > 0
-              ? `${result.deletedCount} arquivo(s) removido(s).`
-              : 'Nenhum arquivo encontrado na pasta.',
+              ? `${result.deletedCount} arquivo(s) antigo(s) removido(s).`
+              : 'Nenhum arquivo antigo encontrado.',
           });
         } else {
           toast({

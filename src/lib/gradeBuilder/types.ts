@@ -50,7 +50,6 @@ export interface BlockLogItem {
 export interface BlockResult {
   line: string;
   logs: BlockLogItem[];
-  songFreshness?: string[]; // ISO timestamps for each song slot (for freshness comparison on rebuild)
 }
 
 export interface LibraryCheckResult {
@@ -88,7 +87,6 @@ export interface GradeContext {
     style: string;
     trend: 'up' | 'down' | 'stable';
     lastPlayed: Date;
-    station?: string;
   }>;
   filterChars?: string[];
   fixedContent: Array<{

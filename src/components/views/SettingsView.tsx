@@ -44,9 +44,6 @@ export function SettingsView() {
   const [filterCharacters, setFilterCharacters] = useState(
     config.filterCharacters?.join(', ') || 'â€™, Ã©, Ã£, Ã§, â€", â€œ, â€, Â, ´, `, ~, ^, $, #, @'
   );
-  const [forbiddenSongs, setForbiddenSongs] = useState(
-    config.forbiddenSongs?.join('\n') || ''
-  );
   
   // Refs to track if filters have changed
   const filtersSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -104,10 +101,7 @@ export function SettingsView() {
     if (config.filterCharacters) {
       setFilterCharacters(config.filterCharacters.join(', '));
     }
-    if (config.forbiddenSongs) {
-      setForbiddenSongs(config.forbiddenSongs.join('\n'));
-    }
-  }, [config.forbiddenWords, config.funkWords, config.filterCharacters, config.forbiddenSongs]);
+  }, [config.forbiddenWords, config.funkWords, config.filterCharacters]);
   
   // Auto-save filter words with debounce
   const autoSaveFilters = useCallback(() => {
@@ -119,17 +113,15 @@ export function SettingsView() {
       const parsedForbidden = forbiddenWords.split(',').map(w => w.trim()).filter(Boolean);
       const parsedFunk = funkWords.split(',').map(w => w.trim()).filter(Boolean);
       const parsedFilterChars = filterCharacters.split(',').map(w => w.trim()).filter(Boolean);
-      const parsedForbiddenSongs = forbiddenSongs.split('\n').map(s => s.trim()).filter(Boolean);
       
       setConfig({ 
         forbiddenWords: parsedForbidden, 
         funkWords: parsedFunk,
         filterCharacters: parsedFilterChars,
-        forbiddenSongs: parsedForbiddenSongs,
       });
-      console.log('[SETTINGS] ✓ Auto-saved filters:', { forbiddenWords: parsedForbidden.length, funkWords: parsedFunk.length, filterCharacters: parsedFilterChars.length, forbiddenSongs: parsedForbiddenSongs.length });
+      console.log('[SETTINGS] ✓ Auto-saved filters:', { forbiddenWords: parsedForbidden.length, funkWords: parsedFunk.length, filterCharacters: parsedFilterChars.length });
     }, 800);
-  }, [forbiddenWords, funkWords, filterCharacters, forbiddenSongs, setConfig]);
+  }, [forbiddenWords, funkWords, filterCharacters, setConfig]);
   
   // Trigger auto-save when filter words change (skip initial mount)
   const isFiltersMounted = useRef(false);
@@ -146,7 +138,7 @@ export function SettingsView() {
         clearTimeout(filtersSaveTimeoutRef.current);
       }
     };
-  }, [forbiddenWords, funkWords, filterCharacters, forbiddenSongs, autoSaveFilters]);
+  }, [forbiddenWords, funkWords, filterCharacters, autoSaveFilters]);
 
   const handleReset = () => {
     setLocalConfig(config);
@@ -597,52 +589,34 @@ export function SettingsView() {
               O sistema vasculha recursivamente todas as subpastas procurando arquivos de áudio (.mp3, .flac, .wav, .m4a, .aac, .ogg, .wma)
             </p>
 
-            {/* Similarity Threshold Toggle + Slider */}
+            {/* Similarity Threshold Slider */}
             <div className="space-y-2 pt-4 border-t border-border">
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={localConfig.similarityThreshold !== 0}
-                    onCheckedChange={(checked) =>
-                      setLocalConfig((prev) => ({
-                        ...prev,
-                        similarityThreshold: checked ? 0.75 : 0,
-                      }))
-                    }
-                  />
-                  <Label>Threshold de Similaridade</Label>
-                </div>
+                <Label>Threshold de Similaridade</Label>
                 <span className="text-sm font-mono text-blue-500">
-                  {localConfig.similarityThreshold === 0
-                    ? 'Desabilitado'
-                    : `${Math.round((localConfig.similarityThreshold || 0.75) * 100)}%`}
+                  {Math.round((localConfig.similarityThreshold || 0.75) * 100)}%
                 </span>
               </div>
-              {localConfig.similarityThreshold !== 0 && (
-                <>
-                  <Slider
-                    value={[(localConfig.similarityThreshold || 0.75) * 100]}
-                    onValueChange={([value]) =>
-                      setLocalConfig((prev) => ({ ...prev, similarityThreshold: value / 100 }))
-                    }
-                    min={50}
-                    max={95}
-                    step={5}
-                    className="w-full"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>50%</span>
-                    <span>65%</span>
-                    <span>75%</span>
-                    <span>85%</span>
-                    <span>95%</span>
-                  </div>
-                </>
-              )}
+              <Slider
+                value={[(localConfig.similarityThreshold || 0.75) * 100]}
+                onValueChange={([value]) =>
+                  setLocalConfig((prev) => ({ ...prev, similarityThreshold: value / 100 }))
+                }
+                min={50}
+                max={95}
+                step={5}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>50%</span>
+                <span>65%</span>
+                <span>75%</span>
+                <span>85%</span>
+                <span>95%</span>
+              </div>
               <p className="text-xs text-muted-foreground">
-                {localConfig.similarityThreshold === 0
-                  ? 'Verificação de similaridade desabilitada. Todas as músicas serão tratadas como "encontradas" na biblioteca.'
-                  : 'Define o quão similar uma música capturada precisa ser com o arquivo local para ser considerada "encontrada". Valores menores = mais flexível, valores maiores = mais rigoroso.'}
+                Define o quão similar uma música capturada precisa ser com o arquivo local para ser considerada "encontrada". 
+                Valores menores = mais flexível (mais matches), valores maiores = mais rigoroso (menos falsos positivos).
               </p>
 
               {/* Similarity Stats Panel */}
@@ -846,19 +820,6 @@ export function SettingsView() {
               <p className="text-xs text-muted-foreground mt-2">
                 Caracteres que serão removidos dos nomes de arquivos na grade. Útil para remover artefatos de encoding (â€™, Ã©, etc.) e caracteres especiais.
                 Os nomes originais do monitoramento são preservados no banco de dados.
-              </p>
-            </div>
-
-            <div>
-              <Label className="text-sm">🚫 Músicas Proibidas (Artista - Título)</Label>
-              <Textarea
-                value={forbiddenSongs}
-                onChange={(e) => setForbiddenSongs(e.target.value)}
-                className="mt-2 font-mono text-xs h-32"
-                placeholder={"Wellington Paixone - Eu Vou na Sua Casa\nPromessa D - Pedido de Socorro (Ao Vivo)\nOlivia - Homem de Papel"}
-              />
-              <p className="text-xs text-muted-foreground mt-2">
-                Uma música por linha no formato <strong>Artista - Título</strong>. Essas músicas não serão montadas na grade e nem baixadas.
               </p>
             </div>
           </CardContent>

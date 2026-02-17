@@ -17,27 +17,18 @@ const BATCH_CONCURRENCY = 5; // Max parallel Electron IPC calls
  */
 export async function batchFindSongsInLibrary(
   songs: Array<{ artist: string; title: string }>,
-  musicFolders: string[],
-  similarityThreshold?: number
+  musicFolders: string[]
 ): Promise<Map<string, LibraryCheckResult>> {
-  // Web mode OR threshold disabled (0): assume all songs exist (simulation-like behavior)
-  if (!isElectronEnv || !window.electronAPI?.findSongMatch || similarityThreshold === 0) {
-    return new Proxy(new Map<string, LibraryCheckResult>(), {
-      get(target, prop) {
-        if (prop === 'get') return () => ({ exists: true } as LibraryCheckResult);
-        if (prop === 'has') return () => true;
-        if (prop === 'size') return 0;
-        if (prop === 'entries') return () => [][Symbol.iterator]();
-        if (prop === 'forEach') return () => {};
-        if (prop === 'keys') return () => [][Symbol.iterator]();
-        if (prop === 'values') return () => [][Symbol.iterator]();
-        if (prop === Symbol.iterator) return () => [][Symbol.iterator]();
-        return Reflect.get(target, prop);
-      }
-    });
-  }
-
   const results = new Map<string, LibraryCheckResult>();
+  
+  if (!isElectronEnv || !window.electronAPI?.findSongMatch) {
+    // Web mode: assume all exist
+    for (const song of songs) {
+      const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
+      results.set(key, { exists: true });
+    }
+    return results;
+  }
 
   // Deduplicate by key
   const uniqueSongs = new Map<string, { artist: string; title: string }>();
@@ -90,12 +81,10 @@ export async function batchFindSongsInLibrary(
 export async function findSongInLibrary(
   artist: string,
   title: string,
-  musicFolders: string[],
-  similarityThreshold?: number
+  musicFolders: string[]
 ): Promise<LibraryCheckResult> {
-  // Web mode OR threshold disabled (0): assume exists (simulation-like behavior)
-  if (!isElectronEnv || !window.electronAPI?.findSongMatch || similarityThreshold === 0) {
-    return { exists: true }; // Assume exists
+  if (!isElectronEnv || !window.electronAPI?.findSongMatch) {
+    return { exists: true }; // Web mode: assume exists
   }
   
   try {

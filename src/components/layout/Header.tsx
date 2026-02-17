@@ -1,6 +1,5 @@
-import { Power, RefreshCw, Clock, Sun, Moon, Download } from 'lucide-react';
+import { Power, RefreshCw, Clock, Sun, Moon } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
-import { useCapturedDownloadStore } from '@/store/capturedDownloadStore';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -72,9 +71,6 @@ export function Header() {
           </Button>
         )}
 
-        {/* Captured Download Progress */}
-        <CapturedDownloadBadge />
-
         {/* Status Indicator */}
         <StatusIndicator />
         
@@ -106,21 +102,5 @@ export function Header() {
         </Button>
       </div>
     </header>
-  );
-}
-
-/** Small badge showing captured download progress — purely visual, no logic changes */
-function CapturedDownloadBadge() {
-  const { isProcessing, current, total } = useCapturedDownloadStore();
-
-  if (!isProcessing || total === 0) return null;
-
-  return (
-    <div className="flex items-center gap-1.5 px-2 py-1 bg-primary/10 rounded-md animate-pulse" title="Downloads de músicas capturadas em andamento">
-      <Download className="w-3.5 h-3.5 text-primary" />
-      <span className="text-xs font-semibold text-primary tabular-nums">
-        {current}/{total}
-      </span>
-    </div>
   );
 }

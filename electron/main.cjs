@@ -1,7 +1,4 @@
 const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification, dialog } = require('electron');
-
-// Set app name so AppData folder becomes "AudioSolutions" instead of default
-app.setName('AudioSolutions');
 const path = require('path');
 const { spawn, exec } = require('child_process');
 const fs = require('fs');
@@ -23,304 +20,6 @@ let scrapedSongsCache = new Map();
 
 let mainWindow;
 let tray = null;
-let radioMonitorProcess = null;
-let radioMonitorRunning = false;
-let radioMonitorRestartCount = 0;
-const RADIO_MONITOR_MAX_RESTARTS = 3;
-let radioMonitorWatchdog = null;
-let customRadioMonitorScriptPath = null;
-
-// Load custom script path from config file
-function loadCustomScriptPath() {
-  try {
-    const configDir = path.join(app.getPath('userData'), 'config');
-    const configFile = path.join(configDir, 'radio-monitor-config.json');
-    if (fs.existsSync(configFile)) {
-      const data = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
-      if (data.scriptPath && fs.existsSync(data.scriptPath)) {
-        customRadioMonitorScriptPath = data.scriptPath;
-        console.log('[RADIO-MONITOR] Custom script path loaded:', customRadioMonitorScriptPath);
-      }
-    }
-  } catch (e) {
-    console.error('[RADIO-MONITOR] Error loading custom path config:', e.message);
-  }
-}
-
-// Save custom script path to config file
-function saveCustomScriptPath(scriptPath) {
-  try {
-    const configDir = path.join(app.getPath('userData'), 'config');
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
-    }
-    const configFile = path.join(configDir, 'radio-monitor-config.json');
-    fs.writeFileSync(configFile, JSON.stringify({ scriptPath }, null, 2), 'utf-8');
-    customRadioMonitorScriptPath = scriptPath;
-    console.log('[RADIO-MONITOR] Custom script path saved:', scriptPath);
-  } catch (e) {
-    console.error('[RADIO-MONITOR] Error saving custom path config:', e.message);
-  }
-}
-
-// =============== PYTHON RADIO MONITOR ===============
-
-function getRadioMonitorScriptPath() {
-  // Use custom path if set
-  if (customRadioMonitorScriptPath && fs.existsSync(customRadioMonitorScriptPath)) {
-    return customRadioMonitorScriptPath;
-  }
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'app', 'public', 'radio_monitor_supabase.py');
-  }
-  return path.join(__dirname, '..', 'public', 'radio_monitor_supabase.py');
-}
-
-// Install all Python dependencies for the radio monitor silently
-function installRadioMonitorDeps() {
-  return new Promise((resolve) => {
-    const packages = ['playwright', 'requests', 'beautifulsoup4', 'supabase'];
-    const pipCmd = process.platform === 'win32' ? 'pip' : 'pip3';
-    const installCmd = `${pipCmd} install ${packages.join(' ')} -q --upgrade`;
-    
-    console.log('[RADIO-MONITOR] Installing dependencies:', installCmd);
-    
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('radio-monitor-status', { 
-        running: false, 
-        installing: true,
-        message: 'Instalando dependências do monitor...' 
-      });
-    }
-
-    exec(installCmd, { timeout: 300000 }, (error, stdout, stderr) => {
-      if (error) {
-        // Try with --user flag
-        const fallbackCmd = `${pipCmd} install ${packages.join(' ')} -q --upgrade --user`;
-        console.log('[RADIO-MONITOR] Retrying with --user:', fallbackCmd);
-        
-        exec(fallbackCmd, { timeout: 300000 }, (error2, stdout2, stderr2) => {
-          if (error2) {
-            console.error('[RADIO-MONITOR] Failed to install deps:', stderr2 || error2.message);
-            resolve(false);
-            return;
-          }
-          console.log('[RADIO-MONITOR] Dependencies installed (--user)');
-          installPlaywrightChromium(resolve);
-        });
-        return;
-      }
-      
-      console.log('[RADIO-MONITOR] Dependencies installed');
-      installPlaywrightChromium(resolve);
-    });
-  });
-}
-
-// Install Playwright Chromium browser
-function installPlaywrightChromium(resolve) {
-  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-  const cmd = `${pythonCmd} -m playwright install chromium`;
-  
-  console.log('[RADIO-MONITOR] Installing Chromium:', cmd);
-  
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('radio-monitor-status', { 
-      running: false, 
-      installing: true,
-      message: 'Instalando navegador Chromium...' 
-    });
-  }
-
-  exec(cmd, { timeout: 600000 }, (error, stdout, stderr) => {
-    if (error) {
-      console.error('[RADIO-MONITOR] Chromium install failed:', error.message);
-      // Still resolve true - the script has its own auto-install logic
-      resolve(true);
-      return;
-    }
-    console.log('[RADIO-MONITOR] ✓ Chromium installed');
-    resolve(true);
-  });
-}
-
-function startRadioMonitor() {
-  if (radioMonitorProcess) {
-    console.log('[RADIO-MONITOR] Already running, skipping start');
-    return;
-  }
-
-  const scriptPath = getRadioMonitorScriptPath();
-  
-  if (!fs.existsSync(scriptPath)) {
-    console.error('[RADIO-MONITOR] Script not found:', scriptPath);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('radio-monitor-status', { 
-        running: false, 
-        error: 'Script não encontrado: ' + scriptPath 
-      });
-    }
-    return;
-  }
-
-  console.log('[RADIO-MONITOR] Starting Python monitor:', scriptPath);
-
-  // Try python, then python3
-  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-  
-  radioMonitorProcess = spawn(pythonCmd, [scriptPath], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env },
-    detached: false,
-  });
-
-  radioMonitorRunning = true;
-  radioMonitorRestartCount = 0; // Reset on successful start
-
-  radioMonitorProcess.stdout.on('data', (data) => {
-    const output = data.toString().trim();
-    if (output) {
-      console.log('[RADIO-MONITOR]', output);
-      // Forward output to renderer
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('radio-monitor-log', output);
-      }
-    }
-  });
-
-  radioMonitorProcess.stderr.on('data', (data) => {
-    const output = data.toString().trim();
-    if (output) {
-      console.error('[RADIO-MONITOR-ERR]', output);
-      // Forward errors to renderer so user can see them in the log panel
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('radio-monitor-log', '⚠️ ' + output);
-      }
-    }
-  });
-
-  radioMonitorProcess.on('close', (code) => {
-    console.log(`[RADIO-MONITOR] Process exited with code ${code}`);
-    radioMonitorProcess = null;
-    radioMonitorRunning = false;
-    stopRadioMonitorWatchdog();
-    
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('radio-monitor-status', { 
-        running: false, 
-        exitCode: code 
-      });
-    }
-
-    // Auto-restart with limit (max 3 attempts)
-    if (!app.isQuitting && code !== 0 && code !== null) {
-      radioMonitorRestartCount++;
-      if (radioMonitorRestartCount <= RADIO_MONITOR_MAX_RESTARTS) {
-        const delay = radioMonitorRestartCount * 15000; // 15s, 30s, 45s
-        console.log(`[RADIO-MONITOR] Restart ${radioMonitorRestartCount}/${RADIO_MONITOR_MAX_RESTARTS} in ${delay/1000}s...`);
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('radio-monitor-log', 
-            `🔄 Reiniciando automaticamente (${radioMonitorRestartCount}/${RADIO_MONITOR_MAX_RESTARTS}) em ${delay/1000}s...`
-          );
-        }
-        setTimeout(() => {
-          if (!app.isQuitting) {
-            startRadioMonitor();
-          }
-        }, delay);
-      } else {
-        console.error('[RADIO-MONITOR] Max restarts exceeded, giving up.');
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('radio-monitor-log', 
-            '❌ Monitor parou após 3 tentativas de reinício. Clique em "Iniciar" para tentar novamente.'
-          );
-          mainWindow.webContents.send('radio-monitor-status', { 
-            running: false, 
-            error: 'Monitor parou após 3 tentativas. Verifique os logs e reinicie manualmente.' 
-          });
-        }
-      }
-    }
-  });
-
-  radioMonitorProcess.on('error', (err) => {
-    console.error('[RADIO-MONITOR] Failed to start:', err.message);
-    radioMonitorProcess = null;
-    radioMonitorRunning = false;
-
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('radio-monitor-log', '❌ Erro ao iniciar Python: ' + err.message);
-      mainWindow.webContents.send('radio-monitor-status', { 
-        running: false, 
-        error: 'Erro ao iniciar: ' + err.message 
-      });
-    }
-  });
-
-  // Notify renderer
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('radio-monitor-status', { running: true });
-  }
-  
-  // Start watchdog - checks every 60s if process is still alive
-  startRadioMonitorWatchdog();
-  
-  console.log('[RADIO-MONITOR] Process started with PID:', radioMonitorProcess.pid);
-}
-
-// Watchdog: periodically verify the Python process is alive and responsive
-function startRadioMonitorWatchdog() {
-  stopRadioMonitorWatchdog();
-  radioMonitorWatchdog = setInterval(() => {
-    if (!radioMonitorProcess || !radioMonitorRunning) {
-      stopRadioMonitorWatchdog();
-      return;
-    }
-    try {
-      // Check if process is still alive by sending signal 0
-      process.kill(radioMonitorProcess.pid, 0);
-    } catch (e) {
-      // Process is dead but we didn't get the 'close' event
-      console.error('[RADIO-MONITOR] Watchdog: process is dead (zombie detected)');
-      radioMonitorProcess = null;
-      radioMonitorRunning = false;
-      stopRadioMonitorWatchdog();
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('radio-monitor-log', '⚠️ Watchdog: processo Python detectado como morto');
-        mainWindow.webContents.send('radio-monitor-status', { running: false, error: 'Processo morreu inesperadamente' });
-      }
-      // Trigger auto-restart
-      if (!app.isQuitting && radioMonitorRestartCount < RADIO_MONITOR_MAX_RESTARTS) {
-        radioMonitorRestartCount++;
-        setTimeout(() => { if (!app.isQuitting) startRadioMonitor(); }, 10000);
-      }
-    }
-  }, 60000);
-}
-
-function stopRadioMonitorWatchdog() {
-  if (radioMonitorWatchdog) {
-    clearInterval(radioMonitorWatchdog);
-    radioMonitorWatchdog = null;
-  }
-}
-
-function stopRadioMonitor() {
-  stopRadioMonitorWatchdog();
-  if (radioMonitorProcess) {
-    console.log('[RADIO-MONITOR] Stopping process...');
-    radioMonitorRunning = false;
-    radioMonitorRestartCount = 0; // Reset counter on manual stop
-    
-    if (process.platform === 'win32') {
-      spawn('taskkill', ['/pid', radioMonitorProcess.pid.toString(), '/f', '/t']);
-    } else {
-      radioMonitorProcess.kill('SIGTERM');
-    }
-    
-    radioMonitorProcess = null;
-  }
-}
 
 // Prevent multiple instances
 const gotTheLock = app.requestSingleInstanceLock();
@@ -988,9 +687,6 @@ function ensureDefaultFolders() {
 
 // App ready
 app.whenReady().then(async () => {
-  // Load custom radio monitor script path
-  loadCustomScriptPath();
-  
   // Ensure default folders exist
   ensureDefaultFolders();
   
@@ -1075,48 +771,6 @@ app.whenReady().then(async () => {
       }, 3000);
     }
   }
-
-  // Auto-start Radio Monitor: install deps then start
-  if (pythonStatus.available) {
-    console.log('[INIT] 🎵 Preparing Radio Monitor...');
-    setTimeout(async () => {
-      try {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('radio-monitor-log', '📦 Instalando dependências do monitor...');
-        }
-        
-        const depsOk = await installRadioMonitorDeps();
-        
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('radio-monitor-log', 
-            depsOk ? '✅ Dependências instaladas!' : '⚠️ Algumas dependências falharam, tentando iniciar...'
-          );
-          mainWindow.webContents.send('radio-monitor-log', '🚀 Iniciando monitor automaticamente...');
-        }
-        
-        console.log('[INIT] 🎵 Starting Radio Monitor...');
-        startRadioMonitor();
-      } catch (err) {
-        console.error('[INIT] Radio Monitor startup error:', err);
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('radio-monitor-log', '❌ Erro ao iniciar: ' + err.message);
-        }
-        // Try starting anyway - script has its own auto-install
-        startRadioMonitor();
-      }
-    }, 5000);
-  } else {
-    console.log('[INIT] ⚠️ Radio Monitor skipped - Python not available');
-    setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('radio-monitor-log', '⚠️ Python não encontrado - monitor não iniciado');
-        mainWindow.webContents.send('radio-monitor-status', { 
-          running: false, 
-          error: 'Python não encontrado no sistema. Instale Python para ativar o monitor.' 
-        });
-      }
-    }, 5000);
-  }
   
   // Check for updates after window is ready (only in production)
   if (autoUpdater && app.isPackaged) {
@@ -1149,75 +803,11 @@ app.on('window-all-closed', () => {
 // Before quit
 app.on('before-quit', () => {
   app.isQuitting = true;
-  stopRadioMonitor();
 });
 
 // IPC Handlers for communication with renderer
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
-});
-
-// Radio Monitor IPC handlers
-ipcMain.handle('get-radio-monitor-status', () => {
-  return { 
-    running: radioMonitorRunning, 
-    pid: radioMonitorProcess ? radioMonitorProcess.pid : null 
-  };
-});
-
-ipcMain.handle('start-radio-monitor', () => {
-  startRadioMonitor();
-  return { success: true };
-});
-
-ipcMain.handle('stop-radio-monitor', () => {
-  stopRadioMonitor();
-  return { success: true };
-});
-
-ipcMain.handle('restart-radio-monitor', () => {
-  stopRadioMonitor();
-  setTimeout(() => startRadioMonitor(), 2000);
-  return { success: true };
-});
-
-ipcMain.handle('get-radio-monitor-script-path', () => {
-  return { 
-    path: getRadioMonitorScriptPath(),
-    customPath: customRadioMonitorScriptPath,
-    exists: fs.existsSync(getRadioMonitorScriptPath())
-  };
-});
-
-ipcMain.handle('set-radio-monitor-script-path', (_, scriptPath) => {
-  if (!scriptPath) {
-    // Clear custom path
-    customRadioMonitorScriptPath = null;
-    try {
-      const configFile = path.join(app.getPath('userData'), 'config', 'radio-monitor-config.json');
-      if (fs.existsSync(configFile)) fs.unlinkSync(configFile);
-    } catch {}
-    return { success: true, path: getRadioMonitorScriptPath() };
-  }
-  if (!fs.existsSync(scriptPath)) {
-    return { success: false, error: 'Arquivo não encontrado: ' + scriptPath };
-  }
-  if (!scriptPath.endsWith('.py')) {
-    return { success: false, error: 'O arquivo deve ser um script Python (.py)' };
-  }
-  saveCustomScriptPath(scriptPath);
-  return { success: true, path: scriptPath };
-});
-
-ipcMain.handle('browse-radio-monitor-script', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Selecionar script Python do Radio Monitor',
-    filters: [{ name: 'Python Scripts', extensions: ['py'] }],
-    properties: ['openFile']
-  });
-  if (result.canceled || !result.filePaths.length) return { canceled: true };
-  return { canceled: false, path: result.filePaths[0] };
-  return { success: true };
 });
 
 ipcMain.handle('get-app-path', (event, name) => {
@@ -2085,7 +1675,6 @@ function scanMusicLibrary(musicFolders) {
 
 // Find best matching file in library using similarity
 // IMPORTANT: Artist matching is STRICT to avoid confusing different artists with same song title
-// OPTIMIZED: Pre-filters by word overlap to avoid expensive Levenshtein on every file
 function findBestMatch(artist, title, musicFolders) {
   const files = scanMusicLibrary(musicFolders);
   const normalizedArtist = normalizeText(artist);
@@ -2093,13 +1682,10 @@ function findBestMatch(artist, title, musicFolders) {
   const searchQuery = normalizeText(`${artist} ${title}`);
   
   // Create "clean" versions with ALL parenthetical content removed
+  // This handles: library has "(Ao Vivo Em Brasília)" but capture has "(Ao Vivo)" or no suffix
   const cleanArtist = cleanNormalize(artist);
   const cleanTitle = cleanNormalize(title);
   const cleanQuery = cleanNormalize(`${artist} ${title}`);
-  
-  // Extract significant words (>= 3 chars) from artist for pre-filtering
-  const artistWords = normalizedArtist.split(/\s+/).filter(w => w.length >= 3);
-  const titleWords = normalizedTitle.split(/\s+/).filter(w => w.length >= 3);
   
   let bestMatch = null;
   let bestScore = 0;
@@ -2108,6 +1694,7 @@ function findBestMatch(artist, title, musicFolders) {
   
   for (const file of files) {
     // PRIORITY 1: Direct match - both artist AND title present in filename
+    // Check BOTH full normalized AND clean (no parenthetical) versions
     if (
       (file.normalized.includes(normalizedArtist) && file.normalized.includes(normalizedTitle)) ||
       (file.cleanNormalized.includes(cleanArtist) && file.cleanNormalized.includes(cleanTitle))
@@ -2121,21 +1708,19 @@ function findBestMatch(artist, title, musicFolders) {
       };
     }
     
-    // OPTIMIZATION: Skip files that don't share ANY word with the artist
-    // This avoids running expensive Levenshtein on clearly unrelated files
-    const hasArtistWord = artistWords.length === 0 || artistWords.some(w => file.normalized.includes(w));
-    if (!hasArtistWord) continue;
-    
     // PRIORITY 2: Similarity-based matching with ARTIST VERIFICATION
+    // Check artist similarity using BOTH original and clean versions
     const artistScore = Math.max(
       calculateSimilarity(normalizedArtist, file.normalized),
       calculateSimilarity(cleanArtist, file.cleanNormalized)
     );
     
+    // Only consider this file if artist has some presence in filename
     if (artistScore < ARTIST_MIN_SIMILARITY) {
       continue;
     }
     
+    // Check overall similarity using BOTH original and clean versions
     const score = Math.max(
       calculateSimilarity(searchQuery, file.normalized),
       calculateSimilarity(cleanQuery, file.cleanNormalized)

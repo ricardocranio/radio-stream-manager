@@ -6,10 +6,9 @@
  */
 
 import { useRef, useCallback, useState } from 'react';
-import { useRadioStore, MissingSong, getActiveSequence } from '@/store/radioStore';
+import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { radioScraperApi } from '@/lib/api/radioScraper';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
-import { STATION_ID_TO_DB_NAME } from '@/lib/gradeBuilder/constants';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -64,7 +63,7 @@ export function useGlobalScrapingService(
   }, []);
 
   const scrapeAllStations = useCallback(async (_forceRefresh = false) => {
-    const { stations, addCapturedSong, addMissingSong, missingSongs, config } = useRadioStore.getState();
+    const { stations, addCapturedSong, addOrUpdateRankingSong, addMissingSong, missingSongs, config } = useRadioStore.getState();
     const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl);
     
     if (enabledStations.length === 0) {
@@ -111,36 +110,6 @@ export function useGlobalScrapingService(
       );
     };
 
-    // Helper: check if song matches any forbidden/funk words
-    const isSongForbidden = (artist: string, title: string): boolean => {
-      const combined = `${artist} ${title}`.toLowerCase();
-      const allForbidden = [
-        ...(config.forbiddenWords || []),
-        ...(config.funkWords || []),
-      ];
-      if (allForbidden.some(word => word && combined.includes(word.toLowerCase().trim()))) return true;
-      
-      // Check forbidden songs list (exact artist-title match)
-      if (config.forbiddenSongs && config.forbiddenSongs.length > 0) {
-        const normalizedArtist = artist.toLowerCase().trim();
-        const normalizedTitle = title.toLowerCase().trim();
-        for (const entry of config.forbiddenSongs) {
-          const parts = entry.split(' - ');
-          if (parts.length >= 2) {
-            const fbArtist = parts[0].toLowerCase().trim();
-            const fbTitle = parts.slice(1).join(' - ').toLowerCase().trim();
-            // Remove parentheses content for comparison (e.g., "(Ao Vivo)")
-            const cleanTitle = normalizedTitle.replace(/\s*\(.*?\)\s*/g, '').trim();
-            const cleanFbTitle = fbTitle.replace(/\s*\(.*?\)\s*/g, '').trim();
-            if (normalizedArtist.includes(fbArtist) && (normalizedTitle.includes(cleanFbTitle) || cleanTitle.includes(cleanFbTitle))) {
-              return true;
-            }
-          }
-        }
-      }
-      return false;
-    };
-
     const processSong = async (
       songTitle: string,
       songArtist: string,
@@ -153,12 +122,6 @@ export function useGlobalScrapingService(
       if (alreadyProcessedForStation) {
         return { isNew: false, isMissing: false };
       }
-
-      // Block songs matching forbidden/funk words
-      if (isSongForbidden(songArtist, songTitle)) {
-        console.log(`[SCRAPE-SVC] 🚫 Blocked: ${songArtist} - ${songTitle}`);
-        return { isNew: false, isMissing: false };
-      }
       
       const processKey = `${stationName.toLowerCase().trim()}|${songArtist.toLowerCase().trim()}|${songTitle.toLowerCase().trim()}`;
       processedSongsRef.current.add(processKey);
@@ -166,14 +129,15 @@ export function useGlobalScrapingService(
       let existsInLibrary = false;
       if (isElectron && config.musicFolders?.length > 0) {
         try {
-          // Timeout guard: abort library check after 10s to prevent hanging on network drives
-          const result = await Promise.race([
-            checkSongInLibrary(songArtist, songTitle, config.musicFolders, config.similarityThreshold || 0.75),
-            new Promise<{ exists: false }>((_, reject) => setTimeout(() => reject(new Error('Library check timeout (10s)')), 10000)),
-          ]);
+          const result = await checkSongInLibrary(
+            songArtist,
+            songTitle,
+            config.musicFolders,
+            config.similarityThreshold || 0.75
+          );
           existsInLibrary = result.exists;
         } catch (error) {
-          console.error('[SCRAPE-SVC] Library check failed/timeout:', error);
+          console.error('[SCRAPE-SVC] Library check failed:', error);
         }
       }
 
@@ -189,21 +153,12 @@ export function useGlobalScrapingService(
         source: scrapeUrl,
       });
       
-      // Ranking is now fed from grade generation, not scraping
+      addOrUpdateRankingSong(songTitle, songArtist, stationStyle);
       
       const alreadyMissing = isSongAlreadyMissing(songArtist, songTitle);
       const alreadyQueued = isSongContentAlreadyQueued(songArtist, songTitle);
       
       if (!existsInLibrary && !alreadyMissing && !alreadyQueued && isElectron) {
-        // Only add to Missing if station is in the active sequence
-        const activeSeq = getActiveSequence();
-        const sequenceStationNames = new Set(
-          activeSeq.map(s => STATION_ID_TO_DB_NAME[s.radioSource] || STATION_ID_TO_DB_NAME[s.radioSource.toLowerCase()]).filter(Boolean)
-        );
-        if (!sequenceStationNames.has(stationName)) {
-          return { isNew: true, isMissing: false };
-        }
-        
         console.log(`[SCRAPE-SVC] 📥 Faltando: ${songArtist} - ${songTitle} (${stationName})`);
         addMissingSong({
           id: songId,
@@ -294,186 +249,31 @@ export function useGlobalScrapingService(
     return { successCount, errorCount, newSongsCount, missingCount };
   }, [scrapeStation, processedSongsRef, downloadQueueRef]);
 
-  // Ref to track which batch index to scrape next (stagger)
-  const staggerIndexRef = useRef(0);
-
-  /**
-   * Scrape a staggered mini-batch of stations (2-3 at a time).
-   * Called every 2 minutes so all stations rotate within ~6 min.
-   */
-  const scrapeStaggeredBatch = useCallback(async () => {
-    const { stations, isRunning } = useRadioStore.getState();
-    if (!isRunning) return;
-
-    const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl);
-    if (enabledStations.length === 0) return;
-
-    // Determine batch size so all stations are covered in ~3 cycles (6 min / 2 min)
-    const cycles = 3;
-    const batchSize = Math.max(2, Math.ceil(enabledStations.length / cycles));
-    const startIdx = staggerIndexRef.current % enabledStations.length;
-    const batch = [];
-    for (let i = 0; i < batchSize; i++) {
-      batch.push(enabledStations[(startIdx + i) % enabledStations.length]);
-    }
-    staggerIndexRef.current = (startIdx + batchSize) % enabledStations.length;
-
-    console.log(`[SCRAPE-SVC] 📡 Stagger batch: ${batch.map(s => s.name).join(', ')}`);
-
-    // Reuse the full scraping logic but only for this batch
-    const { addCapturedSong, addMissingSong, config } = useRadioStore.getState();
-
-    const isSongAlreadyProcessedForStation = (artist: string, title: string, stationName: string): boolean => {
-      const key = `${stationName.toLowerCase().trim()}|${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`;
-      return processedSongsRef.current.has(key);
-    };
-
-    const isSongAlreadyMissing = (artist: string, title: string): boolean => {
-      const currentMissing = useRadioStore.getState().missingSongs;
-      return currentMissing.some(
-        s => s.artist.toLowerCase().trim() === artist.toLowerCase().trim() &&
-             s.title.toLowerCase().trim() === title.toLowerCase().trim()
-      );
-    };
-
-    const isSongContentAlreadyQueued = (artist: string, title: string): boolean => {
-      return downloadQueueRef.current.some(
-        item => item.song.artist.toLowerCase().trim() === artist.toLowerCase().trim() &&
-                item.song.title.toLowerCase().trim() === title.toLowerCase().trim()
-      );
-    };
-
-    // Helper: check if song matches any forbidden/funk words
-    const isSongForbidden = (artist: string, title: string): boolean => {
-      const combined = `${artist} ${title}`.toLowerCase();
-      const allForbidden = [
-        ...(config.forbiddenWords || []),
-        ...(config.funkWords || []),
-      ];
-      return allForbidden.some(word => word && combined.includes(word.toLowerCase().trim()));
-    };
-
-    const processSong = async (
-      songTitle: string, songArtist: string, stationName: string,
-      stationStyle: string, scrapeUrl: string, timestamp: Date = new Date()
-    ) => {
-      if (isSongAlreadyProcessedForStation(songArtist, songTitle, stationName)) {
-        return { isNew: false, isMissing: false };
-      }
-
-      // Block songs matching forbidden/funk words
-      if (isSongForbidden(songArtist, songTitle)) {
-        console.log(`[SCRAPE-SVC] 🚫 Blocked: ${songArtist} - ${songTitle}`);
-        return { isNew: false, isMissing: false };
-      }
-      const processKey = `${stationName.toLowerCase().trim()}|${songArtist.toLowerCase().trim()}|${songTitle.toLowerCase().trim()}`;
-      processedSongsRef.current.add(processKey);
-
-      let existsInLibrary = false;
-      if (isElectron && config.musicFolders?.length > 0) {
-        try {
-          const result = await Promise.race([
-            checkSongInLibrary(songArtist, songTitle, config.musicFolders, config.similarityThreshold || 0.75),
-            new Promise<{ exists: false }>((_, reject) => setTimeout(() => reject(new Error('Library check timeout (10s)')), 10000)),
-          ]);
-          existsInLibrary = result.exists;
-        } catch (error) {
-          console.error('[SCRAPE-SVC] Library check failed/timeout:', error);
-        }
-      }
-
-      const songId = `${stationName}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-      addCapturedSong({ id: songId, title: songTitle, artist: songArtist, station: stationName, timestamp, status: existsInLibrary ? 'found' : 'missing', source: scrapeUrl });
-      // Ranking is now fed from grade generation, not scraping
-
-      if (!existsInLibrary && !isSongAlreadyMissing(songArtist, songTitle) && !isSongContentAlreadyQueued(songArtist, songTitle) && isElectron) {
-        // Only add to Missing if station is in the active sequence
-        const activeSeq = getActiveSequence();
-        const sequenceStationNames = new Set(
-          activeSeq.map(s => STATION_ID_TO_DB_NAME[s.radioSource] || STATION_ID_TO_DB_NAME[s.radioSource.toLowerCase()]).filter(Boolean)
-        );
-        if (!sequenceStationNames.has(stationName)) {
-          return { isNew: true, isMissing: false };
-        }
-        
-        addMissingSong({ id: songId, title: songTitle, artist: songArtist, station: stationName, timestamp: new Date(), status: 'missing' });
-        return { isNew: true, isMissing: true };
-      }
-      return { isNew: true, isMissing: false };
-    };
-
-    let successCount = 0;
-    let errorCount = 0;
-
-    const batchResults = await Promise.allSettled(
-      batch.map(station => scrapeStation(station.name, station.scrapeUrl!))
-    );
-
-    for (let j = 0; j < batchResults.length; j++) {
-      const result = batchResults[j];
-      const station = batch[j];
-      if (result.status === 'fulfilled' && result.value.success) {
-        successCount++;
-        const { stationName, nowPlaying, recentSongs, scrapeUrl } = result.value;
-        const stationStyle = station.styles?.[0] || 'POP/VARIADO';
-        if (nowPlaying) await processSong(nowPlaying.title, nowPlaying.artist, stationName, stationStyle, scrapeUrl);
-        for (const song of (recentSongs || []).slice(0, 3)) {
-          await processSong(song.title, song.artist, stationName, stationStyle, scrapeUrl, new Date(song.timestamp));
-        }
-      } else {
-        errorCount++;
-      }
-    }
-
-    if (successCount > 0 || errorCount > 0) {
-      console.log(`[SCRAPE-SVC] 📡 Stagger done: ${successCount}✓ ${errorCount}✗`);
-    }
-
-    setScrapeStats(prev => ({
-      ...prev,
-      lastScrape: new Date(),
-      successCount: prev.successCount + successCount,
-      errorCount: prev.errorCount + errorCount,
-    }));
-  }, [scrapeStation, processedSongsRef, downloadQueueRef]);
-
-  /** Check if Python monitor is running (skip Edge Functions scraping if so) */
-  const isPythonMonitorRunning = useCallback(async (): Promise<boolean> => {
-    if (!isElectron || !window.electronAPI?.getRadioMonitorStatus) return false;
-    try {
-      const status = await window.electronAPI.getRadioMonitorStatus();
-      return !!status?.running;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  /** Start the staggered scraping interval. Returns cleanup function. */
+  /** Start the scraping interval. Returns cleanup function. */
   const start = useCallback(() => {
-    // Stagger: scrape a mini-batch every 2 minutes (only if Python monitor is NOT running)
-    scrapeIntervalRef.current = setInterval(async () => {
-      const pythonRunning = await isPythonMonitorRunning();
-      if (pythonRunning) {
-        // Python monitor is handling scraping — skip Edge Functions
-        return;
-      }
-      scrapeStaggeredBatch();
-    }, 2 * 60 * 1000);
+    const scrapeAllRef = { current: scrapeAllStations };
 
-    // Initial scrape on start (only if Python is not running)
-    isPythonMonitorRunning().then(running => {
-      if (!running) {
-        console.log('[SCRAPE-SVC] 📡 Python monitor inativo, usando Edge Functions como fallback');
-        scrapeAllStations();
-      } else {
-        console.log('[SCRAPE-SVC] 🐍 Python monitor ativo, Edge Functions scraping desabilitado');
+    // Scraping every 15 minutes
+    scrapeIntervalRef.current = setInterval(() => {
+      const currentState = useRadioStore.getState();
+      if (!currentState.isRunning) return;
+      const hasStations = currentState.stations.some(s => s.enabled && s.scrapeUrl);
+      if (hasStations) {
+        scrapeAllRef.current();
       }
-    });
+    }, 15 * 60 * 1000);
+
+    // Initial scrape
+    const state = useRadioStore.getState();
+    const hasStations = state.stations.some(s => s.enabled && s.scrapeUrl);
+    if (state.isRunning && hasStations) {
+      scrapeAllStations();
+    }
 
     return () => {
       if (scrapeIntervalRef.current) clearInterval(scrapeIntervalRef.current);
     };
-  }, [scrapeAllStations, scrapeStaggeredBatch, isPythonMonitorRunning]);
+  }, [scrapeAllStations]);
 
   return {
     stats: scrapeStats,

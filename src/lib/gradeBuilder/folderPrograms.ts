@@ -27,8 +27,6 @@ export interface FolderBlockConfig {
   targetSongs: number;
   /** Coringa/fallback code */
   coringa: string;
-  /** Separator between songs (default: 'vht') */
-  separator?: string;
 }
 
 /** Default configuration for the 17:00-18:30 Happy Hour blocks */
@@ -42,21 +40,6 @@ export const HAPPY_HOUR_CONFIG: FolderBlockConfig = {
   folderLabels: ['Mix FM', 'Positiva FM', 'Metropolitana FM'],
   targetSongs: 10,
   coringa: 'jov',
-};
-
-/** Configuration for the 21:00-00:00 Nossa Balada (weekend) blocks */
-export const NOSSA_BALADA_CONFIG: FolderBlockConfig = {
-  programName: 'Nossa Balada',
-  folders: [
-    '\\\\DESKTOP-DPOUD22\\Playlist\\Downloads\\Metropolitana FM',
-    '\\\\DESKTOP-DPOUD22\\Playlist\\Downloads\\Energia 97',
-    '\\\\DESKTOP-DPOUD22\\Playlist\\Downloads\\Mix FM',
-    '\\\\DESKTOP-DPOUD22\\Playlist\\Downloads\\Positividade FM',
-  ],
-  folderLabels: ['Metropolitana FM', 'Energia 97', 'Mix FM', 'Positividade FM'],
-  targetSongs: 10,
-  coringa: 'jov',
-  separator: 'vhtn',
 };
 
 /** Configuration for the 22:00-00:00 Romance blocks */
@@ -86,16 +69,6 @@ export function isFolderBasedBlock(hour: number, minute: number): boolean {
   // 17:00, 17:30, 18:00
   if (hour === 17 && (minute === 0 || minute === 30)) return true;
   if (hour === 18 && minute === 0) return true;
-  return false;
-}
-
-/**
- * Check if a given hour:minute falls within the Nossa Balada range (21:00-23:30).
- */
-export function isNossaBaladaBlock(hour: number, minute: number): boolean {
-  // 21:00, 21:30, 22:00, 22:30, 23:00, 23:30, 00:00
-  if (hour >= 21 && hour <= 23 && (minute === 0 || minute === 30)) return true;
-  if (hour === 0 && minute === 0) return true;
   return false;
 }
 
@@ -274,7 +247,7 @@ export async function generateFolderBasedBlock(
   console.log(`[FOLDER-BLOCK] ✅ Bloco ${timeStr}: ${selectedSongs.length} músicas selecionadas de pastas locais`);
 
   return {
-    line: ctx.sanitizeGradeLine(`${timeStr} (ID=${cfg.programName}) ${selectedSongs.join(`,${cfg.separator || 'vht'},`)}`),
+    line: ctx.sanitizeGradeLine(`${timeStr} (ID=${cfg.programName}) ${selectedSongs.join(',vht,')}`),
     logs,
   };
 }

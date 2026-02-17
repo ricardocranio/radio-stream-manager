@@ -23,8 +23,6 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { GradePreviewCard } from '@/components/dashboard/GradePreviewCard';
 import { GradeScheduleCard } from '@/components/dashboard/GradeScheduleCard';
-import { RadioMonitorCard } from '@/components/dashboard/RadioMonitorCard';
-import { GradeCoverageCard } from '@/components/dashboard/GradeCoverageCard';
 
 export function DashboardView() {
   const { 
@@ -324,7 +322,7 @@ export function DashboardView() {
               <div className="min-w-0">
                 <p className="text-[10px] md:text-xs text-muted-foreground truncate">Emissoras</p>
                 <p className="text-lg md:text-2xl font-bold text-foreground">
-                  {stations.filter(s => s.enabled).length}
+                  {realtimeStats.isLoading ? '...' : realtimeStats.activeStations}
                 </p>
                 <p className="text-[10px] md:text-xs text-cyan-500 flex items-center gap-1">
                   <Radio className="w-3 h-3" />
@@ -338,42 +336,7 @@ export function DashboardView() {
           </CardContent>
         </Card>
 
-        <Card className="glass-card border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5 cursor-pointer" onClick={async () => {
-          // Diagnostic: log folder status to help debug
-          const folders = config.musicFolders;
-          const isElectron = !!window.electronAPI;
-          const hasFindMatch = !!window.electronAPI?.findSongMatch;
-          const hasGetStats = !!window.electronAPI?.getMusicLibraryStats;
-          
-          let diagnosticMsg = `🔍 DIAGNÓSTICO BANCO MUSICAL\n\n`;
-          diagnosticMsg += `Electron detectado: ${isElectron ? '✅ Sim' : '❌ Não'}\n`;
-          diagnosticMsg += `findSongMatch: ${hasFindMatch ? '✅' : '❌'}\n`;
-          diagnosticMsg += `getMusicLibraryStats: ${hasGetStats ? '✅' : '❌'}\n`;
-          diagnosticMsg += `Pastas configuradas (${folders.length}):\n`;
-          folders.forEach((f, i) => {
-            diagnosticMsg += `  ${i + 1}. "${f}" ${f ? '' : '⚠️ VAZIA'}\n`;
-          });
-          
-          if (hasGetStats) {
-            try {
-              const result = await window.electronAPI!.getMusicLibraryStats({ musicFolders: folders });
-              diagnosticMsg += `\nResultado do scan: ${result.success ? '✅' : '❌'}\n`;
-              diagnosticMsg += `Arquivos encontrados: ${result.count}\n`;
-              diagnosticMsg += `Pastas válidas: ${result.folders}\n`;
-            } catch (e: any) {
-              diagnosticMsg += `\n❌ Erro no scan: ${e.message}\n`;
-            }
-          }
-          
-          console.log(diagnosticMsg);
-          toast({
-            title: isElectron ? '🔍 Diagnóstico do Banco Musical' : '⚠️ Modo Web',
-            description: isElectron 
-              ? `${folders.length} pasta(s) configurada(s). ${libraryStats.count} arquivos. Veja o console (F12) para detalhes.`
-              : 'O banco musical só funciona no Desktop (Electron). No preview web, o contador sempre mostra 0.',
-            duration: 8000,
-          });
-        }}>
+        <Card className="glass-card border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5">
           <CardContent className="p-3 md:p-4">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
@@ -384,7 +347,6 @@ export function DashboardView() {
                 <p className="text-[10px] md:text-xs text-amber-500 flex items-center gap-1">
                   <HardDrive className="w-3 h-3" />
                   <span className="hidden sm:inline">Local</span>
-                  {!window.electronAPI && <Badge variant="outline" className="ml-1 text-[8px] px-1 py-0">Web</Badge>}
                 </p>
               </div>
               <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
@@ -520,7 +482,7 @@ export function DashboardView() {
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={() => gradeBuilder.buildFullDayGrade()}
+                    onClick={gradeBuilder.buildFullDayGrade}
                     disabled={gradeBuilder.isBuilding}
                     className="gap-2 bg-emerald-600 hover:bg-emerald-700"
                   >
@@ -618,14 +580,10 @@ export function DashboardView() {
         </Card>
       )}
 
-      {/* Radio Monitor Python Status */}
-      <RadioMonitorCard />
-
-      {/* Preview da Próxima Grade, Grades Montadas & Cobertura */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-        <GradePreviewCard />
+      {/* Preview da Próxima Grade & Grades Montadas */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        <GradePreviewCard recentSongsByStation={realtimeStats.recentSongsByStation} />
         <GradeScheduleCard />
-        <GradeCoverageCard />
       </div>
 
       {/* Ranking Integration Banner */}
@@ -944,177 +902,120 @@ export function DashboardView() {
         </Card>
       </div>
 
-      {/* System Actions Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Restart System Card */}
-        <Card className="glass-card border-amber-500/30 bg-gradient-to-r from-amber-500/5 to-transparent">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-                  <RefreshCw className="w-5 h-5 text-amber-500" />
-                </div>
-                <div className="min-w-0">
-                  <p className="font-medium text-foreground">Reiniciar Sistema</p>
-                  <p className="text-sm text-muted-foreground">
-                    Re-sincroniza com o banco e recarrega todos os serviços
-                  </p>
-                </div>
+      {/* System Reset Card */}
+      <Card className="glass-card border-destructive/30 bg-gradient-to-r from-destructive/5 to-transparent">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
+                <RotateCcw className="w-5 h-5 text-destructive" />
               </div>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2 shrink-0 border-amber-500/30 text-amber-500 hover:bg-amber-500/10">
-                    <RefreshCw className="w-4 h-4" />
-                    Reiniciar
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle className="flex items-center gap-2 text-amber-500">
-                      <RefreshCw className="w-5 h-5" />
-                      Reiniciar Sistema
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      <p>Isto vai:</p>
-                      <div className="space-y-1 p-3 rounded-lg bg-muted/50 text-sm mt-2">
-                        <p>✓ Re-sincronizar emissoras do banco</p>
-                        <p>✓ Recarregar todos os serviços</p>
-                        <p>✓ Atualizar estatísticas em tempo real</p>
-                        <p>✓ Reconectar canais de monitoramento</p>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">Nenhum dado será perdido. Equivale a fechar e abrir o aplicativo.</p>
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction 
-                      onClick={() => window.location.reload()}
-                      className="bg-amber-500 hover:bg-amber-600 text-white"
-                    >
-                      Confirmar Reinício
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <div className="min-w-0">
+                <p className="font-medium text-foreground">Zerar Sistema Completo</p>
+                <p className="text-sm text-muted-foreground">
+                  Limpa todos os dados locais e do banco de dados para novas instalações
+                </p>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+            
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="destructive" 
+                  size="sm" 
+                  className="gap-2 shrink-0"
+                  disabled={isResetting}
+                >
+                  {isResetting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  Zerar Tudo
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="max-w-md">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                    <Shield className="w-5 h-5" />
+                    Reset Completo do Sistema
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="space-y-3">
+                    <p>Esta ação irá limpar <strong>TODOS</strong> os dados do sistema:</p>
+                    
+                    <div className="space-y-2 p-3 rounded-lg bg-muted/50 text-sm">
+                      <p>✓ Músicas capturadas (local)</p>
+                      <p>✓ Ranking TOP25</p>
+                      <p>✓ Músicas faltando</p>
+                      <p>✓ Histórico de downloads</p>
+                      <p>✓ Histórico de grades</p>
+                      <p>✓ Estatísticas de similaridade</p>
+                    </div>
 
-        {/* System Reset Card */}
-        <Card className="glass-card border-destructive/30 bg-gradient-to-r from-destructive/5 to-transparent">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
-                  <RotateCcw className="w-5 h-5 text-destructive" />
-                </div>
-                <div className="min-w-0">
-                  <p className="font-medium text-foreground">Zerar Sistema Completo</p>
-                  <p className="text-sm text-muted-foreground">
-                    Limpa todos os dados locais e do banco
-                  </p>
-                </div>
-              </div>
-              
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button 
-                    variant="destructive" 
-                    size="sm" 
-                    className="gap-2 shrink-0"
-                    disabled={isResetting}
-                  >
-                    {isResetting ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4" />
-                    )}
-                    Zerar Tudo
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent className="max-w-md">
-                  <AlertDialogHeader>
-                    <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-                      <Shield className="w-5 h-5" />
-                      Reset Completo do Sistema
-                    </AlertDialogTitle>
-                    <AlertDialogDescription className="space-y-3">
-                      <p>Esta ação irá limpar <strong>TODOS</strong> os dados do sistema:</p>
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="clearSupabase" 
+                          checked={resetOptions.clearSupabase}
+                          onCheckedChange={(checked) => 
+                            setResetOptions(prev => ({ ...prev, clearSupabase: checked === true }))
+                          }
+                        />
+                        <Label htmlFor="clearSupabase" className="text-sm font-medium cursor-pointer">
+                          Limpar banco de dados remoto (Supabase)
+                        </Label>
+                      </div>
                       
-                      <div className="space-y-2 p-3 rounded-lg bg-muted/50 text-sm">
-                        <p>✓ Músicas capturadas (local)</p>
-                        <p>✓ Ranking TOP25</p>
-                        <p>✓ Músicas faltando</p>
-                        <p>✓ Histórico de downloads</p>
-                        <p>✓ Histórico de grades</p>
-                        <p>✓ Estatísticas de similaridade</p>
-                      </div>
+                      {resetOptions.clearSupabase && (
+                        <>
+                          <div className="flex items-center space-x-2 ml-6">
+                            <Checkbox 
+                              id="clearSchedules" 
+                              checked={resetOptions.clearSchedules}
+                              onCheckedChange={(checked) => 
+                                setResetOptions(prev => ({ ...prev, clearSchedules: checked === true }))
+                              }
+                            />
+                            <Label htmlFor="clearSchedules" className="text-sm cursor-pointer">
+                              Limpar monitoramentos especiais
+                            </Label>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2 ml-6">
+                            <Checkbox 
+                              id="resetStations" 
+                              checked={resetOptions.resetStations}
+                              onCheckedChange={(checked) => 
+                                setResetOptions(prev => ({ ...prev, resetStations: checked === true }))
+                              }
+                            />
+                            <Label htmlFor="resetStations" className="text-sm cursor-pointer">
+                              Desativar todas as emissoras
+                            </Label>
+                          </div>
+                        </>
+                      )}
+                    </div>
 
-                      <div className="space-y-3 pt-2">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox 
-                            id="clearSupabase" 
-                            checked={resetOptions.clearSupabase}
-                            onCheckedChange={(checked) => 
-                              setResetOptions(prev => ({ ...prev, clearSupabase: checked === true }))
-                            }
-                          />
-                          <Label htmlFor="clearSupabase" className="text-sm font-medium cursor-pointer">
-                            Limpar banco de dados remoto
-                          </Label>
-                        </div>
-                        
-                        {resetOptions.clearSupabase && (
-                          <>
-                            <div className="flex items-center space-x-2 ml-6">
-                              <Checkbox 
-                                id="clearSchedules" 
-                                checked={resetOptions.clearSchedules}
-                                onCheckedChange={(checked) => 
-                                  setResetOptions(prev => ({ ...prev, clearSchedules: checked === true }))
-                                }
-                              />
-                              <Label htmlFor="clearSchedules" className="text-sm cursor-pointer">
-                                Limpar monitoramentos especiais
-                              </Label>
-                            </div>
-                            
-                            <div className="flex items-center space-x-2 ml-6">
-                              <Checkbox 
-                                id="resetStations" 
-                                checked={resetOptions.resetStations}
-                                onCheckedChange={(checked) => 
-                                  setResetOptions(prev => ({ ...prev, resetStations: checked === true }))
-                                }
-                              />
-                              <Label htmlFor="resetStations" className="text-sm cursor-pointer">
-                                Desativar todas as emissoras
-                              </Label>
-                            </div>
-                          </>
-                        )}
-                      </div>
-
-                      <p className="text-destructive text-xs font-medium pt-2">
-                        ⚠️ Esta ação é irreversível!
-                      </p>
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction 
-                      onClick={handleFullSystemReset}
-                      className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-                    >
-                      Confirmar Reset
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                    <p className="text-destructive text-xs font-medium pt-2">
+                      ⚠️ Esta ação é irreversível!
+                    </p>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleFullSystemReset}
+                    className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                  >
+                    Confirmar Reset
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

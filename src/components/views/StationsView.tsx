@@ -748,8 +748,14 @@ export function StationsView() {
                     </div>
                   </div>
                   <Switch
-                    checked={true}
-                    disabled={true}
+                    checked={data.prioritizeDownloads || false}
+                    onCheckedChange={(checked) => {
+                      if (isEditing) {
+                        setEditForm((prev) => prev && { ...prev, prioritizeDownloads: checked });
+                      } else {
+                        updateStation(station.id, { prioritizeDownloads: checked });
+                      }
+                    }}
                   />
                 </div>
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.pgmfm.programador-radio",
-  "productName": "AudioSolutions",
+  "productName": "Programador Rádio",
   "copyright": "Copyright © 2024 PGM-FM",
   "extraMetadata": {
     "main": "electron/main.cjs"
@@ -35,7 +35,7 @@
       }
     ],
     "icon": "public/favicon.ico",
-    "artifactName": "AudioSolutions-Setup beta 04.${ext}"
+    "artifactName": "${productName}-Setup-${version}.${ext}"
   },
   "nsis": {
     "oneClick": false,

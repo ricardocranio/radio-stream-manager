@@ -11,12 +11,12 @@ export interface HealthStatus {
 }
 
 // Increased intervals and thresholds for stability and CPU optimization
-const CHECK_INTERVAL = 900000; // 15 minutes - reduce noise further
-const LATENCY_THRESHOLD = 25000; // 25 seconds - generous to avoid false positives
-const REALTIME_TIMEOUT = 12000; // 12 seconds
+const CHECK_INTERVAL = 600000; // 10 minutes (was 5 minutes - further reduce noise)
+const LATENCY_THRESHOLD = 15000; // 15 seconds (was 8 seconds - avoid false positives from heavy scraping)
+const REALTIME_TIMEOUT = 8000; // 8 seconds (was 5 seconds)
 
 // Track consecutive failures before showing degraded status
-const FAILURE_THRESHOLD = 5; // Require 5 consecutive failures to report degraded
+const FAILURE_THRESHOLD = 3; // Require 3 consecutive failures (was 2)
 
 export function useHealthCheck() {
   const [status, setStatus] = useState<HealthStatus>({
@@ -39,10 +39,11 @@ export function useHealthCheck() {
       const startTime = Date.now();
       
       // Use Promise.race with a timeout to prevent the health check from hanging
-      // Use a minimal query - just check connectivity, not data
       const queryPromise = supabase
         .from('radio_stations')
-        .select('id', { count: 'exact', head: true });
+        .select('id')
+        .limit(1)
+        .maybeSingle();
       
       const timeoutPromise = new Promise<{ error: { code: string; message: string } }>((resolve) => {
         setTimeout(() => resolve({ error: { code: 'TIMEOUT', message: 'Health check timeout' } }), LATENCY_THRESHOLD);

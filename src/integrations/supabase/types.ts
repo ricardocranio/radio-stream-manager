@@ -14,33 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      radio_historico: {
-        Row: {
-          artist: string
-          captured_at: string
-          id: string
-          source: string | null
-          station_name: string
-          title: string
-        }
-        Insert: {
-          artist: string
-          captured_at?: string
-          id?: string
-          source?: string | null
-          station_name: string
-          title: string
-        }
-        Update: {
-          artist?: string
-          captured_at?: string
-          id?: string
-          source?: string | null
-          station_name?: string
-          title?: string
-        }
-        Relationships: []
-      }
       radio_stations: {
         Row: {
           created_at: string
@@ -53,7 +26,6 @@ export type Database = {
           monitoring_week_days: string[] | null
           name: string
           scrape_url: string
-          stream_url: string | null
           styles: string[] | null
           updated_at: string
         }
@@ -68,7 +40,6 @@ export type Database = {
           monitoring_week_days?: string[] | null
           name: string
           scrape_url: string
-          stream_url?: string | null
           styles?: string[] | null
           updated_at?: string
         }
@@ -83,7 +54,6 @@ export type Database = {
           monitoring_week_days?: string[] | null
           name?: string
           scrape_url?: string
-          stream_url?: string | null
           styles?: string[] | null
           updated_at?: string
         }

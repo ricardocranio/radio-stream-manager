@@ -191,19 +191,13 @@ export function GradeScheduleCard() {
       
       const timeKey = `${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')}`;
       
-      // Get program name for this hour (weekends use unified IDs)
-      const dayOfWeek = new Date().getDay();
-      const isWeekend = [0, 6].includes(dayOfWeek);
+      // Get program name for this hour
       let programName = 'PROGRAMA';
-      if (isWeekend) {
-        programName = dayOfWeek === 6 ? 'Nossa Sabado' : 'Nossa Domingo';
-      } else {
-        for (const prog of programs) {
-          const [start, end] = prog.timeRange.split('-').map(Number);
-          if (blockHour >= start && blockHour <= end) {
-            programName = prog.programName;
-            break;
-          }
+      for (const prog of programs) {
+        const [start, end] = prog.timeRange.split('-').map(Number);
+        if (blockHour >= start && blockHour <= end) {
+          programName = prog.programName;
+          break;
         }
       }
       

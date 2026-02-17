@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useCapturedDownloadStore } from '@/store/capturedDownloadStore';
 import { Music, Radio, Calendar, Filter, RefreshCw, Download, TrendingUp, Clock, Search, Loader2, Database, BarChart3, PieChart as PieChartIcon, Zap, PlayCircle, CheckCircle, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,7 +13,7 @@ import { useRadioStore, DownloadHistoryEntry } from '@/store/radioStore';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays, subHours, parseISO, getHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-
+import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
 import {
   BarChart,
   Bar,
@@ -77,21 +76,19 @@ export function CapturedSongsView() {
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState('list');
-  const capturedDl = useCapturedDownloadStore();
-  const isDownloadingAll = capturedDl.isProcessing;
-  const downloadProgress = { current: capturedDl.current, total: capturedDl.total };
-  const downloadStatus: DownloadStatus = useMemo(() => {
-    const result: DownloadStatus = {};
-    capturedDl.processed.forEach((status, id) => { result[id] = status; });
-    return result;
-  }, [capturedDl.processed]);
+  const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
   const [currentPage, setCurrentPage] = useState(1);
-  const [autoDownloadMode] = useState<'manual' | 'auto'>('auto');
+  const [autoDownloadMode, setAutoDownloadMode] = useState<'manual' | 'auto'>(() => {
+    const saved = localStorage.getItem('captured-songs-download-mode');
+    return saved === 'auto' ? 'auto' : 'manual';
+  });
 
-  // Persist as auto always
+  // Auto-save download mode preference
   useEffect(() => {
-    localStorage.setItem('captured-songs-download-mode', 'auto');
-  }, []);
+    localStorage.setItem('captured-songs-download-mode', autoDownloadMode);
+  }, [autoDownloadMode]);
 
   // Load songs from Supabase
   const loadSongs = useCallback(async () => {
@@ -399,8 +396,8 @@ export function CapturedSongsView() {
       .map(([name, count]) => ({ name, count }));
   }, [songs]);
 
-  // Download a single song - enqueue to persistent store
-  const handleDownloadSong = useCallback((song: ScrapedSong) => {
+  // Download a single song
+  const handleDownloadSong = useCallback(async (song: ScrapedSong) => {
     if (!isElectron) {
       toast({
         title: 'Apenas no Desktop',
@@ -409,6 +406,7 @@ export function CapturedSongsView() {
       });
       return;
     }
+
     if (!deezerConfig.enabled || !deezerConfig.arl) {
       toast({
         title: 'Deezer não configurado',
@@ -417,16 +415,91 @@ export function CapturedSongsView() {
       });
       return;
     }
-    capturedDl.enqueue([{
-      id: song.id,
-      title: song.title,
-      artist: song.artist,
-      stationName: song.station_name,
-    }], 'manual');
-  }, [deezerConfig, toast, capturedDl]);
 
-  // Download all filtered songs - enqueue to persistent store
-  const handleDownloadAll = useCallback(() => {
+    // Check if song already exists in library
+    if (config.musicFolders?.length > 0) {
+      try {
+        const existsResult = await checkSongInLibrary(
+          song.artist,
+          song.title,
+          config.musicFolders,
+          config.similarityThreshold || 0.75
+        );
+        if (existsResult.exists) {
+          setDownloadStatus(prev => ({ ...prev, [song.id]: 'exists' }));
+          toast({
+            title: '✓ Já existe na biblioteca',
+            description: `${song.artist} - ${song.title}`,
+          });
+          return;
+        }
+      } catch (err) {
+        // Continue with download if check fails
+      }
+    }
+
+    setDownloadStatus(prev => ({ ...prev, [song.id]: 'downloading' }));
+    const startTime = Date.now();
+
+    try {
+      const result = await window.electronAPI?.downloadFromDeezer({
+        artist: song.artist,
+        title: song.title,
+        arl: deezerConfig.arl,
+        outputFolder: deezerConfig.downloadFolder,
+        quality: deezerConfig.quality,
+        stationName: song.station_name,
+      });
+
+      const duration = Date.now() - startTime;
+
+      if (result?.success) {
+        setDownloadStatus(prev => ({ ...prev, [song.id]: 'success' }));
+        
+        const historyEntry: DownloadHistoryEntry = {
+          id: crypto.randomUUID(),
+          songId: song.id,
+          title: song.title,
+          artist: song.artist,
+          timestamp: new Date(),
+          status: 'success',
+          duration,
+        };
+        addDownloadHistory(historyEntry);
+
+        toast({
+          title: '✅ Download concluído!',
+          description: `${song.artist} - ${song.title}`,
+        });
+      } else {
+        throw new Error(result?.error || 'Falha no download');
+      }
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      setDownloadStatus(prev => ({ ...prev, [song.id]: 'error' }));
+      
+      const historyEntry: DownloadHistoryEntry = {
+        id: crypto.randomUUID(),
+        songId: song.id,
+        title: song.title,
+        artist: song.artist,
+        timestamp: new Date(),
+        status: 'error',
+        errorMessage: error instanceof Error ? error.message : 'Erro desconhecido',
+        duration,
+      };
+      addDownloadHistory(historyEntry);
+
+      toast({
+        title: '❌ Erro no download',
+        description: error instanceof Error ? error.message : 'Falha ao baixar.',
+        variant: 'destructive',
+      });
+    }
+  }, [deezerConfig, config, toast, addDownloadHistory]);
+
+  // Download all filtered songs (with deduplication)
+  const handleDownloadAll = useCallback(async () => {
     if (!isElectron) {
       toast({
         title: 'Apenas no Desktop',
@@ -435,6 +508,7 @@ export function CapturedSongsView() {
       });
       return;
     }
+
     if (!deezerConfig.enabled || !deezerConfig.arl) {
       toast({
         title: 'Deezer não configurado',
@@ -453,33 +527,95 @@ export function CapturedSongsView() {
       return true;
     });
 
-    capturedDl.enqueue(
-      uniqueSongs.map(s => ({ id: s.id, title: s.title, artist: s.artist, stationName: s.station_name })),
-      autoDownloadMode === 'auto' ? 'auto' : 'manual'
-    );
-  }, [filteredSongs, deezerConfig, toast, autoDownloadMode, capturedDl]);
+    setIsDownloadingAll(true);
+    setDownloadProgress({ current: 0, total: uniqueSongs.length });
 
-  // Auto-trigger download when mode is "auto" and songs are loaded
-  const [autoDownloadLastTrigger, setAutoDownloadLastTrigger] = useState<string>('');
-  
-  useEffect(() => {
-    if (autoDownloadMode !== 'auto') return;
-    if (!isElectron) return;
-    if (isDownloadingAll) return;
-    if (filteredSongs.length === 0) return;
-    if (!deezerConfig.enabled || !deezerConfig.arl) return;
-    
-    const fingerprint = `${filteredSongs.length}-${selectedStation}-${dateRange}`;
-    if (fingerprint === autoDownloadLastTrigger) return;
-    
-    const timer = setTimeout(() => {
-      console.log('[CAPTURED-SONGS] Auto-download triggered for', filteredSongs.length, 'songs');
-      setAutoDownloadLastTrigger(fingerprint);
-      handleDownloadAll();
-    }, 3000);
-    
-    return () => clearTimeout(timer);
-  }, [autoDownloadMode, filteredSongs.length, isDownloadingAll, deezerConfig.enabled, deezerConfig.arl, selectedStation, dateRange, handleDownloadAll, autoDownloadLastTrigger]);
+    let successCount = 0;
+    let existsCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < uniqueSongs.length; i++) {
+      const song = uniqueSongs[i];
+      setDownloadProgress({ current: i + 1, total: uniqueSongs.length });
+
+      // Check if already exists in library
+      if (config.musicFolders?.length > 0) {
+        try {
+          const existsResult = await checkSongInLibrary(
+            song.artist,
+            song.title,
+            config.musicFolders,
+            config.similarityThreshold || 0.75
+          );
+          if (existsResult.exists) {
+            setDownloadStatus(prev => ({ ...prev, [song.id]: 'exists' }));
+            existsCount++;
+            continue;
+          }
+        } catch (err) {
+          // Continue with download if check fails
+        }
+      }
+
+      setDownloadStatus(prev => ({ ...prev, [song.id]: 'downloading' }));
+      const startTime = Date.now();
+
+      try {
+        const result = await window.electronAPI?.downloadFromDeezer({
+          artist: song.artist,
+          title: song.title,
+          arl: deezerConfig.arl,
+          outputFolder: deezerConfig.downloadFolder,
+          quality: deezerConfig.quality,
+          stationName: song.station_name,
+        });
+
+        const duration = Date.now() - startTime;
+
+        if (result?.success) {
+          setDownloadStatus(prev => ({ ...prev, [song.id]: 'success' }));
+          successCount++;
+          
+          addDownloadHistory({
+            id: crypto.randomUUID(),
+            songId: song.id,
+            title: song.title,
+            artist: song.artist,
+            timestamp: new Date(),
+            status: 'success',
+            duration,
+          });
+        } else {
+          throw new Error(result?.error || 'Falha');
+        }
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        setDownloadStatus(prev => ({ ...prev, [song.id]: 'error' }));
+        errorCount++;
+        
+        addDownloadHistory({
+          id: crypto.randomUUID(),
+          songId: song.id,
+          title: song.title,
+          artist: song.artist,
+          timestamp: new Date(),
+          status: 'error',
+          errorMessage: error instanceof Error ? error.message : 'Erro',
+          duration,
+        });
+      }
+
+      // Delay between downloads (2 minutes for auto mode, 5 seconds for manual)
+      const delayMs = autoDownloadMode === 'auto' ? 120000 : 5000;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+
+    setIsDownloadingAll(false);
+    toast({
+      title: '📥 Download em lote concluído!',
+      description: `✅ ${successCount} baixadas | ⏭️ ${existsCount} já existiam | ❌ ${errorCount} erros`,
+    });
+  }, [filteredSongs, deezerConfig, config, toast, addDownloadHistory, autoDownloadMode]);
 
   // Export songs as JSON
   const handleExport = () => {
@@ -559,10 +695,19 @@ export function CapturedSongsView() {
           {/* Download Mode Toggle - Always visible, disabled in browser */}
           <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-secondary/50 border border-border">
             <Download className="w-3.5 h-3.5 text-muted-foreground" />
-            <Badge variant="outline" className="text-xs border-green-500/50 text-green-500">
-              <Zap className="w-3 h-3 mr-1" />
-              Automático
-            </Badge>
+            <Select 
+              value={autoDownloadMode} 
+              onValueChange={(v: 'manual' | 'auto') => setAutoDownloadMode(v)}
+              disabled={!isElectron}
+            >
+              <SelectTrigger className="h-6 w-[90px] text-xs border-0 bg-transparent p-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manual">Manual</SelectItem>
+                <SelectItem value="auto">Automático</SelectItem>
+              </SelectContent>
+            </Select>
             {!isElectron && (
               <Badge variant="outline" className="text-[9px] px-1 py-0">Desktop</Badge>
             )}

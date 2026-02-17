@@ -312,17 +312,6 @@ interface ElectronAPI {
   onDeemixStatus: (callback: (status: { installed: boolean; command: string | null }) => void) => void;
   getDeemixCommand: () => Promise<string | null>;
   
-  // Radio Monitor
-  getRadioMonitorStatus: () => Promise<{ running: boolean; pid: number | null }>;
-  startRadioMonitor: () => Promise<{ success: boolean }>;
-  stopRadioMonitor: () => Promise<{ success: boolean }>;
-  restartRadioMonitor: () => Promise<{ success: boolean }>;
-  getRadioMonitorScriptPath: () => Promise<{ path: string; customPath: string | null; exists: boolean }>;
-  setRadioMonitorScriptPath: (path: string | null) => Promise<{ success: boolean; path?: string; error?: string }>;
-  browseRadioMonitorScript: () => Promise<{ canceled: boolean; path?: string }>;
-  onRadioMonitorStatus: (callback: (status: { running: boolean; error?: string; exitCode?: number }) => void) => void;
-  onRadioMonitorLog: (callback: (log: string) => void) => void;
-  
   // Platform detection
   platform: string;
   isElectron: boolean;

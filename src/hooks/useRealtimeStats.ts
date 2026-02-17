@@ -98,25 +98,26 @@ export function useRealtimeStats() {
           const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
           const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
 
-          // Fetch data — 4 parallel queries (optimized: removed separate total count, derive from recent)
-          const [last24hResult, lastHourResult, stationsResult, recentSongsResult] = await Promise.all([
+          const [totalResult, last24hResult, lastHourResult, stationsResult, lastSongResult, recentSongsResult] = await Promise.all([
+            supabase.from('scraped_songs').select('*', { count: 'exact', head: true }),
             supabase.from('scraped_songs').select('*', { count: 'exact', head: true }).gte('scraped_at', last24h.toISOString()),
-            supabase.from('scraped_songs').select('artist, title').gte('scraped_at', lastHour.toISOString()).limit(500),
+            supabase.from('scraped_songs').select('*', { count: 'exact', head: true }).gte('scraped_at', lastHour.toISOString()),
             supabase.from('radio_stations').select('name, enabled').eq('enabled', true),
-            supabase.from('scraped_songs').select('title, artist, station_name, scraped_at').order('scraped_at', { ascending: false }).limit(200),
+            supabase.from('scraped_songs').select('title, artist, station_name, scraped_at').order('scraped_at', { ascending: false }).limit(1).single(),
+            supabase.from('scraped_songs').select('title, artist, station_name, scraped_at').order('scraped_at', { ascending: false }).limit(100),
           ]);
 
-          if (last24hResult.error && last24hResult.error.code !== 'PGRST116') {
-            throw new Error(`Query failed: ${last24hResult.error.message}`);
+          if (totalResult.error && totalResult.error.code !== 'PGRST116') {
+            throw new Error(`Query failed: ${totalResult.error.message}`);
           }
 
-          // Derive total and lastSong from recentSongsResult (eliminates 2 extra queries)
-          const recentData = recentSongsResult.data || [];
-          const firstSong = recentData[0] || null;
+          const { data: stationSongs } = await supabase
+            .from('scraped_songs')
+            .select('station_name')
+            .gte('scraped_at', last24h.toISOString());
 
-          // Compute station counts from recentSongsResult
           const newStationCounts: Record<string, number> = {};
-          recentData.forEach(song => {
+          stationSongs?.forEach(song => {
             newStationCounts[song.station_name] = (newStationCounts[song.station_name] || 0) + 1;
           });
 
@@ -124,7 +125,7 @@ export function useRealtimeStats() {
           const newRecentSongsByStation: Record<string, LastSongByStation[]> = {};
           const seenStations = new Set<string>();
 
-          recentData.forEach(song => {
+          recentSongsResult.data?.forEach(song => {
             const stationName = song.station_name;
             const songData: LastSongByStation = {
               title: song.title,
@@ -153,24 +154,18 @@ export function useRealtimeStats() {
             }
           });
 
-          // Count unique songs in last hour (deduplicated by artist+title)
-          const lastHourSongs = lastHourResult.data || [];
-          const uniqueLastHour = new Set(
-            lastHourSongs.map(s => `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`)
-          );
-
-          // Update persisted store - use last24h count as approximate total (DB has auto-cleanup to 40/station)
+          // Update persisted store
           persistedStore.setStats({
-            totalSongs: last24hResult.count || recentData.length,
+            totalSongs: totalResult.count || 0,
             songsLast24h: last24hResult.count || 0,
-            songsLastHour: uniqueLastHour.size,
+            songsLastHour: lastHourResult.count || 0,
             activeStations: stationsResult.data?.length || 0,
             allStations: allStationsList,
-            lastSong: firstSong ? {
-              title: firstSong.title,
-              artist: firstSong.artist,
-              station: firstSong.station_name,
-              timestamp: firstSong.scraped_at,
+            lastSong: lastSongResult.data ? {
+              title: lastSongResult.data.title,
+              artist: lastSongResult.data.artist,
+              station: lastSongResult.data.station_name,
+              timestamp: lastSongResult.data.scraped_at,
             } : null,
             lastSongsByStation: newLastSongsByStation,
             recentSongsByStation: newRecentSongsByStation,

@@ -56,13 +56,11 @@ export function setCachedVerification(
   
   // Limit cache size to prevent memory bloat (500 entries max)
   if (cache.size > 500) {
-    // Remove oldest 100 entries using insertion order (Map iterates in insertion order)
-    let removed = 0;
-    for (const key of cache.keys()) {
-      if (removed >= 100) break;
-      cache.delete(key);
-      removed++;
-    }
+    // Remove oldest entries (remove 100 at a time)
+    const entries = Array.from(cache.entries());
+    entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const toRemove = entries.slice(0, 100);
+    toRemove.forEach(([key]) => cache.delete(key));
   }
 }
 

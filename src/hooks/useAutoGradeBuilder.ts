@@ -7,7 +7,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
-import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { sanitizeFilename, processFixedContentTemplate } from '@/lib/sanitizeFilename';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,8 +27,7 @@ import {
 } from '@/lib/gradeBuilder/specialPrograms';
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
 import { batchFindSongsInLibrary, findSongInLibrary as findSongInLibraryFn } from '@/lib/gradeBuilder/batchLibrary';
-import { buildDnaProfiles } from '@/lib/gradeBuilder/stationDna';
-import { isFolderBasedBlock, generateFolderBasedBlock, isRomanceBlock, generateRomanceBlock, isNossaBaladaBlock, NOSSA_BALADA_CONFIG } from '@/lib/gradeBuilder/folderPrograms';
+import { isFolderBasedBlock, generateFolderBasedBlock, isRomanceBlock, generateRomanceBlock } from '@/lib/gradeBuilder/folderPrograms';
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
@@ -60,7 +58,7 @@ export function useAutoGradeBuilder() {
   const {
     programs, sequence: defaultSequence, scheduledSequences,
     stations, config, fixedContent, rankingSongs,
-    addGradeHistory, addMissingSong, addOrUpdateRankingSong,
+    addGradeHistory, addMissingSong,
     missingSongs: existingMissingSongs,
   } = useRadioStore();
 
@@ -84,8 +82,7 @@ export function useAutoGradeBuilder() {
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
   /** Tracks which block time keys (e.g. "18:00") have already been assembled and locked */
   const builtBlocksRef = useRef<Set<string>>(new Set());
-  /** Tracks freshness (scrapedAt timestamps) of songs in each block slot for rebuild comparison */
-  const blockFreshnessRef = useRef<Map<string, string[]>>(new Map());
+
   // ==================== Utility Helpers ====================
 
   const getDayCode = useCallback((targetDay?: WeekDay) => {
@@ -104,12 +101,7 @@ export function useAutoGradeBuilder() {
     return day >= 1 && day <= 5;
   }, []);
 
-  const getProgramForHour = useCallback((hour: number, targetDay?: WeekDay) => {
-    // Weekend: all blocks use a unified ID
-    const dayToCheck = targetDay || (['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const)[new Date().getDay()];
-    if (dayToCheck === 'sab') return 'Nossa Sabado';
-    if (dayToCheck === 'dom') return 'Nossa Domingo';
-
+  const getProgramForHour = useCallback((hour: number) => {
     for (const prog of programs) {
       const [start, end] = prog.timeRange.split('-').map(Number);
       if (hour >= start && hour <= end) return prog.programName;
@@ -117,14 +109,14 @@ export function useAutoGradeBuilder() {
     return 'PROGRAMA';
   }, [programs]);
 
-  const getFixedContentForTime = useCallback((hour: number, minute: number, targetDay?: WeekDay) => {
-    const dayToCheck = targetDay || (['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const)[new Date().getDay()];
-    const isWeekdayDay = WEEKDAY_KEYS.includes(dayToCheck);
-    const isWeekendDay = dayToCheck === 'sab' || dayToCheck === 'dom';
+  const getFixedContentForTime = useCallback((hour: number, minute: number) => {
+    const dayOfWeek = new Date().getDay();
+    const isWeekdayNow = dayOfWeek >= 1 && dayOfWeek <= 5;
+    const isWeekendNow = dayOfWeek === 0 || dayOfWeek === 6;
     return fixedContent.filter(fc => {
       if (!fc.enabled) return false;
-      if (fc.dayPattern === 'WEEKDAYS' && !isWeekdayDay) return false;
-      if (fc.dayPattern === 'WEEKEND' && !isWeekendDay) return false;
+      if (fc.dayPattern === 'WEEKDAYS' && !isWeekdayNow) return false;
+      if (fc.dayPattern === 'WEEKEND' && !isWeekendNow) return false;
       return fc.timeSlots.some(ts => ts.hour === hour && ts.minute === minute);
     });
   }, [fixedContent]);
@@ -144,12 +136,9 @@ export function useAutoGradeBuilder() {
       })
       .sort((a, b) => b.priority - a.priority);
     if (activeScheduled.length > 0) {
-      const seq = activeScheduled[0];
-      const stationsList = seq.sequence.map(s => s.radioSource).join(', ');
-      console.log(`[SEQUENCE] ✅ Sequência agendada "${seq.name}" para ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} (${currentDay}) | Estações: ${stationsList}`);
-      return seq.sequence;
+      console.log(`[SEQUENCE] Usando sequência agendada "${activeScheduled[0].name}" para ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} (${currentDay})`);
+      return activeScheduled[0].sequence;
     }
-    console.log(`[SEQUENCE] 📋 Sequência PADRÃO para ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} (${currentDay}) | Nenhuma agendada ativa`);
     return defaultSequence;
   }, [scheduledSequences, defaultSequence]);
 
@@ -184,7 +173,6 @@ export function useAutoGradeBuilder() {
     usedSongsRef.current = [];
     carryOverSongsRef.current = [];
     builtBlocksRef.current.clear();
-    blockFreshnessRef.current.clear();
   }, []);
 
   const addCarryOverSong = useCallback((song: Omit<CarryOverSong, 'addedAt'>) => {
@@ -208,12 +196,12 @@ export function useAutoGradeBuilder() {
   // ==================== Library Helpers ====================
 
   const findSongInLibrary = useCallback(async (artist: string, title: string) => {
-    return findSongInLibraryFn(artist, title, config.musicFolders, config.similarityThreshold);
-  }, [config.musicFolders, config.similarityThreshold]);
+    return findSongInLibraryFn(artist, title, config.musicFolders);
+  }, [config.musicFolders]);
 
   const batchFind = useCallback(async (songs: Array<{ artist: string; title: string }>) => {
-    return batchFindSongsInLibrary(songs, config.musicFolders, config.similarityThreshold);
-  }, [config.musicFolders, config.similarityThreshold]);
+    return batchFindSongsInLibrary(songs, config.musicFolders);
+  }, [config.musicFolders]);
 
   const isSongAlreadyMissing = useCallback((artist: string, title: string): boolean => {
     return existingMissingSongs.some(
@@ -250,8 +238,7 @@ export function useAutoGradeBuilder() {
       .replace(/\{DD\}/gi, fullDayName)
       .replace(/\{ED\}/gi, edition);
     const hasFullDayName = FULL_DAY_NAMES_BY_INDEX.some(day => result.toUpperCase().includes(`_${day}`));
-    const hasWeekendSuffix = result.toUpperCase().includes('FINAL_DE_SEMANA');
-    if (!result.toLowerCase().includes('_{dia}') && !result.toLowerCase().includes('_{dd}') && !hasFullDayName && !hasWeekendSuffix) {
+    if (!result.toLowerCase().includes('_{dia}') && !result.toLowerCase().includes('_{dd}') && !hasFullDayName) {
       if (result.toLowerCase().endsWith('.mp3')) {
         result = result.slice(0, -4) + `_${fullDayName}.mp3`;
       } else {
@@ -298,114 +285,44 @@ export function useAutoGradeBuilder() {
 
   // ==================== Data Fetching ====================
 
-  const fetchSongsForBlock = useCallback(async (blockHour: number, blockMinute: number, targetDate?: Date, retryCount = 0): Promise<Record<string, SongEntry[]>> => {
+  const fetchSongsForBlock = useCallback(async (blockHour: number, blockMinute: number, targetDate?: Date): Promise<Record<string, SongEntry[]>> => {
     try {
       const baseDate = targetDate || new Date();
       const blockTime = new Date(baseDate);
       blockTime.setHours(blockHour, blockMinute, 0, 0);
       const windowEnd = blockTime.toISOString();
-      // Use 24-hour window to capture full monitoring history
-      const windowStart = new Date(blockTime.getTime() - 24 * 60 * 60 * 1000).toISOString();
-      console.log(`[AUTO-GRADE] 🕐 Buscando músicas para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')} (janela: ${windowStart.substring(11, 16)} → ${windowEnd.substring(11, 16)} UTC)`);
-      
-      // Diagnostic: verify Supabase connection
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      console.log(`[AUTO-GRADE] 🔗 Supabase URL: ${supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : '❌ NÃO CONFIGURADA'}`);
-      console.log(`[AUTO-GRADE] 🔑 Supabase Key: ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ? 'OK' : '❌ NÃO CONFIGURADA'}`);
+      const windowStart = new Date(blockTime.getTime() - 60 * 60 * 1000).toISOString();
+      console.log(`[AUTO-GRADE] 🕐 Buscando músicas para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')} (janela de 1h)`);
 
-      // Fetch from both scraped_songs (real-time) and radio_historico (acervo) in parallel
-      const [scrapedResult, historicoResult] = await Promise.all([
-        supabase
-          .from('scraped_songs')
-          .select('title, artist, station_name, scraped_at')
-          .gte('scraped_at', windowStart)
-          .lte('scraped_at', windowEnd)
-          .order('scraped_at', { ascending: false })
-          .limit(1500),
-        supabase
-          .from('radio_historico')
-          .select('title, artist, station_name, captured_at')
-          .order('captured_at', { ascending: false })
-          .limit(500),
-      ]);
-      
-      const data = scrapedResult.data || [];
-      const historicoData = (historicoResult.data || []).map(h => ({
-        title: h.title,
-        artist: h.artist,
-        station_name: h.station_name,
-        scraped_at: h.captured_at, // Normalize field name
-      }));
-      
-      // Merge: scraped_songs first (fresher), then radio_historico as supplement
-      const merged = [...data, ...historicoData];
-      
-      console.log(`[AUTO-GRADE] 📊 Supabase: ${data.length} scraped + ${historicoData.length} histórico = ${merged.length} total, erro: ${scrapedResult.error ? JSON.stringify(scrapedResult.error) : 'nenhum'}`);
-      if (scrapedResult.error) throw scrapedResult.error;
+      const { data, error } = await supabase
+        .from('scraped_songs')
+        .select('title, artist, station_name, scraped_at')
+        .gte('scraped_at', windowStart)
+        .lte('scraped_at', windowEnd)
+        .order('scraped_at', { ascending: false })
+        .limit(500);
+      if (error) throw error;
 
-      const result = buildSongsByStation(merged, 100);
-      const totalSongs = Object.values(result).reduce((sum, arr) => sum + arr.length, 0);
-      if (totalSongs === 0) {
-        console.warn(`[AUTO-GRADE] ⚠️ POOL VAZIO para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')}! Nenhuma música encontrada. Dados: ${merged.length} registros.`);
-      }
-      return result;
+      return buildSongsByStation(data || []);
     } catch (error) {
-      console.error(`[AUTO-GRADE] ❌ Erro ao buscar músicas (tentativa ${retryCount + 1}):`, error);
-      // Retry up to 2 times on fetch errors (AbortError, network issues)
-      if (retryCount < 2) {
-        console.log(`[AUTO-GRADE] 🔄 Retentando busca em 3 segundos... (tentativa ${retryCount + 2}/3)`);
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        return fetchSongsForBlock(blockHour, blockMinute, targetDate, retryCount + 1);
-      }
-      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase (3 tentativas falharam)', String(error));
+      console.error('[AUTO-GRADE] Error fetching songs for block:', error);
+      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
       return {};
     }
   }, [stations]);
 
-  const fetchAllRecentSongs = useCallback(async (retryCount = 0): Promise<Record<string, SongEntry[]>> => {
+  const fetchAllRecentSongs = useCallback(async (): Promise<Record<string, SongEntry[]>> => {
     try {
-      console.log(`[AUTO-GRADE] 🌐 fetchAllRecentSongs: Iniciando busca...`);
-      
-      // Fetch from both sources in parallel
-      const [scrapedResult, historicoResult] = await Promise.all([
-        supabase
-          .from('scraped_songs')
-          .select('title, artist, station_name, scraped_at')
-          .order('scraped_at', { ascending: false })
-          .limit(2000),
-        supabase
-          .from('radio_historico')
-          .select('title, artist, station_name, captured_at')
-          .order('captured_at', { ascending: false })
-          .limit(500),
-      ]);
-      
-      const data = scrapedResult.data || [];
-      const historicoData = (historicoResult.data || []).map(h => ({
-        title: h.title,
-        artist: h.artist,
-        station_name: h.station_name,
-        scraped_at: h.captured_at,
-      }));
-      
-      const merged = [...data, ...historicoData];
-      
-      console.log(`[AUTO-GRADE] 📊 fetchAllRecentSongs: ${data.length} scraped + ${historicoData.length} histórico = ${merged.length} total, erro: ${scrapedResult.error ? JSON.stringify(scrapedResult.error) : 'nenhum'}`);
-      if (scrapedResult.error) throw scrapedResult.error;
-      const result = buildSongsByStation(merged, 150);
-      const totalSongs = Object.values(result).reduce((sum, arr) => sum + arr.length, 0);
-      if (totalSongs === 0) {
-        console.warn(`[AUTO-GRADE] ⚠️ POOL VAZIO no fetchAllRecentSongs! Dados: ${merged.length} registros.`);
-      }
-      return result;
+      const { data, error } = await supabase
+        .from('scraped_songs')
+        .select('title, artist, station_name, scraped_at')
+        .order('scraped_at', { ascending: false })
+        .limit(2000);
+      if (error) throw error;
+      return buildSongsByStation(data || [], 150);
     } catch (error) {
-      console.error(`[AUTO-GRADE] ❌ Erro ao buscar todas as músicas (tentativa ${retryCount + 1}):`, error);
-      if (retryCount < 2) {
-        console.log(`[AUTO-GRADE] 🔄 Retentando busca geral em 3 segundos... (tentativa ${retryCount + 2}/3)`);
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        return fetchAllRecentSongs(retryCount + 1);
-      }
-      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase (3 tentativas falharam)', String(error));
+      console.error('[AUTO-GRADE] Error fetching all songs:', error);
+      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
       return {};
     }
   }, [stations]);
@@ -434,37 +351,10 @@ export function useAutoGradeBuilder() {
         });
       }
     });
-    // Sort each station's songs by freshness (most recent first)
-    for (const stName of Object.keys(songsByStation)) {
-      songsByStation[stName].sort((a, b) => {
-        if (!a.scrapedAt && !b.scrapedAt) return 0;
-        if (!a.scrapedAt) return 1;
-        if (!b.scrapedAt) return -1;
-        return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
-      });
-    }
     const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
     console.log(`[AUTO-GRADE] Pool: ${stationList}`);
     return songsByStation;
   }, [stations]);
-
-  // ==================== Ranking from Grade ====================
-  
-  /** Feed the TOP25 ranking from songs actually placed in the grade (not scraping) */
-  const updateRankingFromLogs = useCallback((logs: BlockLogItem[]) => {
-    const usedSongs = logs.filter(l => l.type === 'used' || l.type === 'substituted');
-    if (usedSongs.length === 0) return;
-    
-    // Deduplicate by artist+title within this batch
-    const seen = new Set<string>();
-    for (const log of usedSongs) {
-      const key = `${log.artist.toLowerCase().trim()}|${log.title.toLowerCase().trim()}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      addOrUpdateRankingSong(log.title, log.artist, log.style || 'POP/VARIADO', log.station);
-    }
-    console.log(`[AUTO-GRADE] 🏆 Ranking atualizado com ${seen.size} músicas da grade`);
-  }, [addOrUpdateRankingSong]);
 
   // ==================== Block Generation ====================
 
@@ -476,8 +366,8 @@ export function useAutoGradeBuilder() {
     targetDay?: WeekDay
   ): Promise<BlockResult> => {
     const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-    const programName = getProgramForHour(hour, targetDay);
-    const fixedItems = getFixedContentForTime(hour, minute, targetDay);
+    const programName = getProgramForHour(hour);
+    const fixedItems = getFixedContentForTime(hour, minute);
     const ctx = buildGradeContext();
 
     // === Special Programs ===
@@ -492,48 +382,35 @@ export function useAutoGradeBuilder() {
       return await generateMisturadao(hour, minute, ctx, targetDay);
     }
 
-    // Folder-based blocks (17:00-18:30 Happy Hour) - weekdays only
-    if (isFolderBasedBlock(hour, minute) && isWeekday(targetDay)) {
+    // Folder-based blocks (17:00-18:30 Happy Hour)
+    if (isFolderBasedBlock(hour, minute)) {
       return generateFolderBasedBlock(hour, minute, stats, isFullDay, ctx);
     }
 
-    // Romance blocks (22:00-00:00) - folder-based with fixed content (weekdays only)
+    // Romance blocks (22:00-00:00) - folder-based with fixed content
     if (isRomanceBlock(hour, minute) && isWeekday(targetDay)) {
       return generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay);
     }
 
-    // Nossa Balada (21:00-23:30 weekends) - folder-based from network paths
-    if (isNossaBaladaBlock(hour, minute) && !isWeekday(targetDay)) {
-      return generateFolderBasedBlock(hour, minute, stats, isFullDay, ctx, NOSSA_BALADA_CONFIG);
-    }
-
-    // TOP50 blocks (all days) — filtered to only include songs from active sequence stations
+    // TOP50 blocks
     const top50Item = fixedItems.find(fc => fc.type === 'top50');
     if (top50Item) {
-      // Build set of station names from the active sequence
-      const top50Sequence = getActiveSequenceForBlock(hour, minute, targetDay);
-      const seqStationNames = new Set<string>();
-      for (const seq of top50Sequence) {
-        const dbName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()];
-        if (dbName) seqStationNames.add(dbName);
-      }
-      // Filter ranking to only include songs from sequence stations
-      const filteredCtx = seqStationNames.size > 0 ? {
-        ...ctx,
-        rankingSongs: ctx.rankingSongs.filter(s => !s.station || seqStationNames.has(s.station)),
-      } : ctx;
-      const top50Result = await generateTop50Block(hour, minute, top50Item.top50Count || 10, filteredCtx);
-      // Override ID on weekends
-      if (!isWeekday(targetDay)) {
-        top50Result.line = top50Result.line.replace(/\(ID=[^)]*\)/, `(ID=${programName})`);
-      }
-      return top50Result;
+      return await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx);
     }
 
-    // Madrugada (00:00-04:30) - now follows sequence like normal blocks
+    // Madrugada (00:00-04:30)
+    if (hour >= 0 && hour <= 5) {
+      // Hour 5 is Sertanejo Nossa, check below
+      if (hour <= 4 || (hour === 5 && minute === 0 && !(hour >= 5 && hour <= 7))) {
+        // Actually hours 0-4 only for madrugada
+      }
+    }
+    if (hour >= 0 && hour <= 4) {
+      return generateMadrugada(hour, minute, songsByStation, stats, isFullDay, ctx, programName);
+    }
 
-    // Sertanejo Nossa (05:00-07:30) - weekdays only
-    if (hour >= 5 && hour <= 7 && isWeekday(targetDay)) {
+    // Sertanejo Nossa (05:00-07:30)
+    if (hour >= 5 && hour <= 7) {
       return generateSertanejoNossa(hour, minute, songsByStation, stats, isFullDay, ctx);
     }
 
@@ -541,17 +418,16 @@ export function useAutoGradeBuilder() {
 
     const blockLogs: BlockLogItem[] = [];
 
-    // Fixed content handling — supports multiple fixed items per slot
-    const fixedItemsList = fixedItems.filter(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil');
-    const fixedContentFiles: Array<{ file: string; position: 'start' | 'middle' | 'end' | number }> = [];
+    // Fixed content handling
+    const fixedItem = fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil');
+    let fixedContentFile: string | null = null;
+    let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
 
-    for (const fixedItem of fixedItemsList) {
+    if (fixedItem) {
       const processedFileName = processFixedContentFilename(fixedItem.fileName, hour, minute, 0, targetDay);
       const finalFileName = processedFileName.toLowerCase().endsWith('.mp3') ? processedFileName : `${processedFileName}.mp3`;
-      fixedContentFiles.push({
-        file: `"${finalFileName}"`,
-        position: fixedItem.position || 'start',
-      });
+      fixedContentFile = `"${finalFileName}"`;
+      fixedPosition = fixedItem.position || 'start';
       blockLogs.push({
         blockTime: timeStr, type: 'fixed',
         title: fixedItem.name, artist: finalFileName,
@@ -565,47 +441,11 @@ export function useAutoGradeBuilder() {
       allSongsPool.push(...stationSongs);
     }
 
-    // Build fresh songs pool (captured in last 30 minutes) for P0.5 priority
-    const freshCutoffMs = Date.now() - 30 * 60 * 1000;
-    const freshSongsByStation: Record<string, SongEntry[]> = {};
-    for (const [stName, stSongs] of Object.entries(songsByStation)) {
-      const fresh = stSongs.filter(s => s.scrapedAt && new Date(s.scrapedAt).getTime() >= freshCutoffMs);
-      if (fresh.length > 0) {
-        freshSongsByStation[stName] = fresh.sort((a, b) => new Date(b.scrapedAt || 0).getTime() - new Date(a.scrapedAt || 0).getTime());
-      }
-    }
-    const freshCount = Object.values(freshSongsByStation).reduce((sum, arr) => sum + arr.length, 0);
-    if (freshCount > 0) {
-      console.log(`[AUTO-GRADE] 🔥 Fresh songs (last 30min): ${freshCount} across ${Object.keys(freshSongsByStation).length} stations`);
-    }
-
-    // === PRE-BATCH: Check all songs in library at once to avoid individual IPC calls ===
-    const allSongsToCheck = allSongsPool.map(s => ({ artist: s.artist, title: s.title }));
+    // Carry-over
     const carryOverAvailable = getCarryOverSongs(timeStr);
-    for (const co of carryOverAvailable) {
-      allSongsToCheck.push({ artist: co.artist, title: co.title });
-    }
-    
-    if (allSongsToCheck.length === 0) {
-      console.error(`[AUTO-GRADE] ❌ DIAGNÓSTICO: Pool de músicas completamente VAZIO para bloco ${timeStr}! Estações no pool: ${Object.keys(songsByStation).join(', ') || 'NENHUMA'}. Verifique a conexão com o banco de dados.`);
-    }
-    
-    const libraryCache = await batchFind(allSongsToCheck);
-    const foundCount = [...libraryCache.entries()].filter(([, r]) => r.exists).length;
-    console.log(`[AUTO-GRADE] 📦 Batch library check: ${allSongsToCheck.length} songs → ${foundCount} found`);
-    
-    if (allSongsToCheck.length > 0 && foundCount === 0) {
-      console.error(`[AUTO-GRADE] ❌ DIAGNÓSTICO: ${allSongsToCheck.length} músicas verificadas, NENHUMA encontrada na biblioteca local!`);
-      console.error(`[AUTO-GRADE] 📋 Pastas configuradas: ${config.musicFolders?.join(', ') || 'NENHUMA'}`);
-      console.error(`[AUTO-GRADE] 📋 Primeiras 5 músicas buscadas: ${allSongsToCheck.slice(0, 5).map(s => `${s.artist} - ${s.title}`).join(' | ')}`);
-      console.error(`[AUTO-GRADE] 💡 Verifique: 1) As pastas existem? 2) Há MP3s nelas? 3) O threshold de similaridade está muito alto?`);
-    }
-
-    // Build carry-over using cached results
     const carryOverByStation: Record<string, SongEntry[]> = {};
     for (const carryOver of carryOverAvailable) {
-      const key = `${carryOver.artist.toLowerCase().trim()}|${carryOver.title.toLowerCase().trim()}`;
-      const libraryResult = libraryCache.get(key) || { exists: false };
+      const libraryResult = await findSongInLibrary(carryOver.artist, carryOver.title);
       if (libraryResult.exists) {
         const correctFilename = libraryResult.filename || sanitizeFilename(`${carryOver.artist} - ${carryOver.title}.mp3`);
         const songEntry: SongEntry = {
@@ -625,61 +465,10 @@ export function useAutoGradeBuilder() {
     const stationSongIndex: Record<string, number> = {};
     const songs: string[] = [];
 
-    // Build DNA profiles ONLY for stations in the active sequence
-    // This prevents songs from stations like Metropolitana/Blink appearing when they're not in the sequence
-    const sequenceStationNames = new Set<string>();
-    for (const seq of activeSequence) {
-      const dbName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()];
-      if (dbName) sequenceStationNames.add(dbName);
-    }
-    const filteredSongsByStation: Record<string, SongEntry[]> = {};
-    for (const [stName, songs_] of Object.entries(songsByStation)) {
-      if (sequenceStationNames.has(stName)) {
-        filteredSongsByStation[stName] = songs_;
-      }
-    }
-    const dnaProfiles = buildDnaProfiles(filteredSongsByStation);
-    const dnaStations = Object.keys(dnaProfiles).length;
-    if (dnaStations > 1) {
-      console.log(`[AUTO-GRADE] 🧬 DNA profiles built for ${dnaStations} stations (filtered to sequence)`);
-    }
-
-    // Build ranking song keys for P0.75 priority (filtered to sequence stations)
-    const rankingSongKeys = new Set<string>();
-    for (const rs of rankingSongs) {
-      if (!rs.station || sequenceStationNames.has(rs.station)) {
-        rankingSongKeys.add(`${rs.title.toLowerCase().trim()}|${rs.artist.toLowerCase().trim()}`);
-      }
-    }
-    if (rankingSongKeys.size > 0) {
-      console.log(`[AUTO-GRADE] ⭐ ${rankingSongKeys.size} ranking songs available for P0.75 priority`);
-    }
-
-    // Build forbidden song keys from config
-    const forbiddenSongKeys = new Set<string>();
-    if (config.forbiddenSongs && config.forbiddenSongs.length > 0) {
-      for (const entry of config.forbiddenSongs) {
-        const parts = entry.split(' - ');
-        if (parts.length >= 2) {
-          const artist = parts[0].toLowerCase().trim();
-          const title = parts.slice(1).join(' - ').toLowerCase().trim();
-          forbiddenSongKeys.add(`${artist}|${title}`);
-        }
-      }
-      if (forbiddenSongKeys.size > 0) {
-        console.log(`[AUTO-GRADE] 🚫 ${forbiddenSongKeys.size} forbidden songs configured`);
-      }
-    }
-
     const selCtx = {
       timeStr, isFullDay, usedInBlock, usedArtistsInBlock,
-      songsByStation, allSongsPool, carryOverByStation, freshSongsByStation,
-      dnaProfiles,
-      rankingSongKeys,
-      forbiddenSongKeys,
-      stationSongIndex,
+      songsByStation, allSongsPool, carryOverByStation, stationSongIndex,
       logs: blockLogs, stats,
-      libraryCache, // Pass pre-checked results
     };
 
     for (const seq of activeSequence) {
@@ -692,67 +481,35 @@ export function useAutoGradeBuilder() {
         continue;
       }
 
-      // Normal station selection — uses pre-cached library results
+      // Normal station selection (P0-P6)
       const songStr = await selectSongForSlot(seq, selCtx, ctx);
       songs.push(songStr);
     }
 
-    // Insert fixed content at configured positions (supports multiple items)
+    // Insert fixed content at configured position
     let allContent: string[] = [...songs];
-    if (fixedContentFiles.length > 0) {
-      // Sort by position: 'start' first, then numbers, then 'middle', then 'end'
-      const sorted = [...fixedContentFiles].sort((a, b) => {
-        const order = (p: typeof a.position) => p === 'start' ? -1 : p === 'end' ? 999 : p === 'middle' ? 500 : p;
-        return (order(a.position) as number) - (order(b.position) as number);
-      });
-      // Insert in reverse order to maintain correct indices
-      for (const fc of sorted.reverse()) {
-        if (fc.position === 'start') {
-          allContent = [fc.file, ...allContent];
-        } else if (fc.position === 'end') {
-          allContent = [...allContent, fc.file];
-        } else if (fc.position === 'middle') {
-          const midIndex = Math.floor(allContent.length / 2);
-          allContent = [...allContent.slice(0, midIndex), fc.file, ...allContent.slice(midIndex)];
-        } else if (typeof fc.position === 'number') {
-          const insertIndex = Math.max(0, Math.min(fc.position - 1, allContent.length));
-          allContent = [...allContent.slice(0, insertIndex), fc.file, ...allContent.slice(insertIndex)];
-        }
+    if (fixedContentFile) {
+      if (fixedPosition === 'start') {
+        allContent = [fixedContentFile, ...songs];
+      } else if (fixedPosition === 'end') {
+        allContent = [...songs, fixedContentFile];
+      } else if (fixedPosition === 'middle') {
+        const midIndex = Math.floor(songs.length / 2);
+        allContent = [...songs.slice(0, midIndex), fixedContentFile, ...songs.slice(midIndex)];
+      } else if (typeof fixedPosition === 'number') {
+        const insertIndex = Math.max(0, Math.min(fixedPosition - 1, songs.length));
+        allContent = [...songs.slice(0, insertIndex), fixedContentFile, ...songs.slice(insertIndex)];
       }
     }
 
     const lineContent = allContent.join(',vht,');
-    
-    // Build freshness array from selected songs for rebuild comparison
-    // Each entry is the scrapedAt timestamp of the song in that slot
-    const songFreshness: string[] = [];
-    for (const song of songs) {
-      // Find the matching log entry to get the song's freshness
-      const songFile = song.replace(/^"|"$/g, '');
-      const matchingLog = blockLogs.find(l => 
-        (l.type === 'used' || l.type === 'substituted') && 
-        sanitizeFilename(`${l.artist} - ${l.title}.mp3`) === songFile
-      );
-      if (matchingLog) {
-        // Look up scrapedAt from the pool
-        const poolSong = allSongsPool.find(s => 
-          s.title.toLowerCase() === matchingLog.title.toLowerCase() && 
-          s.artist.toLowerCase() === matchingLog.artist.toLowerCase()
-        );
-        songFreshness.push(poolSong?.scrapedAt || '');
-      } else {
-        songFreshness.push('');
-      }
-    }
-    
     return {
       line: sanitizeGradeLine(`${timeStr} (ID=${programName}) ${lineContent}`, filterChars),
       logs: blockLogs,
-      songFreshness,
     };
   }, [
     getProgramForHour, getFixedContentForTime, isWeekday,
-    getActiveSequenceForBlock, findSongInLibrary, batchFind,
+    getActiveSequenceForBlock, findSongInLibrary,
     processFixedContentFilename, getDayCode, getCarryOverSongs,
     buildGradeContext, filterChars, stations,
   ]);
@@ -774,7 +531,7 @@ export function useAutoGradeBuilder() {
 
   // ==================== Full Day Grade ====================
 
-  const buildFullDayGrade = useCallback(async (overrideTargetDay?: WeekDay) => {
+  const buildFullDayGrade = useCallback(async () => {
     if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
       toast({ title: '⚠️ Modo Web', description: 'Geração de grade disponível apenas no aplicativo desktop.' });
       return;
@@ -788,13 +545,13 @@ export function useAutoGradeBuilder() {
     }));
 
     const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
-    const targetDay = overrideTargetDay || dayMap[new Date().getDay()];
+    const targetDay = dayMap[new Date().getDay()];
     const dayCode = getDayCode(targetDay);
     const filename = `${dayCode}.txt`;
 
     try {
-      console.log(`[AUTO-GRADE] 🚀 Building full day grade for ${targetDay} (${filename}) with progressive saving...`);
-      logSystemError('GRADE', 'info', `Iniciando geração da grade completa para ${targetDay}`);
+      console.log('[AUTO-GRADE] 🚀 Building full day grade with progressive saving...');
+      logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
       clearUsedSongs();
 
       const songsByStation = await fetchAllRecentSongs();
@@ -809,23 +566,21 @@ export function useAutoGradeBuilder() {
       for (let hour = 0; hour < 24; hour++) {
         for (const minute of [0, 30]) {
           const blockTimeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-          // Throttle UI updates: only update every 4 blocks to reduce render pressure
-          if (blockCount % 4 === 0) {
-            setState(prev => ({
-              ...prev, currentProcessingBlock: blockTimeStr,
-              currentProcessingSong: `Processando bloco ${blockTimeStr}...`,
-            }));
-          }
+          setState(prev => ({
+            ...prev, currentProcessingBlock: blockTimeStr,
+            currentProcessingSong: `Processando bloco ${blockTimeStr}...`,
+          }));
 
           // Inject carry-over songs from previous block into the ref
+          // so generateBlockLine's carry-over logic picks them up
           if (fullDayCarryOver.length > 0) {
             for (const co of fullDayCarryOver) {
               carryOverSongsRef.current.push({
                 ...co,
-                addedAt: new Date(Date.now() - 120000),
+                addedAt: new Date(Date.now() - 120000), // Simulate 2 min ago to pass the 1-min threshold
               });
             }
-            fullDayCarryOver.length = 0;
+            fullDayCarryOver.length = 0; // Clear after injecting
           }
 
           const result = await generateBlockLine(hour, minute, songsByStation, stats, true, targetDay);
@@ -833,19 +588,18 @@ export function useAutoGradeBuilder() {
           allLogs.push(...result.logs);
           blockCount++;
 
+          // Collect any new carry-over songs added during this block for next block
           const newCarryOvers = carryOverSongsRef.current.filter(
-            co => (Date.now() - co.addedAt.getTime()) < 60000
+            co => (Date.now() - co.addedAt.getTime()) < 60000 // Recently added (within 1 min)
           );
           fullDayCarryOver.push(...newCarryOvers);
 
-          // Throttle progress updates: every 4 blocks
-          if (blockCount % 4 === 0 || blockCount === 48) {
-            setState(prev => ({
-              ...prev, fullDayProgress: blockCount,
-              skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
-              currentProcessingSong: `Bloco ${blockCount}/48`,
-            }));
-          }
+          const lastLog = result.logs.filter(l => l.type === 'used' || l.type === 'substituted').pop();
+          setState(prev => ({
+            ...prev, fullDayProgress: blockCount,
+            skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
+            currentProcessingSong: lastLog ? `${lastLog.artist} - ${lastLog.title}` : 'Processando...',
+          }));
 
           // Progressive save every 4 blocks
           if (blockCount % 4 === 0 || blockCount === 48) {
@@ -865,7 +619,6 @@ export function useAutoGradeBuilder() {
       }
 
       addBlockLogs(allLogs);
-      updateRankingFromLogs(allLogs);
       const finalContent = lines.join('\n');
       await renameFilesInGradeContent(finalContent);
 
@@ -875,7 +628,7 @@ export function useAutoGradeBuilder() {
         logSystemError('GRADE', 'info', `Grade completa salva: ${filename}`, `${lines.length} blocos, ${stats.skipped} puladas, ${stats.substituted} substituídas, ${stats.missing} faltando`);
         addGradeHistory({
           id: `grade-fullday-${Date.now()}`, timestamp: new Date(), blockTime: 'COMPLETA',
-          songsProcessed: 48 * defaultSequence.length, songsFound: lines.length, songsMissing: stats.missing, programName: `Grade Completa (${targetDay.toUpperCase()})`,
+          songsProcessed: 48 * defaultSequence.length, songsFound: lines.length, songsMissing: stats.missing, programName: 'Grade Completa',
         });
         setState(prev => ({
           ...prev, isBuilding: false, lastBuildTime: new Date(), lastSavedFile: filename,
@@ -895,111 +648,8 @@ export function useAutoGradeBuilder() {
     }
   }, [
     clearUsedSongs, fetchAllRecentSongs, generateBlockLine, renameFilesInGradeContent,
-    getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, toast, addBlockLogs, updateRankingFromLogs,
+    getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, toast, addBlockLogs,
   ]);
-
-  // ==================== Sunday Pre-Build (Saturday ≥ 11:00) ====================
-
-  /**
-   * On Sunday, refresh existing grade by substituting oldest songs with fresh captures.
-   * Ratio: 3:1 (keep 3, replace 1 with fresh capture per 4 songs).
-   */
-  const refreshSundayGrade = useCallback(async () => {
-    if (!isElectronEnv || !window.electronAPI?.saveGradeFile) return;
-
-    const filename = `${getDayCode('dom')}.txt`;
-    console.log(`[AUTO-GRADE] 🔄 Atualizando grade de domingo com capturas frescas (proporção 3:1)...`);
-
-    try {
-      // Read existing Sunday grade
-      let existingContent = '';
-      if (window.electronAPI?.readGradeFile) {
-        const readResult = await window.electronAPI.readGradeFile({ folder: config.gradeFolder, filename });
-        if (readResult.success && readResult.content) existingContent = readResult.content;
-      }
-
-      if (!existingContent) {
-        console.log('[AUTO-GRADE] 📋 Nenhuma grade de domingo existente, gerando do zero...');
-        await buildFullDayGrade('dom');
-        return;
-      }
-
-      // Fetch fresh songs captured today (Sunday)
-      const freshSongs = await fetchAllRecentSongs();
-      const freshPool: SongEntry[] = [];
-      for (const stationSongs of Object.values(freshSongs)) {
-        freshPool.push(...stationSongs);
-      }
-
-      if (freshPool.length === 0) {
-        console.log('[AUTO-GRADE] ⚠️ Nenhuma música fresca disponível, mantendo grade existente');
-        return;
-      }
-
-      // Shuffle fresh pool
-      const shuffledFresh = [...freshPool].sort(() => Math.random() - 0.5);
-      let freshIndex = 0;
-
-      const ctx = buildGradeContext();
-      const lines = existingContent.split('\n');
-      const updatedLines: string[] = [];
-      let replacements = 0;
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) { updatedLines.push(trimmed); continue; }
-
-        // Extract songs from line: everything between quotes
-        const songMatches = trimmed.match(/"([^"]+)"/g);
-        if (!songMatches || songMatches.length < 4) {
-          updatedLines.push(trimmed);
-          continue;
-        }
-
-        // Apply 3:1 ratio: for every 4 songs, replace the 4th with a fresh one
-        let songCounter = 0;
-        let updatedLine = trimmed;
-
-        for (let i = 0; i < songMatches.length; i++) {
-          songCounter++;
-          if (songCounter % 4 === 0 && freshIndex < shuffledFresh.length) {
-            const fresh = shuffledFresh[freshIndex];
-            const batchKey = `${fresh.artist.toLowerCase().trim()}|${fresh.title.toLowerCase().trim()}`;
-
-            // Verify fresh song exists in library
-            const libraryResult = await ctx.findSongInLibrary(fresh.artist, fresh.title);
-            if (libraryResult.exists) {
-              const freshFilename = libraryResult.filename || sanitizeFilename(`${fresh.artist} - ${fresh.title}.mp3`);
-
-              // Don't replace fixed content files (uppercase patterns like ROMANCE_BLOCO, PARADA_POP, etc.)
-              const originalSong = songMatches[i].replace(/"/g, '');
-              if (!/^[A-Z0-9_]+\.MP3$/i.test(originalSong)) {
-                updatedLine = updatedLine.replace(songMatches[i], `"${freshFilename}"`);
-                replacements++;
-                freshIndex++;
-              }
-            }
-          }
-        }
-
-        updatedLines.push(updatedLine);
-      }
-
-      if (replacements > 0) {
-        const finalContent = updatedLines.join('\n');
-        await renameFilesInGradeContent(finalContent);
-        const result = await window.electronAPI.saveGradeFile({ folder: config.gradeFolder, filename, content: finalContent });
-        if (result.success) {
-          console.log(`[AUTO-GRADE] ✅ Grade de domingo atualizada: ${replacements} músicas substituídas por capturas frescas`);
-          toast({ title: '🔄 Grade Domingo Atualizada', description: `${replacements} músicas substituídas por capturas frescas (3:1)` });
-        }
-      } else {
-        console.log('[AUTO-GRADE] ℹ️ Nenhuma substituição possível na grade de domingo');
-      }
-    } catch (error) {
-      console.error('[AUTO-GRADE] Erro ao atualizar grade de domingo:', error);
-    }
-  }, [getDayCode, config.gradeFolder, fetchAllRecentSongs, buildGradeContext, renameFilesInGradeContent, buildFullDayGrade, toast]);
 
   // ==================== Incremental Build ====================
 
@@ -1010,36 +660,18 @@ export function useAutoGradeBuilder() {
     }
 
     try {
-      const musicFolders = config.musicFolders;
-      
-      if (!musicFolders || musicFolders.length === 0) {
-        console.error('[AUTO-GRADE] ❌ Nenhuma pasta de música configurada!');
-        logSystemError('GRADE', 'error', 'Nenhuma pasta de música configurada', 'Vá em Configurações > Banco Musical e adicione pelo menos uma pasta.');
-        toast({ title: '❌ Pastas de Música', description: 'Nenhuma pasta configurada. Vá em Configurações > Banco Musical.', variant: 'destructive' });
-        return;
-      }
-
       const blocks = getBlockTimes();
       const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
       const dayCode = getDayCode();
       const filename = `${dayCode}.txt`;
 
-      // Check lock status: current block locks once built, next block only locks 10 min before start
+      // Check which blocks are already locked (already built)
       const currentLocked = builtBlocksRef.current.has(currentTimeKey);
-      
-      // Next block: calculate minutes until it starts
-      const now = new Date();
-      const nowMinutes = now.getHours() * 60 + now.getMinutes();
-      const nextBlockMinutes = blocks.next.hour * 60 + blocks.next.minute;
-      let minutesUntilNextBlock = nextBlockMinutes - nowMinutes;
-      if (minutesUntilNextBlock < 0) minutesUntilNextBlock += 24 * 60; // wrap around midnight
-      
-      // Next block is only locked if it was built AND we're within 10 minutes of its start
-      const nextLocked = builtBlocksRef.current.has(nextTimeKey) && minutesUntilNextBlock <= 10;
-      
+      const nextLocked = builtBlocksRef.current.has(nextTimeKey);
+
       if (currentLocked && nextLocked) {
-        console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} (travado) e ${nextTimeKey} (travado, ${minutesUntilNextBlock}min restantes) já montados, pulando`);
+        console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já montados, pulando`);
         return;
       }
 
@@ -1067,7 +699,7 @@ export function useAutoGradeBuilder() {
       const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: BlockLogItem[] = [];
 
-      // Current block: lock after first build (never regenerate)
+      // Only generate blocks that are NOT locked
       if (!currentLocked) {
         const songsCurrent = await fetchSongsForBlock(blocks.current.hour, blocks.current.minute);
         let currentPool = songsCurrent;
@@ -1083,8 +715,6 @@ export function useAutoGradeBuilder() {
         console.log(`[AUTO-GRADE] ⏭️ Bloco ${currentTimeKey} já travado, mantendo`);
       }
 
-      // Next block: always regenerate UNLESS locked (within 10 min of start)
-      // FRESHNESS GUARD: only replace slots with fresher songs
       if (!nextLocked) {
         const songsNext = await fetchSongsForBlock(blocks.next.hour, blocks.next.minute);
         let nextPool = songsNext;
@@ -1092,66 +722,15 @@ export function useAutoGradeBuilder() {
           nextPool = await fetchAllRecentSongs();
         }
         const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, nextPool, stats);
-        
-        // Freshness comparison: only accept new block if songs are fresher
-        const previousFreshness = blockFreshnessRef.current.get(nextTimeKey);
-        const existingLine = lineMap.get(nextTimeKey);
-        
-        if (previousFreshness && existingLine && nextResult.songFreshness) {
-          // Compare slot-by-slot: count how many slots got fresher vs older
-          let fresherSlots = 0;
-          let olderSlots = 0;
-          const mergedFreshness = [...(previousFreshness || [])];
-          
-          for (let i = 0; i < Math.min(previousFreshness.length, nextResult.songFreshness.length); i++) {
-            const oldTs = previousFreshness[i];
-            const newTs = nextResult.songFreshness[i];
-            
-            // New song is fresher if it has a timestamp and it's more recent
-            if (newTs && (!oldTs || newTs > oldTs)) {
-              fresherSlots++;
-              mergedFreshness[i] = newTs;
-            } else if (oldTs && (!newTs || newTs < oldTs)) {
-              olderSlots++;
-              // Keep old freshness
-            }
-          }
-          
-          if (fresherSlots > 0) {
-            // Accept new block — it has fresher songs
-            lineMap.set(nextTimeKey, nextResult.line);
-            allLogs.push(...nextResult.logs);
-            blockFreshnessRef.current.set(nextTimeKey, nextResult.songFreshness);
-            console.log(`[AUTO-GRADE] 🔥 Bloco ${nextTimeKey} regenerado com ${fresherSlots} músicas mais frescas (${olderSlots} mantidas)`);
-          } else {
-            // Keep existing block — no improvement in freshness
-            console.log(`[AUTO-GRADE] 🧊 Bloco ${nextTimeKey} mantido (nenhuma música mais fresca encontrada)`);
-          }
-        } else {
-          // First build or no previous data — always accept
-          lineMap.set(nextTimeKey, nextResult.line);
-          allLogs.push(...nextResult.logs);
-          if (nextResult.songFreshness) {
-            blockFreshnessRef.current.set(nextTimeKey, nextResult.songFreshness);
-          }
-          console.log(`[AUTO-GRADE] 🆕 Bloco ${nextTimeKey} montado (primeira geração)`);
-        }
-        
-        // Only lock when within 10 minutes of the block start
-        if (minutesUntilNextBlock <= 10) {
-          builtBlocksRef.current.add(nextTimeKey);
-          console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} TRAVADO (${minutesUntilNextBlock}min para início)`);
-        } else {
-          builtBlocksRef.current.delete(nextTimeKey);
-        }
+        lineMap.set(nextTimeKey, nextResult.line);
+        allLogs.push(...nextResult.logs);
+        builtBlocksRef.current.add(nextTimeKey);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} montado e travado`);
       } else {
-        console.log(`[AUTO-GRADE] ⏭️ Bloco ${nextTimeKey} já travado (${minutesUntilNextBlock}min para início), mantendo`);
+        console.log(`[AUTO-GRADE] ⏭️ Bloco ${nextTimeKey} já travado, mantendo`);
       }
 
-      if (allLogs.length > 0) {
-        addBlockLogs(allLogs);
-        updateRankingFromLogs(allLogs);
-      }
+      if (allLogs.length > 0) addBlockLogs(allLogs);
 
       const sortedContent = Array.from(lineMap.keys()).sort().map(t => lineMap.get(t)).join('\n');
       await renameFilesInGradeContent(sortedContent);
@@ -1185,7 +764,7 @@ export function useAutoGradeBuilder() {
     }
   }, [
     getBlockTimes, fetchSongsForBlock, fetchAllRecentSongs, generateBlockLine, renameFilesInGradeContent,
-    getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, getProgramForHour, toast, addBlockLogs, updateRankingFromLogs,
+    getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, getProgramForHour, toast, addBlockLogs,
   ]);
 
   // ==================== Timer & Auto Build ====================
@@ -1218,9 +797,6 @@ export function useAutoGradeBuilder() {
     if (!isElectronEnv || !state.isAutoEnabled) return;
     console.log(`[AUTO-GRADE] ⏰ Modo automático ATIVO - atualiza ${state.minutesBeforeBlock} min antes de cada bloco`);
     let lastBuiltBlock = '';
-    let lastSundayBuildHour = -1;
-    let saturdayFullDayBuilt = false;
-    let isFirstCycle = true; // Flag to force build on first interval cycle
 
     buildIntervalRef.current = setInterval(() => {
       const { isRunning } = useRadioStore.getState();
@@ -1228,7 +804,6 @@ export function useAutoGradeBuilder() {
       const now = new Date();
       const currentMinute = now.getMinutes();
       const currentHour = now.getHours();
-      const currentDay = now.getDay(); // 0=dom, 6=sab
       let targetBlockHour = currentHour;
       let targetBlockMinute = 0;
       if (currentMinute < 30) targetBlockMinute = 30;
@@ -1242,91 +817,24 @@ export function useAutoGradeBuilder() {
         builtBlocksRef.current.clear();
       }
 
-      // === Saturday: First build Saturday full-day grade, THEN pre-build Sunday ===
-      if (currentDay === 6 && currentHour >= 11) {
-        if (!saturdayFullDayBuilt) {
-          // Step 1: Build Saturday's own full-day grade first
-          saturdayFullDayBuilt = true;
-          console.log(`[AUTO-GRADE] 📅 Sábado ${currentHour}h — gerando grade COMPLETA de sábado (SÁB.txt) primeiro...`);
-          buildFullDayGrade('sab').then(() => {
-            console.log(`[AUTO-GRADE] ✅ Grade de sábado concluída! Agora gerando grade de domingo...`);
-            buildFullDayGrade('dom');
-          });
-          return; // Don't run incremental build while full-day is running
-        } else if (lastSundayBuildHour !== currentHour) {
-          // Step 2: Subsequent hours, refresh Sunday grade
-          lastSundayBuildHour = currentHour;
-          console.log(`[AUTO-GRADE] 📅 Sábado ${currentHour}h — atualizando grade de domingo...`);
-          buildFullDayGrade('dom');
-        }
-      }
+      const shouldBuild = minutesUntilBlock <= state.minutesBeforeBlock && lastBuiltBlock !== blockKey;
 
-      // === Sunday: Refresh grade with fresh captures (3:1 ratio) ===
-      if (currentDay === 0 && currentMinute < 6) {
-        // Run once per hour on Sunday (when minute < 6, aligns with 6-min interval)
-        console.log(`[AUTO-GRADE] 🔄 Domingo ${currentHour}h — atualizando grade com capturas frescas (3:1)...`);
-        refreshSundayGrade();
-      }
-
-      // Build when within minutesBeforeBlock window OR on first cycle after startup
-      const shouldBuild = minutesUntilBlock <= state.minutesBeforeBlock || isFirstCycle;
-      
       if (shouldBuild) {
-        if (isFirstCycle) {
-          console.log(`[AUTO-GRADE] 🔄 Primeiro ciclo pós-startup: montando bloco ${blockKey} imediatamente (${minutesUntilBlock}min restantes)`);
-          isFirstCycle = false;
-        } else if (lastBuiltBlock !== blockKey) {
-          console.log(`[AUTO-GRADE] 🔄 Novo ciclo: atualizando grade para bloco ${blockKey}`);
-        } else {
-          console.log(`[AUTO-GRADE] 🔄 Regenerando próximo bloco (${minutesUntilBlock}min para ${blockKey})`);
-        }
+        console.log(`[AUTO-GRADE] 🔄 Atualizando grade para bloco ${blockKey}`);
         lastBuiltBlock = blockKey;
         buildGrade();
       }
-    }, 6 * 60 * 1000); // 6 minutos entre ciclos
+      // Removed: periodic 10-min save that was causing unwanted block regeneration
+    }, 60 * 1000);
 
     const { isRunning } = useRadioStore.getState();
     if (isRunning) {
-      console.log(`[AUTO-GRADE] 🚀 Build inicial imediato (independente do tempo restante)`);
+      console.log(`[AUTO-GRADE] 🚀 Build inicial`);
       buildGrade();
-
-      // If it's Saturday ≥ 11:00, build Saturday first then Sunday
-      const now = new Date();
-      if (now.getDay() === 6 && now.getHours() >= 11) {
-        console.log(`[AUTO-GRADE] 📅 Sábado ${now.getHours()}h (startup) — gerando grade de sábado primeiro, depois domingo...`);
-        saturdayFullDayBuilt = true;
-        setTimeout(() => {
-          buildFullDayGrade('sab').then(() => {
-            console.log(`[AUTO-GRADE] ✅ Grade de sábado (startup) concluída! Agora gerando domingo...`);
-            buildFullDayGrade('dom');
-          });
-        }, 10000);
-      }
-
-      // If it's Sunday, refresh with fresh captures
-      if (now.getDay() === 0) {
-        console.log(`[AUTO-GRADE] 🔄 Domingo (startup) — atualizando grade com capturas frescas...`);
-        setTimeout(() => refreshSundayGrade(), 15000);
-      }
     }
 
     return () => { if (buildIntervalRef.current) clearInterval(buildIntervalRef.current); };
-  }, [state.isAutoEnabled, state.minutesBeforeBlock, buildGrade, buildFullDayGrade, refreshSundayGrade]);
-
-  // Reactive: rebuild grade immediately when a download completes (coringa replacement)
-  useEffect(() => {
-    if (!isElectronEnv) return;
-    const unsubscribe = useAutoDownloadStore.subscribe((s, prev) => {
-      if (s.gradeRebuildSignal > prev.gradeRebuildSignal) {
-        const { isRunning } = useRadioStore.getState();
-        if (isRunning && state.isAutoEnabled && !state.isBuilding) {
-          console.log('[AUTO-GRADE] ⚡ Download concluído — reconstruindo grade imediatamente (substituir coringas)');
-          buildGrade();
-        }
-      }
-    });
-    return () => unsubscribe();
-  }, [buildGrade, state.isAutoEnabled, state.isBuilding]);
+  }, [state.isAutoEnabled, state.minutesBeforeBlock, buildGrade]);
 
   // Countdown update effect
   useEffect(() => {
