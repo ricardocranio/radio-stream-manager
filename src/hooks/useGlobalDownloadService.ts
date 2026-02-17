@@ -155,8 +155,8 @@ export function useGlobalDownloadService() {
         useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
       }
 
-      // Small delay between downloads (5 seconds)
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // 15 seconds delay between downloads
+      await new Promise(resolve => setTimeout(resolve, 15000));
     }
 
     isProcessingRef.current = false;
