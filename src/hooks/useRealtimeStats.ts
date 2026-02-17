@@ -142,7 +142,7 @@ export function useRealtimeStats() {
             if (!newRecentSongsByStation[stationName]) {
               newRecentSongsByStation[stationName] = [];
             }
-            if (newRecentSongsByStation[stationName].length < 5) {
+            if (newRecentSongsByStation[stationName].length < 15) {
               newRecentSongsByStation[stationName].push(songData);
             }
           });
