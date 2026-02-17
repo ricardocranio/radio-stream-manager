@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Music, Radio, Calendar, Filter, RefreshCw, Download, TrendingUp, Clock, Search, Loader2, Database, BarChart3, PieChart as PieChartIcon, Zap, PlayCircle, CheckCircle, XCircle } from 'lucide-react';
+import { Music, Radio, Calendar, Filter, RefreshCw, Download, TrendingUp, Clock, Search, Loader2, Database, BarChart3, PieChart as PieChartIcon, Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,11 +9,11 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { useRadioStore, DownloadHistoryEntry } from '@/store/radioStore';
+import { useRadioStore } from '@/store/radioStore';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays, subHours, parseISO, getHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
+
 import {
   BarChart,
   Bar,
@@ -43,9 +43,6 @@ interface ScrapedSong {
   source: string | null;
 }
 
-interface DownloadStatus {
-  [songId: string]: 'idle' | 'downloading' | 'success' | 'error' | 'exists';
-}
 
 // Colors for charts
 const CHART_COLORS = [
@@ -63,7 +60,7 @@ const PAGE_SIZE = 50;
 
 export function CapturedSongsView() {
   const { toast } = useToast();
-  const { addOrUpdateRankingSong, rankingSongs, deezerConfig, config, addDownloadHistory } = useRadioStore();
+  const { addOrUpdateRankingSong, rankingSongs, deezerConfig, config } = useRadioStore();
   const [songs, setSongs] = useState<ScrapedSong[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -76,19 +73,7 @@ export function CapturedSongsView() {
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState('list');
-  const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
-  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
   const [currentPage, setCurrentPage] = useState(1);
-  const [autoDownloadMode, setAutoDownloadMode] = useState<'manual' | 'auto'>(() => {
-    const saved = localStorage.getItem('captured-songs-download-mode');
-    return saved === 'auto' ? 'auto' : 'manual';
-  });
-
-  // Auto-save download mode preference
-  useEffect(() => {
-    localStorage.setItem('captured-songs-download-mode', autoDownloadMode);
-  }, [autoDownloadMode]);
 
   // Load songs from Supabase
   const loadSongs = useCallback(async () => {
@@ -396,225 +381,6 @@ export function CapturedSongsView() {
       .map(([name, count]) => ({ name, count }));
   }, [songs]);
 
-  // Download a single song
-  const handleDownloadSong = useCallback(async (song: ScrapedSong) => {
-    if (!isElectron) {
-      toast({
-        title: 'Apenas no Desktop',
-        description: 'Download só funciona no app Electron.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!deezerConfig.enabled || !deezerConfig.arl) {
-      toast({
-        title: 'Deezer não configurado',
-        description: 'Configure o ARL do Deezer nas Configurações.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // Check if song already exists in library
-    if (config.musicFolders?.length > 0) {
-      try {
-        const existsResult = await checkSongInLibrary(
-          song.artist,
-          song.title,
-          config.musicFolders,
-          config.similarityThreshold || 0.75
-        );
-        if (existsResult.exists) {
-          setDownloadStatus(prev => ({ ...prev, [song.id]: 'exists' }));
-          toast({
-            title: '✓ Já existe na biblioteca',
-            description: `${song.artist} - ${song.title}`,
-          });
-          return;
-        }
-      } catch (err) {
-        // Continue with download if check fails
-      }
-    }
-
-    setDownloadStatus(prev => ({ ...prev, [song.id]: 'downloading' }));
-    const startTime = Date.now();
-
-    try {
-      const result = await window.electronAPI?.downloadFromDeezer({
-        artist: song.artist,
-        title: song.title,
-        arl: deezerConfig.arl,
-        outputFolder: deezerConfig.downloadFolder,
-        quality: deezerConfig.quality,
-      });
-
-      const duration = Date.now() - startTime;
-
-      if (result?.success) {
-        setDownloadStatus(prev => ({ ...prev, [song.id]: 'success' }));
-        
-        const historyEntry: DownloadHistoryEntry = {
-          id: crypto.randomUUID(),
-          songId: song.id,
-          title: song.title,
-          artist: song.artist,
-          timestamp: new Date(),
-          status: 'success',
-          duration,
-        };
-        addDownloadHistory(historyEntry);
-
-        toast({
-          title: '✅ Download concluído!',
-          description: `${song.artist} - ${song.title}`,
-        });
-      } else {
-        throw new Error(result?.error || 'Falha no download');
-      }
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      setDownloadStatus(prev => ({ ...prev, [song.id]: 'error' }));
-      
-      const historyEntry: DownloadHistoryEntry = {
-        id: crypto.randomUUID(),
-        songId: song.id,
-        title: song.title,
-        artist: song.artist,
-        timestamp: new Date(),
-        status: 'error',
-        errorMessage: error instanceof Error ? error.message : 'Erro desconhecido',
-        duration,
-      };
-      addDownloadHistory(historyEntry);
-
-      toast({
-        title: '❌ Erro no download',
-        description: error instanceof Error ? error.message : 'Falha ao baixar.',
-        variant: 'destructive',
-      });
-    }
-  }, [deezerConfig, config, toast, addDownloadHistory]);
-
-  // Download all filtered songs (with deduplication)
-  const handleDownloadAll = useCallback(async () => {
-    if (!isElectron) {
-      toast({
-        title: 'Apenas no Desktop',
-        description: 'Download só funciona no app Electron.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!deezerConfig.enabled || !deezerConfig.arl) {
-      toast({
-        title: 'Deezer não configurado',
-        description: 'Configure o ARL do Deezer nas Configurações.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // Deduplicate songs by artist+title (case insensitive)
-    const seenSongs = new Set<string>();
-    const uniqueSongs = filteredSongs.filter(song => {
-      const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
-      if (seenSongs.has(key)) return false;
-      seenSongs.add(key);
-      return true;
-    });
-
-    setIsDownloadingAll(true);
-    setDownloadProgress({ current: 0, total: uniqueSongs.length });
-
-    let successCount = 0;
-    let existsCount = 0;
-    let errorCount = 0;
-
-    for (let i = 0; i < uniqueSongs.length; i++) {
-      const song = uniqueSongs[i];
-      setDownloadProgress({ current: i + 1, total: uniqueSongs.length });
-
-      // Check if already exists in library
-      if (config.musicFolders?.length > 0) {
-        try {
-          const existsResult = await checkSongInLibrary(
-            song.artist,
-            song.title,
-            config.musicFolders,
-            config.similarityThreshold || 0.75
-          );
-          if (existsResult.exists) {
-            setDownloadStatus(prev => ({ ...prev, [song.id]: 'exists' }));
-            existsCount++;
-            continue;
-          }
-        } catch (err) {
-          // Continue with download if check fails
-        }
-      }
-
-      setDownloadStatus(prev => ({ ...prev, [song.id]: 'downloading' }));
-      const startTime = Date.now();
-
-      try {
-        const result = await window.electronAPI?.downloadFromDeezer({
-          artist: song.artist,
-          title: song.title,
-          arl: deezerConfig.arl,
-        outputFolder: deezerConfig.downloadFolder,
-        quality: deezerConfig.quality,
-        });
-
-        const duration = Date.now() - startTime;
-
-        if (result?.success) {
-          setDownloadStatus(prev => ({ ...prev, [song.id]: 'success' }));
-          successCount++;
-          
-          addDownloadHistory({
-            id: crypto.randomUUID(),
-            songId: song.id,
-            title: song.title,
-            artist: song.artist,
-            timestamp: new Date(),
-            status: 'success',
-            duration,
-          });
-        } else {
-          throw new Error(result?.error || 'Falha');
-        }
-      } catch (error) {
-        const duration = Date.now() - startTime;
-        setDownloadStatus(prev => ({ ...prev, [song.id]: 'error' }));
-        errorCount++;
-        
-        addDownloadHistory({
-          id: crypto.randomUUID(),
-          songId: song.id,
-          title: song.title,
-          artist: song.artist,
-          timestamp: new Date(),
-          status: 'error',
-          errorMessage: error instanceof Error ? error.message : 'Erro',
-          duration,
-        });
-      }
-
-      // Delay between downloads (2 minutes for auto mode, 5 seconds for manual)
-      const delayMs = autoDownloadMode === 'auto' ? 120000 : 5000;
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-    }
-
-    setIsDownloadingAll(false);
-    toast({
-      title: '📥 Download em lote concluído!',
-      description: `✅ ${successCount} baixadas | ⏭️ ${existsCount} já existiam | ❌ ${errorCount} erros`,
-    });
-  }, [filteredSongs, deezerConfig, config, toast, addDownloadHistory, autoDownloadMode]);
-
   // Export songs as JSON
   const handleExport = () => {
     const exportData = {
@@ -690,48 +456,14 @@ export function CapturedSongsView() {
             <span className="hidden sm:inline">Sync Ranking</span>
           </Button>
           
-          {/* Download Mode Toggle - Always visible, disabled in browser */}
+          {/* Auto Download Status Badge */}
           <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-secondary/50 border border-border">
-            <Download className="w-3.5 h-3.5 text-muted-foreground" />
-            <Select 
-              value={autoDownloadMode} 
-              onValueChange={(v: 'manual' | 'auto') => setAutoDownloadMode(v)}
-              disabled={!isElectron}
-            >
-              <SelectTrigger className="h-6 w-[90px] text-xs border-0 bg-transparent p-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="manual">Manual</SelectItem>
-                <SelectItem value="auto">Automático</SelectItem>
-              </SelectContent>
-            </Select>
+            <Download className="w-3.5 h-3.5 text-primary animate-pulse" />
+            <span className="text-xs font-medium text-foreground">Auto</span>
             {!isElectron && (
               <Badge variant="outline" className="text-[9px] px-1 py-0">Desktop</Badge>
             )}
           </div>
-          
-          {/* Baixar Todas - Always visible, disabled in browser */}
-          <Button
-            variant="default"
-            size="sm"
-            onClick={handleDownloadAll}
-            disabled={!isElectron || isDownloadingAll || filteredSongs.length === 0}
-            className="gap-1.5 bg-primary"
-            title={!isElectron ? 'Disponível apenas no app Desktop' : undefined}
-          >
-            {isDownloadingAll ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span className="hidden sm:inline">{downloadProgress.current}/{downloadProgress.total}</span>
-              </>
-            ) : (
-              <>
-                <PlayCircle className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Baixar Todas</span>
-              </>
-            )}
-          </Button>
           <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
             <Download className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Exportar</span>
@@ -978,26 +710,6 @@ export function CapturedSongsView() {
                           <Clock className="w-3 h-3 mr-1" />
                           {format(new Date(song.scraped_at), 'dd/MM HH:mm', { locale: ptBR })}
                         </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => handleDownloadSong(song)}
-                          disabled={!isElectron || downloadStatus[song.id] === 'downloading'}
-                          title={!isElectron ? 'Disponível no Desktop' : 'Baixar música'}
-                        >
-                          {downloadStatus[song.id] === 'downloading' ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : downloadStatus[song.id] === 'success' ? (
-                            <CheckCircle className="w-3.5 h-3.5 text-success" />
-                          ) : downloadStatus[song.id] === 'exists' ? (
-                            <CheckCircle className="w-3.5 h-3.5 text-muted-foreground" />
-                          ) : downloadStatus[song.id] === 'error' ? (
-                            <XCircle className="w-3.5 h-3.5 text-destructive" />
-                          ) : (
-                            <Download className="w-3.5 h-3.5" />
-                          )}
-                        </Button>
                       </div>
                     </div>
                   ))}
