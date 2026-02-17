@@ -310,6 +310,11 @@ const defaultConfig: SystemConfig = {
   powerSavingMode: false,
   // Similarity threshold for music library matching (0.5 to 0.95)
   similarityThreshold: 0.75,
+  // Blocked songs (Artist - Title format)
+  blockedSongs: [
+    'Jefi - Marquinha De Fita',
+    'Olivia - Homem De Papel',
+  ],
 };
 
 const defaultDeezerConfig: DeezerConfig = {

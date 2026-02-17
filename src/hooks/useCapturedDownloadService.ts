@@ -158,12 +158,18 @@ export function useCapturedDownloadService() {
 
       if (error || !data) return;
 
-      // Deduplicate by artist+title
+      // Deduplicate by artist+title and filter blocked songs
+      const blockedSet = new Set<string>(
+        (useRadioStore.getState().config.blockedSongs || []).map(s => s.toLowerCase().trim())
+      );
       const seen = new Set<string>();
       const unique: CapturedQueueItem[] = [];
       for (const song of data) {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
         if (seen.has(key) || processedRef.current.has(key)) continue;
+        // Check blocked list
+        const blockedKey = `${song.artist.trim()} - ${song.title.trim()}`.toLowerCase();
+        if (blockedSet.has(blockedKey)) continue;
         seen.add(key);
         unique.push(song);
       }
