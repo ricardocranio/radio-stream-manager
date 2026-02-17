@@ -63,7 +63,7 @@ export function useGlobalScrapingService(
   }, []);
 
   const scrapeAllStations = useCallback(async (_forceRefresh = false) => {
-    const { stations, addCapturedSong, addOrUpdateRankingSong, addMissingSong, missingSongs, config } = useRadioStore.getState();
+    const { stations, addCapturedSong, addMissingSong, missingSongs, config } = useRadioStore.getState();
     const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl);
     
     if (enabledStations.length === 0) {
@@ -153,7 +153,7 @@ export function useGlobalScrapingService(
         source: scrapeUrl,
       });
       
-      addOrUpdateRankingSong(songTitle, songArtist, stationStyle);
+      // Ranking is now fed exclusively by the Grade Builder (songs actually used in programming)
       
       const alreadyMissing = isSongAlreadyMissing(songArtist, songTitle);
       const alreadyQueued = isSongContentAlreadyQueued(songArtist, songTitle);
