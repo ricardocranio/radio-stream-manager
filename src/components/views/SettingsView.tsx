@@ -44,6 +44,9 @@ export function SettingsView() {
   const [filterCharacters, setFilterCharacters] = useState(
     config.filterCharacters?.join(', ') || 'â€™, Ã©, Ã£, Ã§, â€", â€œ, â€, Â, ´, `, ~, ^, $, #, @'
   );
+  const [blockedSongs, setBlockedSongs] = useState(
+    config.blockedSongs?.join('\n') || ''
+  );
   
   // Refs to track if filters have changed
   const filtersSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -101,7 +104,10 @@ export function SettingsView() {
     if (config.filterCharacters) {
       setFilterCharacters(config.filterCharacters.join(', '));
     }
-  }, [config.forbiddenWords, config.funkWords, config.filterCharacters]);
+    if (config.blockedSongs) {
+      setBlockedSongs(config.blockedSongs.join('\n'));
+    }
+  }, [config.forbiddenWords, config.funkWords, config.filterCharacters, config.blockedSongs]);
   
   // Auto-save filter words with debounce
   const autoSaveFilters = useCallback(() => {
@@ -113,15 +119,17 @@ export function SettingsView() {
       const parsedForbidden = forbiddenWords.split(',').map(w => w.trim()).filter(Boolean);
       const parsedFunk = funkWords.split(',').map(w => w.trim()).filter(Boolean);
       const parsedFilterChars = filterCharacters.split(',').map(w => w.trim()).filter(Boolean);
+      const parsedBlocked = blockedSongs.split('\n').map(s => s.trim()).filter(Boolean);
       
       setConfig({ 
         forbiddenWords: parsedForbidden, 
         funkWords: parsedFunk,
         filterCharacters: parsedFilterChars,
+        blockedSongs: parsedBlocked,
       });
-      console.log('[SETTINGS] ✓ Auto-saved filters:', { forbiddenWords: parsedForbidden.length, funkWords: parsedFunk.length, filterCharacters: parsedFilterChars.length });
+      console.log('[SETTINGS] ✓ Auto-saved filters:', { forbiddenWords: parsedForbidden.length, funkWords: parsedFunk.length, filterCharacters: parsedFilterChars.length, blockedSongs: parsedBlocked.length });
     }, 800);
-  }, [forbiddenWords, funkWords, filterCharacters, setConfig]);
+  }, [forbiddenWords, funkWords, filterCharacters, blockedSongs, setConfig]);
   
   // Trigger auto-save when filter words change (skip initial mount)
   const isFiltersMounted = useRef(false);
@@ -138,7 +146,7 @@ export function SettingsView() {
         clearTimeout(filtersSaveTimeoutRef.current);
       }
     };
-  }, [forbiddenWords, funkWords, filterCharacters, autoSaveFilters]);
+  }, [forbiddenWords, funkWords, filterCharacters, blockedSongs, autoSaveFilters]);
 
   const handleReset = () => {
     setLocalConfig(config);
@@ -820,6 +828,20 @@ export function SettingsView() {
               <p className="text-xs text-muted-foreground mt-2">
                 Caracteres que serão removidos dos nomes de arquivos na grade. Útil para remover artefatos de encoding (â€™, Ã©, etc.) e caracteres especiais.
                 Os nomes originais do monitoramento são preservados no banco de dados.
+              </p>
+            </div>
+
+            <div>
+              <Label className="text-sm">🚫 Músicas Bloqueadas</Label>
+              <Textarea
+                value={blockedSongs}
+                onChange={(e) => setBlockedSongs(e.target.value)}
+                className="mt-2 font-mono text-xs h-32"
+                placeholder={"Artista - Título (uma por linha)\nEx:\nJefi - Marquinha De Fita\nOlivia - Homem De Papel"}
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                Músicas específicas que serão bloqueadas da grade e dos downloads automáticos. 
+                Use o formato <span className="font-semibold">Artista - Título</span>, uma por linha.
               </p>
             </div>
           </CardContent>

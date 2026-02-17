@@ -366,6 +366,12 @@ export function useAutoGradeBuilder() {
     const songsByStation: Record<string, SongEntry[]> = {};
     const stationNameToStyle: Record<string, string> = {};
     const seenSongs = new Set<string>();
+
+    // Build blocked songs set for fast lookup
+    const blockedSet = new Set<string>(
+      (config.blockedSongs || []).map(s => s.toLowerCase().trim())
+    );
+
     stations.forEach(s => {
       stationNameToStyle[s.name] = s.styles?.[0] || 'POP/VARIADO';
       stationNameToStyle[s.name.toLowerCase()] = s.styles?.[0] || 'POP/VARIADO';
@@ -375,6 +381,10 @@ export function useAutoGradeBuilder() {
       const songKey = `${song.title.toLowerCase()}-${song.artist.toLowerCase()}`;
       if (seenSongs.has(songKey)) return;
       seenSongs.add(songKey);
+
+      // Check if song is blocked (Artist - Title format)
+      const blockedKey = `${song.artist.trim()} - ${song.title.trim()}`.toLowerCase();
+      if (blockedSet.has(blockedKey)) return;
       if (!songsByStation[song.station_name]) songsByStation[song.station_name] = [];
       if (songsByStation[song.station_name].length < maxPerStation) {
         const style = stationNameToStyle[song.station_name] || stationNameToStyle[song.station_name.toLowerCase()] || 'POP/VARIADO';
@@ -388,7 +398,7 @@ export function useAutoGradeBuilder() {
     const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
     console.log(`[AUTO-GRADE] Pool: ${stationList}`);
     return songsByStation;
-  }, [stations]);
+  }, [stations, config.blockedSongs]);
 
   // ==================== Block Generation ====================
 

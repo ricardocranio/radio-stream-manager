@@ -64,6 +64,8 @@ export interface SystemConfig {
   powerSavingMode?: boolean;
   // Similarity threshold for music library matching (0.5 to 0.95)
   similarityThreshold?: number;
+  // Blocked songs in "Artist - Title" format
+  blockedSongs?: string[];
 }
 
 export interface SequenceConfig {
