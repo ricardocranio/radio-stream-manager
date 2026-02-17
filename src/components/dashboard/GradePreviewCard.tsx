@@ -159,9 +159,15 @@ export function GradePreviewCard() {
         return;
       }
 
-      // Sort by priority order: P0 > P0.5 > P0.75 > P1 > P2
+      // Sort by freshness first (most recent), then by priority
       const priorityOrder = { 'P0': 0, 'P0.5': 1, 'P0.75': 2, 'P1': 3, 'P2': 4 };
-      const sorted = [...pool].sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+      const sorted = [...pool].sort((a, b) => {
+        // Primary: most recent timestamp first (freshness)
+        const timeDiff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        // Secondary: priority order
+        return priorityOrder[a.priority] - priorityOrder[b.priority];
+      });
 
       // Pick first song that doesn't repeat artist
       let picked: SongPool | null = null;
