@@ -81,6 +81,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startRadioMonitor: () => ipcRenderer.invoke('start-radio-monitor'),
   stopRadioMonitor: () => ipcRenderer.invoke('stop-radio-monitor'),
   restartRadioMonitor: () => ipcRenderer.invoke('restart-radio-monitor'),
+  getRadioMonitorScriptPath: () => ipcRenderer.invoke('get-radio-monitor-script-path'),
+  setRadioMonitorScriptPath: (path) => ipcRenderer.invoke('set-radio-monitor-script-path', path),
+  browseRadioMonitorScript: () => ipcRenderer.invoke('browse-radio-monitor-script'),
   onRadioMonitorStatus: (callback) => ipcRenderer.on('radio-monitor-status', (_, status) => callback(status)),
   onRadioMonitorLog: (callback) => ipcRenderer.on('radio-monitor-log', (_, log) => callback(log)),
   

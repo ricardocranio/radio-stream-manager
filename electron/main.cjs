@@ -28,10 +28,48 @@ let radioMonitorRunning = false;
 let radioMonitorRestartCount = 0;
 const RADIO_MONITOR_MAX_RESTARTS = 3;
 let radioMonitorWatchdog = null;
+let customRadioMonitorScriptPath = null;
+
+// Load custom script path from config file
+function loadCustomScriptPath() {
+  try {
+    const configDir = path.join(app.getPath('userData'), 'config');
+    const configFile = path.join(configDir, 'radio-monitor-config.json');
+    if (fs.existsSync(configFile)) {
+      const data = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
+      if (data.scriptPath && fs.existsSync(data.scriptPath)) {
+        customRadioMonitorScriptPath = data.scriptPath;
+        console.log('[RADIO-MONITOR] Custom script path loaded:', customRadioMonitorScriptPath);
+      }
+    }
+  } catch (e) {
+    console.error('[RADIO-MONITOR] Error loading custom path config:', e.message);
+  }
+}
+
+// Save custom script path to config file
+function saveCustomScriptPath(scriptPath) {
+  try {
+    const configDir = path.join(app.getPath('userData'), 'config');
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+    const configFile = path.join(configDir, 'radio-monitor-config.json');
+    fs.writeFileSync(configFile, JSON.stringify({ scriptPath }, null, 2), 'utf-8');
+    customRadioMonitorScriptPath = scriptPath;
+    console.log('[RADIO-MONITOR] Custom script path saved:', scriptPath);
+  } catch (e) {
+    console.error('[RADIO-MONITOR] Error saving custom path config:', e.message);
+  }
+}
 
 // =============== PYTHON RADIO MONITOR ===============
 
 function getRadioMonitorScriptPath() {
+  // Use custom path if set
+  if (customRadioMonitorScriptPath && fs.existsSync(customRadioMonitorScriptPath)) {
+    return customRadioMonitorScriptPath;
+  }
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'app', 'public', 'radio_monitor_supabase.py');
   }
@@ -950,6 +988,9 @@ function ensureDefaultFolders() {
 
 // App ready
 app.whenReady().then(async () => {
+  // Load custom radio monitor script path
+  loadCustomScriptPath();
+  
   // Ensure default folders exist
   ensureDefaultFolders();
   
@@ -1137,6 +1178,45 @@ ipcMain.handle('stop-radio-monitor', () => {
 ipcMain.handle('restart-radio-monitor', () => {
   stopRadioMonitor();
   setTimeout(() => startRadioMonitor(), 2000);
+  return { success: true };
+});
+
+ipcMain.handle('get-radio-monitor-script-path', () => {
+  return { 
+    path: getRadioMonitorScriptPath(),
+    customPath: customRadioMonitorScriptPath,
+    exists: fs.existsSync(getRadioMonitorScriptPath())
+  };
+});
+
+ipcMain.handle('set-radio-monitor-script-path', (_, scriptPath) => {
+  if (!scriptPath) {
+    // Clear custom path
+    customRadioMonitorScriptPath = null;
+    try {
+      const configFile = path.join(app.getPath('userData'), 'config', 'radio-monitor-config.json');
+      if (fs.existsSync(configFile)) fs.unlinkSync(configFile);
+    } catch {}
+    return { success: true, path: getRadioMonitorScriptPath() };
+  }
+  if (!fs.existsSync(scriptPath)) {
+    return { success: false, error: 'Arquivo não encontrado: ' + scriptPath };
+  }
+  if (!scriptPath.endsWith('.py')) {
+    return { success: false, error: 'O arquivo deve ser um script Python (.py)' };
+  }
+  saveCustomScriptPath(scriptPath);
+  return { success: true, path: scriptPath };
+});
+
+ipcMain.handle('browse-radio-monitor-script', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecionar script Python do Radio Monitor',
+    filters: [{ name: 'Python Scripts', extensions: ['py'] }],
+    properties: ['openFile']
+  });
+  if (result.canceled || !result.filePaths.length) return { canceled: true };
+  return { canceled: false, path: result.filePaths[0] };
   return { success: true };
 });
 

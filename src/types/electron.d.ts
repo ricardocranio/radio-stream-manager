@@ -317,6 +317,9 @@ interface ElectronAPI {
   startRadioMonitor: () => Promise<{ success: boolean }>;
   stopRadioMonitor: () => Promise<{ success: boolean }>;
   restartRadioMonitor: () => Promise<{ success: boolean }>;
+  getRadioMonitorScriptPath: () => Promise<{ path: string; customPath: string | null; exists: boolean }>;
+  setRadioMonitorScriptPath: (path: string | null) => Promise<{ success: boolean; path?: string; error?: string }>;
+  browseRadioMonitorScript: () => Promise<{ canceled: boolean; path?: string }>;
   onRadioMonitorStatus: (callback: (status: { running: boolean; error?: string; exitCode?: number }) => void) => void;
   onRadioMonitorLog: (callback: (log: string) => void) => void;
   
