@@ -448,7 +448,6 @@ export function CapturedSongsView() {
         arl: deezerConfig.arl,
         outputFolder: deezerConfig.downloadFolder,
         quality: deezerConfig.quality,
-        stationName: song.station_name,
       });
 
       const duration = Date.now() - startTime;
@@ -565,9 +564,8 @@ export function CapturedSongsView() {
           artist: song.artist,
           title: song.title,
           arl: deezerConfig.arl,
-          outputFolder: deezerConfig.downloadFolder,
-          quality: deezerConfig.quality,
-          stationName: song.station_name,
+        outputFolder: deezerConfig.downloadFolder,
+        quality: deezerConfig.quality,
         });
 
         const duration = Date.now() - startTime;

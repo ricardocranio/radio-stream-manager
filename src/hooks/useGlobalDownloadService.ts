@@ -59,7 +59,6 @@ export function useGlobalDownloadService() {
         arl: storeState.deezerConfig.arl,
         outputFolder: storeState.deezerConfig.downloadFolder,
         quality: storeState.deezerConfig.quality,
-        stationName: song.station,
       });
 
       const duration = Date.now() - startTime;
