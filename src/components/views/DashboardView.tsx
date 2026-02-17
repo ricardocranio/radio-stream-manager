@@ -582,7 +582,7 @@ export function DashboardView() {
 
       {/* Preview da Próxima Grade & Grades Montadas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        <GradePreviewCard recentSongsByStation={realtimeStats.recentSongsByStation} />
+        <GradePreviewCard />
         <GradeScheduleCard />
       </div>
 
