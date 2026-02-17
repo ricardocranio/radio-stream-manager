@@ -653,6 +653,20 @@ export function useAutoGradeBuilder() {
       }
 
       addBlockLogs(allLogs);
+      
+      // Feed ranking TOP25 from songs actually used in the full-day grade
+      const usedSongs = allLogs.filter(log => log.type === 'used');
+      if (usedSongs.length > 0) {
+        const { applyRankingBatch } = useRadioStore.getState();
+        const rankingUpdates = usedSongs.map(log => ({
+          title: log.title,
+          artist: log.artist,
+          style: log.style || 'POP/VARIADO',
+          count: 1,
+        }));
+        applyRankingBatch(rankingUpdates);
+        console.log(`[AUTO-GRADE] 📊 Ranking atualizado (grade completa): ${usedSongs.length} músicas`);
+      }
       const finalContent = lines.join('\n');
       await renameFilesInGradeContent(finalContent);
 
@@ -765,7 +779,23 @@ export function useAutoGradeBuilder() {
         console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} montado em memória`);
       }
 
-      if (allLogs.length > 0) addBlockLogs(allLogs);
+      if (allLogs.length > 0) {
+        addBlockLogs(allLogs);
+        
+        // Feed ranking TOP25 from songs actually used in the grade
+        const usedSongs = allLogs.filter(log => log.type === 'used');
+        if (usedSongs.length > 0) {
+          const { applyRankingBatch } = useRadioStore.getState();
+          const rankingUpdates = usedSongs.map(log => ({
+            title: log.title,
+            artist: log.artist,
+            style: log.style || 'POP/VARIADO',
+            count: 1,
+          }));
+          applyRankingBatch(rankingUpdates);
+          console.log(`[AUTO-GRADE] 📊 Ranking atualizado: ${usedSongs.length} músicas da grade`);
+        }
+      }
 
       // Store in memory buffer
       pendingGradeRef.current = { lineMap, filename, blockKey: nextTimeKey };
