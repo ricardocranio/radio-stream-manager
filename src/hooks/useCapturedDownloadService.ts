@@ -18,7 +18,7 @@ import { subHours } from 'date-fns';
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
 const POLL_INTERVAL = 120_000; // 2 minutes
-const DOWNLOAD_DELAY = 5_000; // 5s between downloads
+const DOWNLOAD_DELAY = 15_000; // 15s between downloads
 
 interface CapturedQueueItem {
   id: string;
