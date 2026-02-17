@@ -313,13 +313,47 @@ export function useAutoGradeBuilder() {
 
   const fetchAllRecentSongs = useCallback(async (): Promise<Record<string, SongEntry[]>> => {
     try {
-      const { data, error } = await supabase
-        .from('scraped_songs')
-        .select('title, artist, station_name, scraped_at')
-        .order('scraped_at', { ascending: false })
-        .limit(2000);
-      if (error) throw error;
-      return buildSongsByStation(data || [], 150);
+      // Fetch from both scraped_songs and radio_historico in parallel for maximum pool
+      const [scrapedResult, historicoResult] = await Promise.all([
+        supabase
+          .from('scraped_songs')
+          .select('title, artist, station_name, scraped_at')
+          .order('scraped_at', { ascending: false })
+          .limit(3000),
+        supabase
+          .from('radio_historico')
+          .select('title, artist, station_name, captured_at')
+          .order('captured_at', { ascending: false })
+          .limit(1500),
+      ]);
+
+      if (scrapedResult.error) throw scrapedResult.error;
+
+      // Merge both sources, normalizing historico timestamps
+      const allData = [
+        ...(scrapedResult.data || []),
+        ...(historicoResult.data || []).map(h => ({
+          title: h.title,
+          artist: h.artist,
+          station_name: h.station_name,
+          scraped_at: h.captured_at,
+        })),
+      ];
+
+      // Deduplicate: keep the most recent entry per song
+      const seen = new Map<string, typeof allData[0]>();
+      for (const song of allData) {
+        const key = `${song.title.toLowerCase().trim()}-${song.artist.toLowerCase().trim()}`;
+        const existing = seen.get(key);
+        if (!existing || new Date(song.scraped_at) > new Date(existing.scraped_at)) {
+          seen.set(key, song);
+        }
+      }
+
+      const deduplicated = Array.from(seen.values());
+      console.log(`[AUTO-GRADE] Pool ampliado: ${scrapedResult.data?.length || 0} scraped + ${historicoResult.data?.length || 0} histórico = ${deduplicated.length} únicas`);
+
+      return buildSongsByStation(deduplicated, 300);
     } catch (error) {
       console.error('[AUTO-GRADE] Error fetching all songs:', error);
       logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
