@@ -105,8 +105,27 @@ export function GradePreviewCard() {
 
   useEffect(() => {
     fetchSongs();
-    const interval = setInterval(fetchSongs, 30000); // refresh every 30s
-    return () => clearInterval(interval);
+    
+    // Subscribe to realtime changes on scraped_songs
+    const channel = supabase
+      .channel('grade-preview-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'scraped_songs' },
+        () => {
+          console.log('[GradePreview] Nova captura detectada, atualizando preview...');
+          fetchSongs();
+        }
+      )
+      .subscribe();
+
+    // Fallback polling every 60s (in case realtime hiccups)
+    const interval = setInterval(fetchSongs, 60000);
+    
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Calculate next block time
