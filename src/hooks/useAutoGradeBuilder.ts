@@ -685,9 +685,14 @@ export function useAutoGradeBuilder() {
     getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, toast, addBlockLogs,
   ]);
 
-  // ==================== Incremental Build ====================
+  // ==================== Pending Grade (in-memory buffer) ====================
 
-  const buildGrade = useCallback(async () => {
+  /** Holds the latest generated grade content in memory, ready to be flushed to disk */
+  const pendingGradeRef = useRef<{ lineMap: Map<string, string>; filename: string; blockKey: string } | null>(null);
+
+  // ==================== Incremental Build (silent, in-memory) ====================
+
+  const buildGrade = useCallback(async (forceWrite: boolean = false) => {
     if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
       console.log('[AUTO-GRADE] Not in Electron mode, skipping');
       return;
@@ -744,9 +749,7 @@ export function useAutoGradeBuilder() {
         lineMap.set(currentTimeKey, currentResult.line);
         allLogs.push(...currentResult.logs);
         builtBlocksRef.current.add(currentTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} montado e travado`);
-      } else {
-        console.log(`[AUTO-GRADE] ⏭️ Bloco ${currentTimeKey} já travado, mantendo`);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} montado em memória`);
       }
 
       if (!nextLocked) {
@@ -759,47 +762,77 @@ export function useAutoGradeBuilder() {
         lineMap.set(nextTimeKey, nextResult.line);
         allLogs.push(...nextResult.logs);
         builtBlocksRef.current.add(nextTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} montado e travado`);
-      } else {
-        console.log(`[AUTO-GRADE] ⏭️ Bloco ${nextTimeKey} já travado, mantendo`);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} montado em memória`);
       }
 
       if (allLogs.length > 0) addBlockLogs(allLogs);
 
-      const sortedContent = Array.from(lineMap.keys()).sort().map(t => lineMap.get(t)).join('\n');
+      // Store in memory buffer
+      pendingGradeRef.current = { lineMap, filename, blockKey: nextTimeKey };
+
+      // Update state for UI preview (silent - no file write)
+      setState(prev => ({
+        ...prev, isBuilding: false, lastBuildTime: new Date(),
+        currentBlock: currentTimeKey, nextBlock: nextTimeKey,
+        blocksGenerated: prev.blocksGenerated + (currentLocked ? 0 : 1) + (nextLocked ? 0 : 1),
+        skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
+      }));
+
+      console.log(`[AUTO-GRADE] 📋 Grade montada em memória (aguardando janela de 10min para escrita)`);
+
+      // Only write to disk if forceWrite is true (triggered by the 10-min timer)
+      if (forceWrite) {
+        await flushGradeToDisk();
+      }
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      logSystemError('GRADE', 'error', 'Erro ao atualizar grade', errorMessage);
+      setState(prev => ({ ...prev, isBuilding: false, error: errorMessage }));
+    }
+  }, [
+    getBlockTimes, fetchSongsForBlock, fetchAllRecentSongs, generateBlockLine,
+    getDayCode, config.gradeFolder, addBlockLogs,
+  ]);
+
+  // ==================== Flush to Disk (only at 10min before block) ====================
+
+  const flushGradeToDisk = useCallback(async () => {
+    const pending = pendingGradeRef.current;
+    if (!pending || !isElectronEnv || !window.electronAPI?.saveGradeFile) {
+      console.log('[AUTO-GRADE] Nada pendente para escrita');
+      return;
+    }
+
+    try {
+      const sortedContent = Array.from(pending.lineMap.keys()).sort().map(t => pending.lineMap.get(t)).join('\n');
       await renameFilesInGradeContent(sortedContent);
 
-      const result = await window.electronAPI.saveGradeFile({ folder: config.gradeFolder, filename, content: sortedContent });
+      const result = await window.electronAPI.saveGradeFile({
+        folder: config.gradeFolder,
+        filename: pending.filename,
+        content: sortedContent,
+      });
+
       if (result.success) {
-        console.log(`[AUTO-GRADE] ✅ Grade salva na pasta destino: ${result.filePath}`);
+        console.log(`[AUTO-GRADE] ✅ Grade escrita no disco: ${result.filePath}`);
         addGradeHistory({
-          id: `grade-${Date.now()}`, timestamp: new Date(), blockTime: currentTimeKey,
+          id: `grade-${Date.now()}`, timestamp: new Date(), blockTime: pending.blockKey,
           songsProcessed: defaultSequence.length * 2,
-          songsFound: defaultSequence.length * 2 - stats.missing,
-          songsMissing: stats.missing, programName: getProgramForHour(blocks.current.hour),
+          songsFound: pending.lineMap.size,
+          songsMissing: 0, programName: getProgramForHour(parseInt(pending.blockKey)),
         });
-        setState(prev => ({
-          ...prev, isBuilding: false, lastBuildTime: new Date(),
-          currentBlock: currentTimeKey, nextBlock: nextTimeKey,
-          lastSavedFile: filename, blocksGenerated: prev.blocksGenerated + (currentLocked ? 0 : 1) + (nextLocked ? 0 : 1),
-          skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
-        }));
-        if (!currentLocked || !nextLocked) {
-          toast({ title: '✅ Grade Atualizada', description: `Blocos ${currentTimeKey} e ${nextTimeKey} atualizados em ${filename}` });
-        }
+        setState(prev => ({ ...prev, lastSavedFile: pending.filename }));
+        toast({ title: '✅ Grade Atualizada', description: `${pending.filename} escrito 10 min antes do bloco ${pending.blockKey}` });
       } else {
         throw new Error(result.error || 'Erro ao salvar');
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      logSystemError('GRADE', 'error', 'Erro ao atualizar grade', errorMessage);
-      setState(prev => ({ ...prev, isBuilding: false, error: errorMessage }));
-      toast({ title: '❌ Erro', description: errorMessage, variant: 'destructive' });
+      logSystemError('GRADE', 'error', 'Erro ao escrever grade no disco', errorMessage);
+      toast({ title: '❌ Erro na escrita', description: errorMessage, variant: 'destructive' });
     }
-  }, [
-    getBlockTimes, fetchSongsForBlock, fetchAllRecentSongs, generateBlockLine, renameFilesInGradeContent,
-    getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, getProgramForHour, toast, addBlockLogs,
-  ]);
+  }, [renameFilesInGradeContent, config.gradeFolder, addGradeHistory, defaultSequence.length, getProgramForHour, toast]);
 
   // ==================== Timer & Auto Build ====================
 
@@ -826,11 +859,12 @@ export function useAutoGradeBuilder() {
     setState(prev => ({ ...prev, minutesBeforeBlock: Math.max(1, Math.min(10, minutes)) }));
   }, []);
 
-  // Auto-build effect
+  // Auto-build effect: builds silently in memory every 6 min, writes TXT only at 10 min before block
   useEffect(() => {
     if (!isElectronEnv || !state.isAutoEnabled) return;
-    console.log(`[AUTO-GRADE] ⏰ Modo automático ATIVO - atualiza ${state.minutesBeforeBlock} min antes de cada bloco`);
+    console.log(`[AUTO-GRADE] ⏰ Modo automático ATIVO - monta silenciosamente, escreve ${state.minutesBeforeBlock} min antes do bloco`);
     let lastBuiltBlock = '';
+    let lastWrittenBlock = '';
 
     buildIntervalRef.current = setInterval(() => {
       const { isRunning } = useRadioStore.getState();
@@ -849,26 +883,41 @@ export function useAutoGradeBuilder() {
       if (lastBuiltBlock && lastBuiltBlock !== blockKey) {
         console.log(`[AUTO-GRADE] 🔓 Novo ciclo de blocos (${lastBuiltBlock} → ${blockKey}), limpando locks antigos`);
         builtBlocksRef.current.clear();
+        lastBuiltBlock = '';
       }
 
-      const shouldBuild = minutesUntilBlock <= state.minutesBeforeBlock && lastBuiltBlock !== blockKey;
-
-      if (shouldBuild) {
-        console.log(`[AUTO-GRADE] 🔄 Atualizando grade para bloco ${blockKey}`);
+      // Silent build: mount in memory (every cycle if not yet locked)
+      if (lastBuiltBlock !== blockKey) {
+        console.log(`[AUTO-GRADE] 🔄 Montando grade em memória para bloco ${blockKey} (silencioso)`);
         lastBuiltBlock = blockKey;
-        buildGrade();
+        buildGrade(false); // silent, no file write
       }
-      // Removed: periodic 10-min save that was causing unwanted block regeneration
+
+      // Disk write: only exactly at the minutesBeforeBlock window
+      const shouldWrite = minutesUntilBlock <= state.minutesBeforeBlock && lastWrittenBlock !== blockKey;
+      if (shouldWrite) {
+        console.log(`[AUTO-GRADE] 📝 Janela de ${state.minutesBeforeBlock}min atingida! Escrevendo grade no disco para bloco ${blockKey}`);
+        lastWrittenBlock = blockKey;
+        flushGradeToDisk();
+      }
     }, 60 * 1000);
 
+    // Initial build (silent)
     const { isRunning } = useRadioStore.getState();
     if (isRunning) {
-      console.log(`[AUTO-GRADE] 🚀 Build inicial`);
-      buildGrade();
+      console.log(`[AUTO-GRADE] 🚀 Build inicial (silencioso em memória)`);
+      
+      // Check if we're already within the write window
+      const now = new Date();
+      const currentMinute = now.getMinutes();
+      const minutesUntilBlock = currentMinute < 30 ? 30 - currentMinute : 60 - currentMinute;
+      const shouldWriteNow = minutesUntilBlock <= state.minutesBeforeBlock;
+      
+      buildGrade(shouldWriteNow);
     }
 
     return () => { if (buildIntervalRef.current) clearInterval(buildIntervalRef.current); };
-  }, [state.isAutoEnabled, state.minutesBeforeBlock, buildGrade]);
+  }, [state.isAutoEnabled, state.minutesBeforeBlock, buildGrade, flushGradeToDisk]);
 
   // Countdown update effect
   useEffect(() => {
