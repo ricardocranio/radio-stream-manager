@@ -468,7 +468,7 @@ export function DashboardView() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={gradeBuilder.buildGrade}
+                    onClick={() => gradeBuilder.buildGrade(true)}
                     disabled={gradeBuilder.isBuilding}
                     className="gap-2"
                   >
