@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Terminal, Play, Square, RotateCw, Radio, Loader2, Clock, Music } from 'lucide-react';
+import { Terminal, Play, Square, RotateCw, Radio, Loader2, Clock, Music, FolderOpen, Settings2, Check, X } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 
 type MonitorStatus = {
@@ -23,20 +24,31 @@ export function RadioMonitorCard() {
   const [captureCount, setCaptureCount] = useState(0);
   const [uptimeStart, setUptimeStart] = useState<number | null>(null);
   const [uptimeText, setUptimeText] = useState('');
+  const [showPathConfig, setShowPathConfig] = useState(false);
+  const [scriptPath, setScriptPath] = useState('');
+  const [scriptPathInfo, setScriptPathInfo] = useState<{ path: string; customPath: string | null; exists: boolean } | null>(null);
+  const [pathSaving, setPathSaving] = useState(false);
   const { toast } = useToast();
   const isElectron = !!window.electronAPI;
+
+  // Load script path info on mount
+  useEffect(() => {
+    if (!window.electronAPI?.getRadioMonitorScriptPath) return;
+    window.electronAPI.getRadioMonitorScriptPath().then((info) => {
+      setScriptPathInfo(info);
+      setScriptPath(info.customPath || '');
+    });
+  }, []);
 
   // Poll status on mount
   useEffect(() => {
     if (!window.electronAPI?.getRadioMonitorStatus) return;
-
     const fetchStatus = async () => {
       try {
         const s = await window.electronAPI!.getRadioMonitorStatus();
         setStatus(prev => ({ ...prev, running: s.running, pid: s.pid }));
       } catch { /* ignore */ }
     };
-
     fetchStatus();
     const interval = setInterval(fetchStatus, 10000);
     return () => clearInterval(interval);
@@ -65,7 +77,6 @@ export function RadioMonitorCard() {
     if (!window.electronAPI?.onRadioMonitorLog) return;
     window.electronAPI.onRadioMonitorLog((log) => {
       setLogs(prev => [...prev.slice(-100), log]);
-      // Count captures (lines with cloud upload or music emoji)
       if (log.includes('☁️') || log.includes('Enviado para Supabase')) {
         setCaptureCount(prev => prev + 1);
       }
@@ -85,7 +96,6 @@ export function RadioMonitorCard() {
       setUptimeText('');
       return;
     }
-
     const update = () => {
       const elapsed = Math.floor((Date.now() - uptimeStart) / 1000);
       if (elapsed < 60) {
@@ -98,7 +108,6 @@ export function RadioMonitorCard() {
         setUptimeText(`${h}h${m.toString().padStart(2, '0')}min`);
       }
     };
-
     update();
     const interval = setInterval(update, 30000);
     return () => clearInterval(interval);
@@ -131,6 +140,42 @@ export function RadioMonitorCard() {
       await window.electronAPI!.restartRadioMonitor();
       toast({ title: '🔄 Radio Monitor', description: 'Reiniciando monitor...' });
     } catch { setIsActing(false); }
+  }, [toast]);
+
+  const handleBrowseScript = useCallback(async () => {
+    if (!window.electronAPI?.browseRadioMonitorScript) return;
+    const result = await window.electronAPI.browseRadioMonitorScript();
+    if (!result.canceled && result.path) {
+      setScriptPath(result.path);
+    }
+  }, []);
+
+  const handleSavePath = useCallback(async () => {
+    if (!window.electronAPI?.setRadioMonitorScriptPath) return;
+    setPathSaving(true);
+    try {
+      const result = await window.electronAPI.setRadioMonitorScriptPath(scriptPath || null);
+      if (result.success) {
+        toast({ title: '✅ Caminho salvo', description: scriptPath ? `Script: ${scriptPath}` : 'Usando caminho padrão' });
+        const info = await window.electronAPI.getRadioMonitorScriptPath();
+        setScriptPathInfo(info);
+      } else {
+        toast({ title: '❌ Erro', description: result.error, variant: 'destructive' });
+      }
+    } finally {
+      setPathSaving(false);
+    }
+  }, [scriptPath, toast]);
+
+  const handleClearPath = useCallback(async () => {
+    setScriptPath('');
+    if (!window.electronAPI?.setRadioMonitorScriptPath) return;
+    const result = await window.electronAPI.setRadioMonitorScriptPath(null);
+    if (result.success) {
+      const info = await window.electronAPI.getRadioMonitorScriptPath();
+      setScriptPathInfo(info);
+      toast({ title: '✅ Caminho resetado', description: 'Usando caminho padrão do sistema' });
+    }
   }, [toast]);
 
   if (!isElectron) return null;
@@ -237,6 +282,15 @@ export function RadioMonitorCard() {
             <Button
               variant="ghost"
               size="sm"
+              onClick={() => setShowPathConfig(!showPathConfig)}
+              className={`gap-1.5 ${showPathConfig ? 'bg-accent' : ''}`}
+              title="Configurar caminho do script"
+            >
+              <Settings2 className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setShowLogs(!showLogs)}
               className="gap-1.5"
             >
@@ -245,6 +299,39 @@ export function RadioMonitorCard() {
             </Button>
           </div>
         </div>
+
+        {/* Script path configuration */}
+        {showPathConfig && (
+          <div className="mt-3 rounded-lg bg-background/80 border border-border p-3 space-y-2">
+            <p className="text-xs font-medium text-foreground">Caminho do script Python</p>
+            <p className="text-xs text-muted-foreground">
+              {scriptPathInfo?.exists 
+                ? `✅ Atual: ${scriptPathInfo.path}`
+                : `❌ Não encontrado: ${scriptPathInfo?.path || 'N/A'}`
+              }
+              {scriptPathInfo?.customPath && ' (personalizado)'}
+            </p>
+            <div className="flex items-center gap-2">
+              <Input
+                value={scriptPath}
+                onChange={(e) => setScriptPath(e.target.value)}
+                placeholder="Ex: C:\Scripts\radio_monitor_supabase.py"
+                className="text-xs h-8 flex-1"
+              />
+              <Button size="sm" variant="outline" className="h-8 px-2" onClick={handleBrowseScript} title="Procurar arquivo">
+                <FolderOpen className="w-4 h-4" />
+              </Button>
+              <Button size="sm" variant="default" className="h-8 px-2 bg-teal-600 hover:bg-teal-700" onClick={handleSavePath} disabled={pathSaving} title="Salvar">
+                {pathSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              </Button>
+              {scriptPathInfo?.customPath && (
+                <Button size="sm" variant="ghost" className="h-8 px-2" onClick={handleClearPath} title="Resetar para padrão">
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Logs panel */}
         {showLogs && (
