@@ -53,7 +53,6 @@ def verificar_e_instalar_dependencias():
         'playwright': 'playwright',
         'requests': 'requests',
         'beautifulsoup4': 'bs4',
-        'supabase': 'supabase',
     }
     
     todas_instaladas = True
@@ -111,76 +110,65 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any
 
+import requests as http_requests
+
 try:
     from playwright.async_api import async_playwright, Page
     PLAYWRIGHT_OK = True
 except ImportError:
     PLAYWRIGHT_OK = False
 
-try:
-    from supabase import create_client, Client
-    SUPABASE_OK = True
-except ImportError:
-    SUPABASE_OK = False
-
 # ═══════════════════════════════════════════════════════════════════════════════
-# CONFIGURAÇÃO DO SUPABASE
+# CONFIGURAÇÃO DO SUPABASE (via HTTP requests - sem SDK)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Credenciais do Supabase - Configure aqui!
 SUPABASE_URL = "https://liuyuvxbdmowtidjhfnc.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpdXl1dnhiZG1vd3RpZGpoZm5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg3NTMzOTIsImV4cCI6MjA4NDMyOTM5Mn0.S-dt-yzcHn9g3u3K6fTGJbNNPPX-K0wMQFEwh3s7eTc"
 
-# Inicializar cliente Supabase com retry e diagnóstico
-supabase: Client = None
+SUPABASE_HEADERS = {
+    "apikey": SUPABASE_ANON_KEY,
+    "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=minimal"
+}
+
+supabase_connected = False
+
+def supabase_get(table, params=None):
+    """GET request to Supabase REST API"""
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    r = http_requests.get(url, headers=SUPABASE_HEADERS, params=params, timeout=15)
+    r.raise_for_status()
+    return r.json()
+
+def supabase_insert(table, data):
+    """POST (insert) to Supabase REST API"""
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    r = http_requests.post(url, headers=SUPABASE_HEADERS, json=data, timeout=15)
+    # 201 = created, 409 = conflict (duplicate), both ok
+    if r.status_code not in (200, 201, 409):
+        r.raise_for_status()
 
 def inicializar_supabase(max_tentativas=3):
-    """Inicializa o cliente Supabase com retry e diagnóstico detalhado"""
-    global supabase
-    
-    if not SUPABASE_OK:
-        print("  ❌ Módulo 'supabase' não instalado. Execute: pip install supabase")
-        return False
-    
-    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-        print("  ❌ SUPABASE_URL ou SUPABASE_ANON_KEY não configurados!")
-        return False
+    """Testa conexão com Supabase via HTTP"""
+    global supabase_connected
     
     for tentativa in range(1, max_tentativas + 1):
         try:
             print(f"  🔄 Conectando ao Supabase (tentativa {tentativa}/{max_tentativas})...")
-            supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-            
-            # Testar conexão real com uma query simples
-            test = supabase.table('radio_stations').select('id', count='exact').limit(1).execute()
-            print(f"  ✅ Supabase conectado! ({len(test.data)} estações encontradas no teste)")
+            data = supabase_get("radio_stations", {"select": "id", "limit": "1"})
+            supabase_connected = True
+            print(f"  ✅ Supabase conectado via HTTP!")
             return True
-            
         except Exception as e:
             erro_str = str(e)
-            print(f"  ⚠️  Tentativa {tentativa} falhou: {erro_str[:100]}")
-            
-            # Diagnóstico detalhado
-            if 'ConnectionError' in erro_str or 'MaxRetryError' in erro_str:
-                print("     💡 Problema de rede - verifique sua conexão com a internet")
-            elif 'Invalid API key' in erro_str or '401' in erro_str or 'apikey' in erro_str.lower():
-                print("     💡 Chave API inválida - verifique SUPABASE_ANON_KEY")
-            elif 'not found' in erro_str.lower() or '404' in erro_str:
-                print("     💡 URL do projeto incorreta - verifique SUPABASE_URL")
-            elif 'timeout' in erro_str.lower():
-                print("     💡 Timeout de conexão - servidor pode estar lento")
-            
-            supabase = None
-            
+            print(f"  ⚠️  Tentativa {tentativa} falhou: {erro_str[:120]}")
+            supabase_connected = False
             if tentativa < max_tentativas:
                 import time
-                wait = tentativa * 5
-                print(f"     ⏳ Aguardando {wait}s antes da próxima tentativa...")
-                time.sleep(wait)
+                time.sleep(tentativa * 5)
     
-    print("  ❌ Não foi possível conectar ao Supabase após todas as tentativas")
-    print(f"     URL: {SUPABASE_URL}")
-    print(f"     Key: {SUPABASE_ANON_KEY[:20]}...{SUPABASE_ANON_KEY[-10:]}")
+    print("  ❌ Não foi possível conectar ao Supabase")
     return False
 
 # Executar inicialização
@@ -304,7 +292,7 @@ class RadioMonitor:
         print()
         
         status = cor(Cores.GREEN, "● ONLINE") if self.online else cor(Cores.RED, "● OFFLINE")
-        supabase_status = cor(Cores.GREEN, "● CONECTADO") if supabase else cor(Cores.RED, "● DESCONECTADO")
+        supabase_status = cor(Cores.GREEN, "● CONECTADO") if supabase_connected else cor(Cores.RED, "● DESCONECTADO")
         print(f"  Internet: {status}")
         print(f"  Supabase: {supabase_status}")
         print(f"  Última atualização: {self.historico.get('ultima_atualizacao', 'Nunca')}")
@@ -314,23 +302,19 @@ class RadioMonitor:
         print(cor(Cores.YELLOW, "─" * 72))
     
     def _carregar_radios_supabase(self) -> List[Dict]:
-        """Carrega as rádios ativas do Supabase"""
-        if not supabase:
+        """Carrega as rádios ativas do Supabase via HTTP"""
+        if not supabase_connected:
             print(cor(Cores.YELLOW, "  ⚠️  Supabase não conectado, usando config local"))
             config = carregar_configuracao()
             return [r for r in config.get('radios', []) if r.get('ativo', True)]
         
         try:
-            response = supabase.table('radio_stations').select('*').eq('enabled', True).execute()
+            stations = supabase_get("radio_stations", {"select": "*", "enabled": "eq.true"})
             
             radios = []
-            for station in response.data:
-                # Determinar o tipo baseado na URL
+            for station in stations:
                 url = station.get('scrape_url', '')
-                if 'clubefm' in url.lower():
-                    tipo = 'clubefm'
-                else:
-                    tipo = 'mytuner'
+                tipo = 'clubefm' if 'clubefm' in url.lower() else 'mytuner'
                 
                 radios.append({
                     'nome': station.get('name'),
@@ -338,8 +322,6 @@ class RadioMonitor:
                     'tipo': tipo,
                     'id': station.get('id')
                 })
-                
-                # Guardar mapeamento nome -> id
                 self.supabase_stations[station.get('name')] = station.get('id')
             
             print(cor(Cores.GREEN, f"  ✅ {len(radios)} rádios carregadas do Supabase"))
@@ -351,15 +333,14 @@ class RadioMonitor:
             return [r for r in config.get('radios', []) if r.get('ativo', True)]
     
     async def _enviar_para_supabase(self, dados: Dict, radio: Dict):
-        """Envia dados capturados para o Supabase (scraped_songs + radio_historico)"""
-        if not supabase:
+        """Envia dados capturados para o Supabase via HTTP"""
+        if not supabase_connected:
             return
         
         try:
             station_id = radio.get('id') or self.supabase_stations.get(dados['nome'])
             station_name = dados['nome']
             
-            # Enviar "tocando agora"
             if dados.get('tocando_agora'):
                 song_info = parse_song_text(dados['tocando_agora'])
                 
@@ -371,10 +352,8 @@ class RadioMonitor:
                     'is_now_playing': True,
                     'source': 'python_monitor'
                 }
+                supabase_insert('scraped_songs', song_data)
                 
-                supabase.table('scraped_songs').insert(song_data).execute()
-                
-                # Também inserir no radio_historico (acervo permanente, 30 por rádio)
                 historico_data = {
                     'station_name': station_name,
                     'title': song_info['title'] or dados['tocando_agora'],
@@ -382,13 +361,12 @@ class RadioMonitor:
                     'source': 'python_monitor'
                 }
                 try:
-                    supabase.table('radio_historico').insert(historico_data).execute()
+                    supabase_insert('radio_historico', historico_data)
                 except:
-                    pass  # Duplicata ou erro silencioso
+                    pass
                 
                 print(cor(Cores.GREEN, f"     ☁️  Enviado para Supabase: {song_info['title']}"))
             
-            # Enviar últimas tocadas
             for song_text in dados.get('ultimas_tocadas', [])[:5]:
                 song_info = parse_song_text(song_text)
                 
@@ -400,23 +378,20 @@ class RadioMonitor:
                     'is_now_playing': False,
                     'source': 'python_monitor'
                 }
+                supabase_insert('scraped_songs', song_data)
                 
-                supabase.table('scraped_songs').insert(song_data).execute()
-                
-                # Também inserir no radio_historico
-                historico_data = {
-                    'station_name': station_name,
-                    'title': song_info['title'] or song_text,
-                    'artist': song_info['artist'] or 'Desconhecido',
-                    'source': 'python_monitor'
-                }
                 try:
-                    supabase.table('radio_historico').insert(historico_data).execute()
+                    supabase_insert('radio_historico', {
+                        'station_name': station_name,
+                        'title': song_info['title'] or song_text,
+                        'artist': song_info['artist'] or 'Desconhecido',
+                        'source': 'python_monitor'
+                    })
                 except:
-                    pass  # Duplicata ou erro silencioso
+                    pass
                 
         except Exception as e:
-            print(cor(Cores.YELLOW, f"     ⚠️  Erro Supabase: {str(e)[:50]}"))
+            print(cor(Cores.YELLOW, f"     ⚠️  Erro Supabase: {str(e)[:80]}"))
     
     async def _extrair_mytuner(self, page: Page, url: str, nome: str) -> Dict:
         dados = {
@@ -532,17 +507,16 @@ class RadioMonitor:
     
     def _verificar_supabase(self):
         """Verifica conexão Supabase e reconecta se necessário"""
-        global supabase
-        if supabase:
+        global supabase_connected
+        if supabase_connected:
             try:
-                supabase.table('radio_stations').select('id', count='exact').limit(1).execute()
+                supabase_get("radio_stations", {"select": "id", "limit": "1"})
                 return True
             except:
                 print(cor(Cores.YELLOW, "  ⚠️  Conexão Supabase perdida, reconectando..."))
-                supabase = None
+                supabase_connected = False
         
-        if not supabase:
-            return inicializar_supabase(max_tentativas=2)
+        return inicializar_supabase(max_tentativas=2)
     
     async def _atualizar_todas(self):
         if not PLAYWRIGHT_OK:
@@ -600,7 +574,7 @@ class RadioMonitor:
             self._salvar_historico()
             self._salvar_relatorio()
             
-            if supabase:
+            if supabase_connected:
                 print(cor(Cores.CYAN, f"\n  ☁️  Dados sincronizados com Supabase!"))
     
     async def _aguardar_reconexao(self):
@@ -669,7 +643,7 @@ if __name__ == "__main__":
     config = carregar_configuracao()
     
     print()
-    if supabase:
+    if supabase_connected:
         print(cor(Cores.GREEN, "  ✅ Modo Supabase ativo!"))
         print(cor(Cores.CYAN, "  📻 As emissoras serão carregadas automaticamente do banco de dados"))
     else:
