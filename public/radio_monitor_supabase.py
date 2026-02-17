@@ -131,14 +131,60 @@ except ImportError:
 SUPABASE_URL = "https://liuyuvxbdmowtidjhfnc.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpdXl1dnhiZG1vd3RpZGpoZm5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg3NTMzOTIsImV4cCI6MjA4NDMyOTM5Mn0.S-dt-yzcHn9g3u3K6fTGJbNNPPX-K0wMQFEwh3s7eTc"
 
-# Inicializar cliente Supabase
+# Inicializar cliente Supabase com retry e diagnóstico
 supabase: Client = None
-if SUPABASE_OK and SUPABASE_URL and SUPABASE_ANON_KEY:
-    try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-        print("  ✅ Supabase conectado!")
-    except Exception as e:
-        print(f"  ⚠️  Erro ao conectar Supabase: {e}")
+
+def inicializar_supabase(max_tentativas=3):
+    """Inicializa o cliente Supabase com retry e diagnóstico detalhado"""
+    global supabase
+    
+    if not SUPABASE_OK:
+        print("  ❌ Módulo 'supabase' não instalado. Execute: pip install supabase")
+        return False
+    
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        print("  ❌ SUPABASE_URL ou SUPABASE_ANON_KEY não configurados!")
+        return False
+    
+    for tentativa in range(1, max_tentativas + 1):
+        try:
+            print(f"  🔄 Conectando ao Supabase (tentativa {tentativa}/{max_tentativas})...")
+            supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+            
+            # Testar conexão real com uma query simples
+            test = supabase.table('radio_stations').select('id', count='exact').limit(1).execute()
+            print(f"  ✅ Supabase conectado! ({len(test.data)} estações encontradas no teste)")
+            return True
+            
+        except Exception as e:
+            erro_str = str(e)
+            print(f"  ⚠️  Tentativa {tentativa} falhou: {erro_str[:100]}")
+            
+            # Diagnóstico detalhado
+            if 'ConnectionError' in erro_str or 'MaxRetryError' in erro_str:
+                print("     💡 Problema de rede - verifique sua conexão com a internet")
+            elif 'Invalid API key' in erro_str or '401' in erro_str or 'apikey' in erro_str.lower():
+                print("     💡 Chave API inválida - verifique SUPABASE_ANON_KEY")
+            elif 'not found' in erro_str.lower() or '404' in erro_str:
+                print("     💡 URL do projeto incorreta - verifique SUPABASE_URL")
+            elif 'timeout' in erro_str.lower():
+                print("     💡 Timeout de conexão - servidor pode estar lento")
+            
+            supabase = None
+            
+            if tentativa < max_tentativas:
+                import time
+                wait = tentativa * 5
+                print(f"     ⏳ Aguardando {wait}s antes da próxima tentativa...")
+                time.sleep(wait)
+    
+    print("  ❌ Não foi possível conectar ao Supabase após todas as tentativas")
+    print(f"     URL: {SUPABASE_URL}")
+    print(f"     Key: {SUPABASE_ANON_KEY[:20]}...{SUPABASE_ANON_KEY[-10:]}")
+    return False
+
+# Executar inicialização
+inicializar_supabase()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURAÇÃO LOCAL (FALLBACK)
