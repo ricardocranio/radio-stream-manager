@@ -87,7 +87,7 @@ export const useRealtimeStatsStore = create<RealtimeStatsState & RealtimeStatsAc
         // Update recentSongsByStation
         const updatedRecentSongsByStation = { ...state.recentSongsByStation };
         const stationSongs = updatedRecentSongsByStation[newSong.station_name] || [];
-        updatedRecentSongsByStation[newSong.station_name] = [newSongData, ...stationSongs].slice(0, 5);
+        updatedRecentSongsByStation[newSong.station_name] = [newSongData, ...stationSongs].slice(0, 15);
 
         set({
           totalSongs: state.totalSongs + 1,

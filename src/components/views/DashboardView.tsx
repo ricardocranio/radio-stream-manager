@@ -705,7 +705,7 @@ export function DashboardView() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-0 flex-1">
-                    <ScrollArea className="h-[140px]">
+                    <ScrollArea className="h-[280px]">
                       {songs.length > 0 ? (
                         <div className="divide-y divide-border">
                           {songs.map((song, index) => (
