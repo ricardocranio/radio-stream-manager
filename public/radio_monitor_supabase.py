@@ -394,50 +394,87 @@ class RadioMonitor:
     async def _enviar_para_supabase(self, dados: Dict, radio: Dict):
         """Envia dados capturados para o Supabase via REST API"""
         if not SUPABASE_OK:
+            print(cor(Cores.YELLOW, f"     ⚠️  Supabase não conectado, pulando envio"))
             return
         
         try:
             station_id = radio.get('id') or self.supabase_stations.get(dados['nome'])
             station_name = dados['nome']
             
-            # Enviar "tocando agora"
-            if dados.get('tocando_agora'):
-                song_info = parse_song_text(dados['tocando_agora'])
-                title = song_info['title'] or dados['tocando_agora']
-                artist = song_info['artist'] or 'Desconhecido'
-                
-                # Ignorar entradas que parecem ser timestamps ou lixo
-                import re
-                if re.match(r'^\d{2}:\d{2}$', title) or len(title) < 3:
-                    return
-                
-                # Inserir em scraped_songs
-                song_data = {
-                    'station_name': station_name,
-                    'station_id': station_id,
-                    'title': title,
-                    'artist': artist,
-                    'is_now_playing': True,
-                    'source': 'python_monitor'
-                }
-                
-                ok = supabase_insert('scraped_songs', song_data)
-                if ok:
-                    print(cor(Cores.GREEN, f"     ☁️  scraped_songs: {artist} - {title}"))
-                
-                # Inserir também em radio_historico
-                hist_data = {
-                    'station_name': station_name,
-                    'artist': artist,
-                    'title': title,
-                    'source': 'python_monitor'
-                }
-                ok2 = supabase_insert('radio_historico', hist_data)
-                if ok2:
-                    print(cor(Cores.CYAN, f"     📜  radio_historico: {artist} - {title}"))
+            raw_text = dados.get('tocando_agora')
+            print(cor(Cores.BLUE, f"     🔍 Raw tocando_agora: {repr(raw_text)[:100]}"))
+            
+            if not raw_text:
+                print(cor(Cores.YELLOW, f"     ⚠️  Sem dados de 'tocando agora' para {station_name}"))
+                return
+            
+            song_info = parse_song_text(raw_text)
+            title = song_info['title'] or raw_text.strip()
+            artist = song_info['artist'] or 'Desconhecido'
+            
+            print(cor(Cores.BLUE, f"     🔍 Parsed: artist='{artist}' title='{title}'"))
+            
+            # Ignorar entradas que parecem ser timestamps ou lixo
+            import re
+            if re.match(r'^\d{2}:\d{2}$', title) or len(title) < 2:
+                print(cor(Cores.YELLOW, f"     ⚠️  Ignorado (timestamp/lixo): '{title}'"))
+                return
+            
+            # Ignorar se artista é "Desconhecido" e título parece lixo
+            if artist == 'Desconhecido' and len(title) < 4:
+                print(cor(Cores.YELLOW, f"     ⚠️  Ignorado (dados insuficientes): '{title}'"))
+                return
+            
+            # Inserir em scraped_songs (sem station_id se None para evitar FK error)
+            song_data = {
+                'station_name': station_name,
+                'title': title,
+                'artist': artist,
+                'is_now_playing': True,
+                'source': 'python_monitor'
+            }
+            if station_id:
+                song_data['station_id'] = station_id
+            
+            print(cor(Cores.BLUE, f"     📤 Enviando para scraped_songs..."))
+            ok = supabase_insert('scraped_songs', song_data)
+            if ok:
+                print(cor(Cores.GREEN, f"     ☁️  scraped_songs: {artist} - {title}"))
+            else:
+                print(cor(Cores.RED, f"     ❌ Falha ao inserir em scraped_songs"))
+            
+            # Inserir também em radio_historico
+            hist_data = {
+                'station_name': station_name,
+                'artist': artist,
+                'title': title,
+                'source': 'python_monitor'
+            }
+            print(cor(Cores.BLUE, f"     📤 Enviando para radio_historico..."))
+            ok2 = supabase_insert('radio_historico', hist_data)
+            if ok2:
+                print(cor(Cores.CYAN, f"     📜  radio_historico: {artist} - {title}"))
+            else:
+                print(cor(Cores.RED, f"     ❌ Falha ao inserir em radio_historico"))
+            
+            # Enviar também últimas tocadas
+            for song_text in (dados.get('ultimas_tocadas') or [])[:5]:
+                s = parse_song_text(song_text)
+                t = s['title']
+                a = s['artist']
+                if t and len(t) >= 3 and not re.match(r'^\d{2}:\d{2}$', t) and a != 'Desconhecido':
+                    hist2 = {
+                        'station_name': station_name,
+                        'artist': a,
+                        'title': t,
+                        'source': 'python_monitor'
+                    }
+                    supabase_insert('radio_historico', hist2)
             
         except Exception as e:
-            print(cor(Cores.YELLOW, f"     ⚠️  Erro Supabase: {str(e)[:60]}"))
+            import traceback
+            print(cor(Cores.RED, f"     ❌ Erro Supabase: {str(e)}"))
+            traceback.print_exc()
     
     async def _extrair_mytuner(self, page: Page, url: str, nome: str) -> Dict:
         dados = {
