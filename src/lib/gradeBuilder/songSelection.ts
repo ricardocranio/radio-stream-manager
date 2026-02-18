@@ -15,6 +15,59 @@ import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import type { SongEntry, BlockLogItem, BlockStats, GradeContext, CarryOverSong } from './types';
 import { STATION_ID_TO_DB_NAME } from './constants';
 import type { WeekDay, SequenceConfig } from '@/types/radio';
+import { getCachedVerification } from '@/lib/libraryVerificationCache';
+
+const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+
+/**
+ * Attempt to download a missing song and wait for it to become available.
+ * Returns true if the song was downloaded successfully within the timeout.
+ * @param artist - Song artist
+ * @param title - Song title  
+ * @param ctx - Grade context with library check
+ * @param maxWaitMs - Maximum time to wait (default 30s for full-day, up to 720s/12min for incremental)
+ */
+async function tryDownloadAndWait(
+  artist: string, title: string, ctx: GradeContext, maxWaitMs: number = 30000
+): Promise<boolean> {
+  if (!isElectron || !window.electronAPI?.downloadFromDeezer) {
+    return false;
+  }
+
+  const { useRadioStore } = await import('@/store/radioStore');
+  const storeState = useRadioStore.getState();
+  if (!storeState.deezerConfig.enabled || !storeState.deezerConfig.arl) {
+    return false;
+  }
+
+  console.log(`[SONG-SELECT] ⏬ Download imediato: ${artist} - ${title} (timeout: ${Math.round(maxWaitMs / 1000)}s)`);
+
+  try {
+    const result = await Promise.race([
+      window.electronAPI.downloadFromDeezer({
+        artist, title,
+        arl: storeState.deezerConfig.arl,
+        outputFolder: storeState.deezerConfig.downloadFolder,
+        quality: storeState.deezerConfig.quality,
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), maxWaitMs)),
+    ]);
+
+    if (result && typeof result === 'object' && 'success' in result && result.success) {
+      console.log(`[SONG-SELECT] ✅ Download concluído a tempo: ${artist} - ${title}`);
+      // Update cache so findSongInLibrary picks it up
+      const { markSongAsDownloaded } = await import('@/lib/libraryVerificationCache');
+      markSongAsDownloaded(artist, title, (result as any).output);
+      return true;
+    }
+
+    console.log(`[SONG-SELECT] ⏰ Download não concluiu a tempo: ${artist} - ${title}`);
+    return false;
+  } catch (error) {
+    console.error(`[SONG-SELECT] ❌ Erro no download imediato: ${artist} - ${title}`, error);
+    return false;
+  }
+}
 
 interface SelectionContext {
   timeStr: string;
@@ -115,8 +168,12 @@ export async function selectSongForSlot(
     }
   }
 
-  // PRIORITY 1: Station pool
+  // PRIORITY 1: Station pool (with immediate download attempt for missing songs)
   if (!selectedSong) {
+    // Determine download wait time: 12 min for incremental builds, 30s for full-day builds
+    const downloadTimeoutMs = isFullDay ? 30000 : 720000; // 30s vs 12 minutes
+    let attemptedDownload = false; // Only attempt one download per slot to avoid blocking
+
     let startIndex = stationSongIndex[stationName] || 0;
     let checkedCount = 0;
     while (checkedCount < (stationSongs?.length || 0) && !selectedSong) {
@@ -133,7 +190,35 @@ export async function selectSongForSlot(
           stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
           break;
         } else {
-          // Mark as missing + carry-over
+          // Song exists in DB but not in library — try immediate download
+          if (!attemptedDownload) {
+            attemptedDownload = true;
+            console.log(`[SONG-SELECT] 🔍 Música "${candidate.artist} - ${candidate.title}" ausente na biblioteca, tentando download imediato...`);
+            
+            const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
+            
+            if (downloaded) {
+              // Re-check library after download
+              const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+              if (recheck.exists) {
+                const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+                selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+                stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
+                logs.push({
+                  blockTime: timeStr, type: 'used',
+                  title: candidate.title, artist: candidate.artist,
+                  station: candidate.station, style: candidate.style,
+                  reason: '✅ Baixada just-in-time antes do bloco',
+                });
+                break;
+              }
+            }
+            
+            // Download failed or timed out — log and continue to find available alternative
+            console.log(`[SONG-SELECT] ⚠️ Download não disponível a tempo, buscando alternativa disponível...`);
+          }
+
+          // Mark as missing + carry-over for future blocks
           if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
             ctx.addMissingSong({
               id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
