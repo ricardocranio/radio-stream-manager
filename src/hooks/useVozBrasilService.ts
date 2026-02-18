@@ -63,35 +63,8 @@ export function useVozBrasilService() {
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const year = now.getFullYear();
     
-    // Try scraping the EBC page first for the correct URL
-    const urls: string[] = [];
-    
-    if (window.electronAPI?.scrapeVozDownloadUrl) {
-      try {
-        console.log('[VOZ-SVC] 🔍 Buscando link na página do EBC...');
-        const scrapeResult = await window.electronAPI.scrapeVozDownloadUrl();
-        if (scrapeResult.success && scrapeResult.url) {
-          console.log(`[VOZ-SVC] 🔍 Link encontrado: ${scrapeResult.url}`);
-          urls.push(scrapeResult.url);
-        }
-      } catch (e) {
-        console.log('[VOZ-SVC] 🔍 Scraping falhou, usando URLs padrão');
-      }
-    }
-    
-    // Fallback URLs (hardcoded patterns)
-    const shortYear = year.toString().slice(-2); // e.g., "25" from "2025"
-    urls.push(
-      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}-1/@@download/file`,
-      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
-      `https://audios.ebc.com.br/radiogov/${year}/${month}/${day}-${month}-${shortYear}-a-voz-do-brasil.mp3`,
-      `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/voz_${day}${month}${year}.mp3`,
-      `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/vozbrasil_${day}${month}${year}.mp3`,
-      `https://conteudo.ebcservicos.com.br/25-streaming-ebc/a-voz-do-brasil/VozDoBrasil_${day}-${month}-${year}.mp3`,
-    );
-    
-    // Deduplicate URLs (scraped URL might match a hardcoded one)
-    const uniqueUrls = [...new Set(urls)];
+    const url = `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`;
+    const uniqueUrls = [url];
     
     const filename = `VozDoBrasil_${day}-${month}-${year}.mp3`;
 
