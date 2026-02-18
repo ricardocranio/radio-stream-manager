@@ -39,29 +39,53 @@ export async function selectSongForSlot(
 ): Promise<string> {
   const { timeStr, isFullDay, usedInBlock, usedArtistsInBlock, songsByStation, allSongsPool, carryOverByStation, stationSongIndex, logs, stats } = selCtx;
 
-  // Resolve station name
-  let stationName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()] || '';
+  // Resolve station name using multiple strategies
+  let stationName = '';
+
+  // Strategy 1: Hardcoded legacy mapping (short IDs like 'bh', 'band')
+  stationName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()] || '';
+
+  // Strategy 2: Find station config by ID (handles UUIDs) and use its name
   if (!stationName) {
-    const stationConfig = ctx.stations.find(s => s.id === seq.radioSource || s.id.toLowerCase() === seq.radioSource.toLowerCase());
+    const stationConfig = ctx.stations.find(
+      s => s.id === seq.radioSource || s.id.toLowerCase() === seq.radioSource.toLowerCase()
+    );
     stationName = stationConfig?.name || '';
+  }
+
+  // Strategy 3: Check if radioSource itself is a station name that exists in the pool
+  if (!stationName && songsByStation[seq.radioSource]) {
+    stationName = seq.radioSource;
   }
 
   // Get songs for this station
   let stationSongs: SongEntry[] = [];
   if (stationName && songsByStation[stationName]) {
     stationSongs = songsByStation[stationName];
-  } else {
+  }
+  
+  // Fallback: fuzzy match against songsByStation keys
+  if (stationSongs.length === 0) {
     const normalizedSource = seq.radioSource.toLowerCase().replace(/[^a-z0-9]/g, '');
     const normalizedConfigName = stationName.toLowerCase().replace(/[^a-z0-9]/g, '');
     for (const [poolStationName, poolSongs] of Object.entries(songsByStation)) {
       const normalizedPool = poolStationName.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (normalizedPool === normalizedSource || normalizedPool === normalizedConfigName ||
-          normalizedPool.includes(normalizedSource) || normalizedSource.includes(normalizedPool)) {
+      if (
+        normalizedPool === normalizedSource || normalizedPool === normalizedConfigName ||
+        normalizedPool.includes(normalizedSource) || normalizedSource.includes(normalizedPool) ||
+        (normalizedConfigName && (normalizedPool.includes(normalizedConfigName) || normalizedConfigName.includes(normalizedPool)))
+      ) {
         stationName = poolStationName;
         stationSongs = poolSongs;
         break;
       }
     }
+  }
+
+  if (stationSongs.length > 0) {
+    console.log(`[SONG-SELECT] 🎯 Estação "${stationName}" encontrada com ${stationSongs.length} músicas para slot (source: ${seq.radioSource})`);
+  } else {
+    console.warn(`[SONG-SELECT] ⚠️ Nenhuma música encontrada para source "${seq.radioSource}" (resolved: "${stationName}"). Pool disponível: ${Object.keys(songsByStation).join(', ')}`);
   }
 
   const stationStyle = ctx.stations.find(s => s.id === seq.radioSource)?.styles?.[0] || 'POP/VARIADO';

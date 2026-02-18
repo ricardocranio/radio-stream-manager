@@ -163,8 +163,21 @@ export function GradePreviewCard() {
 
     activeSequence.forEach((seq, index) => {
       // Resolve station name from sequence config
-      const dbName = stationIdToDbName[seq.radioSource] || seq.radioSource;
-      const pool = songsByStation[dbName] || [];
+      let dbName = stationIdToDbName[seq.radioSource] || seq.radioSource;
+      let pool = songsByStation[dbName] || [];
+
+      // Fuzzy fallback: try matching pool keys if direct lookup failed
+      if (pool.length === 0) {
+        const normalized = dbName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        for (const [poolKey, poolSongs] of Object.entries(songsByStation)) {
+          const normalizedPool = poolKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (normalizedPool.includes(normalized) || normalized.includes(normalizedPool)) {
+            dbName = poolKey;
+            pool = poolSongs;
+            break;
+          }
+        }
+      }
 
       if (pool.length === 0) {
         songs.push({
