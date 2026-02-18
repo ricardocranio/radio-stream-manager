@@ -377,11 +377,31 @@ export async function selectSongForSlot(
 
   // PRIORITY 6: Coringa
   stats.missing++;
+  
+  // === DIAGNOSTIC LOGGING ===
+  const stationPoolSize = stationSongs?.length || 0;
+  const allPoolSize = allSongsPool.length;
+  const rankingSize = ctx.rankingSongs.length;
+  console.warn(`[SONG-SELECT] ❌ CORINGA usado para slot "${seq.radioSource}" (resolved: "${stationName}")`);
+  console.warn(`[SONG-SELECT] ❌ DIAGNÓSTICO:`);
+  console.warn(`  - Pool da estação "${stationName}": ${stationPoolSize} músicas`);
+  console.warn(`  - Pool geral: ${allPoolSize} músicas`);
+  console.warn(`  - Ranking: ${rankingSize} músicas`);
+  console.warn(`  - Usadas no bloco: ${usedInBlock.size}`);
+  console.warn(`  - Artistas no bloco: ${usedArtistsInBlock.size}`);
+  console.warn(`  - Pastas de música: ${ctx.musicFolders.join(', ')}`);
+  if (stationPoolSize > 0) {
+    const first3 = stationSongs.slice(0, 3).map(s => `${s.artist} - ${s.title}`).join('; ');
+    console.warn(`  - Primeiras 3 do pool: ${first3}`);
+    console.warn(`  - TODAS foram verificadas e NÃO encontradas na biblioteca!`);
+  }
+  // === END DIAGNOSTIC ===
+  
   logs.push({
     blockTime: timeStr, type: 'substituted',
     title: ctx.coringaCode, artist: 'CORINGA',
     station: 'FALLBACK',
-    reason: 'Nenhuma música válida encontrada, usando coringa para curadoria manual',
+    reason: `Nenhuma música válida encontrada (pool: ${stationPoolSize}, geral: ${allPoolSize}, ranking: ${rankingSize})`,
   });
   return ctx.coringaCode;
 }

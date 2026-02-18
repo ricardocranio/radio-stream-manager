@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Eye, Music, TrendingUp, Radio, Clock, Sparkles, Flame, RefreshCw, Loader2 } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Eye, Music, TrendingUp, Radio, Clock, Sparkles, Flame, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,8 @@ import { STATION_ID_TO_DB_NAME } from '@/lib/gradeBuilder/constants';
 import { supabase } from '@/integrations/supabase/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+
+const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
 interface SongPool {
   title: string;
@@ -27,13 +29,19 @@ interface PreviewSong {
   priority: string;
   freshness?: string;
   isFromRanking: boolean;
+  originalArtist?: string;
+  originalTitle?: string;
 }
 
+type LibraryStatus = 'checking' | 'found' | 'missing' | 'unavailable';
+
 export function GradePreviewCard() {
-  const { stations, rankingSongs, gradeHistory, scheduledSequences, sequence } = useRadioStore();
+  const { stations, rankingSongs, gradeHistory, scheduledSequences, sequence, config } = useRadioStore();
   const [songsByStation, setSongsByStation] = useState<Record<string, SongPool[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
+  const [libraryStatus, setLibraryStatus] = useState<Record<string, LibraryStatus>>({});
+  const [isCheckingLibrary, setIsCheckingLibrary] = useState(false);
 
   // Fetch real songs from both tables
   const fetchSongs = async () => {
@@ -234,15 +242,117 @@ export function GradePreviewCard() {
         priority: picked.priority,
         freshness: isFresh ? formatDistanceToNow(new Date(picked.timestamp), { locale: ptBR, addSuffix: true }) : undefined,
         isFromRanking: isRanked,
+        originalArtist: picked.artist,
+        originalTitle: picked.title,
       });
     });
 
     return songs;
   }, [songsByStation, stationIdToDbName, rankingSongs, sequence, scheduledSequences]);
 
+  // Check library availability for preview songs
+  const checkLibrary = useCallback(async () => {
+    if (!isElectron || !window.electronAPI?.findSongMatch) {
+      // In web mode, mark all as unavailable
+      const newStatus: Record<string, LibraryStatus> = {};
+      previewSongs.forEach(s => {
+        if (s.originalArtist && s.originalTitle) {
+          const key = `${s.originalArtist.toLowerCase()}|${s.originalTitle.toLowerCase()}`;
+          newStatus[key] = 'unavailable';
+        }
+      });
+      setLibraryStatus(newStatus);
+      return;
+    }
+
+    setIsCheckingLibrary(true);
+    const newStatus: Record<string, LibraryStatus> = {};
+    const musicFolders = config.musicFolders || [];
+    const threshold = config.similarityThreshold || 0.75;
+
+    // Mark all as checking first
+    previewSongs.forEach(s => {
+      if (s.originalArtist && s.originalTitle) {
+        const key = `${s.originalArtist.toLowerCase()}|${s.originalTitle.toLowerCase()}`;
+        newStatus[key] = 'checking';
+      }
+    });
+    setLibraryStatus({ ...newStatus });
+
+    // Check in parallel batches of 3
+    const songsToCheck = previewSongs.filter(s => s.originalArtist && s.originalTitle);
+    for (let i = 0; i < songsToCheck.length; i += 3) {
+      const batch = songsToCheck.slice(i, i + 3);
+      const results = await Promise.all(
+        batch.map(async (song) => {
+          const key = `${song.originalArtist!.toLowerCase()}|${song.originalTitle!.toLowerCase()}`;
+          try {
+            const result = await Promise.race([
+              window.electronAPI!.findSongMatch({
+                artist: song.originalArtist!,
+                title: song.originalTitle!,
+                musicFolders,
+                threshold,
+              } as any),
+              new Promise<{ exists: false }>((resolve) => setTimeout(() => resolve({ exists: false }), 10000)),
+            ]);
+            return { key, status: (result.exists ? 'found' : 'missing') as LibraryStatus };
+          } catch {
+            return { key, status: 'missing' as LibraryStatus };
+          }
+        })
+      );
+      
+      for (const { key, status } of results) {
+        newStatus[key] = status;
+      }
+      setLibraryStatus({ ...newStatus });
+    }
+
+    setIsCheckingLibrary(false);
+
+    // Log diagnostic summary
+    const found = Object.values(newStatus).filter(s => s === 'found').length;
+    const missing = Object.values(newStatus).filter(s => s === 'missing').length;
+    console.log(`[GradePreview] 🔍 Biblioteca: ${found} encontradas, ${missing} faltando de ${songsToCheck.length} verificadas`);
+    
+    if (missing > 0) {
+      const missingSongs = songsToCheck.filter(s => {
+        const key = `${s.originalArtist!.toLowerCase()}|${s.originalTitle!.toLowerCase()}`;
+        return newStatus[key] === 'missing';
+      });
+      console.log('[GradePreview] ❌ Músicas faltando na biblioteca:');
+      missingSongs.forEach(s => console.log(`  - ${s.originalArtist} - ${s.originalTitle}`));
+      console.log(`[GradePreview] 📁 Pastas configuradas: ${musicFolders.join(', ')}`);
+      console.log(`[GradePreview] 🎯 Threshold: ${Math.round(threshold * 100)}%`);
+    }
+  }, [previewSongs, config.musicFolders, config.similarityThreshold]);
+
+  // Auto-check library when preview songs change
+  useEffect(() => {
+    if (previewSongs.length > 0) {
+      checkLibrary();
+    }
+  }, [previewSongs, checkLibrary]);
+
+  const getLibraryIcon = (song: PreviewSong) => {
+    if (!song.originalArtist || !song.originalTitle) return null;
+    const key = `${song.originalArtist.toLowerCase()}|${song.originalTitle.toLowerCase()}`;
+    const status = libraryStatus[key];
+    
+    if (!status || status === 'unavailable') return null;
+    if (status === 'checking') return <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />;
+    if (status === 'found') return <CheckCircle className="w-3 h-3 text-green-400" />;
+    if (status === 'missing') return <XCircle className="w-3 h-3 text-red-400" />;
+    return null;
+  };
+
   const songsFromRanking = previewSongs.filter(s => s.isFromRanking).length;
   const freshSongs = previewSongs.filter(s => s.freshness).length;
   const totalPool = Object.values(songsByStation).reduce((acc, arr) => acc + arr.length, 0);
+
+  const foundCount = Object.values(libraryStatus).filter(s => s === 'found').length;
+  const missingCount = Object.values(libraryStatus).filter(s => s === 'missing').length;
 
   // Priority badge color mapping
   const priorityColor = (p: string) => {
@@ -281,7 +391,7 @@ export function GradePreviewCard() {
               variant="ghost"
               size="icon"
               className="h-7 w-7"
-              onClick={fetchSongs}
+              onClick={() => { fetchSongs(); }}
               disabled={isLoading}
             >
               {isLoading ? (
@@ -295,7 +405,7 @@ export function GradePreviewCard() {
       </CardHeader>
       <CardContent className="p-4 space-y-4">
         {/* Pool Stats */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           <div className="p-2 rounded-lg bg-secondary/50 text-center">
             <p className="text-lg font-bold text-primary">{totalPool}</p>
             <p className="text-[10px] text-muted-foreground">Pool Total</p>
@@ -305,8 +415,12 @@ export function GradePreviewCard() {
             <p className="text-[10px] text-muted-foreground">🔥 Frescas</p>
           </div>
           <div className="p-2 rounded-lg bg-secondary/50 text-center">
-            <p className="text-lg font-bold text-purple-400">{songsFromRanking}</p>
-            <p className="text-[10px] text-muted-foreground">📊 Ranking</p>
+            <p className="text-lg font-bold text-green-400">{foundCount}</p>
+            <p className="text-[10px] text-muted-foreground">✅ Na Lib</p>
+          </div>
+          <div className="p-2 rounded-lg bg-secondary/50 text-center">
+            <p className="text-lg font-bold text-red-400">{missingCount}</p>
+            <p className="text-[10px] text-muted-foreground">❌ Faltando</p>
           </div>
         </div>
 
@@ -328,6 +442,18 @@ export function GradePreviewCard() {
               <Sparkles className="w-4 h-4" />
               Próximo Bloco ({previewSongs.length} slots):
             </p>
+            {isElectron && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] gap-1"
+                onClick={checkLibrary}
+                disabled={isCheckingLibrary}
+              >
+                <HardDrive className="w-3 h-3" />
+                {isCheckingLibrary ? 'Verificando...' : 'Verificar Lib'}
+              </Button>
+            )}
           </div>
 
           <ScrollArea className="h-[300px]">
@@ -336,11 +462,13 @@ export function GradePreviewCard() {
                 <div
                   key={index}
                   className={`p-2 rounded-lg flex items-center gap-2 ${
-                    song.isFromRanking
-                      ? 'bg-purple-500/10 border border-purple-500/20'
-                      : song.freshness
-                        ? 'bg-orange-500/5 border border-orange-500/10'
-                        : 'bg-secondary/50'
+                    song.originalArtist && libraryStatus[`${song.originalArtist.toLowerCase()}|${song.originalTitle?.toLowerCase()}`] === 'missing'
+                      ? 'bg-red-500/10 border border-red-500/20'
+                      : song.isFromRanking
+                        ? 'bg-purple-500/10 border border-purple-500/20'
+                        : song.freshness
+                          ? 'bg-orange-500/5 border border-orange-500/10'
+                          : 'bg-secondary/50'
                   }`}
                 >
                   <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
@@ -364,6 +492,7 @@ export function GradePreviewCard() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    {getLibraryIcon(song)}
                     <Badge className={`text-[9px] px-1 py-0 ${priorityColor(song.priority)}`}>
                       {song.priority}
                     </Badge>
