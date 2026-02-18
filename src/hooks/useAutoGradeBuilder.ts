@@ -195,13 +195,15 @@ export function useAutoGradeBuilder() {
 
   // ==================== Library Helpers ====================
 
+  const similarityThreshold = config.similarityThreshold || 0.75;
+
   const findSongInLibrary = useCallback(async (artist: string, title: string) => {
-    return findSongInLibraryFn(artist, title, config.musicFolders);
-  }, [config.musicFolders]);
+    return findSongInLibraryFn(artist, title, config.musicFolders, similarityThreshold);
+  }, [config.musicFolders, similarityThreshold]);
 
   const batchFind = useCallback(async (songs: Array<{ artist: string; title: string }>) => {
-    return batchFindSongsInLibrary(songs, config.musicFolders);
-  }, [config.musicFolders]);
+    return batchFindSongsInLibrary(songs, config.musicFolders, similarityThreshold);
+  }, [config.musicFolders, similarityThreshold]);
 
   const isSongAlreadyMissing = useCallback((artist: string, title: string): boolean => {
     return existingMissingSongs.some(
