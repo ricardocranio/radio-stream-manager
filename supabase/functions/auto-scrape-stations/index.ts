@@ -45,9 +45,7 @@ function isWithinSchedule(schedule: SpecialMonitoring, now: Date): boolean {
   const dayMap: Record<number, string> = { 0: 'dom', 1: 'seg', 2: 'ter', 3: 'qua', 4: 'qui', 5: 'sex', 6: 'sab' };
   if (schedule.week_days?.length > 0 && !schedule.week_days.includes(dayMap[currentDay])) return false;
   const currentMins = adjustedHour * 60 + currentMinute;
-  const startMins = schedule.start_hour * 60 + schedule.start_minute;
-  const endMins = schedule.end_hour * 60 + schedule.end_minute;
-  return currentMins >= startMins && currentMins <= endMins;
+  return currentMins >= schedule.start_hour * 60 + schedule.start_minute && currentMins <= schedule.end_hour * 60 + schedule.end_minute;
 }
 
 function isStationActiveNow(station: RadioStation, now: Date): boolean {
@@ -59,158 +57,125 @@ function isStationActiveNow(station: RadioStation, now: Date): boolean {
   const dayMap: Record<number, string> = { 0: 'dom', 1: 'seg', 2: 'ter', 3: 'qua', 4: 'qui', 5: 'sex', 6: 'sab' };
   if (station.monitoring_week_days?.length > 0 && !station.monitoring_week_days.includes(dayMap[currentDay])) return false;
   const currentMins = adjustedHour * 60 + currentMinute;
-  const startMins = station.monitoring_start_hour * 60 + station.monitoring_start_minute;
-  const endMins = station.monitoring_end_hour * 60 + station.monitoring_end_minute;
-  return currentMins >= startMins && currentMins <= endMins;
+  return currentMins >= station.monitoring_start_hour * 60 + station.monitoring_start_minute && currentMins <= station.monitoring_end_hour * 60 + station.monitoring_end_minute;
 }
 
 const BATCH_SIZE = 4;
 
-// ===== Direct HTTP Scraping (no Firecrawl) =====
+// ===== OnlineRadioBox Parsing =====
 
-function cleanText(text: string): string {
-  if (!text) return '';
-  return text
-    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
-    .replace(/\[[^\]]*\]\([^)]+\)/g, '')
-    .replace(/https?:\/\/[^\s]+/gi, '')
-    .replace(/\.(jpg|jpeg|png|gif|webp|svg|ico)[^\s]*/gi, '')
-    .replace(/\*\*/g, '').replace(/\*/g, '')
-    .replace(/\s+/g, ' ').trim();
-}
-
-function isValidSongPart(text: string): boolean {
-  if (!text || text.length < 2 || text.length > 100) return false;
-  const alphaCount = (text.match(/[a-zA-ZÀ-ÿ]/g) || []).length;
-  if (alphaCount < text.length * 0.3) return false;
-  if (text.match(/https?:|www\.|\.com|\.jpg|\.png|\.gif|\.webp|\.svg|\/\/|mzstatic|image\/|thumb\/|rgb\.|!\[|\]\(/i)) return false;
-  if (text.match(/\.[a-f0-9]{6,}$/i)) return false;
-  const rejectPatterns = [
-    /^(tocando agora|now playing|recently|últimas|recentes)/i,
-    /^\d+\s*(min|hour|hora|segundo)/i, /^(min ago|hour ago)/i, /^[\d:]+$/,
-    /^v4\/|^Music\d+|^24UMGIM/i, /^programas?\s+(em\s+)?destaque/i,
-    /^radio|^fm\s*\d|^\d+\.\d+\s*fm/i, /^-\s*[A-Za-z]/,
-    /klassik|schweiz|globo.*fm/i,
-  ];
-  return !rejectPatterns.some(p => p.test(text));
-}
-
-function extractSongFromHtml(html: string): { title: string; artist: string } | null {
-  const titleMatch = html.match(/class="[^"]*title[^"]*"[^>]*>([^<]+)</i) || html.match(/<b>([^<]+)<\/b>/i);
-  const artistMatch = html.match(/class="[^"]*artist[^"]*"[^>]*>([^<]+)</i) || html.match(/<span[^>]*>([^<]+)<\/span>/i);
-  if (titleMatch && artistMatch) {
-    const title = cleanText(titleMatch[1]);
-    const artist = cleanText(artistMatch[1]);
-    if (isValidSongPart(title) && isValidSongPart(artist)) return { title, artist };
+// Convert a scrape_url (mytuner or onlineradiobox) to an OnlineRadioBox playlist URL
+function getOnlineRadioBoxUrl(scrapeUrl: string, stationName: string): string | null {
+  // If already an onlineradiobox URL, use it
+  if (scrapeUrl.includes('onlineradiobox.com')) {
+    if (scrapeUrl.includes('/playlist')) return scrapeUrl;
+    return scrapeUrl.replace(/\/?$/, '/playlist/');
   }
-  const altMatch = html.match(/alt="([^"]+)"/i);
-  if (altMatch) {
-    const dashParts = altMatch[1].match(/^(.+?)\s*[-–]\s*(.+)$/);
-    if (dashParts) {
-      const artist = cleanText(dashParts[1]);
-      const title = cleanText(dashParts[2]);
-      if (isValidSongPart(title) && isValidSongPart(artist)) return { title, artist };
+
+  // Map known stations from mytuner URLs to OnlineRadioBox slugs
+  const slugMap: Record<string, string> = {
+    'band-fm': 'bandfm',
+    'radio-bh-fm': 'bh',
+    'radio-clube-fm-brasilia': 'clubefm',
+    'radio-metropolitana-fm': 'metropolitana',
+    'radio-globo-rj': 'globo',
+    'mix-fm-sao-paulo': 'mixfm',
+    'jovem-pan-fm-florianopolis': 'jovempan',
+    'energia-97-fm': 'energia97',
+  };
+
+  for (const [pattern, slug] of Object.entries(slugMap)) {
+    if (scrapeUrl.includes(pattern)) {
+      return `https://onlineradiobox.com/br/${slug}/playlist/`;
     }
   }
+
+  // Fallback: try to derive slug from station name
+  const normalized = stationName
+    .toLowerCase()
+    .replace(/\s*(fm|am)\s*/gi, '')
+    .replace(/rádio\s*/gi, '')
+    .replace(/[^a-z0-9]/gi, '')
+    .trim();
+  if (normalized) {
+    return `https://onlineradiobox.com/br/${normalized}/playlist/`;
+  }
+
   return null;
 }
 
 async function fetchPageHtml(url: string, stationName: string): Promise<string | null> {
-  const urlsToTry = [url];
-  if (url.includes('/pt/')) urlsToTry.push(url.replace('/pt/', '/'));
-  else urlsToTry.push(url.replace('mytuner-radio.com/', 'mytuner-radio.com/pt/'));
-
-  for (const currentUrl of urlsToTry) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-      const response = await fetch(currentUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-        },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      if (!response.ok) { console.warn(`[${stationName}] HTTP ${response.status}`); continue; }
-      const html = await response.text();
-      if (html.length > 500) return html;
-    } catch (e) {
-      console.error(`[${stationName}] Fetch error:`, e instanceof Error ? e.message : 'Unknown');
-    }
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!response.ok) { console.warn(`[${stationName}] HTTP ${response.status}`); return null; }
+    const html = await response.text();
+    if (html.length > 500) return html;
+    console.warn(`[${stationName}] Page too short`);
+    return null;
+  } catch (e) {
+    console.error(`[${stationName}] Fetch error:`, e instanceof Error ? e.message : 'Unknown');
+    return null;
   }
-  return null;
 }
 
-function parseHtmlForSongs(html: string, stationName: string): { nowPlaying?: ScrapedSong; recentSongs: ScrapedSong[] } {
+function isValidSongText(text: string): boolean {
+  if (!text || text.length < 3 || text.length > 120) return false;
+  // Reject station name/promo entries (no dash = not a song)
+  if (!text.includes(' - ')) return false;
+  // Reject known non-song patterns
+  const rejectPatterns = [
+    /^(METROPOLITANA|BH FM|BAND FM|CLUBE FM|GLOBO|MIX FM|ENERGIA|JOVEM PAN)/i,
+    /^(RÁDIO|RADIO)\s/i,
+    /COMERCIAL|VINHETA|INSTITUCIONAL|PROPAGANDA/i,
+  ];
+  return !rejectPatterns.some(p => p.test(text));
+}
+
+function parseOnlineRadioBoxHtml(html: string, stationName: string): { nowPlaying?: ScrapedSong; recentSongs: ScrapedSong[] } {
   const songs: ScrapedSong[] = [];
   let nowPlaying: ScrapedSong | undefined;
 
-  // Method 1: latest-song div
-  const latestSongMatch = html.match(/<div[^>]*class="[^"]*latest-song[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-  if (latestSongMatch) {
-    const extracted = extractSongFromHtml(latestSongMatch[1]);
-    if (extracted) {
-      nowPlaying = { ...extracted, timestamp: new Date().toISOString() };
-      console.log(`[${stationName}] Now playing: ${extracted.artist} - ${extracted.title}`);
+  // Parse track_history_item entries from OnlineRadioBox
+  // Format: <td class="track_history_item">ARTIST - TITLE</td>
+  // or: <td class="track_history_item"><a href="...">ARTIST - TITLE</a></td>
+  const trackMatches = html.matchAll(/class="track_history_item"[^>]*>(?:<a[^>]*>)?([^<]+)(?:<\/a>)?/gi);
+
+  for (const match of trackMatches) {
+    const rawText = match[1].trim();
+    if (!isValidSongText(rawText)) continue;
+
+    const dashIndex = rawText.indexOf(' - ');
+    if (dashIndex === -1) continue;
+
+    const artist = rawText.substring(0, dashIndex).trim();
+    const title = rawText.substring(dashIndex + 3).trim();
+
+    if (artist.length < 2 || title.length < 2) continue;
+
+    // Remove " feat. XXX" from title for cleaner matching but keep for display
+    const song: ScrapedSong = { artist, title, timestamp: new Date().toISOString() };
+
+    if (!nowPlaying) {
+      nowPlaying = song;
+      console.log(`[${stationName}] Now playing: ${artist} - ${title}`);
+    } else if (!songs.some(s => s.title === title && s.artist === artist)) {
+      songs.push(song);
     }
+
+    if (songs.length >= 5) break;
   }
 
-  // Method 2: og:title meta tag
-  if (!nowPlaying) {
-    const ogMatch = html.match(/property="og:title"[^>]*content="([^"]+)"/i) ||
-                    html.match(/content="([^"]+)"[^>]*property="og:title"/i);
-    if (ogMatch) {
-      const ogText = ogMatch[1].split('|')[0].trim();
-      const dashParts = ogText.match(/^(.+?)\s*[-–]\s*(.+)$/);
-      if (dashParts) {
-        const artist = cleanText(dashParts[1]);
-        const title = cleanText(dashParts[2]);
-        if (isValidSongPart(title) && isValidSongPart(artist)) {
-          nowPlaying = { title, artist, timestamp: new Date().toISOString() };
-          console.log(`[${stationName}] Now playing (og): ${artist} - ${title}`);
-        }
-      }
-    }
-  }
-
-  // Method 3: all alt text with "Artist - Title" pattern
-  const allAltTexts = html.matchAll(/alt="([^"]{5,80})"/gi);
-  for (const match of allAltTexts) {
-    const dashParts = match[1].match(/^(.+?)\s*[-–]\s*(.+)$/);
-    if (dashParts) {
-      const artist = cleanText(dashParts[1]);
-      const title = cleanText(dashParts[2]);
-      if (isValidSongPart(title) && isValidSongPart(artist) &&
-          !songs.some(s => s.title.toLowerCase() === title.toLowerCase() && s.artist.toLowerCase() === artist.toLowerCase()) &&
-          (!nowPlaying || nowPlaying.title.toLowerCase() !== title.toLowerCase() || nowPlaying.artist.toLowerCase() !== artist.toLowerCase())) {
-        if (!nowPlaying) {
-          nowPlaying = { title, artist, timestamp: new Date().toISOString() };
-          console.log(`[${stationName}] Now playing (alt): ${artist} - ${title}`);
-        } else {
-          songs.push({ title, artist, timestamp: new Date().toISOString() });
-        }
-        if (songs.length >= 5) break;
-      }
-    }
-  }
-
-  // Method 4: song-history section
-  const historySection = html.match(/id="song-history"[^>]*>([\s\S]*?)(?:<\/section>|<section|<footer)/i);
-  if (historySection) {
-    const songDivs = historySection[1].match(/<div[^>]*class="[^"]*song[^"]*"[^>]*>[\s\S]*?<\/div>/gi) || [];
-    for (const div of songDivs.slice(0, 5)) {
-      const extracted = extractSongFromHtml(div);
-      if (extracted &&
-          !songs.some(s => s.title.toLowerCase() === extracted.title.toLowerCase()) &&
-          (!nowPlaying || nowPlaying.title.toLowerCase() !== extracted.title.toLowerCase())) {
-        songs.push({ ...extracted, timestamp: new Date().toISOString() });
-      }
-    }
-  }
-
-  return { nowPlaying, recentSongs: songs.slice(0, 5) };
+  return { nowPlaying, recentSongs: songs };
 }
 
 // ===== Station Processing =====
@@ -224,23 +189,35 @@ async function processStation(
     return { station: station.name, success: true, songs: 0, skipped: true };
   }
 
-  console.log(`[${station.name}] Scraping...`);
-  const html = await fetchPageHtml(station.scrape_url, station.name);
+  // Get OnlineRadioBox URL
+  const orbUrl = getOnlineRadioBoxUrl(station.scrape_url, station.name);
+  if (!orbUrl) {
+    console.error(`[${station.name}] No OnlineRadioBox URL found`);
+    return { station: station.name, success: false, songs: 0, error: 'No ORB URL' };
+  }
+
+  console.log(`[${station.name}] Fetching: ${orbUrl}`);
+  const html = await fetchPageHtml(orbUrl, station.name);
 
   if (!html) {
-    console.error(`[${station.name}] Failed to fetch page`);
     return { station: station.name, success: false, songs: 0, error: 'Failed to fetch' };
   }
 
-  const parsed = parseHtmlForSongs(html, station.name);
+  // Check if we got a valid playlist page (not directory/404)
+  if (!html.includes('track_history_item') && !html.includes('tablelist-schedule')) {
+    console.warn(`[${station.name}] No playlist data found in page`);
+    return { station: station.name, success: false, songs: 0, error: 'No playlist data' };
+  }
+
+  const parsed = parseOnlineRadioBoxHtml(html, station.name);
   let songsInserted = 0;
 
   if (parsed.nowPlaying) {
     const { data: existing } = await supabase
       .from('scraped_songs').select('id')
       .eq('station_id', station.id)
-      .eq('title', parsed.nowPlaying.title)
-      .eq('artist', parsed.nowPlaying.artist)
+      .ilike('title', parsed.nowPlaying.title)
+      .ilike('artist', parsed.nowPlaying.artist)
       .gte('scraped_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
       .limit(1);
 
@@ -251,14 +228,12 @@ async function processStation(
         title: parsed.nowPlaying.title,
         artist: parsed.nowPlaying.artist,
         is_now_playing: true,
-        source: station.scrape_url,
+        source: orbUrl,
       });
       if (!insertError) {
         songsInserted++;
         console.log(`[${station.name}] ✅ Inserted: ${parsed.nowPlaying.artist} - ${parsed.nowPlaying.title}`);
       }
-    } else {
-      console.log(`[${station.name}] Already exists, skipping`);
     }
   }
 
@@ -266,14 +241,14 @@ async function processStation(
     const { data: existing } = await supabase
       .from('scraped_songs').select('id')
       .eq('station_id', station.id)
-      .eq('title', song.title).eq('artist', song.artist)
+      .ilike('title', song.title).ilike('artist', song.artist)
       .gte('scraped_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
       .limit(1);
     if (!existing || existing.length === 0) {
       const { error: insertError } = await supabase.from('scraped_songs').insert({
         station_id: station.id, station_name: station.name,
         title: song.title, artist: song.artist,
-        is_now_playing: false, source: station.scrape_url,
+        is_now_playing: false, source: orbUrl,
       });
       if (!insertError) songsInserted++;
     }
@@ -286,28 +261,33 @@ async function processSpecialMonitoring(
   schedule: SpecialMonitoring,
   supabase: any
 ): Promise<{ station: string; success: boolean; songs: number; error?: string }> {
-  console.log(`[ESPECIAL ${schedule.station_name}] Scraping...`);
-  const html = await fetchPageHtml(schedule.scrape_url, schedule.station_name);
+  const orbUrl = getOnlineRadioBoxUrl(schedule.scrape_url, schedule.station_name);
+  if (!orbUrl) {
+    return { station: `[ESPECIAL] ${schedule.station_name}`, success: false, songs: 0, error: 'No ORB URL' };
+  }
 
-  if (!html) {
+  console.log(`[ESPECIAL ${schedule.station_name}] Fetching: ${orbUrl}`);
+  const html = await fetchPageHtml(orbUrl, schedule.station_name);
+
+  if (!html || (!html.includes('track_history_item') && !html.includes('tablelist-schedule'))) {
     return { station: `[ESPECIAL] ${schedule.station_name}`, success: false, songs: 0, error: 'Failed to fetch' };
   }
 
-  const parsed = parseHtmlForSongs(html, schedule.station_name);
+  const parsed = parseOnlineRadioBoxHtml(html, schedule.station_name);
   let songsInserted = 0;
 
   if (parsed.nowPlaying) {
     const { data: existing } = await supabase
       .from('scraped_songs').select('id')
       .eq('station_name', schedule.station_name)
-      .eq('title', parsed.nowPlaying.title).eq('artist', parsed.nowPlaying.artist)
+      .ilike('title', parsed.nowPlaying.title).ilike('artist', parsed.nowPlaying.artist)
       .gte('scraped_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
       .limit(1);
     if (!existing || existing.length === 0) {
       const { error: insertError } = await supabase.from('scraped_songs').insert({
         station_name: schedule.station_name,
         title: parsed.nowPlaying.title, artist: parsed.nowPlaying.artist,
-        is_now_playing: true, source: schedule.scrape_url,
+        is_now_playing: true, source: orbUrl,
       });
       if (!insertError) {
         songsInserted++;
@@ -327,7 +307,7 @@ Deno.serve(async (req) => {
   }
 
   const startTime = Date.now();
-  console.log('=== AUTO-SCRAPE STATIONS STARTED (Direct HTTP) ===');
+  console.log('=== AUTO-SCRAPE STATIONS STARTED (OnlineRadioBox) ===');
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
