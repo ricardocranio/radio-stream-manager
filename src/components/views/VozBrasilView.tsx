@@ -161,14 +161,20 @@ export function VozBrasilView() {
     };
   }, [config.scheduleTime, config.cleanupTime, config.enabled]);
 
-  // Generate download URL with current date
-  const getDownloadUrl = () => {
+  // Generate download URLs with current date
+  const getDownloadUrls = () => {
     const now = new Date();
     const day = now.getDate().toString().padStart(2, '0');
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const year = now.getFullYear();
-    return `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`;
+    return [
+      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
+      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-2025/@@download/file`,
+      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}-1/@@download/file`,
+    ];
   };
+
+  const getDownloadUrl = () => getDownloadUrls()[0];
 
   // Generate filename with current date
   const getFilename = () => {
@@ -203,34 +209,48 @@ export function VozBrasilView() {
       progress: 0,
     });
 
-    const url = getDownloadUrl();
+    const urls = getDownloadUrls();
     const filename = getFilename();
 
     try {
       // Check if running in Electron
       if (window.electronAPI?.downloadVozBrasil) {
         console.log('[VOZ] Starting Electron download...');
-        console.log('[VOZ] URL:', url);
+        console.log('[VOZ] URLs to try:', urls);
         console.log('[VOZ] Folder:', config.downloadFolder);
         console.log('[VOZ] Filename:', filename);
         
         let result = null;
         let lastError = null;
         
-        try {
-          result = await window.electronAPI.downloadVozBrasil({
-            url,
-            outputFolder: config.downloadFolder,
-            filename,
-          });
+        for (let i = 0; i < urls.length; i++) {
+          const url = urls[i];
+          console.log(`[VOZ] Trying URL ${i + 1}/${urls.length}: ${url}`);
           
-          if (!result.success) {
-            lastError = result.error || 'Falha no download';
-            console.log(`[VOZ] Download failed: ${lastError}`);
+          setDownloadStatus(prev => ({
+            ...prev,
+            progress: 0,
+            errorMessage: i > 0 ? `Tentando fonte alternativa ${i + 1}...` : undefined,
+          }));
+          
+          try {
+            result = await window.electronAPI.downloadVozBrasil({
+              url,
+              outputFolder: config.downloadFolder,
+              filename,
+            });
+            
+            if (result.success) {
+              console.log(`[VOZ] Success with URL ${i + 1}`);
+              break;
+            } else {
+              lastError = result.error || `Falha na URL ${i + 1}`;
+              console.log(`[VOZ] URL ${i + 1} failed: ${lastError}`);
+            }
+          } catch (err) {
+            lastError = err instanceof Error ? err.message : 'Erro desconhecido';
+            console.log(`[VOZ] URL ${i + 1} error: ${lastError}`);
           }
-        } catch (err) {
-          lastError = err instanceof Error ? err.message : 'Erro desconhecido';
-          console.log(`[VOZ] Download error: ${lastError}`);
         }
 
         if (result?.success) {
@@ -584,10 +604,14 @@ export function VozBrasilView() {
 
             {/* URL Preview */}
             <div className="p-3 rounded-lg bg-background/50 border border-border">
-              <p className="text-xs text-muted-foreground mb-2">URL de hoje:</p>
-              <code className="text-[10px] text-primary/80 break-all block">
-                {getDownloadUrl()}
-              </code>
+              <p className="text-xs text-muted-foreground mb-2">URLs de hoje:</p>
+              <div className="space-y-1">
+                {getDownloadUrls().map((url, idx) => (
+                  <code key={idx} className="text-[10px] text-primary/80 break-all block">
+                    {idx + 1}. {url}
+                  </code>
+                ))}
+              </div>
             </div>
 
             {/* Schedule Info */}

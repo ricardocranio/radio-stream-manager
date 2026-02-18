@@ -63,8 +63,11 @@ export function useVozBrasilService() {
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const year = now.getFullYear();
     
-    const url = `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`;
-    const uniqueUrls = [url];
+    const uniqueUrls = [
+      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
+      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-2025/@@download/file`,
+      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}-1/@@download/file`,
+    ];
     
     const filename = `VozDoBrasil_${day}-${month}-${year}.mp3`;
 
