@@ -53,7 +53,6 @@ def verificar_e_instalar_dependencias():
         'playwright': 'playwright',
         'requests': 'requests',
         'beautifulsoup4': 'bs4',
-        'supabase': 'supabase',
     }
     
     todas_instaladas = True
@@ -117,28 +116,60 @@ try:
 except ImportError:
     PLAYWRIGHT_OK = False
 
-try:
-    from supabase import create_client, Client
-    SUPABASE_OK = True
-except ImportError:
-    SUPABASE_OK = False
+import requests as http_requests
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CONFIGURAÇÃO DO SUPABASE
+# CONFIGURAÇÃO DO SUPABASE (REST API DIRETO - sem SDK)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Credenciais do Supabase - Configure aqui!
 SUPABASE_URL = "https://liuyuvxbdmowtidjhfnc.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpdXl1dnhiZG1vd3RpZGpoZm5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg3NTMzOTIsImV4cCI6MjA4NDMyOTM5Mn0.S-dt-yzcHn9g3u3K6fTGJbNNPPX-K0wMQFEwh3s7eTc"
 
-# Inicializar cliente Supabase
-supabase: Client = None
-if SUPABASE_OK and SUPABASE_URL and SUPABASE_ANON_KEY:
+SUPABASE_HEADERS = {
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+    'Content-Type': 'application/json',
+    'Prefer': 'return=minimal'
+}
+
+def supabase_insert(table: str, data: dict) -> bool:
+    """Insere dados no Supabase via REST API"""
     try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-        print("  ✅ Supabase conectado!")
+        url = f"{SUPABASE_URL}/rest/v1/{table}"
+        resp = http_requests.post(url, json=data, headers=SUPABASE_HEADERS, timeout=10)
+        if resp.status_code in (200, 201, 204):
+            return True
+        else:
+            print(f"     ⚠️  Supabase HTTP {resp.status_code}: {resp.text[:80]}")
+            return False
     except Exception as e:
-        print(f"  ⚠️  Erro ao conectar Supabase: {e}")
+        print(f"     ⚠️  Erro REST: {str(e)[:60]}")
+        return False
+
+def supabase_select(table: str, params: dict = None) -> list:
+    """Busca dados do Supabase via REST API"""
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/{table}"
+        headers = {**SUPABASE_HEADERS, 'Prefer': 'return=representation'}
+        resp = http_requests.get(url, params=params or {}, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+        return []
+    except:
+        return []
+
+# Verificar conexão
+try:
+    _test = http_requests.get(f"{SUPABASE_URL}/rest/v1/radio_stations?select=id&limit=1", headers=SUPABASE_HEADERS, timeout=5)
+    SUPABASE_OK = _test.status_code == 200
+    if SUPABASE_OK:
+        print("  ✅ Supabase conectado (REST API)!")
+    else:
+        print(f"  ⚠️  Supabase retornou HTTP {_test.status_code}")
+        SUPABASE_OK = False
+except Exception as e:
+    print(f"  ⚠️  Supabase offline: {e}")
+    SUPABASE_OK = False
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURAÇÃO LOCAL (FALLBACK)
@@ -193,21 +224,45 @@ def cor(c: str, texto: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def parse_song_text(text: str) -> Dict[str, str]:
-    """Extrai título e artista de um texto de música"""
+    """Extrai título e artista de um texto de música (suporta formato MyTuner multilinhas)"""
     if not text:
         return {"title": "", "artist": ""}
     
     text = text.strip()
     
-    # Formatos comuns: "Artista - Título" ou "Título - Artista"
-    separators = [" - ", " – ", " — ", " | "]
+    # Remover sufixos de tempo do MyTuner (LIVE, "X min ago", "Xh ago", etc)
+    import re
+    time_patterns = [
+        r'\n?LIVE\s*$',
+        r'\n?\d+\s*(min|sec|h)\s*ago\s*$',
+        r'\n?\d+h\d+m\s*ago\s*$',
+    ]
+    cleaned = text
+    for pat in time_patterns:
+        cleaned = re.sub(pat, '', cleaned, flags=re.IGNORECASE).strip()
     
+    # Formato MyTuner multilinhas: "Título\n\nArtista" ou "Título\nArtista"
+    lines = [l.strip() for l in cleaned.split('\n') if l.strip()]
+    
+    if len(lines) >= 2:
+        # Primeira linha = título, segunda = artista
+        title = lines[0].strip()
+        artist = lines[1].strip()
+        # Ignorar se artista parece ser timestamp ou lixo
+        if artist and len(artist) > 1 and not re.match(r'^\d{2}:\d{2}$', artist):
+            return {"title": title, "artist": artist}
+    
+    # Formato "Artista - Título"
+    separators = [" - ", " – ", " — ", " | "]
     for sep in separators:
-        if sep in text:
-            parts = text.split(sep, 1)
-            if len(parts) == 2:
+        if sep in cleaned:
+            parts = cleaned.split(sep, 1)
+            if len(parts) == 2 and len(parts[0].strip()) > 1 and len(parts[1].strip()) > 1:
                 return {"artist": parts[0].strip(), "title": parts[1].strip()}
     
+    # Fallback: texto inteiro como título
+    if lines:
+        return {"title": lines[0], "artist": "Desconhecido"}
     return {"title": text, "artist": "Desconhecido"}
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -289,7 +344,7 @@ class RadioMonitor:
         print()
         
         status = cor(Cores.GREEN, "● ONLINE") if self.online else cor(Cores.RED, "● OFFLINE")
-        supabase_status = cor(Cores.GREEN, "● CONECTADO") if supabase else cor(Cores.RED, "● DESCONECTADO")
+        supabase_status = cor(Cores.GREEN, "● CONECTADO") if SUPABASE_OK else cor(Cores.RED, "● DESCONECTADO")
         print(f"  Internet: {status}")
         print(f"  Supabase: {supabase_status}")
         print(f"  Última atualização: {self.historico.get('ultima_atualizacao', 'Nunca')}")
@@ -299,18 +354,20 @@ class RadioMonitor:
         print(cor(Cores.YELLOW, "─" * 72))
     
     def _carregar_radios_supabase(self) -> List[Dict]:
-        """Carrega as rádios ativas do Supabase"""
-        if not supabase:
+        """Carrega as rádios ativas do Supabase via REST API"""
+        if not SUPABASE_OK:
             print(cor(Cores.YELLOW, "  ⚠️  Supabase não conectado, usando config local"))
             config = carregar_configuracao()
             return [r for r in config.get('radios', []) if r.get('ativo', True)]
         
         try:
-            response = supabase.table('radio_stations').select('*').eq('enabled', True).execute()
+            stations = supabase_select('radio_stations', {
+                'select': '*',
+                'enabled': 'eq.true'
+            })
             
             radios = []
-            for station in response.data:
-                # Determinar o tipo baseado na URL
+            for station in stations:
                 url = station.get('scrape_url', '')
                 if 'clubefm' in url.lower():
                     tipo = 'clubefm'
@@ -324,7 +381,6 @@ class RadioMonitor:
                     'id': station.get('id')
                 })
                 
-                # Guardar mapeamento nome -> id
                 self.supabase_stations[station.get('name')] = station.get('id')
             
             print(cor(Cores.GREEN, f"  ✅ {len(radios)} rádios carregadas do Supabase"))
@@ -336,8 +392,8 @@ class RadioMonitor:
             return [r for r in config.get('radios', []) if r.get('ativo', True)]
     
     async def _enviar_para_supabase(self, dados: Dict, radio: Dict):
-        """Envia dados capturados para o Supabase"""
-        if not supabase:
+        """Envia dados capturados para o Supabase via REST API"""
+        if not SUPABASE_OK:
             return
         
         try:
@@ -347,36 +403,41 @@ class RadioMonitor:
             # Enviar "tocando agora"
             if dados.get('tocando_agora'):
                 song_info = parse_song_text(dados['tocando_agora'])
+                title = song_info['title'] or dados['tocando_agora']
+                artist = song_info['artist'] or 'Desconhecido'
                 
+                # Ignorar entradas que parecem ser timestamps ou lixo
+                import re
+                if re.match(r'^\d{2}:\d{2}$', title) or len(title) < 3:
+                    return
+                
+                # Inserir em scraped_songs
                 song_data = {
                     'station_name': station_name,
                     'station_id': station_id,
-                    'title': song_info['title'] or dados['tocando_agora'],
-                    'artist': song_info['artist'] or 'Desconhecido',
+                    'title': title,
+                    'artist': artist,
                     'is_now_playing': True,
                     'source': 'python_monitor'
                 }
                 
-                supabase.table('scraped_songs').insert(song_data).execute()
-                print(cor(Cores.GREEN, f"     ☁️  Enviado para Supabase: {song_info['title']}"))
-            
-            # Enviar últimas tocadas
-            for song_text in dados.get('ultimas_tocadas', [])[:5]:
-                song_info = parse_song_text(song_text)
+                ok = supabase_insert('scraped_songs', song_data)
+                if ok:
+                    print(cor(Cores.GREEN, f"     ☁️  scraped_songs: {artist} - {title}"))
                 
-                song_data = {
+                # Inserir também em radio_historico
+                hist_data = {
                     'station_name': station_name,
-                    'station_id': station_id,
-                    'title': song_info['title'] or song_text,
-                    'artist': song_info['artist'] or 'Desconhecido',
-                    'is_now_playing': False,
+                    'artist': artist,
+                    'title': title,
                     'source': 'python_monitor'
                 }
-                
-                supabase.table('scraped_songs').insert(song_data).execute()
-                
+                ok2 = supabase_insert('radio_historico', hist_data)
+                if ok2:
+                    print(cor(Cores.CYAN, f"     📜  radio_historico: {artist} - {title}"))
+            
         except Exception as e:
-            print(cor(Cores.YELLOW, f"     ⚠️  Erro Supabase: {str(e)[:50]}"))
+            print(cor(Cores.YELLOW, f"     ⚠️  Erro Supabase: {str(e)[:60]}"))
     
     async def _extrair_mytuner(self, page: Page, url: str, nome: str) -> Dict:
         dados = {
@@ -545,7 +606,7 @@ class RadioMonitor:
             
             print(cor(Cores.GREEN, f"\n  💾 Histórico local: {self.arquivo_historico}"))
             print(cor(Cores.GREEN, f"  📄 Relatório: {self.arquivo_relatorio}"))
-            if supabase:
+            if SUPABASE_OK:
                 print(cor(Cores.CYAN, f"  ☁️  Dados sincronizados com Supabase!"))
     
     async def _aguardar_reconexao(self):
@@ -616,8 +677,8 @@ if __name__ == "__main__":
     config = carregar_configuracao()
     
     print()
-    if supabase:
-        print(cor(Cores.GREEN, "  ✅ Modo Supabase ativo!"))
+    if SUPABASE_OK:
+        print(cor(Cores.GREEN, "  ✅ Modo Supabase ativo (REST API)!"))
         print(cor(Cores.CYAN, "  📻 As emissoras serão carregadas automaticamente do banco de dados"))
     else:
         print(cor(Cores.YELLOW, "  ⚠️  Supabase não conectado - usando modo local"))
