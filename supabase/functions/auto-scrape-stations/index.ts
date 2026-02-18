@@ -62,6 +62,101 @@ function isStationActiveNow(station: RadioStation, now: Date): boolean {
 
 const BATCH_SIZE = 4;
 
+// ===== ICY Metadata Fallback =====
+
+async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise<{ artist: string; title: string } | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const response = await fetch(streamUrl, {
+      headers: {
+        'Icy-MetaData': '1',
+        'User-Agent': 'Mozilla/5.0',
+      },
+      signal: controller.signal,
+    });
+
+    const metaInt = parseInt(response.headers.get('icy-metaint') || '0', 10);
+    if (!metaInt || !response.body) {
+      clearTimeout(timeoutId);
+      await response.body?.cancel();
+      console.warn(`[${stationName}] No ICY metadata support (metaint=${metaInt})`);
+      return null;
+    }
+
+    const reader = response.body.getReader();
+    let bytesRead = 0;
+    const chunks: Uint8Array[] = [];
+
+    // Read until we pass the first metaInt boundary + metadata block
+    while (bytesRead < metaInt + 4096) {
+      const { done, value } = await reader.read();
+      if (done || !value) break;
+      chunks.push(value);
+      bytesRead += value.length;
+    }
+
+    clearTimeout(timeoutId);
+    await reader.cancel();
+
+    // Combine all chunks
+    const combined = new Uint8Array(bytesRead);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    // The metadata block starts at position metaInt
+    if (combined.length <= metaInt) return null;
+
+    const metaLength = combined[metaInt] * 16;
+    if (metaLength === 0) return null;
+
+    const metaStart = metaInt + 1;
+    const metaEnd = Math.min(metaStart + metaLength, combined.length);
+    const metaBytes = combined.slice(metaStart, metaEnd);
+    const metaString = new TextDecoder('utf-8', { fatal: false }).decode(metaBytes);
+
+    // Parse StreamTitle='Artist - Title';
+    const titleMatch = metaString.match(/StreamTitle='([^']+)'/);
+    if (!titleMatch || !titleMatch[1]) return null;
+
+    const streamTitle = titleMatch[1].trim();
+    if (!streamTitle || streamTitle.length < 3) return null;
+
+    // Split "Artist - Title"
+    const dashIdx = streamTitle.indexOf(' - ');
+    if (dashIdx === -1) {
+      console.log(`[${stationName}] ICY title without dash: "${streamTitle}"`);
+      return null;
+    }
+
+    const artist = streamTitle.substring(0, dashIdx).trim();
+    const title = streamTitle.substring(dashIdx + 3).trim();
+
+    if (artist.length < 2 || title.length < 2) return null;
+
+    // Reject non-song entries
+    const rejectPatterns = [
+      /COMERCIAL|VINHETA|INSTITUCIONAL|PROPAGANDA|SPOT|BREAK/i,
+      /^(RÁDIO|RADIO)\s/i,
+    ];
+    if (rejectPatterns.some(p => p.test(artist) || p.test(title))) return null;
+
+    console.log(`[${stationName}] ICY metadata: ${artist} - ${title}`);
+    return { artist, title };
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      console.warn(`[${stationName}] ICY timeout`);
+    } else {
+      console.warn(`[${stationName}] ICY error:`, e instanceof Error ? e.message : 'Unknown');
+    }
+    return null;
+  }
+}
+
 // ===== OnlineRadioBox Parsing =====
 
 // Convert a scrape_url (mytuner or onlineradiobox) to an OnlineRadioBox playlist URL
@@ -181,35 +276,43 @@ function parseOnlineRadioBoxHtml(html: string, stationName: string): { nowPlayin
 // ===== Station Processing =====
 
 async function processStation(
-  station: RadioStation,
+  station: RadioStation & { stream_url?: string },
   supabase: any,
   now: Date
-): Promise<{ station: string; success: boolean; songs: number; error?: string; skipped?: boolean }> {
+): Promise<{ station: string; success: boolean; songs: number; error?: string; skipped?: boolean; source?: string }> {
   if (!isStationActiveNow(station, now)) {
     return { station: station.name, success: true, songs: 0, skipped: true };
   }
 
-  // Get OnlineRadioBox URL
+  // Try OnlineRadioBox first
   const orbUrl = getOnlineRadioBoxUrl(station.scrape_url, station.name);
-  if (!orbUrl) {
-    console.error(`[${station.name}] No OnlineRadioBox URL found`);
-    return { station: station.name, success: false, songs: 0, error: 'No ORB URL' };
+  let parsed: { nowPlaying?: ScrapedSong; recentSongs: ScrapedSong[] } = { recentSongs: [] };
+  let sourceUsed = 'onlineradiobox';
+
+  if (orbUrl) {
+    console.log(`[${station.name}] Fetching: ${orbUrl}`);
+    const html = await fetchPageHtml(orbUrl, station.name);
+    if (html && (html.includes('track_history_item') || html.includes('tablelist-schedule'))) {
+      parsed = parseOnlineRadioBoxHtml(html, station.name);
+    } else {
+      console.warn(`[${station.name}] No playlist data found in page`);
+    }
   }
 
-  console.log(`[${station.name}] Fetching: ${orbUrl}`);
-  const html = await fetchPageHtml(orbUrl, station.name);
-
-  if (!html) {
-    return { station: station.name, success: false, songs: 0, error: 'Failed to fetch' };
+  // Fallback to ICY metadata if OnlineRadioBox had no data
+  if (!parsed.nowPlaying && station.stream_url) {
+    console.log(`[${station.name}] Falling back to ICY metadata from stream`);
+    const icyResult = await fetchIcyMetadata(station.stream_url, station.name);
+    if (icyResult) {
+      parsed.nowPlaying = { ...icyResult, timestamp: new Date().toISOString() };
+      sourceUsed = 'icy-stream';
+    }
   }
 
-  // Check if we got a valid playlist page (not directory/404)
-  if (!html.includes('track_history_item') && !html.includes('tablelist-schedule')) {
-    console.warn(`[${station.name}] No playlist data found in page`);
-    return { station: station.name, success: false, songs: 0, error: 'No playlist data' };
+  if (!parsed.nowPlaying && parsed.recentSongs.length === 0) {
+    return { station: station.name, success: false, songs: 0, error: 'No song data from any source' };
   }
 
-  const parsed = parseOnlineRadioBoxHtml(html, station.name);
   let songsInserted = 0;
 
   if (parsed.nowPlaying) {
@@ -228,11 +331,11 @@ async function processStation(
         title: parsed.nowPlaying.title,
         artist: parsed.nowPlaying.artist,
         is_now_playing: true,
-        source: orbUrl,
+        source: sourceUsed === 'icy-stream' ? station.stream_url : orbUrl,
       });
       if (!insertError) {
         songsInserted++;
-        console.log(`[${station.name}] ✅ Inserted: ${parsed.nowPlaying.artist} - ${parsed.nowPlaying.title}`);
+        console.log(`[${station.name}] ✅ Inserted: ${parsed.nowPlaying.artist} - ${parsed.nowPlaying.title} (${sourceUsed})`);
       }
     }
   }
@@ -254,7 +357,7 @@ async function processStation(
     }
   }
 
-  return { station: station.name, success: true, songs: songsInserted };
+  return { station: station.name, success: true, songs: songsInserted, source: sourceUsed };
 }
 
 async function processSpecialMonitoring(
