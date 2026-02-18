@@ -509,8 +509,18 @@ export function useAutoGradeBuilder() {
     const stationSongIndex: Record<string, number> = {};
     const songs: string[] = [];
 
+    // Calculate minutes until block goes on-air
+    let minutesToBlock = 999; // Default: plenty of time (full-day builds)
+    if (!isFullDay) {
+      const now = new Date();
+      const blockTime = new Date(now);
+      blockTime.setHours(hour, minute, 0, 0);
+      if (blockTime.getTime() < now.getTime()) blockTime.setDate(blockTime.getDate() + 1);
+      minutesToBlock = Math.max(0, Math.floor((blockTime.getTime() - now.getTime()) / 60000));
+    }
+
     const selCtx = {
-      timeStr, isFullDay, usedInBlock, usedArtistsInBlock,
+      timeStr, isFullDay, minutesToBlock, usedInBlock, usedArtistsInBlock,
       songsByStation, allSongsPool, carryOverByStation, stationSongIndex,
       logs: blockLogs, stats,
     };

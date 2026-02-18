@@ -19,6 +19,7 @@ import type { WeekDay, SequenceConfig } from '@/types/radio';
 interface SelectionContext {
   timeStr: string;
   isFullDay: boolean;
+  minutesToBlock: number; // Minutes until block goes on-air; ≤12 = no downloads, substitute only
   usedInBlock: Set<string>;
   usedArtistsInBlock: Set<string>;
   songsByStation: Record<string, SongEntry[]>;
@@ -133,20 +134,30 @@ export async function selectSongForSlot(
           stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
           break;
         } else {
-          // Mark as missing + carry-over
-          if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
-            ctx.addMissingSong({
-              id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          // If ≤12 minutes to block, skip download — just continue to find an existing song
+          if (selCtx.minutesToBlock <= 12) {
+            logs.push({
+              blockTime: timeStr, type: 'skipped',
               title: candidate.title, artist: candidate.artist,
-              station: stationName || 'UNKNOWN',
-              timestamp: new Date(), status: 'missing', dna: stationStyle,
+              station: stationName || 'UNKNOWN', style: stationStyle,
+              reason: `⏰ Faltam ${selCtx.minutesToBlock}min - pulando download, buscando substituta`,
+            });
+          } else {
+            // Mark as missing + carry-over (normal behavior with time to download)
+            if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
+              ctx.addMissingSong({
+                id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                title: candidate.title, artist: candidate.artist,
+                station: stationName || 'UNKNOWN',
+                timestamp: new Date(), status: 'missing', dna: stationStyle,
+              });
+            }
+            ctx.addCarryOverSong({
+              title: candidate.title, artist: candidate.artist,
+              station: stationName || 'UNKNOWN', style: stationStyle,
+              targetBlock: timeStr,
             });
           }
-          ctx.addCarryOverSong({
-            title: candidate.title, artist: candidate.artist,
-            station: stationName || 'UNKNOWN', style: stationStyle,
-            targetBlock: timeStr,
-          });
         }
       }
       checkedCount++;
