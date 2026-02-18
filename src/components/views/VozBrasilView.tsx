@@ -161,27 +161,14 @@ export function VozBrasilView() {
     };
   }, [config.scheduleTime, config.cleanupTime, config.enabled]);
 
-  // Generate download URLs with current date - multiple fallback URLs
-  const getDownloadUrls = () => {
+  // Generate download URL with current date
+  const getDownloadUrl = () => {
     const now = new Date();
     const day = now.getDate().toString().padStart(2, '0');
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const year = now.getFullYear();
-    
-    // Multiple EBC URL formats as fallback
-    const shortYear = year.toString().slice(-2);
-    return [
-      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}-1/@@download/file`,
-      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
-      `https://audios.ebc.com.br/radiogov/${year}/${month}/${day}-${month}-${shortYear}-a-voz-do-brasil.mp3`,
-      `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/voz_${day}${month}${year}.mp3`,
-      `https://radiogov.ebc.com.br/sites/default/files/vozbrasil/${year}/${month}/vozbrasil_${day}${month}${year}.mp3`,
-      `https://conteudo.ebcservicos.com.br/25-streaming-ebc/a-voz-do-brasil/VozDoBrasil_${day}-${month}-${year}.mp3`,
-    ];
+    return `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`;
   };
-  
-  // Get primary download URL (for display)
-  const getDownloadUrl = () => getDownloadUrls()[0];
 
   // Generate filename with current date
   const getFilename = () => {
@@ -216,66 +203,34 @@ export function VozBrasilView() {
       progress: 0,
     });
 
-    const fallbackUrls = getDownloadUrls();
+    const url = getDownloadUrl();
     const filename = getFilename();
 
     try {
       // Check if running in Electron
       if (window.electronAPI?.downloadVozBrasil) {
-        // Try scraping EBC page first for the correct URL
-        const urls: string[] = [];
-        if (window.electronAPI?.scrapeVozDownloadUrl) {
-          try {
-            console.log('[VOZ] 🔍 Buscando link na página do EBC...');
-            const scrapeResult = await window.electronAPI.scrapeVozDownloadUrl();
-            if (scrapeResult.success && scrapeResult.url) {
-              console.log(`[VOZ] 🔍 Link encontrado: ${scrapeResult.url}`);
-              urls.push(scrapeResult.url);
-            }
-          } catch (e) {
-            console.log('[VOZ] 🔍 Scraping falhou, usando URLs padrão');
-          }
-        }
-        urls.push(...fallbackUrls);
-        const uniqueUrls = [...new Set(urls)];
-        
-        console.log('[VOZ] Starting Electron download with fallback URLs...');
-        console.log('[VOZ] URLs to try:', uniqueUrls);
+        console.log('[VOZ] Starting Electron download...');
+        console.log('[VOZ] URL:', url);
         console.log('[VOZ] Folder:', config.downloadFolder);
         console.log('[VOZ] Filename:', filename);
         
-        // Try each URL until one works
-        let lastError = null;
         let result = null;
+        let lastError = null;
         
-        for (let i = 0; i < uniqueUrls.length; i++) {
-          const url = uniqueUrls[i];
-          console.log(`[VOZ] Trying URL ${i + 1}/${uniqueUrls.length}: ${url}`);
+        try {
+          result = await window.electronAPI.downloadVozBrasil({
+            url,
+            outputFolder: config.downloadFolder,
+            filename,
+          });
           
-          setDownloadStatus(prev => ({
-            ...prev,
-            progress: 0,
-            errorMessage: i > 0 ? `Tentando fonte alternativa ${i + 1}...` : undefined,
-          }));
-          
-          try {
-            result = await window.electronAPI.downloadVozBrasil({
-              url,
-              outputFolder: config.downloadFolder,
-              filename,
-            });
-            
-            if (result.success) {
-              console.log(`[VOZ] Success with URL ${i + 1}: ${url}`);
-              break;
-            } else {
-              lastError = result.error || `Falha na URL ${i + 1}`;
-              console.log(`[VOZ] URL ${i + 1} failed: ${lastError}`);
-            }
-          } catch (err) {
-            lastError = err instanceof Error ? err.message : 'Erro desconhecido';
-            console.log(`[VOZ] URL ${i + 1} error: ${lastError}`);
+          if (!result.success) {
+            lastError = result.error || 'Falha no download';
+            console.log(`[VOZ] Download failed: ${lastError}`);
           }
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : 'Erro desconhecido';
+          console.log(`[VOZ] Download error: ${lastError}`);
         }
 
         if (result?.success) {
@@ -629,14 +584,10 @@ export function VozBrasilView() {
 
             {/* URL Preview */}
             <div className="p-3 rounded-lg bg-background/50 border border-border">
-              <p className="text-xs text-muted-foreground mb-2">URLs de hoje (com fallback):</p>
-              <div className="space-y-1">
-                {getDownloadUrls().map((url, idx) => (
-                  <code key={idx} className="text-[10px] text-primary/80 break-all block">
-                    {idx + 1}. {url}
-                  </code>
-                ))}
-              </div>
+              <p className="text-xs text-muted-foreground mb-2">URL de hoje:</p>
+              <code className="text-[10px] text-primary/80 break-all block">
+                {getDownloadUrl()}
+              </code>
             </div>
 
             {/* Schedule Info */}
