@@ -16,6 +16,17 @@ export const STATION_ID_TO_DB_NAME: Record<string, string> = {
   'positiva': 'Positiva FM',
   'liberdade': 'Liberdade FM',
   'mix': 'Mix FM',
+  'energia': 'Energia 97',
+  'metropolitana': 'Metropolitana FM',
+  'jpfloripa': 'Jovem Pan Florianópolis',
+  'jovempan': 'Jovem Pan',
+  'alpha': 'Alpha FM',
+  'kiss': 'Kiss FM',
+  'nativa': 'Nativa FM',
+  'transamerica': 'Transamérica',
+  'show': 'Show FM 101.1',
+  '105fm': '105 FM',
+  '89fm': '89 FM',
 };
 
 /** Day code mapping for file naming (abbreviated) */
