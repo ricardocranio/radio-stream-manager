@@ -24,6 +24,7 @@ const ALLOWED_DOMAINS = [
   'onlineradiobox.com', 'www.onlineradiobox.com',
   'radio-browser.info', 'www.radio-browser.info',
   'tunein.com', 'www.tunein.com',
+  'playerservices.streamtheworld.com',
 ];
 
 function isValidRadioUrl(urlString: string): { valid: boolean; error?: string } {
@@ -124,6 +125,71 @@ function parseOnlineRadioBoxHtml(html: string, stationName: string): RadioScrape
   };
 }
 
+// ===== ICY Metadata Fallback =====
+
+async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise<RadioScrapeResult> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const response = await fetch(streamUrl, {
+      headers: { 'Icy-MetaData': '1', 'User-Agent': 'Mozilla/5.0' },
+      signal: controller.signal,
+    });
+
+    const metaInt = parseInt(response.headers.get('icy-metaint') || '0', 10);
+    if (!metaInt || !response.body) {
+      clearTimeout(timeoutId);
+      await response.body?.cancel();
+      return { success: false, stationName, error: 'No ICY support', scrapedAt: new Date().toISOString() };
+    }
+
+    const reader = response.body.getReader();
+    let bytesRead = 0;
+    const chunks: Uint8Array[] = [];
+
+    while (bytesRead < metaInt + 4096) {
+      const { done, value } = await reader.read();
+      if (done || !value) break;
+      chunks.push(value);
+      bytesRead += value.length;
+    }
+
+    clearTimeout(timeoutId);
+    await reader.cancel();
+
+    const combined = new Uint8Array(bytesRead);
+    let offset = 0;
+    for (const chunk of chunks) { combined.set(chunk, offset); offset += chunk.length; }
+
+    if (combined.length <= metaInt) return { success: false, stationName, error: 'No metadata', scrapedAt: new Date().toISOString() };
+
+    const metaLength = combined[metaInt] * 16;
+    if (metaLength === 0) return { success: false, stationName, error: 'Empty metadata', scrapedAt: new Date().toISOString() };
+
+    const metaBytes = combined.slice(metaInt + 1, Math.min(metaInt + 1 + metaLength, combined.length));
+    const metaString = new TextDecoder('utf-8', { fatal: false }).decode(metaBytes);
+
+    const titleMatch = metaString.match(/StreamTitle='([^']+)'/);
+    if (!titleMatch?.[1]) return { success: false, stationName, error: 'No StreamTitle', scrapedAt: new Date().toISOString() };
+
+    const streamTitle = titleMatch[1].trim();
+    const dashIdx = streamTitle.indexOf(' - ');
+    if (dashIdx === -1) return { success: false, stationName, error: `No dash in: ${streamTitle}`, scrapedAt: new Date().toISOString() };
+
+    const artist = streamTitle.substring(0, dashIdx).trim();
+    const title = streamTitle.substring(dashIdx + 3).trim();
+
+    return {
+      success: true, stationName,
+      nowPlaying: { artist, title, timestamp: new Date().toISOString() },
+      source: 'icy-stream', scrapedAt: new Date().toISOString(),
+    };
+  } catch {
+    return { success: false, stationName, error: 'ICY fetch failed', scrapedAt: new Date().toISOString() };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -131,7 +197,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { stationUrl, stationName } = body;
+    const { stationUrl, stationName, streamUrl } = body;
 
     if (!stationUrl || typeof stationUrl !== 'string') {
       return new Response(
@@ -174,6 +240,12 @@ Deno.serve(async (req) => {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      // Try ICY fallback
+      if (streamUrl) {
+        console.log(`[${safeName}] ORB HTTP ${response.status}, trying ICY fallback`);
+        const icyResult = await fetchIcyMetadata(streamUrl, safeName);
+        return new Response(JSON.stringify(icyResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
       return new Response(
         JSON.stringify({ success: false, stationName: safeName, error: `HTTP ${response.status}`, scrapedAt: new Date().toISOString() }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -183,6 +255,12 @@ Deno.serve(async (req) => {
     const html = await response.text();
 
     if (!html.includes('track_history_item') && !html.includes('tablelist-schedule')) {
+      // Try ICY fallback
+      if (streamUrl) {
+        console.log(`[${safeName}] No playlist data, trying ICY fallback`);
+        const icyResult = await fetchIcyMetadata(streamUrl, safeName);
+        return new Response(JSON.stringify(icyResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
       return new Response(
         JSON.stringify({ success: false, stationName: safeName, error: 'No playlist data found', scrapedAt: new Date().toISOString() }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
