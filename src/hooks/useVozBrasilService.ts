@@ -9,6 +9,7 @@ import { useRef, useCallback } from 'react';
 import { useRadioStore } from '@/store/radioStore';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+const MIN_FILE_SIZE_BYTES = 40 * 1024 * 1024; // 40MB minimum to avoid saving error pages
 
 export function useVozBrasilService() {
   const schedulerRef = useRef<NodeJS.Timeout | null>(null);
@@ -85,7 +86,11 @@ export function useVozBrasilService() {
         });
         
         if (result.success) {
-          console.log(`[VOZ-SVC] ✅ Download concluído: ${filename}`);
+          if (result.fileSize && result.fileSize < MIN_FILE_SIZE_BYTES) {
+            console.log(`[VOZ-SVC] URL ${i + 1} arquivo muito pequeno (${(result.fileSize / 1024 / 1024).toFixed(1)}MB < 40MB), pulando...`);
+            continue;
+          }
+          console.log(`[VOZ-SVC] ✅ Download concluído: ${filename} (${result.fileSize ? (result.fileSize / 1024 / 1024).toFixed(1) + 'MB' : '?'})`);
           return true;
         } else {
           console.log(`[VOZ-SVC] URL ${i + 1} falhou: ${result.error}`);
