@@ -158,22 +158,44 @@ def supabase_select(table: str, params: dict = None) -> list:
     except:
         return []
 
-# Verificar conexão
+# Verificar conexão com diagnóstico detalhado
+SUPABASE_OK = False
 try:
-    _test = http_requests.get(f"{SUPABASE_URL}/rest/v1/radio_stations?select=id&limit=1", headers=SUPABASE_HEADERS, timeout=5)
-    SUPABASE_OK = _test.status_code == 200
-    if SUPABASE_OK:
+    print("  🔍 Testando conexão com Supabase...")
+    print(f"     URL: {SUPABASE_URL[:40]}...")
+    _test = http_requests.get(
+        f"{SUPABASE_URL}/rest/v1/radio_stations?select=id&limit=1",
+        headers=SUPABASE_HEADERS,
+        timeout=10
+    )
+    print(f"     HTTP Status: {_test.status_code}")
+    if _test.status_code == 200:
+        SUPABASE_OK = True
         print("  ✅ Supabase conectado (REST API)!")
     else:
         print(f"  ⚠️  Supabase retornou HTTP {_test.status_code}")
-        SUPABASE_OK = False
+        print(f"     Response: {_test.text[:200]}")
+except http_requests.exceptions.ConnectionError as e:
+    print(f"  ❌ Erro de conexão: {str(e)[:100]}")
+    print("     Verifique sua internet e se o firewall permite acesso a supabase.co")
+except http_requests.exceptions.Timeout:
+    print("  ❌ Timeout ao conectar ao Supabase (>10s)")
+    print("     Sua conexão pode estar lenta ou bloqueada")
 except Exception as e:
-    print(f"  ⚠️  Supabase offline: {e}")
-    SUPABASE_OK = False
+    print(f"  ❌ Erro inesperado: {type(e).__name__}: {str(e)[:100]}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CONFIGURAÇÃO LOCAL (FALLBACK)
+# CONFIGURAÇÃO LOCAL (FALLBACK) - Usa pasta do usuário para evitar Errno 13
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# Determinar pasta de dados do usuário
+if os.name == 'nt':
+    _DATA_DIR = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'AudioSolutions', 'RadioMonitor')
+else:
+    _DATA_DIR = os.path.join(os.path.expanduser('~'), '.radio-monitor')
+
+os.makedirs(_DATA_DIR, exist_ok=True)
+print(f"  📁 Pasta de dados: {_DATA_DIR}")
 
 ARQUIVO_CONFIG = "radios_config.json"
 
@@ -181,20 +203,29 @@ CONFIG_PADRAO = {
     "configuracao": {
         "intervalo_minutos": 5,
         "mostrar_navegador": False,
-        "arquivo_historico": "radio_historico.json",
-        "arquivo_relatorio": "radio_relatorio.txt"
+        "arquivo_historico": os.path.join(_DATA_DIR, "radio_historico.json"),
+        "arquivo_relatorio": os.path.join(_DATA_DIR, "radio_relatorio.txt")
     },
     "radios": []
 }
 
 def carregar_configuracao():
     """Carrega configuração do arquivo JSON ou cria arquivo padrão"""
-    if Path(ARQUIVO_CONFIG).exists():
-        try:
-            with open(ARQUIVO_CONFIG, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"  ⚠️  Erro ao carregar {ARQUIVO_CONFIG}: {e}")
+    # Tentar na pasta atual primeiro, depois na pasta de dados
+    for config_path in [ARQUIVO_CONFIG, os.path.join(_DATA_DIR, ARQUIVO_CONFIG)]:
+        if Path(config_path).exists():
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    # Corrigir caminhos de arquivos para pasta de dados
+                    cfg = config.get('configuracao', {})
+                    if 'arquivo_historico' in cfg and not os.path.isabs(cfg['arquivo_historico']):
+                        cfg['arquivo_historico'] = os.path.join(_DATA_DIR, cfg['arquivo_historico'])
+                    if 'arquivo_relatorio' in cfg and not os.path.isabs(cfg['arquivo_relatorio']):
+                        cfg['arquivo_relatorio'] = os.path.join(_DATA_DIR, cfg['arquivo_relatorio'])
+                    return config
+            except Exception as e:
+                print(f"  ⚠️  Erro ao carregar {config_path}: {e}")
     return CONFIG_PADRAO
 
 # ═══════════════════════════════════════════════════════════════════════════════
