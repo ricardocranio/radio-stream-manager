@@ -158,7 +158,19 @@ def supabase_select(table: str, params: dict = None) -> list:
     except:
         return []
 
-# Verificar conexão com diagnóstico detalhado
+def verificar_conexao_supabase() -> bool:
+    """Testa conexão com Supabase (pode ser chamado a qualquer momento)"""
+    try:
+        resp = http_requests.get(
+            f"{SUPABASE_URL}/rest/v1/radio_stations?select=id&limit=1",
+            headers=SUPABASE_HEADERS,
+            timeout=10
+        )
+        return resp.status_code == 200
+    except:
+        return False
+
+# Verificar conexão inicial com diagnóstico detalhado
 SUPABASE_OK = False
 try:
     print("  🔍 Testando conexão com Supabase...")
@@ -305,12 +317,19 @@ class RadioMonitor:
         self.config = config.get('configuracao', {})
         self.radios = []  # Será carregado do Supabase
         self.intervalo = self.config.get('intervalo_minutos', 5) * 60
-        self.arquivo_historico = self.config.get('arquivo_historico', 'radio_historico.json')
-        self.arquivo_relatorio = self.config.get('arquivo_relatorio', 'radio_relatorio.txt')
         self.mostrar_navegador = self.config.get('mostrar_navegador', False)
-        self.historico = self._carregar_historico()
+        self.historico = {}
         self.online = True
         self.supabase_stations = {}  # Mapa nome -> id
+        
+        # SEMPRE forçar caminhos absolutos na pasta de dados do usuário
+        self.arquivo_historico = os.path.join(_DATA_DIR, "radio_historico.json")
+        self.arquivo_relatorio = os.path.join(_DATA_DIR, "radio_relatorio.txt")
+        
+        print(f"  📁 Histórico: {self.arquivo_historico}")
+        print(f"  📁 Relatório: {self.arquivo_relatorio}")
+        
+        self.historico = self._carregar_historico()
         
     def _carregar_historico(self) -> Dict:
         if Path(self.arquivo_historico).exists():
@@ -381,6 +400,9 @@ class RadioMonitor:
         print(f"  Última atualização: {self.historico.get('ultima_atualizacao', 'Nunca')}")
         print(f"  Intervalo: {self.config.get('intervalo_minutos', 5)} minutos")
         print(f"  Rádios ativas: {len(self.radios)}")
+        print(f"  📁 Dados: {_DATA_DIR}")
+        print()
+        print(cor(Cores.YELLOW, "─" * 72))
         print()
         print(cor(Cores.YELLOW, "─" * 72))
     
@@ -424,6 +446,7 @@ class RadioMonitor:
     
     async def _enviar_para_supabase(self, dados: Dict, radio: Dict):
         """Envia dados capturados para o Supabase via REST API"""
+        global SUPABASE_OK
         if not SUPABASE_OK:
             print(cor(Cores.YELLOW, f"     ⚠️  Supabase não conectado, pulando envio"))
             return
@@ -620,9 +643,20 @@ class RadioMonitor:
         print(cor(Cores.YELLOW, "─" * 72))
     
     async def _atualizar_todas(self):
+        global SUPABASE_OK
+        
         if not PLAYWRIGHT_OK:
             print(cor(Cores.RED, "❌ Playwright não disponível"))
             return
+        
+        # Re-verificar conexão Supabase a cada ciclo
+        if not SUPABASE_OK:
+            print(cor(Cores.YELLOW, "  🔄 Tentando reconectar ao Supabase..."))
+            SUPABASE_OK = verificar_conexao_supabase()
+            if SUPABASE_OK:
+                print(cor(Cores.GREEN, "  ✅ Supabase reconectado!"))
+            else:
+                print(cor(Cores.RED, "  ❌ Supabase ainda indisponível, continuando com modo local"))
         
         # Recarregar rádios do Supabase a cada atualização
         self.radios = self._carregar_radios_supabase()
