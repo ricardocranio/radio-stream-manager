@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense, useRef } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 // OPTIMIZED: Dashboard is eagerly loaded (most used), others are lazy
@@ -36,8 +36,48 @@ const ViewSkeleton = () => (
   </div>
 );
 
+// All tab definitions with their components
+const TAB_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentType> | React.ComponentType> = {
+  dashboard: DashboardView,
+  stations: StationsView,
+  specialmonitoring: SpecialMonitoringView,
+  captured: CapturedSongsView,
+  sequence: SequenceView,
+  schedule: ScheduleView,
+  gradebuilder: GradeBuilderView,
+  blockeditor: BlockEditorView,
+  fixedcontent: FixedContentView,
+  ranking: RankingView,
+  vozbrasil: VozBrasilView,
+  logs: LogsView,
+  export: ExportView,
+  folders: FoldersView,
+  missing: MissingView,
+  tools: ToolsView,
+  settings: SettingsView,
+};
+
+/**
+ * Persistent tab panel: once a tab is visited, it stays mounted (hidden via CSS).
+ * This prevents re-initialization delays when switching between tabs.
+ */
+function PersistentTabPanel({ tabId, activeTab, children }: { tabId: string; activeTab: string; children: React.ReactNode }) {
+  const isActive = tabId === activeTab;
+  return (
+    <div
+      className={isActive ? 'block' : 'hidden'}
+      role="tabpanel"
+      aria-hidden={!isActive}
+    >
+      {children}
+    </div>
+  );
+}
+
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
+  // Track which tabs have been visited so we only mount them once visited
+  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['dashboard']));
   const { setIsRunning, setLastUpdate } = useRadioStore();
   
   // NOTE: All background services (scraping, downloads, grade builder) 
@@ -55,53 +95,40 @@ const Index = () => {
     setLastUpdate(new Date());
   }, []);
 
-  const renderView = () => {
-    switch (activeTab) {
-      case 'dashboard':
-        return <DashboardView />;
-      case 'stations':
-        return <Suspense fallback={<ViewSkeleton />}><StationsView /></Suspense>;
-      case 'specialmonitoring':
-        return <Suspense fallback={<ViewSkeleton />}><SpecialMonitoringView /></Suspense>;
-      case 'captured':
-        return <Suspense fallback={<ViewSkeleton />}><CapturedSongsView /></Suspense>;
-      case 'sequence':
-        return <Suspense fallback={<ViewSkeleton />}><SequenceView /></Suspense>;
-      case 'schedule':
-        return <Suspense fallback={<ViewSkeleton />}><ScheduleView /></Suspense>;
-      case 'gradebuilder':
-        return <Suspense fallback={<ViewSkeleton />}><GradeBuilderView /></Suspense>;
-      case 'blockeditor':
-        return <Suspense fallback={<ViewSkeleton />}><BlockEditorView /></Suspense>;
-      case 'fixedcontent':
-        return <Suspense fallback={<ViewSkeleton />}><FixedContentView /></Suspense>;
-      case 'ranking':
-        return <Suspense fallback={<ViewSkeleton />}><RankingView /></Suspense>;
-      case 'vozbrasil':
-        return <Suspense fallback={<ViewSkeleton />}><VozBrasilView /></Suspense>;
-      case 'logs':
-        return <Suspense fallback={<ViewSkeleton />}><LogsView /></Suspense>;
-      case 'export':
-        return <Suspense fallback={<ViewSkeleton />}><ExportView /></Suspense>;
-      case 'folders':
-        return <Suspense fallback={<ViewSkeleton />}><FoldersView /></Suspense>;
-      case 'missing':
-        return <Suspense fallback={<ViewSkeleton />}><MissingView /></Suspense>;
-      case 'tools':
-        return <Suspense fallback={<ViewSkeleton />}><ToolsView /></Suspense>;
-      case 'settings':
-        return <Suspense fallback={<ViewSkeleton />}><SettingsView /></Suspense>;
-      default:
-        return <DashboardView />;
-    }
-  };
+  // Track visited tabs
+  useEffect(() => {
+    setVisitedTabs(prev => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
 
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex-1 flex flex-col">
         <Header />
-        <main className="flex-1 overflow-auto">{renderView()}</main>
+        <main className="flex-1 overflow-auto">
+          {/* Dashboard is always mounted (eagerly loaded) */}
+          <PersistentTabPanel tabId="dashboard" activeTab={activeTab}>
+            <DashboardView />
+          </PersistentTabPanel>
+
+          {/* Lazy views: only mount when first visited, then keep alive */}
+          {Object.entries(TAB_COMPONENTS).map(([tabId, Component]) => {
+            if (tabId === 'dashboard') return null; // Already rendered above
+            if (!visitedTabs.has(tabId)) return null; // Not visited yet, don't mount
+            return (
+              <PersistentTabPanel key={tabId} tabId={tabId} activeTab={activeTab}>
+                <Suspense fallback={<ViewSkeleton />}>
+                  <Component />
+                </Suspense>
+              </PersistentTabPanel>
+            );
+          })}
+        </main>
         <footer className="border-t border-border bg-secondary/30 px-4 py-2 flex items-center justify-center gap-3 text-xs text-muted-foreground">
           <img src={logo} alt="AudioSolutions" className="h-6 w-6 rounded" />
           <a href="https://audiosolutions.tech/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">audiosolutions.tech</a>
