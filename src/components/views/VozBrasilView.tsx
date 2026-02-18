@@ -241,7 +241,13 @@ export function VozBrasilView() {
             });
             
             if (result.success) {
-              console.log(`[VOZ] Success with URL ${i + 1}`);
+              // Validate file size - must be at least 40MB to avoid error pages
+              if (result.fileSize && result.fileSize < 40 * 1024 * 1024) {
+                console.log(`[VOZ] URL ${i + 1} file too small (${(result.fileSize / 1024 / 1024).toFixed(1)}MB < 40MB), skipping...`);
+                lastError = `Arquivo muito pequeno (${(result.fileSize / 1024 / 1024).toFixed(1)}MB)`;
+                continue;
+              }
+              console.log(`[VOZ] Success with URL ${i + 1} (${result.fileSize ? (result.fileSize / 1024 / 1024).toFixed(1) + 'MB' : '?'})`);
               break;
             } else {
               lastError = result.error || `Falha na URL ${i + 1}`;
