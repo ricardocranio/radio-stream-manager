@@ -223,15 +223,35 @@ def cor(c: str, texto: str) -> str:
 # FUNÇÕES AUXILIARES
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def clean_metadata(text: str) -> str:
+    """Remove sufixos indesejados: (Ao Vivo), [Live], feat., etc."""
+    import re
+    if not text:
+        return text
+    # Remover parênteses e colchetes com conteúdo comum
+    patterns = [
+        r'\s*\(Ao Vivo\)', r'\s*\(ao vivo\)', r'\s*\(AO VIVO\)',
+        r'\s*\[Ao Vivo\]', r'\s*\[ao vivo\]', r'\s*\[AO VIVO\]',
+        r'\s*\(Live\)', r'\s*\[Live\]', r'\s*\(LIVE\)', r'\s*\[LIVE\]',
+        r'\s*\(Acústico\)', r'\s*\[Acústico\]', r'\s*\(Acoustic\)',
+        r'\s*\(Remix\)', r'\s*\[Remix\]',
+        r'\s*\(feat\.[^)]*\)', r'\s*\[feat\.[^\]]*\]',
+        r'\s*feat\.\s+[^-]+$',
+    ]
+    result = text.strip()
+    for pat in patterns:
+        result = re.sub(pat, '', result, flags=re.IGNORECASE).strip()
+    return result
+
 def parse_song_text(text: str) -> Dict[str, str]:
-    """Extrai título e artista de um texto de música (suporta formato MyTuner multilinhas)"""
+    """Extrai título e artista limpos de um texto de música"""
     if not text:
         return {"title": "", "artist": ""}
     
+    import re
     text = text.strip()
     
-    # Remover sufixos de tempo do MyTuner (LIVE, "X min ago", "Xh ago", etc)
-    import re
+    # Remover sufixos de tempo do MyTuner (LIVE, "X min ago", etc)
     time_patterns = [
         r'\n?LIVE\s*$',
         r'\n?\d+\s*(min|sec|h)\s*ago\s*$',
@@ -241,14 +261,12 @@ def parse_song_text(text: str) -> Dict[str, str]:
     for pat in time_patterns:
         cleaned = re.sub(pat, '', cleaned, flags=re.IGNORECASE).strip()
     
-    # Formato MyTuner multilinhas: "Título\n\nArtista" ou "Título\nArtista"
+    # Formato MyTuner multilinhas: "Título\n\nArtista"
     lines = [l.strip() for l in cleaned.split('\n') if l.strip()]
     
     if len(lines) >= 2:
-        # Primeira linha = título, segunda = artista
-        title = lines[0].strip()
-        artist = lines[1].strip()
-        # Ignorar se artista parece ser timestamp ou lixo
+        title = clean_metadata(lines[0])
+        artist = clean_metadata(lines[1])
         if artist and len(artist) > 1 and not re.match(r'^\d{2}:\d{2}$', artist):
             return {"title": title, "artist": artist}
     
@@ -258,12 +276,12 @@ def parse_song_text(text: str) -> Dict[str, str]:
         if sep in cleaned:
             parts = cleaned.split(sep, 1)
             if len(parts) == 2 and len(parts[0].strip()) > 1 and len(parts[1].strip()) > 1:
-                return {"artist": parts[0].strip(), "title": parts[1].strip()}
+                return {"artist": clean_metadata(parts[0].strip()), "title": clean_metadata(parts[1].strip())}
     
-    # Fallback: texto inteiro como título
+    # Fallback
     if lines:
-        return {"title": lines[0], "artist": "Desconhecido"}
-    return {"title": text, "artist": "Desconhecido"}
+        return {"title": clean_metadata(lines[0]), "artist": "Desconhecido"}
+    return {"title": clean_metadata(text), "artist": "Desconhecido"}
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CLASSE PRINCIPAL
