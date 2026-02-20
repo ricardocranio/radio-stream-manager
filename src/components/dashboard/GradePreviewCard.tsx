@@ -51,15 +51,8 @@ export function GradePreviewCard() {
   const [libraryStatus, setLibraryStatus] = useState<Record<string, LibraryStatus>>({});
   const [isCheckingLibrary, setIsCheckingLibrary] = useState(false);
 
-  // Next block time
-  const nextBlock = useMemo(() => {
-    const now = new Date();
-    const m = now.getMinutes();
-    const h = now.getHours();
-    return m < 30 ? { hour: h, minute: 30 } : { hour: (h + 1) % 24, minute: 0 };
-  }, [gradeBuilder.nextBlock]);
-
-  const nextBlockTime = `${nextBlock.hour.toString().padStart(2, '0')}:${nextBlock.minute.toString().padStart(2, '0')}`;
+  // Use builder's nextBlock directly as single source of truth
+  const nextBlockTime = gradeBuilder.nextBlock || '--:--';
 
   // === SINGLE SOURCE: Builder output (exact match with TXT) ===
   const displaySongs = useMemo(() => {
@@ -206,7 +199,7 @@ export function GradePreviewCard() {
               variant="ghost"
               size="icon"
               className="h-7 w-7"
-              onClick={() => gradeBuilder.buildGrade(false)}
+              onClick={() => gradeBuilder.buildGrade(false, true)}
               disabled={isLoading}
             >
               {isLoading ? (
