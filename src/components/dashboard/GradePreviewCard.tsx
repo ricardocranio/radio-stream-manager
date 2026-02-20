@@ -338,14 +338,37 @@ export function GradePreviewCard() {
     console.log(`[GradePreview] 🔍 Biblioteca: ${found} encontradas, ${missing} faltando de ${songsToCheck.length} verificadas`);
     
     if (missing > 0) {
-      const missingSongs = songsToCheck.filter(s => {
+      const missingSongsList = songsToCheck.filter(s => {
         const key = `${s.originalArtist!.toLowerCase()}|${s.originalTitle!.toLowerCase()}`;
         return newStatus[key] === 'missing';
       });
       console.log('[GradePreview] ❌ Músicas faltando na biblioteca:');
-      missingSongs.forEach(s => console.log(`  - ${s.originalArtist} - ${s.originalTitle}`));
+      missingSongsList.forEach(s => console.log(`  - ${s.originalArtist} - ${s.originalTitle}`));
       console.log(`[GradePreview] 📁 Pastas configuradas: ${musicFolders.join(', ')}`);
       console.log(`[GradePreview] 🎯 Threshold: ${Math.round(threshold * 100)}%`);
+
+      // 🚨 Feed missing songs directly into the download queue with GRADE urgency
+      const { addMissingSong, missingSongs: existingMissing } = useRadioStore.getState();
+      const existingKeys = new Set(
+        existingMissing.map(m => `${m.artist.toLowerCase().trim()}|${m.title.toLowerCase().trim()}`)
+      );
+
+      for (const s of missingSongsList) {
+        const dlKey = `${s.originalArtist!.toLowerCase().trim()}|${s.originalTitle!.toLowerCase().trim()}`;
+        if (!existingKeys.has(dlKey)) {
+          console.log(`[GradePreview] 🚨 Enviando para download urgente: ${s.originalArtist} - ${s.originalTitle}`);
+          addMissingSong({
+            id: `preview-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            title: s.originalTitle!,
+            artist: s.originalArtist!,
+            station: s.source || 'preview',
+            status: 'missing',
+            timestamp: new Date(),
+            urgency: 'grade',
+          });
+          existingKeys.add(dlKey);
+        }
+      }
     }
   }, [previewSongs, config.musicFolders, config.similarityThreshold]);
 
