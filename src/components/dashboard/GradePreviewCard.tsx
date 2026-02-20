@@ -48,7 +48,7 @@ export function GradePreviewCard() {
   // Timer to keep block times in sync with local PC clock
   const [clockTick, setClockTick] = useState(0);
   useEffect(() => {
-    const interval = setInterval(() => setClockTick(t => t + 1), 30000); // every 30s
+    const interval = setInterval(() => setClockTick(t => t + 1), 600000); // every 10 min
     return () => clearInterval(interval);
   }, []);
 
@@ -130,15 +130,13 @@ export function GradePreviewCard() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'scraped_songs' },
         () => {
-          console.log('[GradePreview] Nova captura detectada, atualizando pool...');
-          fetchSongs();
-          // Do NOT reset lockedPreview here — keep the selection stable
+          // Pool is updated every 10 min, no need to react to every insert
         }
       )
       .subscribe();
 
-    // Fallback polling every 60s for pool data only
-    const interval = setInterval(fetchSongs, 60000);
+    // Pool refresh every 10 minutes
+    const interval = setInterval(fetchSongs, 600000);
     
     return () => {
       clearInterval(interval);
