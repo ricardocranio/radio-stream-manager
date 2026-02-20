@@ -229,23 +229,14 @@ export function GradeScheduleCard() {
         fc.enabled && fc.timeSlots.some(ts => ts.hour === blockHour && ts.minute === blockMinute)
       );
       
-      // PRIMARY SOURCE: read from builder's pendingGradeLines (same as TXT file)
+      // SINGLE SOURCE OF TRUTH: read from builder's pendingGradeLines (same as TXT file)
       let songs: BlockSong[] = [];
       const pendingLine = pendingLines?.get(timeKey);
       if (pendingLine) {
         songs = parsePendingLine(pendingLine);
       } else {
-        // Fallback: use stored blockSongs or auto-generate from captured songs
+        // Fallback: only use stored blockSongs (manually edited), NO auto-generation
         songs = blockSongs[timeKey] || [];
-        if (songs.length === 0 && songsPool.length > 0) {
-          const startIndex = ((blockHour * 2 + (blockMinute === 30 ? 1 : 0)) * 10) % songsPool.length;
-          const selectedSongs: BlockSong[] = [];
-          for (let i = 0; i < 10 && i < songsPool.length; i++) {
-            const poolIndex = (startIndex + i) % songsPool.length;
-            selectedSongs.push({ ...songsPool[poolIndex], id: `${timeKey}-${i}` });
-          }
-          songs = selectedSongs;
-        }
       }
       
       blockList.push({
