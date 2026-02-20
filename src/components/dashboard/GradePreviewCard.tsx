@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Eye, Music, TrendingUp, Radio, Clock, Sparkles, Flame, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive } from 'lucide-react';
+import { Eye, Music, TrendingUp, Radio, Clock, Sparkles, Flame, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -498,6 +498,12 @@ export function GradePreviewCard() {
                         <span className="text-[9px] text-orange-400 whitespace-nowrap">{song.freshness}</span>
                       )}
                     </div>
+                    {song.originalArtist && libraryStatus[`${song.originalArtist.toLowerCase()}|${song.originalTitle?.toLowerCase()}`] === 'missing' && (
+                      <p className="text-[9px] text-red-400 mt-0.5 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        Não encontrada na biblioteca — será substituída por coringa no TXT
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {getLibraryIcon(song)}
