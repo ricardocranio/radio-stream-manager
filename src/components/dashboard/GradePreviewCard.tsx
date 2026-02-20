@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Eye, Music, Clock, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive, AlertTriangle, FileText, Radio } from 'lucide-react';
+import { Eye, Music, Clock, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive, AlertTriangle, FileText, Radio, Flame } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { useGlobalServices } from '@/contexts/GlobalServicesContext';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { STATION_ID_TO_DB_NAME } from '@/lib/gradeBuilder/constants';
 import { supabase } from '@/integrations/supabase/client';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -24,6 +24,8 @@ interface PreviewSong {
   source: string; // station name
   isSpecial: boolean; // coringa, fixo, etc.
   fromBuilder: boolean; // true = from actual builder output
+  freshness?: string; // e.g. "há 5 min"
+  isFresh?: boolean; // captured within last 30 min
 }
 
 /**
@@ -226,6 +228,8 @@ export function GradePreviewCard() {
         if (!picked) picked = sorted[0]; // fallback
 
         const filename = sanitizeFilename(`${picked.artist} - ${picked.title}.mp3`).toUpperCase();
+        const ageMs = Date.now() - picked.ts;
+        const isFresh = ageMs < 30 * 60 * 1000; // within 30 min
 
         songs.push({
           position: seq.position,
@@ -235,6 +239,8 @@ export function GradePreviewCard() {
           source: dbName,
           isSpecial: false,
           fromBuilder: false,
+          isFresh,
+          freshness: isFresh ? formatDistanceToNow(new Date(picked.ts), { locale: ptBR, addSuffix: true }) : undefined,
         });
       }
 
@@ -399,11 +405,17 @@ export function GradePreviewCard() {
             </Button>
           </div>
         </div>
-        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
           <span className="flex items-center gap-1">
             <FileText className="w-3 h-3" />
             {displaySongs.length} faixas
           </span>
+          {displaySongs.filter(s => s.isFresh).length > 0 && (
+            <span className="flex items-center gap-1 text-orange-400">
+              <Flame className="w-3 h-3" />
+              {displaySongs.filter(s => s.isFresh).length} frescas
+            </span>
+          )}
           {isElectron && (foundCount > 0 || missingCount > 0) && (
             <span className="flex items-center gap-1">
               <HardDrive className="w-3 h-3" />
@@ -459,12 +471,16 @@ export function GradePreviewCard() {
                         <>
                           <p className="text-sm font-medium truncate leading-tight">
                             {song.title || song.artist}
+                            {song.isFresh && (
+                              <Flame className="w-3 h-3 inline-block ml-1 text-orange-400" />
+                            )}
                           </p>
-                          {song.title && (
-                            <p className="text-xs text-muted-foreground truncate">
-                              {song.artist}
-                            </p>
-                          )}
+                          <p className="text-xs text-muted-foreground truncate">
+                            {song.artist}
+                            {song.freshness && (
+                              <span className="ml-1 text-orange-400/80">· {song.freshness}</span>
+                            )}
+                          </p>
                         </>
                       )}
                     </div>
