@@ -168,17 +168,23 @@ export async function selectSongForSlot(
     }
   }
 
-  // PRIORITY 1: Station pool (with immediate download attempt for missing songs)
+  // PRIORITY 1: Station pool — sorted by FRESHNESS (most recent first) to match Preview
   if (!selectedSong) {
     // Determine download wait time: 12 min for incremental builds, 30s for full-day builds
     const downloadTimeoutMs = isFullDay ? 30000 : 720000; // 30s vs 12 minutes
     let attemptedDownload = false; // Only attempt one download per slot to avoid blocking
 
-    let startIndex = stationSongIndex[stationName] || 0;
-    let checkedCount = 0;
-    while (checkedCount < (stationSongs?.length || 0) && !selectedSong) {
-      const songIdx = (startIndex + checkedCount) % stationSongs.length;
-      const candidate = stationSongs[songIdx];
+    // Sort by freshness (most recent scrapedAt first) — same logic as GradePreviewCard
+    const freshnessSorted = [...stationSongs].sort((a, b) => {
+      if (a.scrapedAt && b.scrapedAt) {
+        return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
+      }
+      if (a.scrapedAt) return -1;
+      if (b.scrapedAt) return 1;
+      return 0;
+    });
+
+    for (const candidate of freshnessSorted) {
       const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
       const normalizedArtist = candidate.artist.toLowerCase().trim();
       
@@ -187,7 +193,6 @@ export async function selectSongForSlot(
         if (libraryResult.exists) {
           const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
           selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-          stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
           break;
         } else {
           // Song exists in DB but not in library — try immediate download
@@ -203,7 +208,6 @@ export async function selectSongForSlot(
               if (recheck.exists) {
                 const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
                 selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-                stationSongIndex[stationName] = (songIdx + 1) % stationSongs.length;
                 logs.push({
                   blockTime: timeStr, type: 'used',
                   title: candidate.title, artist: candidate.artist,
@@ -234,7 +238,6 @@ export async function selectSongForSlot(
           });
         }
       }
-      checkedCount++;
     }
   }
 
