@@ -51,6 +51,8 @@ interface AutoGradeState {
   currentProcessingSong: string | null;
   currentProcessingBlock: string | null;
   lastSaveProgress: number;
+  /** The actual grade lines built by the engine, keyed by block time (e.g. "18:00") */
+  pendingGradeLines: Map<string, string>;
 }
 
 export function useAutoGradeBuilder() {
@@ -74,6 +76,7 @@ export function useAutoGradeBuilder() {
     fullDayProgress: 0, fullDayTotal: 0,
     skippedSongs: 0, substitutedSongs: 0, missingSongs: 0,
     currentProcessingSong: null, currentProcessingBlock: null, lastSaveProgress: 0,
+    pendingGradeLines: new Map(),
   });
 
   const lastBuildRef = useRef<string | null>(null);
@@ -818,6 +821,7 @@ export function useAutoGradeBuilder() {
         currentBlock: currentTimeKey, nextBlock: nextTimeKey,
         blocksGenerated: prev.blocksGenerated + (currentLocked ? 0 : 1) + (nextLocked ? 0 : 1),
         skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
+        pendingGradeLines: new Map(lineMap),
       }));
 
       console.log(`[AUTO-GRADE] 📋 Grade montada em memória (aguardando janela de 10min para escrita)`);
