@@ -693,11 +693,18 @@ export function useAutoGradeBuilder() {
           id: `grade-fullday-${Date.now()}`, timestamp: new Date(), blockTime: 'COMPLETA',
           songsProcessed: 48 * defaultSequence.length, songsFound: lines.length, songsMissing: stats.missing, programName: 'Grade Completa',
         });
+        // Build pendingGradeLines from all generated lines for preview sync
+        const fullDayLineMap = new Map<string, string>();
+        for (const line of lines) {
+          const timeMatch = line.match(/^(\d{2}:\d{2})/);
+          if (timeMatch) fullDayLineMap.set(timeMatch[1], line);
+        }
         setState(prev => ({
           ...prev, isBuilding: false, lastBuildTime: new Date(), lastSavedFile: filename,
           blocksGenerated: prev.blocksGenerated + 48, fullDayProgress: 48, fullDayTotal: 0,
           skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
           currentProcessingSong: null, currentProcessingBlock: null,
+          pendingGradeLines: fullDayLineMap,
         }));
         toast({ title: '✅ Grade Completa Gerada!', description: `${filename} salvo com 48 blocos. ${stats.skipped} puladas, ${stats.substituted} substituídas, ${stats.missing} faltando.` });
       } else {
@@ -767,79 +774,31 @@ export function useAutoGradeBuilder() {
       const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: BlockLogItem[] = [];
 
-      /**
-       * Helper: check an existing grade line and only regenerate positions
-       * where the song file is MISSING from the library. Keeps found songs intact.
-       */
-      const patchBlockIfNeeded = async (
-        hour: number, minute: number, timeKey: string
-      ) => {
-        const existingLine = lineMap.get(timeKey);
-
-        // If we already have a line, check each song's library status
-        if (existingLine && isElectronEnv && window.electronAPI?.findSongMatch) {
-          const songMatches = [...existingLine.matchAll(/"([^"]+)"/g)];
-          const threshold = config.similarityThreshold || 0.75;
-          let hasMissing = false;
-
-          for (const match of songMatches) {
-            const filename = match[1];
-            // Skip special/fixed content (no " - " separator) and coringa
-            if (!filename.includes(' - ')) continue;
-            const withoutExt = filename.replace(/\.mp3$/i, '');
-            const parts = withoutExt.split(' - ');
-            const artist = parts[0] || '';
-            const title = parts.slice(1).join(' - ') || '';
-            if (!artist || !title) continue;
-
-            try {
-              const result = await Promise.race([
-                window.electronAPI!.findSongMatch({
-                  artist, title,
-                  musicFolders: config.musicFolders,
-                  threshold,
-                } as any),
-                new Promise<{ exists: false }>((resolve) => setTimeout(() => resolve({ exists: false }), 8000)),
-              ]);
-              if (!result.exists) {
-                hasMissing = true;
-                break;
-              }
-            } catch {
-              hasMissing = true;
-              break;
-            }
-          }
-
-          if (!hasMissing) {
-            console.log(`[AUTO-GRADE] ✅ Bloco ${timeKey} já preenchido e todas as músicas existem na biblioteca — mantendo`);
-            builtBlocksRef.current.add(timeKey);
-            return;
-          }
-
-          console.log(`[AUTO-GRADE] 🔄 Bloco ${timeKey} tem músicas faltando na biblioteca — regenerando apenas posições ausentes`);
-        }
-
-        // Generate (or regenerate) the block
-        const songsForBlock = await fetchSongsForBlock(hour, minute);
-        let pool = songsForBlock;
-        if (Object.keys(pool).length === 0) {
-          pool = await fetchAllRecentSongs();
-        }
-        const result = await generateBlockLine(hour, minute, pool, stats);
-        lineMap.set(timeKey, result.line);
-        allLogs.push(...result.logs);
-        builtBlocksRef.current.add(timeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${timeKey} montado em memória`);
-      };
-
-      // Only generate blocks that are NOT locked
+      // Always regenerate blocks following the active sequence + freshness
       if (!currentLocked) {
-        await patchBlockIfNeeded(blocks.current.hour, blocks.current.minute, currentTimeKey);
+        const songsCurrent = await fetchSongsForBlock(blocks.current.hour, blocks.current.minute);
+        let currentPool = songsCurrent;
+        if (Object.keys(currentPool).length === 0) {
+          currentPool = await fetchAllRecentSongs();
+        }
+        const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, currentPool, stats);
+        lineMap.set(currentTimeKey, currentResult.line);
+        allLogs.push(...currentResult.logs);
+        builtBlocksRef.current.add(currentTimeKey);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} montado em memória`);
       }
 
       if (!nextLocked) {
-        await patchBlockIfNeeded(blocks.next.hour, blocks.next.minute, nextTimeKey);
+        const songsNext = await fetchSongsForBlock(blocks.next.hour, blocks.next.minute);
+        let nextPool = songsNext;
+        if (Object.keys(nextPool).length === 0) {
+          nextPool = await fetchAllRecentSongs();
+        }
+        const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, nextPool, stats);
+        lineMap.set(nextTimeKey, nextResult.line);
+        allLogs.push(...nextResult.logs);
+        builtBlocksRef.current.add(nextTimeKey);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} montado em memória`);
       }
 
       if (allLogs.length > 0) {
