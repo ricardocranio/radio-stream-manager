@@ -42,6 +42,13 @@ export function GradePreviewCard() {
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
   const [libraryStatus, setLibraryStatus] = useState<Record<string, LibraryStatus>>({});
   const [isCheckingLibrary, setIsCheckingLibrary] = useState(false);
+  
+  // Timer to keep block times in sync with local PC clock
+  const [clockTick, setClockTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setClockTick(t => t + 1), 30000); // every 30s
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch real songs from both tables
   const fetchSongs = async () => {
@@ -148,7 +155,8 @@ export function GradePreviewCard() {
     }
   };
 
-  const nextBlock = getNextBlockTime();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const nextBlock = useMemo(() => getNextBlockTime(), [clockTick]);
   const nextBlockTime = `${nextBlock.hour.toString().padStart(2, '0')}:${nextBlock.minute.toString().padStart(2, '0')}`;
 
   // Map station IDs to DB names
