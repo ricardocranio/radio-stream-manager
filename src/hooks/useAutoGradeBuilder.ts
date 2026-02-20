@@ -728,7 +728,7 @@ export function useAutoGradeBuilder() {
 
   // ==================== Incremental Build (silent, in-memory) ====================
 
-  const buildGrade = useCallback(async (forceWrite: boolean = false) => {
+  const buildGrade = useCallback(async (forceWrite: boolean = false, forceRegenerate: boolean = false) => {
     if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
       console.log('[AUTO-GRADE] Not in Electron mode, skipping');
       return;
@@ -740,6 +740,13 @@ export function useAutoGradeBuilder() {
       const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
       const dayCode = getDayCode();
       const filename = `${dayCode}.txt`;
+
+      // If forceRegenerate (manual refresh), clear locks so blocks are rebuilt
+      if (forceRegenerate) {
+        builtBlocksRef.current.delete(currentTimeKey);
+        builtBlocksRef.current.delete(nextTimeKey);
+        console.log(`[AUTO-GRADE] 🔓 Force regenerate: locks limpos para ${currentTimeKey} e ${nextTimeKey}`);
+      }
 
       // Check which blocks are already locked (already built)
       const currentLocked = builtBlocksRef.current.has(currentTimeKey);
