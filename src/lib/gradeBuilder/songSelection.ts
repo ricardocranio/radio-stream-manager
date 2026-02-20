@@ -271,8 +271,11 @@ export async function selectSongForSlot(
     }
   }
 
-  // PRIORITY 3: DNA/Style match
+  // PRIORITY 3: DNA/Style match — with JIT download for missing songs
   if (!selectedSong) {
+    const downloadTimeoutP3 = isFullDay ? 30000 : 720000;
+    let attemptedDownloadP3 = false;
+
     for (const [otherStation, songs] of Object.entries(songsByStation)) {
       if (otherStation === stationName) continue;
       for (const candidate of songs) {
@@ -292,6 +295,32 @@ export async function selectSongForSlot(
               reason: `DNA similar: ${stationStyle}`, substituteFor: stationName || 'UNKNOWN',
             });
             break;
+          } else if (!attemptedDownloadP3) {
+            attemptedDownloadP3 = true;
+            const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutP3);
+            if (downloaded) {
+              const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+              if (recheck.exists) {
+                const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+                selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+                stats.substituted++;
+                logs.push({
+                  blockTime: timeStr, type: 'substituted',
+                  title: candidate.title, artist: candidate.artist,
+                  station: candidate.station, style: candidate.style,
+                  reason: `DNA similar JIT: ${stationStyle}`, substituteFor: stationName || 'UNKNOWN',
+                });
+                break;
+              }
+            }
+            if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
+              ctx.addMissingSong({
+                id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                title: candidate.title, artist: candidate.artist,
+                station: otherStation, timestamp: new Date(), status: 'missing',
+                dna: stationStyle, urgency: 'grade',
+              });
+            }
           }
         }
       }
@@ -299,9 +328,11 @@ export async function selectSongForSlot(
     }
   }
 
-  // PRIORITY 4: General Pool (sorted by freshness - most recent captures first)
+  // PRIORITY 4: General Pool (freshness-sorted) — with JIT download
   if (!selectedSong) {
-    // Sort by freshness: most recently captured songs first
+    const downloadTimeoutP4 = isFullDay ? 30000 : 720000;
+    let attemptedDownloadP4 = false;
+
     const freshSortedPool = [...allSongsPool].sort((a, b) => {
       if (a.scrapedAt && b.scrapedAt) {
         return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
@@ -327,6 +358,32 @@ export async function selectSongForSlot(
             reason: 'Pool geral (priorizado por frescor)',
           });
           break;
+        } else if (!attemptedDownloadP4) {
+          attemptedDownloadP4 = true;
+          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutP4);
+          if (downloaded) {
+            const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+            if (recheck.exists) {
+              const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+              stats.substituted++;
+              logs.push({
+                blockTime: timeStr, type: 'substituted',
+                title: candidate.title, artist: candidate.artist,
+                station: candidate.station, style: candidate.style,
+                reason: 'Pool geral JIT (baixada just-in-time)',
+              });
+              break;
+            }
+          }
+          if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
+            ctx.addMissingSong({
+              id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              title: candidate.title, artist: candidate.artist,
+              station: candidate.station, timestamp: new Date(), status: 'missing',
+              dna: candidate.style, urgency: 'grade',
+            });
+          }
         }
       }
     }
