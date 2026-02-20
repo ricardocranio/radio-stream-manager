@@ -291,13 +291,16 @@ export function useAutoGradeBuilder() {
   // ==================== Data Fetching ====================
 
   const fetchSongsForBlock = useCallback(async (blockHour: number, blockMinute: number, targetDate?: Date): Promise<Record<string, SongEntry[]>> => {
+    // NOTE: This function is kept for potential future use but incremental builds
+    // now use fetchAllRecentSongs() directly for a larger, more reliable pool.
     try {
       const baseDate = targetDate || new Date();
       const blockTime = new Date(baseDate);
       blockTime.setHours(blockHour, blockMinute, 0, 0);
       const windowEnd = blockTime.toISOString();
-      const windowStart = new Date(blockTime.getTime() - 60 * 60 * 1000).toISOString();
-      console.log(`[AUTO-GRADE] 🕐 Buscando músicas para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')} (janela de 1h)`);
+      // Use a 24h window instead of 1h to capture all available monitoring data
+      const windowStart = new Date(blockTime.getTime() - 24 * 60 * 60 * 1000).toISOString();
+      console.log(`[AUTO-GRADE] 🕐 Buscando músicas para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')} (janela de 24h)`);
 
       const { data, error } = await supabase
         .from('scraped_songs')
@@ -305,10 +308,10 @@ export function useAutoGradeBuilder() {
         .gte('scraped_at', windowStart)
         .lte('scraped_at', windowEnd)
         .order('scraped_at', { ascending: false })
-        .limit(500);
+        .limit(2000);
       if (error) throw error;
 
-      return buildSongsByStation(data || []);
+      return buildSongsByStation(data || [], 200);
     } catch (error) {
       console.error('[AUTO-GRADE] Error fetching songs for block:', error);
       logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
@@ -781,31 +784,24 @@ export function useAutoGradeBuilder() {
       const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: BlockLogItem[] = [];
 
-      // Always regenerate blocks following the active sequence + freshness
+      // Always use the FULL song pool from monitoring (scraped_songs + radio_historico)
+      // A narrow 1h window misses songs captured earlier, causing unnecessary Coringas
+      const fullPool = await fetchAllRecentSongs();
+
       if (!currentLocked) {
-        const songsCurrent = await fetchSongsForBlock(blocks.current.hour, blocks.current.minute);
-        let currentPool = songsCurrent;
-        if (Object.keys(currentPool).length === 0) {
-          currentPool = await fetchAllRecentSongs();
-        }
-        const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, currentPool, stats);
+        const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats);
         lineMap.set(currentTimeKey, currentResult.line);
         allLogs.push(...currentResult.logs);
         builtBlocksRef.current.add(currentTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} montado em memória`);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} montado em memória (pool: ${Object.keys(fullPool).length} estações)`);
       }
 
       if (!nextLocked) {
-        const songsNext = await fetchSongsForBlock(blocks.next.hour, blocks.next.minute);
-        let nextPool = songsNext;
-        if (Object.keys(nextPool).length === 0) {
-          nextPool = await fetchAllRecentSongs();
-        }
-        const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, nextPool, stats);
+        const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats);
         lineMap.set(nextTimeKey, nextResult.line);
         allLogs.push(...nextResult.logs);
         builtBlocksRef.current.add(nextTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} montado em memória`);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} montado em memória (pool: ${Object.keys(fullPool).length} estações)`);
       }
 
       if (allLogs.length > 0) {
