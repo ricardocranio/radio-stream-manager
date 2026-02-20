@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore, BlockSong, FixedContent } from '@/store/radioStore';
+import { useGlobalServices } from '@/contexts/GlobalServicesContext';
 import { supabase } from '@/integrations/supabase/client';
 import { realtimeManager } from '@/lib/realtimeManager';
 import {
@@ -16,6 +17,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
+import { sanitizeGradeFilename } from '@/lib/gradeBuilder/sanitize';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -60,6 +62,7 @@ function saveSongsToCache(songs: CapturedSong[]) {
 
 export function GradeScheduleCard() {
   const { blockSongs, programs, fixedContent, setBlockSongs, stations, config } = useRadioStore();
+  const { gradeBuilder } = useGlobalServices();
   const { toast } = useToast();
   const [selectedBlock, setSelectedBlock] = useState<BlockInfo | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -168,31 +171,44 @@ export function GradeScheduleCard() {
     return Array.from(uniqueSongs.values());
   }, [capturedSongs]);
 
-  // Get current time and calculate blocks with auto-populated songs
+  // Helper: parse a builder grade line into BlockSong[]
+  const parsePendingLine = useCallback((line: string): BlockSong[] => {
+    const songs: BlockSong[] = [];
+    const matches = line.matchAll(/"([^"]+)"/g);
+    let idx = 0;
+    for (const match of matches) {
+      const filename = match[1];
+      const withoutExt = filename.replace(/\.mp3$/i, '');
+      const parts = withoutExt.split(' - ');
+      songs.push({
+        id: `pending-${idx}`,
+        artist: parts[0] || filename,
+        title: parts.slice(1).join(' - ') || '',
+        file: filename,
+        source: 'GRADE',
+        isFixed: !filename.includes(' - '),
+      });
+      idx++;
+    }
+    return songs;
+  }, []);
+
+  // Get current time and calculate blocks - READS FROM BUILDER when available
   const blocks = useMemo(() => {
     const now = new Date();
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
     const currentBlock = currentMinute < 30 ? 0 : 30;
+    const pendingLines = gradeBuilder.pendingGradeLines;
 
-    // Generate 5 blocks: 2 previous, current, 2 next
     const blockList: BlockInfo[] = [];
     
     for (let offset = -2; offset <= 2; offset++) {
       let blockMinute = currentBlock + (offset * 30);
       let blockHour = currentHour;
       
-      // Adjust for negative minutes or overflow
-      while (blockMinute < 0) {
-        blockMinute += 60;
-        blockHour -= 1;
-      }
-      while (blockMinute >= 60) {
-        blockMinute -= 60;
-        blockHour += 1;
-      }
-      
-      // Handle day overflow
+      while (blockMinute < 0) { blockMinute += 60; blockHour -= 1; }
+      while (blockMinute >= 60) { blockMinute -= 60; blockHour += 1; }
       if (blockHour < 0) blockHour += 24;
       if (blockHour >= 24) blockHour -= 24;
       
@@ -213,25 +229,23 @@ export function GradeScheduleCard() {
         fc.enabled && fc.timeSlots.some(ts => ts.hour === blockHour && ts.minute === blockMinute)
       );
       
-      // Get songs for this block - use stored or auto-generate from captured songs
-      let songs = blockSongs[timeKey] || [];
-      
-      // If no songs stored, auto-populate from captured songs pool
-      if (songs.length === 0 && songsPool.length > 0) {
-        // Use different slices of the pool for different blocks to add variety
-        const startIndex = ((blockHour * 2 + (blockMinute === 30 ? 1 : 0)) * 10) % songsPool.length;
-        const selectedSongs: BlockSong[] = [];
-        
-        for (let i = 0; i < 10 && i < songsPool.length; i++) {
-          const poolIndex = (startIndex + i) % songsPool.length;
-          const song = songsPool[poolIndex];
-          selectedSongs.push({
-            ...song,
-            id: `${timeKey}-${i}`,
-          });
+      // PRIMARY SOURCE: read from builder's pendingGradeLines (same as TXT file)
+      let songs: BlockSong[] = [];
+      const pendingLine = pendingLines?.get(timeKey);
+      if (pendingLine) {
+        songs = parsePendingLine(pendingLine);
+      } else {
+        // Fallback: use stored blockSongs or auto-generate from captured songs
+        songs = blockSongs[timeKey] || [];
+        if (songs.length === 0 && songsPool.length > 0) {
+          const startIndex = ((blockHour * 2 + (blockMinute === 30 ? 1 : 0)) * 10) % songsPool.length;
+          const selectedSongs: BlockSong[] = [];
+          for (let i = 0; i < 10 && i < songsPool.length; i++) {
+            const poolIndex = (startIndex + i) % songsPool.length;
+            selectedSongs.push({ ...songsPool[poolIndex], id: `${timeKey}-${i}` });
+          }
+          songs = selectedSongs;
         }
-        
-        songs = selectedSongs;
       }
       
       blockList.push({
@@ -245,7 +259,7 @@ export function GradeScheduleCard() {
     
     return blockList;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blockSongs, programs, fixedContent, songsPool, clockTick]);
+  }, [blockSongs, programs, fixedContent, songsPool, clockTick, gradeBuilder.pendingGradeLines, parsePendingLine]);
 
   // Handle opening block details
   const handleViewBlock = (block: BlockInfo) => {
@@ -288,9 +302,9 @@ export function GradeScheduleCard() {
             console.log('[GRADE-CARD] No existing file, will create new');
           }
 
-          // Generate line for this block
+          // Generate line for this block using sanitizeGradeFilename for TXT parity
           const songFiles = editedSongs.map(s => {
-            const songFilename = sanitizeFilename(`${s.artist} - ${s.title}.mp3`);
+            const songFilename = sanitizeGradeFilename(sanitizeFilename(`${s.artist} - ${s.title}.mp3`));
             return `"${songFilename}"`;
           }).join(',vht,');
           const blockLine = `${selectedBlock.time} (ID=${selectedBlock.programName}) ${songFiles}`;
@@ -348,21 +362,25 @@ export function GradeScheduleCard() {
     setEditedSongs(updated);
   };
 
-  // Generate .txt preview line for the block
+  // Generate .txt preview line for the block - uses sanitizeGradeFilename for TXT parity
   const generateTxtPreview = useCallback((block: BlockInfo | null): string => {
     if (!block) return '';
+    
+    // If this block came from pendingGradeLines, use the raw line directly (already sanitized)
+    const pendingLine = gradeBuilder.pendingGradeLines?.get(block.time);
+    if (pendingLine && !isEditing) return pendingLine;
     
     const songs = isEditing ? editedSongs : block.songs;
     if (songs.length === 0) return `${block.time} (ID=${block.programName}) [vazio]`;
     
-    // Format: "Artist - Title.mp3",vht,"Artist - Title.mp3",vht,...
+    // Format with sanitizeGradeFilename (UPPERCASE, no accents) for TXT parity
     const songFiles = songs.map(s => {
-      const filename = sanitizeFilename(`${s.artist} - ${s.title}.mp3`);
+      const filename = sanitizeGradeFilename(sanitizeFilename(`${s.artist} - ${s.title}.mp3`));
       return `"${filename}"`;
     }).join(',vht,');
     
     return `${block.time} (ID=${block.programName}) ${songFiles}`;
-  }, [isEditing, editedSongs]);
+  }, [isEditing, editedSongs, gradeBuilder.pendingGradeLines]);
 
   // Handle copy to clipboard
   const handleCopyTxt = useCallback(() => {
