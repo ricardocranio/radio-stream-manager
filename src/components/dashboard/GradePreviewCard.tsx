@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Eye, Music, TrendingUp, Radio, Clock, Sparkles, Flame, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +42,8 @@ export function GradePreviewCard() {
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
   const [libraryStatus, setLibraryStatus] = useState<Record<string, LibraryStatus>>({});
   const [isCheckingLibrary, setIsCheckingLibrary] = useState(false);
+  // Locked preview: once built, only recalculates if a song is missing from library
+  const [lockedPreview, setLockedPreview] = useState<PreviewSong[] | null>(null);
   
   // Timer to keep block times in sync with local PC clock
   const [clockTick, setClockTick] = useState(0);
@@ -128,13 +130,14 @@ export function GradePreviewCard() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'scraped_songs' },
         () => {
-          console.log('[GradePreview] Nova captura detectada, atualizando preview...');
+          console.log('[GradePreview] Nova captura detectada, atualizando pool...');
           fetchSongs();
+          // Do NOT reset lockedPreview here — keep the selection stable
         }
       )
       .subscribe();
 
-    // Fallback polling every 60s (in case realtime hiccups)
+    // Fallback polling every 60s for pool data only
     const interval = setInterval(fetchSongs, 60000);
     
     return () => {
@@ -157,6 +160,18 @@ export function GradePreviewCard() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const nextBlock = useMemo(() => getNextBlockTime(), [clockTick]);
+  
+  // Reset lock when block time changes (new 30-min period)
+  const nextBlockKey = `${nextBlock.hour}:${nextBlock.minute}`;
+  const prevBlockKeyRef = useRef(nextBlockKey);
+  useEffect(() => {
+    if (prevBlockKeyRef.current !== nextBlockKey) {
+      console.log('[GradePreview] ⏰ Novo bloco detectado, destravando preview...');
+      setLockedPreview(null);
+      prevBlockKeyRef.current = nextBlockKey;
+    }
+  }, [nextBlockKey]);
+
   const nextBlockTime = `${nextBlock.hour.toString().padStart(2, '0')}:${nextBlock.minute.toString().padStart(2, '0')}`;
 
   // Map station IDs to DB names
@@ -336,12 +351,37 @@ export function GradePreviewCard() {
     }
   }, [previewSongs, config.musicFolders, config.similarityThreshold]);
 
-  // Auto-check library when preview songs change
+  // Lock the preview once built; only rebuild when missing songs detected
   useEffect(() => {
-    if (previewSongs.length > 0) {
+    if (previewSongs.length > 0 && lockedPreview === null) {
+      console.log('[GradePreview] 🔒 Preview travado com', previewSongs.length, 'músicas');
+      setLockedPreview(previewSongs);
+    }
+  }, [previewSongs, lockedPreview]);
+
+  // The songs actually displayed (locked version preferred)
+  const displaySongs = lockedPreview || previewSongs;
+
+  // Auto-check library when display songs change
+  useEffect(() => {
+    if (displaySongs.length > 0) {
       checkLibrary();
     }
-  }, [previewSongs, checkLibrary]);
+  }, [displaySongs, checkLibrary]);
+
+  // When library check completes, rebuild ONLY the missing slots
+  useEffect(() => {
+    if (!lockedPreview || lockedPreview.length === 0) return;
+    const hasMissing = lockedPreview.some(s => {
+      if (!s.originalArtist || !s.originalTitle) return false;
+      const key = `${s.originalArtist.toLowerCase()}|${s.originalTitle.toLowerCase()}`;
+      return libraryStatus[key] === 'missing';
+    });
+    if (hasMissing) {
+      console.log('[GradePreview] 🔓 Músicas faltando detectadas, recalculando preview...');
+      setLockedPreview(null); // unlock to trigger recalculation with updated pool
+    }
+  }, [libraryStatus, lockedPreview]);
 
   const getLibraryIcon = (song: PreviewSong) => {
     if (!song.originalArtist || !song.originalTitle) return null;
@@ -355,12 +395,14 @@ export function GradePreviewCard() {
     return null;
   };
 
-  const songsFromRanking = previewSongs.filter(s => s.isFromRanking).length;
-  const freshSongs = previewSongs.filter(s => s.freshness).length;
+  const songsFromRanking = displaySongs.filter(s => s.isFromRanking).length;
+  const freshSongs = displaySongs.filter(s => s.freshness).length;
   const totalPool = Object.values(songsByStation).reduce((acc, arr) => acc + arr.length, 0);
 
   const foundCount = Object.values(libraryStatus).filter(s => s === 'found').length;
   const missingCount = Object.values(libraryStatus).filter(s => s === 'missing').length;
+
+  const isLocked = lockedPreview !== null;
 
   // Priority badge color mapping
   const priorityColor = (p: string) => {
@@ -399,7 +441,7 @@ export function GradePreviewCard() {
               variant="ghost"
               size="icon"
               className="h-7 w-7"
-              onClick={() => { fetchSongs(); }}
+              onClick={() => { setLockedPreview(null); fetchSongs(); }}
               disabled={isLoading}
             >
               {isLoading ? (
@@ -448,7 +490,7 @@ export function GradePreviewCard() {
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
-              Próximo Bloco ({previewSongs.length} slots):
+              Próximo Bloco ({displaySongs.length} slots){isLocked ? ' 🔒' : ''}:
             </p>
             {isElectron && (
               <Button
@@ -466,7 +508,7 @@ export function GradePreviewCard() {
 
           <ScrollArea className="h-[300px]">
             <div className="space-y-1">
-              {previewSongs.map((song, index) => (
+              {displaySongs.map((song, index) => (
                 <div
                   key={index}
                   className={`p-2 rounded-lg flex items-center gap-2 ${
