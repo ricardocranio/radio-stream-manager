@@ -275,18 +275,24 @@ export function useGlobalDownloadService() {
       }
     });
 
-    // React immediately when new grade-urgent missing songs appear
-    let prevMissingCount = useRadioStore.getState().missingSongs.length;
+    // React immediately when new missing songs appear (especially grade-urgent)
+    let prevMissingIds = new Set(useRadioStore.getState().missingSongs.map(s => s.id));
     const unsubMissing = useRadioStore.subscribe((state) => {
-      const currentCount = state.missingSongs.length;
-      if (currentCount > prevMissingCount) {
-        const hasUrgent = state.missingSongs.some(s => s.status === 'missing' && s.urgency === 'grade');
+      const currentIds = new Set(state.missingSongs.map(s => s.id));
+      if (currentIds.size > prevMissingIds.size) {
+        const newSongs = state.missingSongs.filter(s => !prevMissingIds.has(s.id));
+        const hasUrgent = newSongs.some(s => s.status === 'missing' && s.urgency === 'grade');
+        
         if (hasUrgent) {
-          console.log('[DL-SVC] 🚨 Novas músicas urgentes da grade detectadas, processando imediatamente...');
-          checkNewMissingSongs();
+          console.log(`[DL-SVC] 🚨 ${newSongs.filter(s => s.urgency === 'grade').length} novas músicas urgentes da grade detectadas!`);
+        }
+        
+        if (newSongs.length > 0) {
+          console.log(`[DL-SVC] 📥 ${newSongs.length} novas músicas faltantes detectadas, processando...`);
+          setTimeout(() => checkNewMissingSongs(), 100);
         }
       }
-      prevMissingCount = currentCount;
+      prevMissingIds = currentIds;
     });
 
     return () => {
