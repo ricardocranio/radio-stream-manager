@@ -237,141 +237,127 @@ export function DashboardView() {
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6 animate-fade-in">
       {/* Realtime Stats from Supabase */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3">
+        {/* Row 1: 4 main stats */}
         <Card className="glass-card border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Total Capturadas</p>
-                <p className="text-lg md:text-2xl font-bold text-foreground">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Total Capturadas</p>
+                <p className="text-2xl font-bold text-foreground mt-1">
                   {realtimeStats.isLoading ? '...' : realtimeStats.totalSongs.toLocaleString()}
                 </p>
-                <p className="text-[10px] md:text-xs text-primary flex items-center gap-1">
+                <p className="text-xs text-primary flex items-center gap-1 mt-1">
                   <Database className="w-3 h-3" />
-                  <span className="hidden sm:inline">Supabase</span>
+                  Banco de dados
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
-                <Music className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+              <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                <Music className="w-5 h-5 text-primary" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="glass-card border-green-500/20 bg-gradient-to-br from-green-500/10 to-green-500/5">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Últimas 24h</p>
-                <p className="text-lg md:text-2xl font-bold text-foreground">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Últimas 24h</p>
+                <p className="text-2xl font-bold text-foreground mt-1">
                   {realtimeStats.isLoading ? '...' : realtimeStats.songsLast24h.toLocaleString()}
                 </p>
-                <p className="text-[10px] md:text-xs text-green-500 flex items-center gap-1">
+                <p className="text-xs text-green-500 flex items-center gap-1 mt-1">
                   <Clock className="w-3 h-3" />
-                  <span className="hidden sm:inline">Tempo real</span>
+                  Tempo real
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-green-500/20 flex items-center justify-center shrink-0">
-                <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-green-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-card border-orange-500/20 bg-gradient-to-br from-orange-500/10 to-orange-500/5">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Última Hora</p>
-                <p className="text-lg md:text-2xl font-bold text-foreground">
-                  {realtimeStats.isLoading ? '...' : realtimeStats.songsLastHour.toLocaleString()}
-                </p>
-                <p className="text-[10px] md:text-xs text-orange-500 flex items-center gap-1">
-                  <Zap className="w-3 h-3" />
-                  <span className="hidden sm:inline">Ativo</span>
-                </p>
-              </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-orange-500/20 flex items-center justify-center shrink-0">
-                <Radio className="w-4 h-4 md:w-5 md:h-5 text-orange-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-card border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-purple-500/5">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">No Ranking</p>
-                <p className="text-lg md:text-2xl font-bold text-foreground">{localStats.rankingTotal}</p>
-                <p className="text-[10px] md:text-xs text-purple-500 flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3" />
-                  TOP25
-                </p>
-              </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
-                <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-purple-500" />
+              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-green-500" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="glass-card border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-cyan-500/5">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Emissoras</p>
-                <p className="text-lg md:text-2xl font-bold text-foreground">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Emissoras Ativas</p>
+                <p className="text-2xl font-bold text-foreground mt-1">
                   {realtimeStats.isLoading ? '...' : realtimeStats.activeStations}
                 </p>
-                <p className="text-[10px] md:text-xs text-cyan-500 flex items-center gap-1">
+                <p className="text-xs text-cyan-500 flex items-center gap-1 mt-1">
                   <Radio className="w-3 h-3" />
-                  <span className="hidden sm:inline">Monitorando</span>
+                  Monitorando
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center shrink-0">
-                <Radio className="w-4 h-4 md:w-5 md:h-5 text-cyan-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-card border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Banco Musical</p>
-                <p className="text-lg md:text-2xl font-bold text-foreground">
-                  {libraryStats.isLoading ? '...' : libraryStats.count.toLocaleString()}
-                </p>
-                <p className="text-[10px] md:text-xs text-amber-500 flex items-center gap-1">
-                  <HardDrive className="w-3 h-3" />
-                  <span className="hidden sm:inline">Local</span>
-                </p>
-              </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
-                <HardDrive className="w-4 h-4 md:w-5 md:h-5 text-amber-500" />
+              <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                <Radio className="w-5 h-5 text-cyan-500" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="glass-card border-red-500/20 bg-gradient-to-br from-red-500/10 to-red-500/5">
-          <CardContent className="p-3 md:p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">Faltando</p>
-                <p className="text-lg md:text-2xl font-bold text-foreground">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Faltando</p>
+                <p className="text-2xl font-bold text-foreground mt-1">
                   {missingSongs.filter(s => s.status === 'missing').length}
                 </p>
-                <p className="text-[10px] md:text-xs text-red-500 flex items-center gap-1">
+                <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
                   <AlertTriangle className="w-3 h-3" />
-                  <span className="hidden sm:inline">No Banco</span>
+                  No Banco Musical
                 </p>
               </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-red-500/20 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-4 h-4 md:w-5 md:h-5 text-red-500" />
+              <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-red-500" />
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Row 2: Secondary stats */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="glass-card border-orange-500/20">
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center shrink-0">
+              <Zap className="w-4 h-4 text-orange-500" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Última Hora</p>
+              <p className="text-lg font-bold text-foreground">
+                {realtimeStats.isLoading ? '...' : realtimeStats.songsLastHour.toLocaleString()}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card border-amber-500/20">
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+              <HardDrive className="w-4 h-4 text-amber-500" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Banco Musical</p>
+              <p className="text-lg font-bold text-foreground">
+                {libraryStats.isLoading ? '...' : libraryStats.count.toLocaleString()}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card border-purple-500/20">
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
+              <TrendingUp className="w-4 h-4 text-purple-500" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Ranking TOP25</p>
+              <p className="text-lg font-bold text-foreground">{localStats.rankingTotal}</p>
             </div>
           </CardContent>
         </Card>
