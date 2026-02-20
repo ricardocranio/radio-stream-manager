@@ -69,6 +69,13 @@ export function GradeScheduleCard() {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'songs' | 'preview'>('songs');
 
+  // Timer to keep block times in sync with local PC clock
+  const [clockTick, setClockTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setClockTick(t => t + 1), 30000); // every 30s
+    return () => clearInterval(interval);
+  }, []);
+
   // Get current day info - SÁB with accent for file compatibility
   const dayInfo = useMemo(() => {
     const now = new Date();
@@ -237,7 +244,8 @@ export function GradeScheduleCard() {
     }
     
     return blockList;
-  }, [blockSongs, programs, fixedContent, songsPool]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockSongs, programs, fixedContent, songsPool, clockTick]);
 
   // Handle opening block details
   const handleViewBlock = (block: BlockInfo) => {
