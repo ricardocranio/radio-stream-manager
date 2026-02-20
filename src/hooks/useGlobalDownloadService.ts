@@ -146,6 +146,22 @@ export function useGlobalDownloadService() {
       if (!item) break;
 
       const success = await downloadSong(item.song);
+
+      if (success) {
+        // Remove duplicates of same artist+title from queue to avoid duplicate files
+        const artistLower = item.song.artist.toLowerCase().trim();
+        const titleLower = item.song.title.toLowerCase().trim();
+        const before = downloadQueueRef.current.length;
+        downloadQueueRef.current = downloadQueueRef.current.filter(
+          q => !(q.song.artist.toLowerCase().trim() === artistLower && q.song.title.toLowerCase().trim() === titleLower)
+        );
+        const removed = before - downloadQueueRef.current.length;
+        if (removed > 0) {
+          console.log(`[DL-SVC] 🧹 Removidas ${removed} duplicatas da fila: ${item.song.artist} - ${item.song.title}`);
+          setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
+          useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
+        }
+      }
       
       if (!success && item.retryCount < 2) {
         downloadQueueRef.current.push({
