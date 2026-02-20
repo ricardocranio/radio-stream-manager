@@ -1,15 +1,12 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Eye, Music, Clock, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive, AlertTriangle, FileText, Radio, Flame } from 'lucide-react';
+import { Eye, Music, Clock, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive, AlertTriangle, FileText, Flame } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useRadioStore, getActiveSequence } from '@/store/radioStore';
+import { useRadioStore } from '@/store/radioStore';
 import { useGlobalServices } from '@/contexts/GlobalServicesContext';
-import { sanitizeFilename } from '@/lib/sanitizeFilename';
-import { STATION_ID_TO_DB_NAME } from '@/lib/gradeBuilder/constants';
-import { supabase } from '@/integrations/supabase/client';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -21,15 +18,12 @@ interface PreviewSong {
   filename: string;
   artist: string;
   title: string;
-  source: string; // station name
-  isSpecial: boolean; // coringa, fixo, etc.
-  fromBuilder: boolean; // true = from actual builder output
-  freshness?: string; // e.g. "há 5 min"
-  isFresh?: boolean; // captured within last 30 min
+  isSpecial: boolean;
 }
 
 /**
  * Parse a builder grade line into PreviewSong entries.
+ * This is the ONLY source of truth — matches the TXT file exactly.
  */
 function parseGradeLine(line: string): PreviewSong[] {
   const songs: PreviewSong[] = [];
@@ -45,48 +39,33 @@ function parseGradeLine(line: string): PreviewSong[] {
       filename,
       artist: parts[0] || filename,
       title: parts.slice(1).join(' - ') || '',
-      source: 'builder',
       isSpecial,
-      fromBuilder: true,
     });
   }
   return songs;
 }
 
 export function GradePreviewCard() {
-  const { stations, config, sequence, scheduledSequences } = useRadioStore();
+  const { config } = useRadioStore();
   const { gradeBuilder } = useGlobalServices();
   const [libraryStatus, setLibraryStatus] = useState<Record<string, LibraryStatus>>({});
   const [isCheckingLibrary, setIsCheckingLibrary] = useState(false);
-  const [fallbackSongs, setFallbackSongs] = useState<PreviewSong[]>([]);
-  const [isLoadingFallback, setIsLoadingFallback] = useState(false);
-  const [lastFetch, setLastFetch] = useState<Date | null>(null);
 
   // Next block time
-  const getNextBlockTime = () => {
+  const nextBlock = useMemo(() => {
     const now = new Date();
     const m = now.getMinutes();
     const h = now.getHours();
     return m < 30 ? { hour: h, minute: 30 } : { hour: (h + 1) % 24, minute: 0 };
-  };
+  }, [gradeBuilder.nextBlock]);
 
-  const nextBlock = useMemo(() => getNextBlockTime(), [gradeBuilder.nextBlock]);
   const nextBlockTime = `${nextBlock.hour.toString().padStart(2, '0')}:${nextBlock.minute.toString().padStart(2, '0')}`;
 
-  // Station ID → DB name mapping
-  const stationIdToDbName = useMemo(() => {
-    const map: Record<string, string> = { ...STATION_ID_TO_DB_NAME };
-    stations.forEach(s => {
-      map[s.id] = s.name;
-      map[s.name.toLowerCase()] = s.name;
-    });
-    return map;
-  }, [stations]);
-
-  // === SOURCE 1: Builder output (exact match with TXT) ===
-  const builderSongs = useMemo(() => {
+  // === SINGLE SOURCE: Builder output (exact match with TXT) ===
+  const displaySongs = useMemo(() => {
     const lines = gradeBuilder.pendingGradeLines;
     if (!lines || lines.size === 0) return [];
+    // Try next block first
     const nextLine = lines.get(nextBlockTime);
     if (nextLine) return parseGradeLine(nextLine);
     // Try current block
@@ -94,175 +73,14 @@ export function GradePreviewCard() {
     const currentTime = `${now.getHours().toString().padStart(2, '0')}:${(now.getMinutes() < 30 ? '00' : '30')}`;
     const currentLine = lines.get(currentTime);
     if (currentLine) return parseGradeLine(currentLine);
+    // Try any available block (show the latest one)
+    const sortedKeys = Array.from(lines.keys()).sort();
+    if (sortedKeys.length > 0) {
+      const lastKey = sortedKeys[sortedKeys.length - 1];
+      return parseGradeLine(lines.get(lastKey)!);
+    }
     return [];
   }, [gradeBuilder.pendingGradeLines, nextBlockTime]);
-
-  // === SOURCE 2: Fallback - follow sequence with real songs from DB ===
-  const fetchFallbackPreview = useCallback(async () => {
-    setIsLoadingFallback(true);
-    try {
-      // Get active sequence
-      const activeSeq = getActiveSequence();
-      if (activeSeq.length === 0) {
-        setFallbackSongs([]);
-        return;
-      }
-
-      // Fetch songs from both tables
-      const [scrapedResult, historicoResult] = await Promise.all([
-        supabase
-          .from('scraped_songs')
-          .select('title, artist, station_name, scraped_at')
-          .order('scraped_at', { ascending: false })
-          .limit(500),
-        supabase
-          .from('radio_historico')
-          .select('title, artist, station_name, captured_at')
-          .order('captured_at', { ascending: false })
-          .limit(500),
-      ]);
-
-      // Build pool by station
-      const poolByStation: Record<string, Array<{ title: string; artist: string; ts: number }>> = {};
-      const seen = new Set<string>();
-
-      for (const song of scrapedResult.data || []) {
-        const key = `${song.station_name}|${song.title.toLowerCase()}|${song.artist.toLowerCase()}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        if (!poolByStation[song.station_name]) poolByStation[song.station_name] = [];
-        poolByStation[song.station_name].push({
-          title: song.title, artist: song.artist,
-          ts: new Date(song.scraped_at).getTime(),
-        });
-      }
-
-      for (const song of historicoResult.data || []) {
-        const key = `${song.station_name}|${song.title.toLowerCase()}|${song.artist.toLowerCase()}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        if (!poolByStation[song.station_name]) poolByStation[song.station_name] = [];
-        poolByStation[song.station_name].push({
-          title: song.title, artist: song.artist,
-          ts: new Date(song.captured_at).getTime(),
-        });
-      }
-
-      // Follow the sequence: for each slot, resolve the station and pick a song
-      const usedArtists = new Set<string>();
-      const usedSongs = new Set<string>();
-      const songs: PreviewSong[] = [];
-
-      for (const seq of activeSeq) {
-        // Handle special types
-        if (seq.radioSource.startsWith('fixo_') || seq.radioSource === 'fixo' || seq.radioSource === 'top50' || seq.radioSource === 'random_pop') {
-          songs.push({
-            position: seq.position,
-            filename: seq.radioSource.toUpperCase(),
-            artist: seq.radioSource.toUpperCase(),
-            title: '',
-            source: seq.radioSource,
-            isSpecial: true,
-            fromBuilder: false,
-          });
-          continue;
-        }
-
-        // Resolve station name
-        let dbName = stationIdToDbName[seq.radioSource] || stationIdToDbName[seq.radioSource.toLowerCase()] || '';
-        
-        // Try finding by station config
-        if (!dbName) {
-          const stationConfig = stations.find(s => s.id === seq.radioSource);
-          dbName = stationConfig?.name || '';
-        }
-
-        // Direct name match
-        if (!dbName && poolByStation[seq.radioSource]) {
-          dbName = seq.radioSource;
-        }
-
-        // Fuzzy match
-        if (!dbName || !poolByStation[dbName]) {
-          const normalizedSource = (dbName || seq.radioSource).toLowerCase().replace(/[^a-z0-9]/g, '');
-          for (const poolKey of Object.keys(poolByStation)) {
-            const normalizedPool = poolKey.toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (normalizedPool.includes(normalizedSource) || normalizedSource.includes(normalizedPool)) {
-              dbName = poolKey;
-              break;
-            }
-          }
-        }
-
-        const pool = poolByStation[dbName] || [];
-
-        if (pool.length === 0) {
-          songs.push({
-            position: seq.position,
-            filename: `(Sem músicas: ${dbName || seq.radioSource})`,
-            artist: dbName || seq.radioSource,
-            title: '(Aguardando captura)',
-            source: dbName || seq.radioSource,
-            isSpecial: true,
-            fromBuilder: false,
-          });
-          continue;
-        }
-
-        // Sort by freshness (most recent first)
-        const sorted = [...pool].sort((a, b) => b.ts - a.ts);
-
-        // Pick first non-repeated song
-        let picked: typeof sorted[0] | null = null;
-        for (const candidate of sorted) {
-          const artistKey = candidate.artist.toLowerCase().trim();
-          const songKey = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
-          if (!usedArtists.has(artistKey) && !usedSongs.has(songKey)) {
-            picked = candidate;
-            usedArtists.add(artistKey);
-            usedSongs.add(songKey);
-            break;
-          }
-        }
-
-        if (!picked) picked = sorted[0]; // fallback
-
-        const filename = sanitizeFilename(`${picked.artist} - ${picked.title}.mp3`).toUpperCase();
-        const ageMs = Date.now() - picked.ts;
-        const isFresh = ageMs < 30 * 60 * 1000; // within 30 min
-
-        songs.push({
-          position: seq.position,
-          filename,
-          artist: picked.artist,
-          title: picked.title,
-          source: dbName,
-          isSpecial: false,
-          fromBuilder: false,
-          isFresh,
-          freshness: isFresh ? formatDistanceToNow(new Date(picked.ts), { locale: ptBR, addSuffix: true }) : undefined,
-        });
-      }
-
-      setFallbackSongs(songs);
-      setLastFetch(new Date());
-    } catch (error) {
-      console.error('[GradePreview] Error fetching fallback:', error);
-    } finally {
-      setIsLoadingFallback(false);
-    }
-  }, [stationIdToDbName, stations]);
-
-  // Fetch fallback on mount and every 10 min
-  useEffect(() => {
-    fetchFallbackPreview();
-    const interval = setInterval(fetchFallbackPreview, 600000);
-    return () => clearInterval(interval);
-  }, [fetchFallbackPreview]);
-
-  // Use builder output when available, otherwise fallback
-  const displaySongs = builderSongs.length > 0 ? builderSongs : fallbackSongs;
-  const isFromBuilder = builderSongs.length > 0;
 
   // Get the raw grade line from builder
   const nextBlockLine = useMemo(() => {
@@ -331,7 +149,7 @@ export function GradePreviewCard() {
           addMissingSong({
             id: `preview-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             title: s.title, artist: s.artist,
-            station: s.source || 'preview',
+            station: 'preview',
             status: 'missing', timestamp: new Date(), urgency: 'grade',
           });
           existingKeys.add(dlKey);
@@ -359,7 +177,7 @@ export function GradePreviewCard() {
 
   const foundCount = Object.values(libraryStatus).filter(s => s === 'found').length;
   const missingCount = Object.values(libraryStatus).filter(s => s === 'missing').length;
-  const isLoading = gradeBuilder.isBuilding || isLoadingFallback;
+  const isLoading = gradeBuilder.isBuilding;
 
   return (
     <Card className="glass-card border-amber-500/20">
@@ -371,7 +189,7 @@ export function GradePreviewCard() {
             <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-400 border-amber-500/30">
               {nextBlockTime}
             </Badge>
-            {isFromBuilder && (
+            {displaySongs.length > 0 && (
               <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-400 border-green-500/30">
                 TXT
               </Badge>
@@ -388,13 +206,7 @@ export function GradePreviewCard() {
               variant="ghost"
               size="icon"
               className="h-7 w-7"
-              onClick={() => {
-                if (isElectron) {
-                  gradeBuilder.buildGrade(false);
-                } else {
-                  fetchFallbackPreview();
-                }
-              }}
+              onClick={() => gradeBuilder.buildGrade(false)}
               disabled={isLoading}
             >
               {isLoading ? (
@@ -410,22 +222,16 @@ export function GradePreviewCard() {
             <FileText className="w-3 h-3" />
             {displaySongs.length} faixas
           </span>
-          {displaySongs.filter(s => s.isFresh).length > 0 && (
-            <span className="flex items-center gap-1 text-orange-400">
-              <Flame className="w-3 h-3" />
-              {displaySongs.filter(s => s.isFresh).length} frescas
-            </span>
-          )}
           {isElectron && (foundCount > 0 || missingCount > 0) && (
             <span className="flex items-center gap-1">
               <HardDrive className="w-3 h-3" />
               {foundCount}✅ {missingCount}❌
             </span>
           )}
-          {(gradeBuilder.lastBuildTime || lastFetch) && (
+          {gradeBuilder.lastBuildTime && (
             <span className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              {format(gradeBuilder.lastBuildTime || lastFetch!, 'HH:mm', { locale: ptBR })}
+              {format(gradeBuilder.lastBuildTime, 'HH:mm', { locale: ptBR })}
             </span>
           )}
         </div>
@@ -435,7 +241,12 @@ export function GradePreviewCard() {
           {displaySongs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-muted-foreground gap-2">
               <Music className="w-8 h-8 opacity-50" />
-              <p className="text-sm">{isLoading ? 'Montando preview...' : 'Aguardando dados das emissoras'}</p>
+              <p className="text-sm">
+                {isLoading ? 'Montando grade...' : 'Aguardando montagem da grade'}
+              </p>
+              <p className="text-xs opacity-60">
+                A grade será montada automaticamente antes do próximo bloco
+              </p>
             </div>
           ) : (
             <div className="space-y-1.5">
@@ -471,27 +282,13 @@ export function GradePreviewCard() {
                         <>
                           <p className="text-sm font-medium truncate leading-tight">
                             {song.title || song.artist}
-                            {song.isFresh && (
-                              <Flame className="w-3 h-3 inline-block ml-1 text-orange-400" />
-                            )}
                           </p>
                           <p className="text-xs text-muted-foreground truncate">
                             {song.artist}
-                            {song.freshness && (
-                              <span className="ml-1 text-orange-400/80">· {song.freshness}</span>
-                            )}
                           </p>
                         </>
                       )}
                     </div>
-
-                    {/* Station source badge */}
-                    {!song.isSpecial && !song.fromBuilder && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 max-w-[80px] truncate">
-                        <Radio className="w-2.5 h-2.5 mr-0.5 shrink-0" />
-                        {song.source}
-                      </Badge>
-                    )}
 
                     {/* Missing badge */}
                     {isMissing && (
