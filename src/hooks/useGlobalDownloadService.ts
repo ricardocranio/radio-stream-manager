@@ -18,6 +18,8 @@ interface DownloadQueueItem {
   priority: number;
 }
 
+const PRIORITY_GRADE_BOOST = 500;
+const PRIORITY_SEQUENCE_BOOST = 200;
 const PRIORITY_STATION_BOOST = 100;
 
 export interface DownloadServiceState {
@@ -217,6 +219,15 @@ export function useGlobalDownloadService() {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
         let priority = rankingMap.get(key) || 0;
         
+        // Urgency-based priority boost
+        if (song.urgency === 'grade') {
+          priority += PRIORITY_GRADE_BOOST;
+          console.log(`[DL-SVC] 🚨 Prioridade URGENTE (Grade): ${song.artist} - ${song.title}`);
+        } else if (song.urgency === 'sequence') {
+          priority += PRIORITY_SEQUENCE_BOOST;
+          console.log(`[DL-SVC] ⚡ Prioridade ALTA (Sequência): ${song.artist} - ${song.title}`);
+        }
+        
         const isPriorityStation = priorityStationNames.has(song.station?.toLowerCase() || '');
         if (isPriorityStation) {
           priority += PRIORITY_STATION_BOOST;
@@ -236,9 +247,9 @@ export function useGlobalDownloadService() {
     }
   }, [processQueue]);
 
-  // Watch for reset signal
+  // Watch for reset signal AND react immediately to new missing songs
   useEffect(() => {
-    const unsubscribe = useAutoDownloadStore.subscribe((s, prev) => {
+    const unsubReset = useAutoDownloadStore.subscribe((s, prev) => {
       if (s.resetCounter > prev.resetCounter) {
         console.log('[DL-SVC] 🔄 Reset signal');
         downloadQueueRef.current = [];
@@ -247,8 +258,26 @@ export function useGlobalDownloadService() {
         setState({ queueLength: 0, isProcessing: false });
       }
     });
-    return () => unsubscribe();
-  }, []);
+
+    // React immediately when new grade-urgent missing songs appear
+    let prevMissingCount = useRadioStore.getState().missingSongs.length;
+    const unsubMissing = useRadioStore.subscribe((state) => {
+      const currentCount = state.missingSongs.length;
+      if (currentCount > prevMissingCount) {
+        const hasUrgent = state.missingSongs.some(s => s.status === 'missing' && s.urgency === 'grade');
+        if (hasUrgent) {
+          console.log('[DL-SVC] 🚨 Novas músicas urgentes da grade detectadas, processando imediatamente...');
+          checkNewMissingSongs();
+        }
+      }
+      prevMissingCount = currentCount;
+    });
+
+    return () => {
+      unsubReset();
+      unsubMissing();
+    };
+  }, [checkNewMissingSongs]);
 
   /** Start the download check interval. Returns cleanup function. */
   const start = useCallback(() => {

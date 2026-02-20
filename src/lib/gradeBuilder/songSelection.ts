@@ -222,13 +222,14 @@ export async function selectSongForSlot(
             console.log(`[SONG-SELECT] ⚠️ Download não disponível a tempo, buscando alternativa disponível...`);
           }
 
-          // Mark as missing + carry-over for future blocks
+          // Mark as missing with GRADE urgency + carry-over for future blocks
           if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
             ctx.addMissingSong({
               id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               title: candidate.title, artist: candidate.artist,
               station: stationName || 'UNKNOWN',
               timestamp: new Date(), status: 'missing', dna: stationStyle,
+              urgency: 'grade',
             });
           }
           ctx.addCarryOverSong({

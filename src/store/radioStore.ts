@@ -42,6 +42,7 @@ export interface MissingSong {
   timestamp: Date;
   status: 'missing' | 'downloading' | 'downloaded' | 'error';
   dna?: string;
+  urgency?: 'grade' | 'sequence' | 'normal'; // Priority level for download queue
 }
 
 export interface DownloadHistoryEntry {
