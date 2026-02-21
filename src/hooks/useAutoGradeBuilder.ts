@@ -510,8 +510,35 @@ export function useAutoGradeBuilder() {
       }
     }
 
-    // Get active sequence
+    // Get active sequence for this specific block
     const activeSequence = getActiveSequenceForBlock(hour, minute, targetDay);
+    
+    // === SEQUENCE DIAGNOSTIC LOG ===
+    const seqSummary = activeSequence.map((s, i) => `P${i + 1}:${s.radioSource}`).join(' | ');
+    console.log(`[AUTO-GRADE] 🎼 SEQUÊNCIA para ${timeStr}: [${seqSummary}] (${activeSequence.length} posições)`);
+    
+    // Log station resolution mapping
+    for (const seq of activeSequence) {
+      const resolvedName = STATION_ID_TO_DB_NAME[seq.radioSource] || 
+        stations.find(s => s.id === seq.radioSource)?.name || 
+        seq.radioSource;
+      const poolSongs = songsByStation[resolvedName] || [];
+      const poolKeys = Object.keys(songsByStation);
+      // Try case-insensitive match if exact fails
+      let matchedPool = poolSongs.length;
+      if (matchedPool === 0) {
+        const lowerResolved = resolvedName.toLowerCase().trim();
+        for (const key of poolKeys) {
+          if (key.toLowerCase().trim() === lowerResolved) {
+            matchedPool = songsByStation[key].length;
+            break;
+          }
+        }
+      }
+      console.log(`[AUTO-GRADE]   → "${seq.radioSource}" = "${resolvedName}" (${matchedPool} músicas no pool)`);
+    }
+    // === END DIAGNOSTIC ===
+    
     const usedInBlock = new Set<string>();
     const usedArtistsInBlock = new Set<string>();
     const stationSongIndex: Record<string, number> = {};
