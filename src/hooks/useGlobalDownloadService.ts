@@ -9,6 +9,7 @@ import { useRef, useCallback, useState, useEffect } from 'react';
 import { useRadioStore, MissingSong, DownloadHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
+import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -270,13 +271,22 @@ export function useGlobalDownloadService() {
       setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
       useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
 
-      let success = await downloadSong(item.song, item.fallbackQuality);
+      // Acquire global mutex — wait for any other download to finish
+      const lockPriority = item.priority;
+      await acquireDownloadLock(lockPriority);
 
-      // === QUALITY FALLBACK: try 128kbps if 320 failed ===
-      if (!success && !item.fallbackQuality && useRadioStore.getState().deezerConfig.quality !== 'MP3_128') {
-        console.log(`[DL-SVC] 🔄 Tentando fallback 128kbps: ${item.song.artist} - ${item.song.title}`);
-        await new Promise(resolve => setTimeout(resolve, 5000)); // 5s before retry
-        success = await downloadSong(item.song, true);
+      let success: boolean;
+      try {
+        success = await downloadSong(item.song, item.fallbackQuality);
+
+        // === QUALITY FALLBACK: try 128kbps if 320 failed ===
+        if (!success && !item.fallbackQuality && useRadioStore.getState().deezerConfig.quality !== 'MP3_128') {
+          console.log(`[DL-SVC] 🔄 Tentando fallback 128kbps: ${item.song.artist} - ${item.song.title}`);
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          success = await downloadSong(item.song, true);
+        }
+      } finally {
+        releaseDownloadLock();
       }
 
       if (success) {
