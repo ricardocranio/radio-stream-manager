@@ -1,9 +1,10 @@
-import { Power, RefreshCw, Clock, Sun, Moon, Download } from 'lucide-react';
+import { Power, RefreshCw, Clock, Sun, Moon, Download, AlertTriangle } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useCapturedDownloadStore } from '@/store/capturedDownloadStore';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { StatusIndicator } from '@/components/StatusIndicator';
@@ -13,12 +14,23 @@ import { useEffect, useState } from 'react';
 export function Header() {
   const { isRunning, setIsRunning, lastUpdate } = useRadioStore();
   const autoDownloadQueue = useAutoDownloadStore((s) => s.queueLength);
+  const activeDownload = useAutoDownloadStore((s) => s.activeDownload);
+  const arlValid = useAutoDownloadStore((s) => s.arlValid);
   const capturedDlProcessing = useCapturedDownloadStore((s) => s.isProcessing);
   const capturedDlQueue = useCapturedDownloadStore((s) => s.queueLength);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
 
-  // Avoid hydration mismatch
+  // Track elapsed time for active download
+  useEffect(() => {
+    if (!activeDownload) { setElapsed(0); return; }
+    const timer = setInterval(() => {
+      setElapsed(Math.round((Date.now() - activeDownload.startedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [activeDownload]);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -77,14 +89,39 @@ export function Header() {
           </Button>
         )}
 
-        {/* Download Activity Badge */}
-        {(autoDownloadQueue > 0 || capturedDlProcessing) && (
-          <Badge variant="secondary" className="gap-1.5 animate-pulse text-xs">
-            <Download className="w-3 h-3" />
-            {autoDownloadQueue + capturedDlQueue > 0
-              ? `${autoDownloadQueue + capturedDlQueue} na fila`
-              : 'Baixando...'}
+        {/* ARL Invalid Warning */}
+        {!arlValid && (
+          <Badge variant="destructive" className="gap-1.5 text-xs">
+            <AlertTriangle className="w-3 h-3" />
+            ARL Inválida
           </Badge>
+        )}
+
+        {/* Download Activity Badge with real-time progress */}
+        {(autoDownloadQueue > 0 || capturedDlProcessing || activeDownload) && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="gap-1.5 animate-pulse text-xs max-w-48 truncate">
+                  <Download className="w-3 h-3 shrink-0" />
+                  {activeDownload 
+                    ? `${activeDownload.artist} - ${activeDownload.title} (${elapsed}s)`
+                    : autoDownloadQueue + capturedDlQueue > 0
+                      ? `${autoDownloadQueue + capturedDlQueue} na fila`
+                      : 'Baixando...'}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                {activeDownload && (
+                  <p className="text-xs">
+                    Baixando: {activeDownload.artist} - {activeDownload.title}<br/>
+                    Tempo: {elapsed}s | Fila: {autoDownloadQueue}
+                  </p>
+                )}
+                {!activeDownload && <p className="text-xs">{autoDownloadQueue + capturedDlQueue} músicas na fila</p>}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
 
         {/* Status Indicator */}
