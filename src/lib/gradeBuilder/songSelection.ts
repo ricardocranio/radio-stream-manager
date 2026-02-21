@@ -111,13 +111,30 @@ export async function selectSongForSlot(
     stationName = seq.radioSource;
   }
 
-  // Get songs for this station
+  // Strategy 4: radioSource might be a station name but not matching pool keys exactly
+  if (!stationName) {
+    stationName = seq.radioSource;
+  }
+
+  // Get songs for this station — try exact match first
   let stationSongs: SongEntry[] = [];
   if (stationName && songsByStation[stationName]) {
     stationSongs = songsByStation[stationName];
   }
+
+  // Fallback: case-insensitive exact match against pool keys
+  if (stationSongs.length === 0 && stationName) {
+    const lowerName = stationName.toLowerCase().trim();
+    for (const [poolKey, poolSongs] of Object.entries(songsByStation)) {
+      if (poolKey.toLowerCase().trim() === lowerName) {
+        stationName = poolKey; // Use pool's exact key
+        stationSongs = poolSongs;
+        break;
+      }
+    }
+  }
   
-  // Fallback: fuzzy match against songsByStation keys
+  // Fallback: fuzzy/partial match against songsByStation keys
   if (stationSongs.length === 0) {
     const normalizedSource = seq.radioSource.toLowerCase().replace(/[^a-z0-9]/g, '');
     const normalizedConfigName = stationName.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -130,15 +147,16 @@ export async function selectSongForSlot(
       ) {
         stationName = poolStationName;
         stationSongs = poolSongs;
+        console.log(`[SONG-SELECT] 🔗 Fuzzy match: "${seq.radioSource}" → "${poolStationName}" (${poolSongs.length} músicas)`);
         break;
       }
     }
   }
 
   if (stationSongs.length > 0) {
-    console.log(`[SONG-SELECT] 🎯 Estação "${stationName}" encontrada com ${stationSongs.length} músicas para slot (source: ${seq.radioSource})`);
+    console.log(`[SONG-SELECT] 🎯 Estação "${stationName}" → ${stationSongs.length} músicas (source: ${seq.radioSource})`);
   } else {
-    console.warn(`[SONG-SELECT] ⚠️ Nenhuma música encontrada para source "${seq.radioSource}" (resolved: "${stationName}"). Pool disponível: ${Object.keys(songsByStation).join(', ')}`);
+    console.warn(`[SONG-SELECT] ⚠️ POOL VAZIO para "${seq.radioSource}" (resolved: "${stationName}"). Pool keys: [${Object.keys(songsByStation).join(', ')}]`);
   }
 
   const stationStyle = ctx.stations.find(s => s.id === seq.radioSource)?.styles?.[0] || 'POP/VARIADO';
