@@ -2,7 +2,7 @@
  * Global Download Service Hook
  * 
  * Manages the auto-download queue for missing songs.
- * Extracted from GlobalServicesContext for modularity.
+ * Features: progressive cooldown retry, quality fallback, real-time progress, ARL health check.
  */
 
 import { useRef, useCallback, useState, useEffect } from 'react';
@@ -16,11 +16,18 @@ interface DownloadQueueItem {
   song: MissingSong;
   retryCount: number;
   priority: number;
+  lastFailedAt?: number;
+  consecutiveFailures?: number;
+  fallbackQuality?: boolean; // true = try 128 instead of 320
 }
 
 const PRIORITY_GRADE_BOOST = 500;
 const PRIORITY_SEQUENCE_BOOST = 200;
 const PRIORITY_STATION_BOOST = 100;
+
+const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+const MAX_RETRIES_BEFORE_COOLDOWN = 3;
+const ARL_CHECK_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
 export interface DownloadServiceState {
   queueLength: number;
@@ -32,14 +39,54 @@ export function useGlobalDownloadService() {
   const isProcessingRef = useRef(false);
   const processedSongsRef = useRef<Set<string>>(new Set());
   const downloadIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const arlCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastLogTimeRef = useRef<number>(0);
+  const failureTracker = useRef<Map<string, { count: number; lastFail: number }>>(new Map());
 
   const [state, setState] = useState<DownloadServiceState>({
     queueLength: 0,
     isProcessing: false,
   });
 
-  const downloadSong = useCallback(async (song: MissingSong): Promise<boolean> => {
+  // === ARL HEALTH CHECK ===
+  const checkArlHealth = useCallback(async () => {
+    if (!isElectron) return;
+    const { deezerConfig } = useRadioStore.getState();
+    if (!deezerConfig.enabled || !deezerConfig.arl) return;
+
+    try {
+      // Use the validate-deezer-arl edge function
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      if (!supabaseUrl || !supabaseKey) return;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/validate-deezer-arl`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify({ arl: deezerConfig.arl }),
+      });
+
+      const data = await resp.json();
+      const valid = data?.valid === true;
+      useAutoDownloadStore.getState().setArlStatus(valid);
+
+      if (!valid) {
+        console.warn('[DL-SVC] ⚠️ ARL INVÁLIDA! Downloads serão pausados até uma nova ARL ser configurada.');
+      } else {
+        console.log(`[DL-SVC] ✅ ARL válida — Usuário: ${data.name || 'OK'}`);
+      }
+    } catch (err) {
+      console.warn('[DL-SVC] ARL check failed (network?):', (err as Error).message);
+      // Don't mark as invalid on network errors — keep last known state
+    }
+  }, []);
+
+  // === DOWNLOAD WITH QUALITY FALLBACK ===
+  const downloadSong = useCallback(async (song: MissingSong, fallbackQuality?: boolean): Promise<boolean> => {
     if (!isElectron || !window.electronAPI?.downloadFromDeezer) {
       return false;
     }
@@ -49,8 +96,25 @@ export function useGlobalDownloadService() {
       return false;
     }
 
-    console.log(`[DL-SVC] 🎵 Downloading: ${song.artist} - ${song.title}`);
+    // Check ARL validity
+    if (!useAutoDownloadStore.getState().arlValid) {
+      console.warn(`[DL-SVC] ⏸️ ARL inválida, pulando: ${song.artist} - ${song.title}`);
+      return false;
+    }
+
+    const quality = fallbackQuality ? 'MP3_128' : storeState.deezerConfig.quality;
+    if (fallbackQuality) {
+      console.log(`[DL-SVC] 🔄 Fallback 128kbps: ${song.artist} - ${song.title}`);
+    } else {
+      console.log(`[DL-SVC] 🎵 Downloading (${quality}): ${song.artist} - ${song.title}`);
+    }
+
     useRadioStore.getState().updateMissingSong(song.id, { status: 'downloading' });
+    useAutoDownloadStore.getState().setActiveDownload({
+      artist: song.artist,
+      title: song.title,
+      startedAt: Date.now(),
+    });
 
     const startTime = Date.now();
 
@@ -60,15 +124,15 @@ export function useGlobalDownloadService() {
         title: song.title,
         arl: storeState.deezerConfig.arl,
         outputFolder: storeState.deezerConfig.downloadFolder,
-        quality: storeState.deezerConfig.quality,
+        quality,
       });
 
       const duration = Date.now() - startTime;
+      useAutoDownloadStore.getState().setActiveDownload(null);
 
       if (result?.success) {
-        // Verify the download was truly successful (not just a process exit)
         if (result.skipped) {
-          console.log(`[DL-SVC] ⏭️ Skipped (exists): ${song.artist} - ${song.title} in ${result.existingStation || 'main'}`);
+          console.log(`[DL-SVC] ⏭️ Skipped (exists): ${song.artist} - ${song.title}`);
         } else if ((result as any).verifiedFile) {
           console.log(`[DL-SVC] ✅ Verificado: ${song.artist} - ${song.title} → ${(result as any).verifiedFile}`);
         } else {
@@ -76,9 +140,12 @@ export function useGlobalDownloadService() {
         }
         
         useRadioStore.getState().updateMissingSong(song.id, { status: 'downloaded' });
-        
         markSongAsDownloaded(song.artist, song.title, result.output);
         
+        // Clear failure tracker on success
+        const failKey = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
+        failureTracker.current.delete(failKey);
+
         const historyEntry: DownloadHistoryEntry = {
           id: crypto.randomUUID(),
           songId: song.id,
@@ -89,13 +156,16 @@ export function useGlobalDownloadService() {
           duration,
         };
         useRadioStore.getState().addDownloadHistory(historyEntry);
-
         return true;
       } else {
-        // Download returned failure — log the specific error
         const errorMsg = result?.error || 'Download failed';
         console.error(`[DL-SVC] ❌ Failed: ${song.artist} - ${song.title} — ${errorMsg}`);
         
+        // Check if ARL is the problem
+        if (errorMsg.includes('ARL') || errorMsg.includes('arl') || errorMsg.includes('login')) {
+          useAutoDownloadStore.getState().setArlStatus(false);
+        }
+
         useRadioStore.getState().updateMissingSong(song.id, { status: 'error' });
         
         const historyEntry: DownloadHistoryEntry = {
@@ -109,11 +179,11 @@ export function useGlobalDownloadService() {
           duration,
         };
         useRadioStore.getState().addDownloadHistory(historyEntry);
-
         return false;
       }
     } catch (error) {
       const duration = Date.now() - startTime;
+      useAutoDownloadStore.getState().setActiveDownload(null);
       useRadioStore.getState().updateMissingSong(song.id, { status: 'error' });
       
       const historyEntry: DownloadHistoryEntry = {
@@ -160,18 +230,57 @@ export function useGlobalDownloadService() {
         break;
       }
 
+      // Check ARL validity before each download
+      if (!useAutoDownloadStore.getState().arlValid) {
+        console.warn('[DL-SVC] ⏸️ ARL inválida. Fila pausada.');
+        break;
+      }
+
       // Sort by priority before each pick
       downloadQueueRef.current.sort((a, b) => b.priority - a.priority);
 
-      const item = downloadQueueRef.current.shift();
+      // Find first item not in cooldown
+      const now = Date.now();
+      let itemIndex = -1;
+      for (let i = 0; i < downloadQueueRef.current.length; i++) {
+        const item = downloadQueueRef.current[i];
+        const failKey = `${item.song.artist.toLowerCase().trim()}|${item.song.title.toLowerCase().trim()}`;
+        const tracker = failureTracker.current.get(failKey);
+        
+        if (tracker && tracker.count >= MAX_RETRIES_BEFORE_COOLDOWN) {
+          const elapsed = now - tracker.lastFail;
+          if (elapsed < COOLDOWN_MS) {
+            continue; // Still in cooldown
+          }
+          // Cooldown expired — reset and allow retry
+          console.log(`[DL-SVC] ⏰ Cooldown expirado: ${item.song.artist} - ${item.song.title}, tentando novamente...`);
+          tracker.count = 0;
+        }
+        itemIndex = i;
+        break;
+      }
+
+      if (itemIndex === -1) {
+        // All items in cooldown
+        console.log(`[DL-SVC] 😴 Todos os ${downloadQueueRef.current.length} itens em cooldown (10 min). Aguardando...`);
+        break;
+      }
+
+      const item = downloadQueueRef.current.splice(itemIndex, 1)[0];
       setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
       useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
-      if (!item) break;
 
-      const success = await downloadSong(item.song);
+      let success = await downloadSong(item.song, item.fallbackQuality);
+
+      // === QUALITY FALLBACK: try 128kbps if 320 failed ===
+      if (!success && !item.fallbackQuality && useRadioStore.getState().deezerConfig.quality !== 'MP3_128') {
+        console.log(`[DL-SVC] 🔄 Tentando fallback 128kbps: ${item.song.artist} - ${item.song.title}`);
+        await new Promise(resolve => setTimeout(resolve, 5000)); // 5s before retry
+        success = await downloadSong(item.song, true);
+      }
 
       if (success) {
-        // Remove duplicates of same artist+title from queue to avoid duplicate files
+        // Remove duplicates
         const artistLower = item.song.artist.toLowerCase().trim();
         const titleLower = item.song.title.toLowerCase().trim();
         const before = downloadQueueRef.current.length;
@@ -180,18 +289,39 @@ export function useGlobalDownloadService() {
         );
         const removed = before - downloadQueueRef.current.length;
         if (removed > 0) {
-          console.log(`[DL-SVC] 🧹 Removidas ${removed} duplicatas da fila: ${item.song.artist} - ${item.song.title}`);
+          console.log(`[DL-SVC] 🧹 Removidas ${removed} duplicatas: ${item.song.artist} - ${item.song.title}`);
           setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
           useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
         }
       }
       
-      if (!success && item.retryCount < 2) {
-        downloadQueueRef.current.push({
-          song: item.song,
-          retryCount: item.retryCount + 1,
-          priority: item.priority,
-        });
+      if (!success) {
+        // Track consecutive failures
+        const failKey = `${item.song.artist.toLowerCase().trim()}|${item.song.title.toLowerCase().trim()}`;
+        const tracker = failureTracker.current.get(failKey) || { count: 0, lastFail: 0 };
+        tracker.count++;
+        tracker.lastFail = Date.now();
+        failureTracker.current.set(failKey, tracker);
+
+        if (tracker.count >= MAX_RETRIES_BEFORE_COOLDOWN) {
+          console.warn(`[DL-SVC] 🕐 ${item.song.artist} - ${item.song.title} falhou ${tracker.count}x. Cooldown de 10 min.`);
+          // Reset status to 'missing' so it can be retried after cooldown
+          useRadioStore.getState().updateMissingSong(item.song.id, { status: 'missing' });
+          // Re-add to queue for retry after cooldown
+          downloadQueueRef.current.push({
+            song: item.song,
+            retryCount: item.retryCount + 1,
+            priority: item.priority,
+            fallbackQuality: false,
+          });
+        } else if (item.retryCount < 2) {
+          downloadQueueRef.current.push({
+            song: item.song,
+            retryCount: item.retryCount + 1,
+            priority: item.priority,
+          });
+        }
+        
         setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
         useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
       }
@@ -203,6 +333,7 @@ export function useGlobalDownloadService() {
     isProcessingRef.current = false;
     setState(prev => ({ ...prev, isProcessing: false }));
     useAutoDownloadStore.getState().setIsProcessing(false);
+    useAutoDownloadStore.getState().setActiveDownload(null);
   }, [downloadSong]);
 
   const checkNewMissingSongs = useCallback(() => {
@@ -224,7 +355,6 @@ export function useGlobalDownloadService() {
       return !inQueue && !alreadyDownloaded;
     });
 
-    // Only log every 10 minutes OR when there are new songs
     const now = Date.now();
     const shouldLog = (now - lastLogTimeRef.current > 600000) || (newToQueue.length > 0);
     
@@ -238,7 +368,6 @@ export function useGlobalDownloadService() {
     }
 
     if (newToQueue.length > 0) {
-      // Build ranking and priority maps
       const rankingMap = new Map<string, number>();
       rankingSongs.forEach((song, index) => {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
@@ -258,7 +387,6 @@ export function useGlobalDownloadService() {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
         let priority = rankingMap.get(key) || 0;
         
-        // Urgency-based priority boost
         if (song.urgency === 'grade') {
           priority += PRIORITY_GRADE_BOOST;
           console.log(`[DL-SVC] 🚨 Prioridade URGENTE (Grade): ${song.artist} - ${song.title}`);
@@ -270,7 +398,6 @@ export function useGlobalDownloadService() {
         const isPriorityStation = priorityStationNames.has(song.station?.toLowerCase() || '');
         if (isPriorityStation) {
           priority += PRIORITY_STATION_BOOST;
-          console.log(`[DL-SVC] 📂 Prioridade ALTA (${song.station}): ${song.artist} - ${song.title}`);
         }
 
         downloadQueueRef.current.push({ song, retryCount: 0, priority });
@@ -293,12 +420,12 @@ export function useGlobalDownloadService() {
         console.log('[DL-SVC] 🔄 Reset signal');
         downloadQueueRef.current = [];
         processedSongsRef.current.clear();
+        failureTracker.current.clear();
         isProcessingRef.current = false;
         setState({ queueLength: 0, isProcessing: false });
       }
     });
 
-    // React immediately when new missing songs appear (especially grade-urgent)
     let prevMissingIds = new Set(useRadioStore.getState().missingSongs.map(s => s.id));
     const unsubMissing = useRadioStore.subscribe((state) => {
       const currentIds = new Set(state.missingSongs.map(s => s.id));
@@ -307,11 +434,10 @@ export function useGlobalDownloadService() {
         const hasUrgent = newSongs.some(s => s.status === 'missing' && s.urgency === 'grade');
         
         if (hasUrgent) {
-          console.log(`[DL-SVC] 🚨 ${newSongs.filter(s => s.urgency === 'grade').length} novas músicas urgentes da grade detectadas!`);
+          console.log(`[DL-SVC] 🚨 ${newSongs.filter(s => s.urgency === 'grade').length} novas músicas urgentes!`);
         }
         
         if (newSongs.length > 0) {
-          console.log(`[DL-SVC] 📥 ${newSongs.length} novas músicas faltantes detectadas, processando...`);
           setTimeout(() => checkNewMissingSongs(), 100);
         }
       }
@@ -324,7 +450,7 @@ export function useGlobalDownloadService() {
     };
   }, [checkNewMissingSongs]);
 
-  /** Start the download check interval. Returns cleanup function. */
+  /** Start the download check interval + ARL health check. Returns cleanup function. */
   const start = useCallback(() => {
     // Download check every 100 seconds
     downloadIntervalRef.current = setInterval(() => {
@@ -334,16 +460,23 @@ export function useGlobalDownloadService() {
       }
     }, 100000);
     
-    // Initial check
+    // ARL health check every 30 minutes
+    arlCheckIntervalRef.current = setInterval(() => {
+      checkArlHealth();
+    }, ARL_CHECK_INTERVAL_MS);
+
+    // Initial checks
     const { isRunning } = useRadioStore.getState();
     if (isRunning) {
       checkNewMissingSongs();
     }
+    checkArlHealth();
 
     return () => {
       if (downloadIntervalRef.current) clearInterval(downloadIntervalRef.current);
+      if (arlCheckIntervalRef.current) clearInterval(arlCheckIntervalRef.current);
     };
-  }, [checkNewMissingSongs]);
+  }, [checkNewMissingSongs, checkArlHealth]);
 
   return {
     state,
