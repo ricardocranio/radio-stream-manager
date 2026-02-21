@@ -448,19 +448,21 @@ export function useAutoGradeBuilder() {
       };
     }
 
-    // 12:00-15:30 — Mega Mix (8 blocks) + POSICAO countdown
+    // 12:00-15:30 — Mega Mix (8 blocks) + music
     if (hour >= 12 && hour <= 15) {
-      const blockMap: Record<string, { ed: number; pos: number }> = {
-        '12:00': { ed: 1, pos: 20 }, '12:30': { ed: 2, pos: 19 },
-        '13:00': { ed: 3, pos: 18 }, '13:30': { ed: 4, pos: 17 },
-        '14:00': { ed: 5, pos: 16 }, '14:30': { ed: 6, pos: 15 },
-        '15:00': { ed: 7, pos: 14 }, '15:30': { ed: 8, pos: 13 },
+      const blockMap: Record<string, number> = {
+        '12:00': 1, '12:30': 2, '13:00': 3, '13:30': 4,
+        '14:00': 5, '14:30': 6, '15:00': 7, '15:30': 8,
       };
-      const info = blockMap[timeStr] || { ed: 1, pos: 20 };
-      const ed = info.ed.toString().padStart(2, '0');
-      const posStr = info.pos.toString().padStart(2, '0');
+      const blockNum = blockMap[timeStr] || 1;
+      const ed = blockNum.toString().padStart(2, '0');
+      // First block: fixed,VHTN,mus,vht,mus,vht,mus,vht,mus
+      // Other blocks: fixed,VHTN,VHTN,mus,vht,mus,vht,mus,vht,mus
+      const suffix = blockNum === 1
+        ? ',VHTN,mus,vht,mus,vht,mus,vht,mus'
+        : ',VHTN,VHTN,mus,vht,mus,vht,mus,vht,mus';
       return {
-        line: `${timeStr} (ID=SABADO) "MEGA_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,"POSICAO${posStr}.MP3"`,
+        line: `${timeStr} (ID=SABADO) "MEGA_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3"${suffix}`,
         logs: [{ blockTime: timeStr, type: 'fixed', title: `Mega Mix Bloco ${ed}`, artist: `MEGA_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Mega Mix FDS' }],
       };
     }
@@ -471,7 +473,7 @@ export function useAutoGradeBuilder() {
       const blockNum = blockMap[timeStr] || 1;
       const ed = blockNum.toString().padStart(2, '0');
       return {
-        line: `${timeStr} (ID=SABADO) VHTN,"SEM_PARAR_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,MUS`,
+        line: `${timeStr} (ID=SABADO) VHTN,"SEM_PARAR_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,mus,vht,mus,vht,mus,vht,mus`,
         logs: [{ blockTime: timeStr, type: 'fixed', title: `Sem Parar Bloco ${ed}`, artist: `SEM_PARAR_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Sem Parar FDS' }],
       };
     }
@@ -511,8 +513,12 @@ export function useAutoGradeBuilder() {
       const blockMap: Record<string, number> = { '21:00': 1, '21:30': 2, '22:00': 3, '22:30': 4, '23:00': 5, '23:30': 8 };
       const blockNum = blockMap[timeStr] || 1;
       const ed = blockNum.toString().padStart(2, '0');
+      // 21:30 has a slightly different pattern (MUS first after fixed, no leading VHTN before MUS)
+      const content = timeStr === '21:30'
+        ? `VHTN,"CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3",MUS,VHTN,MUS,VHTN,MUS,VHTN,MUS,VHTN,MUS`
+        : `VHTN,"CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,MUS,VHTN,MUS,VHTN,MUS,VHTN,MUS`;
       return {
-        line: `${timeStr} (ID=SABADO) VHTN,"CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,MUS,VHTN,MUS,VHTN,MUS,VHTN,MUS`,
+        line: `${timeStr} (ID=SABADO) ${content}`,
         logs: [{ blockTime: timeStr, type: 'fixed', title: `Conexão Mix Bloco ${ed}`, artist: `CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Conexão Mix FDS' }],
       };
     }
