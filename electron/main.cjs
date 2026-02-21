@@ -1811,7 +1811,7 @@ function scanMusicLibrary(musicFolders) {
 
 // Find best matching file in library using similarity
 // IMPORTANT: Artist matching is STRICT to avoid confusing different artists with same song title
-function findBestMatch(artist, title, musicFolders) {
+function findBestMatch(artist, title, musicFolders, threshold) {
   const files = scanMusicLibrary(musicFolders);
   const normalizedArtist = normalizeText(artist);
   const normalizedTitle = normalizeText(title);
@@ -1825,8 +1825,8 @@ function findBestMatch(artist, title, musicFolders) {
   
   let bestMatch = null;
   let bestScore = 0;
-  const THRESHOLD = 0.75; // 75% similarity required
-  const ARTIST_MIN_SIMILARITY = 0.6; // Minimum 60% artist match required
+  const THRESHOLD = threshold || 0.75; // Use configured threshold, default 75%
+  const ARTIST_MIN_SIMILARITY = Math.max(0.4, THRESHOLD - 0.2); // Scale with threshold
   
   for (const file of files) {
     // PRIORITY 1: Direct match - both artist AND title present in filename
@@ -1950,11 +1950,11 @@ ipcMain.handle('check-song-exists', async (event, params) => {
 
 // IPC handler to find best matching song using similarity
 ipcMain.handle('find-song-match', async (event, params) => {
-  const { artist, title, musicFolders } = params;
+  const { artist, title, musicFolders, threshold } = params;
   
   try {
-    console.log(`[LIBRARY] Finding best match for: ${artist} - ${title}`);
-    const result = findBestMatch(artist, title, musicFolders);
+    console.log(`[LIBRARY] Finding best match for: ${artist} - ${title} (threshold: ${Math.round((threshold || 0.75) * 100)}%)`);
+    const result = findBestMatch(artist, title, musicFolders, threshold);
     console.log(`[LIBRARY] Best match: ${result.exists ? result.filename + ' (' + (result.similarity * 100).toFixed(0) + '%)' : 'NOT FOUND'}`);
     return result;
   } catch (error) {
