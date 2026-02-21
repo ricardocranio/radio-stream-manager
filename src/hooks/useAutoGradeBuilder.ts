@@ -514,29 +514,24 @@ export function useAutoGradeBuilder() {
     const activeSequence = getActiveSequenceForBlock(hour, minute, targetDay);
     
     // === SEQUENCE DIAGNOSTIC LOG ===
-    const seqSummary = activeSequence.map((s, i) => `P${i + 1}:${s.radioSource}`).join(' | ');
-    console.log(`[AUTO-GRADE] 🎼 SEQUÊNCIA para ${timeStr}: [${seqSummary}] (${activeSequence.length} posições)`);
-    
-    // Log station resolution mapping
-    for (const seq of activeSequence) {
-      const resolvedName = STATION_ID_TO_DB_NAME[seq.radioSource] || 
-        stations.find(s => s.id === seq.radioSource)?.name || 
-        seq.radioSource;
+    const seqSummary = activeSequence.map((s, i) => {
+      const resolvedName = STATION_ID_TO_DB_NAME[s.radioSource] || 
+        stations.find(st => st.id === s.radioSource)?.name || 
+        s.radioSource;
       const poolSongs = songsByStation[resolvedName] || [];
-      const poolKeys = Object.keys(songsByStation);
       // Try case-insensitive match if exact fails
       let matchedPool = poolSongs.length;
       if (matchedPool === 0) {
-        const lowerResolved = resolvedName.toLowerCase().trim();
-        for (const key of poolKeys) {
-          if (key.toLowerCase().trim() === lowerResolved) {
+        for (const key of Object.keys(songsByStation)) {
+          if (key.toLowerCase().trim() === resolvedName.toLowerCase().trim()) {
             matchedPool = songsByStation[key].length;
             break;
           }
         }
       }
-      console.log(`[AUTO-GRADE]   → "${seq.radioSource}" = "${resolvedName}" (${matchedPool} músicas no pool)`);
-    }
+      return `P${i + 1}:${s.radioSource}→${resolvedName}(${matchedPool})`;
+    }).join(' | ');
+    console.log(`[AUTO-GRADE] 🎼 SEQUÊNCIA ${timeStr}: [${seqSummary}]`);
     // === END DIAGNOSTIC ===
     
     const usedInBlock = new Set<string>();
