@@ -754,10 +754,7 @@ export function useAutoGradeBuilder() {
   // ==================== Incremental Build (silent, in-memory) ====================
 
   const buildGrade = useCallback(async (forceWrite: boolean = false, forceRegenerate: boolean = false) => {
-    if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
-      console.log('[AUTO-GRADE] Not in Electron mode, skipping');
-      return;
-    }
+    const isWebOnly = !isElectronEnv || !window.electronAPI?.saveGradeFile;
 
     try {
       const blocks = getBlockTimes();
@@ -784,14 +781,16 @@ export function useAutoGradeBuilder() {
 
       setState(prev => ({ ...prev, isBuilding: true, error: null }));
 
-      // Read existing file first
+      // Read existing file first (Electron only)
       let existingContent = '';
-      try {
-        if (window.electronAPI?.readGradeFile) {
-          const readResult = await window.electronAPI.readGradeFile({ folder: config.gradeFolder, filename });
-          if (readResult.success && readResult.content) existingContent = readResult.content;
-        }
-      } catch { /* ignore */ }
+      if (!isWebOnly) {
+        try {
+          if (window.electronAPI?.readGradeFile) {
+            const readResult = await window.electronAPI.readGradeFile({ folder: config.gradeFolder, filename });
+            if (readResult.success && readResult.content) existingContent = readResult.content;
+          }
+        } catch { /* ignore */ }
+      }
 
       const lineMap = new Map<string, string>();
       if (existingContent) {
@@ -856,10 +855,10 @@ export function useAutoGradeBuilder() {
         pendingGradeLines: new Map(lineMap),
       }));
 
-      console.log(`[AUTO-GRADE] 📋 Grade montada em memória (aguardando janela de 10min para escrita)`);
+      console.log(`[AUTO-GRADE] 📋 Grade montada em memória${isWebOnly ? ' (modo web - preview only)' : ' (aguardando janela de 10min para escrita)'}`);
 
-      // Only write to disk if forceWrite is true (triggered by the 10-min timer)
-      if (forceWrite) {
+      // Only write to disk if forceWrite is true and in Electron mode
+      if (forceWrite && !isWebOnly) {
         await flushGradeToDisk();
       }
 
@@ -939,7 +938,8 @@ export function useAutoGradeBuilder() {
 
   // Auto-build effect: builds silently in memory every 6 min, writes TXT only at 10 min before block
   useEffect(() => {
-    if (!isElectronEnv || !state.isAutoEnabled) return;
+    if (!state.isAutoEnabled) return;
+    const isWebOnly = !isElectronEnv;
     console.log(`[AUTO-GRADE] ⏰ Modo automático ATIVO - monta silenciosamente, escreve ${state.minutesBeforeBlock} min antes do bloco`);
     let lastBuiltBlock = '';
     let lastWrittenBlock = '';
@@ -971,8 +971,8 @@ export function useAutoGradeBuilder() {
         buildGrade(false); // silent, no file write
       }
 
-      // Disk write: only exactly at the minutesBeforeBlock window
-      const shouldWrite = minutesUntilBlock <= state.minutesBeforeBlock && lastWrittenBlock !== blockKey;
+      // Disk write: only exactly at the minutesBeforeBlock window (Electron only)
+      const shouldWrite = !isWebOnly && minutesUntilBlock <= state.minutesBeforeBlock && lastWrittenBlock !== blockKey;
       if (shouldWrite) {
         console.log(`[AUTO-GRADE] 📝 Janela de ${state.minutesBeforeBlock}min atingida! Escrevendo grade no disco para bloco ${blockKey}`);
         lastWrittenBlock = blockKey;
@@ -982,14 +982,14 @@ export function useAutoGradeBuilder() {
 
     // Initial build (silent)
     const { isRunning } = useRadioStore.getState();
-    if (isRunning) {
+    if (isRunning || isWebOnly) {
       console.log(`[AUTO-GRADE] 🚀 Build inicial (silencioso em memória)`);
       
       // Check if we're already within the write window
       const now = new Date();
       const currentMinute = now.getMinutes();
       const minutesUntilBlock = currentMinute < 30 ? 30 - currentMinute : 60 - currentMinute;
-      const shouldWriteNow = minutesUntilBlock <= state.minutesBeforeBlock;
+      const shouldWriteNow = !isWebOnly && minutesUntilBlock <= state.minutesBeforeBlock;
       
       buildGrade(shouldWriteNow);
     }
