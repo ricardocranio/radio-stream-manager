@@ -56,4 +56,10 @@ export const DAY_CODES_BY_INDEX = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'S�
 export const FULL_DAY_NAMES_BY_INDEX = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO'];
 export const WEEKDAY_KEYS: WeekDay[] = ['seg', 'ter', 'qua', 'qui', 'sex'];
 
+/** Runtime check — never cache at module level since preload may not have run yet */
+export function getIsElectronEnv(): boolean {
+  return typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
+}
+
+/** @deprecated Use getIsElectronEnv() for runtime checks */
 export const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
