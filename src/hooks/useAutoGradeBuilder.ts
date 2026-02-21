@@ -418,6 +418,108 @@ export function useAutoGradeBuilder() {
     return songsByStation;
   }, [stations, config.blockedSongs]);
 
+  // ==================== Weekend Template Generator ====================
+
+  /**
+   * Generates weekend (SAB/DOM) blocks using predefined templates.
+   * Returns null if no template matches (falls through to normal logic).
+   */
+  const generateWeekendTemplateBlock = useCallback((hour: number, minute: number, timeStr: string): BlockResult | null => {
+    const musLine = 'mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus';
+
+    // 00:00-07:30 — Regular music blocks
+    if (hour >= 0 && hour <= 7) {
+      return {
+        line: `${timeStr} (ID=SABADO) ${musLine}`,
+        logs: [{ blockTime: timeStr, type: 'fixed', title: 'Weekend Music', artist: '', station: 'TEMPLATE', reason: 'Bloco musical FDS' }],
+      };
+    }
+
+    // 08:00-11:30 — Shake Mix (8 blocks)
+    if (hour >= 8 && hour <= 11) {
+      const blockMap: Record<string, number> = { '08:00': 1, '08:30': 2, '09:00': 3, '09:30': 4, '10:00': 5, '10:30': 6, '11:00': 7, '11:30': 8 };
+      const blockNum = blockMap[timeStr] || 1;
+      const ed = blockNum.toString().padStart(2, '0');
+      const fixedFile = `"SHAKE_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3"`;
+      const musicSlots = ',vht,mus'.repeat(10);
+      return {
+        line: `${timeStr} (ID=SABADO) ${fixedFile}${musicSlots}`,
+        logs: [{ blockTime: timeStr, type: 'fixed', title: `Shake Mix Bloco ${ed}`, artist: `SHAKE_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Shake Mix FDS' }],
+      };
+    }
+
+    // 12:00-15:30 — Mega Mix (8 blocks) + POSICAO countdown
+    if (hour >= 12 && hour <= 15) {
+      const blockMap: Record<string, { ed: number; pos: number }> = {
+        '12:00': { ed: 1, pos: 20 }, '12:30': { ed: 2, pos: 19 },
+        '13:00': { ed: 3, pos: 18 }, '13:30': { ed: 4, pos: 17 },
+        '14:00': { ed: 5, pos: 16 }, '14:30': { ed: 6, pos: 15 },
+        '15:00': { ed: 7, pos: 14 }, '15:30': { ed: 8, pos: 13 },
+      };
+      const info = blockMap[timeStr] || { ed: 1, pos: 20 };
+      const ed = info.ed.toString().padStart(2, '0');
+      const posStr = info.pos.toString().padStart(2, '0');
+      return {
+        line: `${timeStr} (ID=SABADO) "MEGA_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,"POSICAO${posStr}.MP3"`,
+        logs: [{ blockTime: timeStr, type: 'fixed', title: `Mega Mix Bloco ${ed}`, artist: `MEGA_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Mega Mix FDS' }],
+      };
+    }
+
+    // 16:00-17:30 — Sem Parar (4 blocks)
+    if (hour >= 16 && hour <= 17) {
+      const blockMap: Record<string, number> = { '16:00': 1, '16:30': 2, '17:00': 3, '17:30': 4 };
+      const blockNum = blockMap[timeStr] || 1;
+      const ed = blockNum.toString().padStart(2, '0');
+      return {
+        line: `${timeStr} (ID=SABADO) VHTN,"SEM_PARAR_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,MUS`,
+        logs: [{ blockTime: timeStr, type: 'fixed', title: `Sem Parar Bloco ${ed}`, artist: `SEM_PARAR_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Sem Parar FDS' }],
+      };
+    }
+
+    // 18:00-19:30 — Mega Funk (4 blocks, ID=TOP10 for 18h, TOP50 for 19h)
+    if (hour >= 18 && hour <= 19) {
+      const blockMap: Record<string, number> = { '18:00': 1, '18:30': 2, '19:00': 3, '19:30': 4 };
+      const blockNum = blockMap[timeStr] || 1;
+      const ed = blockNum.toString().padStart(2, '0');
+      const programId = hour === 18 ? 'TOP10' : 'TOP50';
+      return {
+        line: `${timeStr} (ID=${programId}) VHTN,"MEGA_FUNK_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,FUN,VHT,FUN,VHTN,FUN,VHT,FUN,VHTN`,
+        logs: [{ blockTime: timeStr, type: 'fixed', title: `Mega Funk Bloco ${ed}`, artist: `MEGA_FUNK_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: `Mega Funk FDS (${programId})` }],
+      };
+    }
+
+    // 20:00 — TOP50 FDS (positions 20 down to 11)
+    if (hour === 20 && minute === 0) {
+      const positions = Array.from({ length: 10 }, (_, i) => `"POSICAO${(20 - i).toString().padStart(2, '0')}.MP3"`);
+      return {
+        line: `${timeStr} (ID=SABADO) ${positions.join(',vht,')}`,
+        logs: [{ blockTime: timeStr, type: 'fixed', title: 'TOP50 FDS Pos 20-11', artist: 'POSICAO20-11', station: 'TOP50', reason: 'TOP50 FDS bloco 1' }],
+      };
+    }
+
+    // 20:30 — TOP50 FDS (positions 01 up to 10)
+    if (hour === 20 && minute === 30) {
+      const positions = Array.from({ length: 10 }, (_, i) => `"POSICAO${(i + 1).toString().padStart(2, '0')}.MP3"`);
+      return {
+        line: `${timeStr} (ID=SABADO) ${positions.join(',vht,')}`,
+        logs: [{ blockTime: timeStr, type: 'fixed', title: 'TOP50 FDS Pos 01-10', artist: 'POSICAO01-10', station: 'TOP50', reason: 'TOP50 FDS bloco 2' }],
+      };
+    }
+
+    // 21:00-23:30 — Conexão Mix (6 blocks, numbered 01-05 then 08)
+    if (hour >= 21 && hour <= 23) {
+      const blockMap: Record<string, number> = { '21:00': 1, '21:30': 2, '22:00': 3, '22:30': 4, '23:00': 5, '23:30': 8 };
+      const blockNum = blockMap[timeStr] || 1;
+      const ed = blockNum.toString().padStart(2, '0');
+      return {
+        line: `${timeStr} (ID=SABADO) VHTN,"CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,MUS,VHTN,MUS,VHTN,MUS,VHTN,MUS`,
+        logs: [{ blockTime: timeStr, type: 'fixed', title: `Conexão Mix Bloco ${ed}`, artist: `CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Conexão Mix FDS' }],
+      };
+    }
+
+    return null;
+  }, []);
+
   // ==================== Block Generation ====================
 
   const generateBlockLine = useCallback(async (
@@ -434,6 +536,12 @@ export function useAutoGradeBuilder() {
 
     // === Special Programs ===
 
+    // Weekend template blocks (entire day uses predefined templates)
+    if (!isWeekday(targetDay)) {
+      const weekendResult = generateWeekendTemplateBlock(hour, minute, timeStr);
+      if (weekendResult) return weekendResult;
+    }
+
     // Voz do Brasil (21:00 weekdays)
     if (hour === 21 && minute === 0 && isWeekday(targetDay)) {
       return generateVozDoBrasil(timeStr);
@@ -444,8 +552,8 @@ export function useAutoGradeBuilder() {
       return await generateMisturadao(hour, minute, ctx, targetDay);
     }
 
-    // Folder-based blocks (17:00-18:30 Happy Hour)
-    if (isFolderBasedBlock(hour, minute)) {
+    // Folder-based blocks (17:00-18:30 Happy Hour) - weekdays only
+    if (isFolderBasedBlock(hour, minute) && isWeekday(targetDay)) {
       return generateFolderBasedBlock(hour, minute, stats, isFullDay, ctx);
     }
 
@@ -461,12 +569,6 @@ export function useAutoGradeBuilder() {
     }
 
     // Madrugada (00:00-04:30)
-    if (hour >= 0 && hour <= 5) {
-      // Hour 5 is Sertanejo Nossa, check below
-      if (hour <= 4 || (hour === 5 && minute === 0 && !(hour >= 5 && hour <= 7))) {
-        // Actually hours 0-4 only for madrugada
-      }
-    }
     if (hour >= 0 && hour <= 4) {
       return generateMadrugada(hour, minute, songsByStation, stats, isFullDay, ctx, programName);
     }
