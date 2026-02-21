@@ -201,10 +201,16 @@ export function useAutoGradeBuilder() {
   const similarityThreshold = config.similarityThreshold || 0.75;
 
   const findSongInLibrary = useCallback(async (artist: string, title: string) => {
-    return findSongInLibraryFn(artist, title, config.musicFolders, similarityThreshold);
+    console.log(`[AUTO-GRADE] 🔍 Library check: "${artist} - ${title}" (folders: ${config.musicFolders.length}, threshold: ${Math.round(similarityThreshold * 100)}%, isElectron: ${!!window.electronAPI?.isElectron})`);
+    const result = await findSongInLibraryFn(artist, title, config.musicFolders, similarityThreshold);
+    if (!result.exists) {
+      console.warn(`[AUTO-GRADE] ❌ NÃO encontrado na biblioteca: "${artist} - ${title}" → folders: [${config.musicFolders.join(', ')}]`);
+    }
+    return result;
   }, [config.musicFolders, similarityThreshold]);
 
   const batchFind = useCallback(async (songs: Array<{ artist: string; title: string }>) => {
+    console.log(`[AUTO-GRADE] 📦 Batch library check: ${songs.length} músicas (folders: ${config.musicFolders.length}, threshold: ${Math.round(similarityThreshold * 100)}%)`);
     return batchFindSongsInLibrary(songs, config.musicFolders, similarityThreshold);
   }, [config.musicFolders, similarityThreshold]);
 

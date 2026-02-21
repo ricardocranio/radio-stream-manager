@@ -6,7 +6,7 @@
  * concurrency limiting to avoid overwhelming the Electron IPC.
  */
 
-import { isElectronEnv } from './constants';
+import { getIsElectronEnv } from './constants';
 import type { LibraryCheckResult } from './types';
 
 const BATCH_CONCURRENCY = 5; // Max parallel Electron IPC calls
@@ -50,6 +50,8 @@ async function findSongMatchWithFallback(
   const normalizedTitle = normalizeTitle(title);
 
   try {
+    console.log(`[BATCH-LIBRARY] 🔍 Buscando: "${artist} - ${title}" (threshold: ${Math.round(threshold * 100)}%, folders: ${musicFolders.length})`);
+    
     // First try with normalized title/artist
     let result = await window.electronAPI.findSongMatch({
       artist: normalizedArtist,
@@ -72,8 +74,10 @@ async function findSongMatchWithFallback(
     }
 
     if (result.exists && result.baseName) {
+      console.log(`[BATCH-LIBRARY] ✅ Encontrado: "${artist} - ${title}" → ${result.baseName}.mp3`);
       return { exists: true, filename: `${result.baseName}.mp3` };
     }
+    console.log(`[BATCH-LIBRARY] ❌ Não encontrado: "${artist} - ${title}"`);
     return { exists: result.exists };
   } catch (error) {
     console.error(`[BATCH-LIBRARY] Error matching ${artist} - ${title}:`, error);
@@ -92,7 +96,8 @@ export async function batchFindSongsInLibrary(
 ): Promise<Map<string, LibraryCheckResult>> {
   const results = new Map<string, LibraryCheckResult>();
   
-  if (!isElectronEnv || !window.electronAPI?.findSongMatch) {
+  if (!getIsElectronEnv() || !window.electronAPI?.findSongMatch) {
+    console.log(`[BATCH-LIBRARY] 🌐 Modo web detectado (isElectron: ${getIsElectronEnv()}, hasAPI: ${!!window.electronAPI?.findSongMatch}) - assumindo todas existem`);
     // Web mode: assume all exist
     for (const song of songs) {
       const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
@@ -144,7 +149,8 @@ export async function findSongInLibrary(
   musicFolders: string[],
   threshold: number = 0.75
 ): Promise<LibraryCheckResult> {
-  if (!isElectronEnv || !window.electronAPI?.findSongMatch) {
+  if (!getIsElectronEnv() || !window.electronAPI?.findSongMatch) {
+    console.log(`[BATCH-LIBRARY] 🌐 findSongInLibrary: modo web (isElectron: ${getIsElectronEnv()}) - assumindo existe`);
     return { exists: true }; // Web mode: assume exists
   }
   
