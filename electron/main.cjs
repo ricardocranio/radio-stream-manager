@@ -1088,6 +1088,29 @@ function sanitizeFolderName(name) {
   return name.replace(/[<>:"/\\|?*]/g, '_').trim();
 }
 
+// Cleanup partial/incomplete files after a timeout kill
+function cleanupPartialFiles(folder, filesBefore) {
+  try {
+    const filesAfter = fs.readdirSync(folder);
+    const newFiles = filesAfter.filter(f => !filesBefore.has(f));
+    for (const file of newFiles) {
+      const filePath = path.join(folder, file);
+      try {
+        const stat = fs.statSync(filePath);
+        // Delete files smaller than 500KB (likely partial)
+        if (stat.size < 500 * 1024) {
+          fs.unlinkSync(filePath);
+          console.log(`[DEEMIX] 🗑️ Cleaned up partial file: ${file} (${Math.round(stat.size / 1024)} KB)`);
+        }
+      } catch (e) {
+        console.warn(`[DEEMIX] Could not check/delete: ${file}`, e.message);
+      }
+    }
+  } catch (e) {
+    console.warn('[DEEMIX] Cleanup error:', e.message);
+  }
+}
+
 // IPC: Create station folders for all active stations
 ipcMain.handle('ensure-station-folders', async (event, { baseFolder, stations }) => {
   console.log(`[FOLDERS] Creating station folders in: ${baseFolder}`);
@@ -1226,6 +1249,12 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
     };
     const deemixQuality = qualityMap[quality] || '320';
 
+    // Get files BEFORE download to detect the new file
+    let filesBefore = new Set();
+    try {
+      filesBefore = new Set(fs.readdirSync(finalOutputFolder));
+    } catch (e) { /* folder may not exist yet */ }
+
     // Run deemix CLI using the detected command
     return new Promise((resolve) => {
       // Build the full command string - use finalOutputFolder for station subfolder
@@ -1233,12 +1262,25 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
 
       console.log(`[DEEMIX] Executing: ${fullCommand}`);
       
-      exec(fullCommand, { timeout: 120000, maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+      // Increased timeout to 5 minutes (300s) to prevent cutting downloads
+      const childProcess = exec(fullCommand, { timeout: 300000, maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
         console.log(`[DEEMIX] STDOUT: ${stdout}`);
-        console.log(`[DEEMIX] STDERR: ${stderr}`);
+        if (stderr) console.log(`[DEEMIX] STDERR: ${stderr}`);
         
         if (error) {
           console.error('[DEEMIX] Exec error:', error.message);
+          
+          // If killed by timeout, clean up partial files
+          if (error.killed || error.signal === 'SIGTERM') {
+            console.error('[DEEMIX] ⚠️ Download KILLED by timeout! Cleaning partial files...');
+            cleanupPartialFiles(finalOutputFolder, filesBefore);
+            resolve({ 
+              success: false, 
+              error: 'Download expirou (timeout de 5 min). A música pode ser muito grande ou a conexão está lenta.',
+              output: stdout + stderr
+            });
+            return;
+          }
           
           // Check for common error patterns
           let errorMessage = stderr || error.message;
@@ -1259,41 +1301,129 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
           return;
         }
 
-        console.log('[DEEMIX] Success output:', stdout);
+        console.log('[DEEMIX] Process finished, verifying file integrity...');
         
-        // Verify the file was created
-        try {
-          const files = fs.readdirSync(finalOutputFolder);
-          console.log(`[DEEMIX] Files in output folder: ${files.join(', ')}`);
-        } catch (e) {
-          console.log('[DEEMIX] Could not list output folder:', e.message);
-        }
-        
-        // Show Windows notification (only for manual downloads, not auto)
-        if (!stationName) {
-          showNotification(
-            '✅ Download Concluído',
-            `${track.artist.name} - ${track.title}`,
-            () => {
-              shell.openPath(finalOutputFolder);
+        // === FILE INTEGRITY VERIFICATION ===
+        // Wait a moment for filesystem sync, then verify
+        setTimeout(() => {
+          try {
+            const filesAfter = fs.readdirSync(finalOutputFolder);
+            const newFiles = filesAfter.filter(f => !filesBefore.has(f) && /\.(mp3|flac|MP3|FLAC)$/i.test(f));
+            
+            console.log(`[DEEMIX] New files detected: ${newFiles.length}`);
+            
+            if (newFiles.length === 0) {
+              console.error('[DEEMIX] ❌ No new audio file found after download!');
+              resolve({
+                success: false,
+                error: 'Download aparentemente concluiu mas nenhum arquivo de áudio foi encontrado.',
+                output: stdout + stderr
+              });
+              return;
             }
-          );
-        }
+            
+            // Verify file integrity for each new file
+            let validFile = null;
+            for (const newFile of newFiles) {
+              const filePath = path.join(finalOutputFolder, newFile);
+              const stat = fs.statSync(filePath);
+              const fileSizeKB = Math.round(stat.size / 1024);
+              
+              console.log(`[DEEMIX] Checking: ${newFile} (${fileSizeKB} KB)`);
+              
+              // Minimum size check: MP3 should be at least 500KB for a real song
+              // (a 3-min MP3 at 128kbps ≈ 2.8MB, at 320kbps ≈ 7MB)
+              if (stat.size < 500 * 1024) {
+                console.error(`[DEEMIX] ❌ File too small (${fileSizeKB} KB) — likely corrupted or partial: ${newFile}`);
+                // Delete the corrupt file
+                try {
+                  fs.unlinkSync(filePath);
+                  console.log(`[DEEMIX] 🗑️ Deleted corrupt file: ${newFile}`);
+                } catch (delErr) {
+                  console.error(`[DEEMIX] Could not delete corrupt file: ${delErr.message}`);
+                }
+                continue;
+              }
+              
+              // MP3 header verification: check for ID3 tag or MP3 sync word
+              try {
+                const headerBuffer = Buffer.alloc(10);
+                const fd = fs.openSync(filePath, 'r');
+                fs.readSync(fd, headerBuffer, 0, 10, 0);
+                fs.closeSync(fd);
+                
+                const hasID3 = headerBuffer[0] === 0x49 && headerBuffer[1] === 0x44 && headerBuffer[2] === 0x33; // "ID3"
+                const hasMP3Sync = (headerBuffer[0] === 0xFF && (headerBuffer[1] & 0xE0) === 0xE0); // MP3 sync
+                const hasFLAC = headerBuffer[0] === 0x66 && headerBuffer[1] === 0x4C && headerBuffer[2] === 0x61 && headerBuffer[3] === 0x43; // "fLaC"
+                
+                if (!hasID3 && !hasMP3Sync && !hasFLAC) {
+                  console.error(`[DEEMIX] ❌ Invalid audio header for: ${newFile}`);
+                  try {
+                    fs.unlinkSync(filePath);
+                    console.log(`[DEEMIX] 🗑️ Deleted invalid file: ${newFile}`);
+                  } catch (delErr) {
+                    console.error(`[DEEMIX] Could not delete: ${delErr.message}`);
+                  }
+                  continue;
+                }
+              } catch (headerErr) {
+                console.warn(`[DEEMIX] Could not verify header: ${headerErr.message}, accepting file`);
+              }
+              
+              // File passed all checks
+              validFile = newFile;
+              console.log(`[DEEMIX] ✅ File integrity OK: ${newFile} (${fileSizeKB} KB)`);
+              break;
+            }
+            
+            if (!validFile) {
+              console.error('[DEEMIX] ❌ All downloaded files failed integrity check');
+              resolve({
+                success: false,
+                error: 'Download concluiu mas o arquivo está corrompido ou incompleto. Tente novamente.',
+                output: stdout + stderr
+              });
+              return;
+            }
+            
+            // Show Windows notification (only for manual downloads, not auto)
+            if (!stationName) {
+              showNotification(
+                '✅ Download Concluído',
+                `${track.artist.name} - ${track.title}`,
+                () => {
+                  shell.openPath(finalOutputFolder);
+                }
+              );
+            }
 
-        resolve({ 
-          success: true, 
-          track: {
-            id: track.id,
-            title: track.title,
-            artist: track.artist.name,
-            album: track.album.title,
-            duration: track.duration,
-          },
-          output: stdout,
-          outputFolder: finalOutputFolder,
-          stationFolder: sanitizedStation,
-          message: `Download concluído: ${track.artist.name} - ${track.title}`
-        });
+            resolve({ 
+              success: true, 
+              track: {
+                id: track.id,
+                title: track.title,
+                artist: track.artist.name,
+                album: track.album.title,
+                duration: track.duration,
+              },
+              output: stdout,
+              outputFolder: finalOutputFolder,
+              stationFolder: sanitizedStation,
+              verifiedFile: validFile,
+              message: `Download concluído e verificado: ${track.artist.name} - ${track.title}`
+            });
+          } catch (verifyError) {
+            console.error('[DEEMIX] Verification error:', verifyError.message);
+            resolve({ 
+              success: true, // Still return success if deemix didn't error
+              track: { id: track.id, title: track.title, artist: track.artist.name, album: track.album?.title, duration: track.duration },
+              output: stdout,
+              outputFolder: finalOutputFolder,
+              stationFolder: sanitizedStation,
+              message: `Download concluído (verificação parcial): ${track.artist.name} - ${track.title}`
+            });
+          }
+        }, 1500); // 1.5s delay for filesystem sync
       });
     });
     
