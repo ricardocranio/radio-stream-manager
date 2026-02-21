@@ -250,14 +250,16 @@ export function useAutoGradeBuilder() {
       .replace(/\{DIA\}/gi, fullDayName)
       .replace(/\{DD\}/gi, fullDayName)
       .replace(/\{ED\}/gi, edition);
+    // Skip day suffix for filenames containing FINAL_DE_SEMANA — they already indicate the period
+    const hasFinalDeSemana = result.toUpperCase().includes('FINAL_DE_SEMANA');
     const hasFullDayName = FULL_DAY_NAMES_BY_INDEX.some(day => result.toUpperCase().includes(`_${day}`));
-    if (!result.toLowerCase().includes('_{dia}') && !result.toLowerCase().includes('_{dd}') && !hasFullDayName) {
+    if (!hasFinalDeSemana && !result.toLowerCase().includes('_{dia}') && !result.toLowerCase().includes('_{dd}') && !hasFullDayName) {
       if (result.toLowerCase().endsWith('.mp3')) {
         result = result.slice(0, -4) + `_${fullDayName}.mp3`;
       } else {
         result = result + `_${fullDayName}`;
       }
-    } else {
+    } else if (!hasFinalDeSemana) {
       result = result.replace(/\{DIA\}/gi, fullDayName).replace(/\{DD\}/gi, fullDayName);
     }
     return processFixedContentTemplate(result, hour, fullDayName);
