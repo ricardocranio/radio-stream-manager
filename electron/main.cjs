@@ -1255,28 +1255,34 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
       filesBefore = new Set(fs.readdirSync(finalOutputFolder));
     } catch (e) { /* folder may not exist yet */ }
 
-    // Run deemix CLI using the detected command
+    // Run deemix CLI using the detected command — NO TIMEOUT to never kill downloads
     return new Promise((resolve) => {
       // Build the full command string - use finalOutputFolder for station subfolder
       const fullCommand = `${deemixCommand} "${deezerUrl}" -p "${finalOutputFolder}" -b ${deemixQuality}`;
 
       console.log(`[DEEMIX] Executing: ${fullCommand}`);
+      console.log(`[DEEMIX] ⏳ Sem timeout — processo será aguardado até concluir.`);
       
-      // Increased timeout to 5 minutes (300s) to prevent cutting downloads
-      const childProcess = exec(fullCommand, { timeout: 300000, maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+      const downloadStartTime = Date.now();
+      let lastProgressLog = Date.now();
+      
+      // Use exec WITHOUT timeout — deemix must NEVER be killed
+      const childProcess = exec(fullCommand, { timeout: 0, maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+        const elapsedSec = Math.round((Date.now() - downloadStartTime) / 1000);
+        console.log(`[DEEMIX] Process finished after ${elapsedSec}s`);
         console.log(`[DEEMIX] STDOUT: ${stdout}`);
         if (stderr) console.log(`[DEEMIX] STDERR: ${stderr}`);
         
         if (error) {
           console.error('[DEEMIX] Exec error:', error.message);
           
-          // If killed by timeout, clean up partial files
+          // Only log — never kill. If the process was externally killed, report it
           if (error.killed || error.signal === 'SIGTERM') {
-            console.error('[DEEMIX] ⚠️ Download KILLED by timeout! Cleaning partial files...');
+            console.error('[DEEMIX] ⚠️ Processo foi terminado EXTERNAMENTE (não por timeout)');
             cleanupPartialFiles(finalOutputFolder, filesBefore);
             resolve({ 
               success: false, 
-              error: 'Download expirou (timeout de 5 min). A música pode ser muito grande ou a conexão está lenta.',
+              error: 'Processo deemix foi interrompido externamente. O download será tentado novamente.',
               output: stdout + stderr
             });
             return;
