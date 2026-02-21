@@ -112,14 +112,16 @@ export function useAutoGradeBuilder() {
     return 'PROGRAMA';
   }, [programs]);
 
-  const getFixedContentForTime = useCallback((hour: number, minute: number) => {
-    const dayOfWeek = new Date().getDay();
-    const isWeekdayNow = dayOfWeek >= 1 && dayOfWeek <= 5;
-    const isWeekendNow = dayOfWeek === 0 || dayOfWeek === 6;
+  const getFixedContentForTime = useCallback((hour: number, minute: number, targetDay?: WeekDay) => {
+    const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
+    const currentDayKey = targetDay || dayMap[new Date().getDay()];
+    const dayIndex = dayMap.indexOf(currentDayKey as typeof dayMap[number]);
+    const isWeekdayDay = dayIndex >= 1 && dayIndex <= 5;
+    const isWeekendDay = dayIndex === 0 || dayIndex === 6;
     return fixedContent.filter(fc => {
       if (!fc.enabled) return false;
-      if (fc.dayPattern === 'WEEKDAYS' && !isWeekdayNow) return false;
-      if (fc.dayPattern === 'WEEKEND' && !isWeekendNow) return false;
+      if (fc.dayPattern === 'WEEKDAYS' && !isWeekdayDay) return false;
+      if (fc.dayPattern === 'WEEKEND' && !isWeekendDay) return false;
       return fc.timeSlots.some(ts => ts.hour === hour && ts.minute === minute);
     });
   }, [fixedContent]);
@@ -425,7 +427,7 @@ export function useAutoGradeBuilder() {
   ): Promise<BlockResult> => {
     const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     const programName = getProgramForHour(hour);
-    const fixedItems = getFixedContentForTime(hour, minute);
+    const fixedItems = getFixedContentForTime(hour, minute, targetDay);
     const ctx = buildGradeContext();
 
     // === Special Programs ===
@@ -482,7 +484,10 @@ export function useAutoGradeBuilder() {
     let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
 
     if (fixedItem) {
-      const processedFileName = processFixedContentFilename(fixedItem.fileName, hour, minute, 0, targetDay);
+      // Calculate edition index based on which time slot this is within the fixed content item
+      const slotIndex = fixedItem.timeSlots.findIndex(ts => ts.hour === hour && ts.minute === minute);
+      const editionIndex = slotIndex >= 0 ? slotIndex : 0;
+      const processedFileName = processFixedContentFilename(fixedItem.fileName, hour, minute, editionIndex, targetDay);
       const finalFileName = processedFileName.toLowerCase().endsWith('.mp3') ? processedFileName : `${processedFileName}.mp3`;
       fixedContentFile = `"${finalFileName}"`;
       fixedPosition = fixedItem.position || 'start';

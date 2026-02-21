@@ -348,6 +348,12 @@ const defaultFixedContent: FixedContent[] = [
   { id: '15', name: 'TOP50 Bloco 19h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 19, minute: 30 }], enabled: true, top50Count: 10 },
   // A Voz do Brasil às 21:00
   { id: '16', name: 'A Voz do Brasil', fileName: 'VOZ_DO_BRASIL', type: 'vozbrasil', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 21, minute: 0 }], enabled: true },
+  // Weekend programs
+  { id: '17', name: 'Shake Mix', fileName: 'SHAKE_MIX_BLOCO{ED}_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 8, minute: 0 }, { hour: 8, minute: 30 }, { hour: 9, minute: 0 }, { hour: 9, minute: 30 }, { hour: 10, minute: 0 }, { hour: 10, minute: 30 }, { hour: 11, minute: 0 }, { hour: 11, minute: 30 }], enabled: true },
+  { id: '18', name: 'Mega Funk', fileName: 'MEGA_FUNK_BLOCO{ED}_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 12, minute: 0 }, { hour: 12, minute: 30 }, { hour: 13, minute: 0 }, { hour: 13, minute: 30 }, { hour: 14, minute: 0 }, { hour: 14, minute: 30 }], enabled: true },
+  // Weekend TOP50
+  { id: '19', name: 'TOP50 FDS 17h', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 17, minute: 0 }], enabled: true, top50Count: 10 },
+  { id: '20', name: 'TOP50 FDS 17h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 17, minute: 30 }], enabled: true, top50Count: 10 },
 ];
 
 export const useRadioStore = create<RadioState>()(
