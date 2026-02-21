@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
 import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 import { subHours } from 'date-fns';
+import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -116,7 +117,14 @@ export function useCapturedDownloadService() {
       const song = queue[i];
       useCapturedDownloadStore.getState().setQueueLength(queue.length - i);
 
-      const result = await downloadOne(song);
+      // Acquire global mutex — wait for any grade download to finish first
+      await acquireDownloadLock(0); // priority 0 = lowest (grade gets 500+)
+      let result: 'success' | 'exists' | 'error';
+      try {
+        result = await downloadOne(song);
+      } finally {
+        releaseDownloadLock();
+      }
       if (result === 'success') {
         useCapturedDownloadStore.getState().incrementProcessed();
       } else if (result === 'exists') {
