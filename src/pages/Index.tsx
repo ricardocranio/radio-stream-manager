@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense, useRef } from 'react';
+import { useState, useEffect, lazy, Suspense, useRef, useCallback } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 // OPTIMIZED: Dashboard is eagerly loaded (most used), others are lazy
@@ -26,6 +26,24 @@ const LogsView = lazy(() => import('@/components/views/LogsView').then(m => ({ d
 const ExportView = lazy(() => import('@/components/views/ExportView').then(m => ({ default: m.ExportView })));
 const GradeBuilderView = lazy(() => import('@/components/views/GradeBuilderView').then(m => ({ default: m.GradeBuilderView })));
 
+// Prefetch map: preload chunk on hover for instant navigation
+const PREFETCH_MAP: Record<string, () => void> = {
+  stations: () => import('@/components/views/StationsView'),
+  captured: () => import('@/components/views/CapturedSongsView'),
+  sequence: () => import('@/components/views/SequenceView'),
+  schedule: () => import('@/components/views/ScheduleView'),
+  gradebuilder: () => import('@/components/views/GradeBuilderView'),
+  blockeditor: () => import('@/components/views/BlockEditorView'),
+  fixedcontent: () => import('@/components/views/FixedContentView'),
+  ranking: () => import('@/components/views/RankingView'),
+  vozbrasil: () => import('@/components/views/VozBrasilView'),
+  specialmonitoring: () => import('@/components/views/SpecialMonitoringView'),
+  logs: () => import('@/components/views/LogsView'),
+  export: () => import('@/components/views/ExportView'),
+  folders: () => import('@/components/views/FoldersView'),
+  missing: () => import('@/components/views/MissingView'),
+  settings: () => import('@/components/views/SettingsView'),
+};
 
 // Loading fallback for lazy components
 const ViewSkeleton = () => (
@@ -79,6 +97,7 @@ const Index = () => {
   // Track which tabs have been visited so we only mount them once visited
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['dashboard']));
   const { setIsRunning, setLastUpdate } = useRadioStore();
+  const prefetchedRef = useRef<Set<string>>(new Set());
   
   // NOTE: All background services (scraping, downloads, grade builder) 
   // are handled by GlobalServicesContext at App level
@@ -105,9 +124,19 @@ const Index = () => {
     });
   }, [activeTab]);
 
+  // Prefetch chunk on hover (only once per tab)
+  const handleTabHover = useCallback((tabId: string) => {
+    if (prefetchedRef.current.has(tabId) || visitedTabs.has(tabId)) return;
+    const prefetch = PREFETCH_MAP[tabId];
+    if (prefetch) {
+      prefetch();
+      prefetchedRef.current.add(tabId);
+    }
+  }, [visitedTabs]);
+
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onTabHover={handleTabHover} />
       <div className="flex-1 flex flex-col">
         <Header />
         <main className="flex-1 overflow-auto">

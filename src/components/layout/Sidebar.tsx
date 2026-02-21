@@ -35,9 +35,10 @@ const staticNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  onTabHover?: (tab: string) => void;
 }
 
-export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, onTabHover }: SidebarProps) {
   const { queueLength, isProcessing } = useAutoDownloadStore();
   const missingSongs = useRadioStore((state) => state.missingSongs);
   
@@ -82,6 +83,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
+              onMouseEnter={() => onTabHover?.(item.id)}
               className={cn(
                 'w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200',
                 isActive
