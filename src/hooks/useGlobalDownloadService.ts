@@ -66,9 +66,15 @@ export function useGlobalDownloadService() {
       const duration = Date.now() - startTime;
 
       if (result?.success) {
+        // Verify the download was truly successful (not just a process exit)
         if (result.skipped) {
           console.log(`[DL-SVC] ⏭️ Skipped (exists): ${song.artist} - ${song.title} in ${result.existingStation || 'main'}`);
+        } else if ((result as any).verifiedFile) {
+          console.log(`[DL-SVC] ✅ Verificado: ${song.artist} - ${song.title} → ${(result as any).verifiedFile}`);
+        } else {
+          console.log(`[DL-SVC] ✅ Downloaded: ${song.artist} - ${song.title}`);
         }
+        
         useRadioStore.getState().updateMissingSong(song.id, { status: 'downloaded' });
         
         markSongAsDownloaded(song.artist, song.title, result.output);
@@ -84,10 +90,27 @@ export function useGlobalDownloadService() {
         };
         useRadioStore.getState().addDownloadHistory(historyEntry);
 
-        console.log(`[DL-SVC] ✅ Downloaded: ${song.artist} - ${song.title}`);
         return true;
       } else {
-        throw new Error(result?.error || 'Download failed');
+        // Download returned failure — log the specific error
+        const errorMsg = result?.error || 'Download failed';
+        console.error(`[DL-SVC] ❌ Failed: ${song.artist} - ${song.title} — ${errorMsg}`);
+        
+        useRadioStore.getState().updateMissingSong(song.id, { status: 'error' });
+        
+        const historyEntry: DownloadHistoryEntry = {
+          id: crypto.randomUUID(),
+          songId: song.id,
+          title: song.title,
+          artist: song.artist,
+          timestamp: new Date(),
+          status: 'error',
+          errorMessage: errorMsg,
+          duration,
+        };
+        useRadioStore.getState().addDownloadHistory(historyEntry);
+
+        return false;
       }
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -105,7 +128,7 @@ export function useGlobalDownloadService() {
       };
       useRadioStore.getState().addDownloadHistory(historyEntry);
 
-      console.error(`[DL-SVC] ❌ Failed: ${song.artist} - ${song.title}`, error);
+      console.error(`[DL-SVC] ❌ Exception: ${song.artist} - ${song.title}`, error);
       return false;
     }
   }, []);

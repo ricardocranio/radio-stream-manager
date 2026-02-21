@@ -25,6 +25,7 @@ interface DeezerDownloadResult {
   output?: string;
   outputFolder?: string;
   message?: string;
+  verifiedFile?: string; // Name of the verified downloaded file
 }
 
 // Station folder management
