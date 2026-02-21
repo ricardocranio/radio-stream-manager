@@ -350,10 +350,14 @@ const defaultFixedContent: FixedContent[] = [
   { id: '16', name: 'A Voz do Brasil', fileName: 'VOZ_DO_BRASIL', type: 'vozbrasil', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 21, minute: 0 }], enabled: true },
   // Weekend programs
   { id: '17', name: 'Shake Mix', fileName: 'SHAKE_MIX_BLOCO{ED}_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 8, minute: 0 }, { hour: 8, minute: 30 }, { hour: 9, minute: 0 }, { hour: 9, minute: 30 }, { hour: 10, minute: 0 }, { hour: 10, minute: 30 }, { hour: 11, minute: 0 }, { hour: 11, minute: 30 }], enabled: true },
-  { id: '18', name: 'Mega Funk', fileName: 'MEGA_FUNK_BLOCO{ED}_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 12, minute: 0 }, { hour: 12, minute: 30 }, { hour: 13, minute: 0 }, { hour: 13, minute: 30 }, { hour: 14, minute: 0 }, { hour: 14, minute: 30 }], enabled: true },
-  // Weekend TOP50
-  { id: '19', name: 'TOP50 FDS 17h', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 17, minute: 0 }], enabled: true, top50Count: 10 },
-  { id: '20', name: 'TOP50 FDS 17h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 17, minute: 30 }], enabled: true, top50Count: 10 },
+  { id: '18', name: 'Mega Mix', fileName: 'MEGA_MIX_BLOCO{ED}_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 12, minute: 0 }, { hour: 12, minute: 30 }, { hour: 13, minute: 0 }, { hour: 13, minute: 30 }, { hour: 14, minute: 0 }, { hour: 14, minute: 30 }, { hour: 15, minute: 0 }, { hour: 15, minute: 30 }], enabled: true },
+  { id: '19', name: 'Sem Parar', fileName: 'SEM_PARAR_BLOCO{ED}_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 16, minute: 0 }, { hour: 16, minute: 30 }, { hour: 17, minute: 0 }, { hour: 17, minute: 30 }], enabled: true },
+  { id: '20', name: 'Mega Funk', fileName: 'MEGA_FUNK_BLOCO{ED}_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 18, minute: 0 }, { hour: 18, minute: 30 }, { hour: 19, minute: 0 }, { hour: 19, minute: 30 }], enabled: true },
+  // Weekend TOP50 FDS
+  { id: '21', name: 'TOP50 FDS 20h', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 20, minute: 0 }], enabled: true, top50Count: 10 },
+  { id: '22', name: 'TOP50 FDS 20h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKEND', timeSlots: [{ hour: 20, minute: 30 }], enabled: true, top50Count: 10 },
+  // Conexão Mix (weekend nights)
+  { id: '23', name: 'Conexão Mix', fileName: 'CONEXAO_MIX_BLOCO{ED}_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 21, minute: 0 }, { hour: 21, minute: 30 }, { hour: 22, minute: 0 }, { hour: 22, minute: 30 }, { hour: 23, minute: 0 }, { hour: 23, minute: 30 }], enabled: true },
 ];
 
 export const useRadioStore = create<RadioState>()(
