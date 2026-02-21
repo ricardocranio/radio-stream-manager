@@ -5,10 +5,15 @@
  * P0: Carry-over (songs from previous blocks, now downloaded)
  * P1: Station Pool (songs from configured station)
  * P2: TOP50 substitute
- * P3: DNA/Style match from other stations
+ * P3: DNA/Style match from other stations (same style affinity)
  * P4: General Pool (sorted by freshness - most recent first)
  * P5: Curadoria (random from ranking)
  * P6: Coringa wildcard
+ * 
+ * The sequence configured by the user is STRICTLY respected:
+ * - Each position maps to a specific radioSource
+ * - Resolution follows: legacy ID → station UUID → exact name → case-insensitive → fuzzy
+ * - Every slot logs which priority level filled it (P0-P6)
  */
 
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
@@ -83,6 +88,81 @@ interface SelectionContext {
 }
 
 /**
+ * Centralized station resolver — tries all strategies in order and returns
+ * the resolved station name + the matching song pool.
+ * Logs the resolution path for diagnostics.
+ */
+function resolveStation(
+  radioSource: string,
+  songsByStation: Record<string, SongEntry[]>,
+  stations: GradeContext['stations'],
+  seqPosition: number,
+): { stationName: string; stationSongs: SongEntry[]; resolvedBy: string } {
+  // Strategy 1: Hardcoded legacy mapping (short IDs like 'bh', 'band')
+  const legacyName = STATION_ID_TO_DB_NAME[radioSource] || STATION_ID_TO_DB_NAME[radioSource.toLowerCase()];
+  if (legacyName) {
+    const songs = songsByStation[legacyName] || [];
+    if (songs.length > 0) {
+      console.log(`[RESOLVE] P${seqPosition}: "${radioSource}" → "${legacyName}" via legacy map (${songs.length} músicas)`);
+      return { stationName: legacyName, stationSongs: songs, resolvedBy: 'legacy' };
+    }
+    // Legacy name found but no pool — still try case-insensitive below
+  }
+
+  // Strategy 2: Find station config by UUID and use its name
+  const stationByUuid = stations.find(
+    s => s.id === radioSource || s.id.toLowerCase() === radioSource.toLowerCase()
+  );
+  if (stationByUuid) {
+    const songs = songsByStation[stationByUuid.name] || [];
+    if (songs.length > 0) {
+      console.log(`[RESOLVE] P${seqPosition}: "${radioSource}" → "${stationByUuid.name}" via UUID (${songs.length} músicas)`);
+      return { stationName: stationByUuid.name, stationSongs: songs, resolvedBy: 'uuid' };
+    }
+  }
+
+  // Strategy 3: Exact match in pool keys
+  if (songsByStation[radioSource]) {
+    const songs = songsByStation[radioSource];
+    console.log(`[RESOLVE] P${seqPosition}: "${radioSource}" exact pool match (${songs.length} músicas)`);
+    return { stationName: radioSource, stationSongs: songs, resolvedBy: 'exact' };
+  }
+
+  // Strategy 4: Case-insensitive exact match against pool keys
+  const lowerSource = radioSource.toLowerCase().trim();
+  const resolvedName = legacyName || stationByUuid?.name || radioSource;
+  const lowerResolved = resolvedName.toLowerCase().trim();
+
+  for (const [poolKey, poolSongs] of Object.entries(songsByStation)) {
+    const lowerPool = poolKey.toLowerCase().trim();
+    if (lowerPool === lowerSource || lowerPool === lowerResolved) {
+      console.log(`[RESOLVE] P${seqPosition}: "${radioSource}" → "${poolKey}" via case-insensitive (${poolSongs.length} músicas)`);
+      return { stationName: poolKey, stationSongs: poolSongs, resolvedBy: 'case-insensitive' };
+    }
+  }
+
+  // Strategy 5: Fuzzy/partial match (contains)
+  const normalizedSource = radioSource.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalizedResolved = resolvedName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  for (const [poolKey, poolSongs] of Object.entries(songsByStation)) {
+    const normalizedPool = poolKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (
+      normalizedPool === normalizedSource || normalizedPool === normalizedResolved ||
+      normalizedPool.includes(normalizedSource) || normalizedSource.includes(normalizedPool) ||
+      (normalizedResolved && (normalizedPool.includes(normalizedResolved) || normalizedResolved.includes(normalizedPool)))
+    ) {
+      console.log(`[RESOLVE] P${seqPosition}: "${radioSource}" → "${poolKey}" via fuzzy match (${poolSongs.length} músicas)`);
+      return { stationName: poolKey, stationSongs: poolSongs, resolvedBy: 'fuzzy' };
+    }
+  }
+
+  // No match found
+  console.warn(`[RESOLVE] P${seqPosition}: "${radioSource}" → SEM MATCH! Pool keys: [${Object.keys(songsByStation).join(', ')}]`);
+  return { stationName: resolvedName, stationSongs: [], resolvedBy: 'none' };
+}
+
+/**
  * Select a song for one sequence position following Priority 0-6 hierarchy.
  */
 export async function selectSongForSlot(
@@ -92,74 +172,14 @@ export async function selectSongForSlot(
 ): Promise<string> {
   const { timeStr, isFullDay, usedInBlock, usedArtistsInBlock, songsByStation, allSongsPool, carryOverByStation, stationSongIndex, logs, stats } = selCtx;
 
-  // Resolve station name using multiple strategies
-  let stationName = '';
+  // Use centralized station resolver
+  const { stationName, stationSongs, resolvedBy } = resolveStation(
+    seq.radioSource, songsByStation, ctx.stations, seq.position
+  );
 
-  // Strategy 1: Hardcoded legacy mapping (short IDs like 'bh', 'band')
-  stationName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()] || '';
-
-  // Strategy 2: Find station config by ID (handles UUIDs) and use its name
-  if (!stationName) {
-    const stationConfig = ctx.stations.find(
-      s => s.id === seq.radioSource || s.id.toLowerCase() === seq.radioSource.toLowerCase()
-    );
-    stationName = stationConfig?.name || '';
-  }
-
-  // Strategy 3: Check if radioSource itself is a station name that exists in the pool
-  if (!stationName && songsByStation[seq.radioSource]) {
-    stationName = seq.radioSource;
-  }
-
-  // Strategy 4: radioSource might be a station name but not matching pool keys exactly
-  if (!stationName) {
-    stationName = seq.radioSource;
-  }
-
-  // Get songs for this station — try exact match first
-  let stationSongs: SongEntry[] = [];
-  if (stationName && songsByStation[stationName]) {
-    stationSongs = songsByStation[stationName];
-  }
-
-  // Fallback: case-insensitive exact match against pool keys
-  if (stationSongs.length === 0 && stationName) {
-    const lowerName = stationName.toLowerCase().trim();
-    for (const [poolKey, poolSongs] of Object.entries(songsByStation)) {
-      if (poolKey.toLowerCase().trim() === lowerName) {
-        stationName = poolKey; // Use pool's exact key
-        stationSongs = poolSongs;
-        break;
-      }
-    }
-  }
-  
-  // Fallback: fuzzy/partial match against songsByStation keys
-  if (stationSongs.length === 0) {
-    const normalizedSource = seq.radioSource.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const normalizedConfigName = stationName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    for (const [poolStationName, poolSongs] of Object.entries(songsByStation)) {
-      const normalizedPool = poolStationName.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (
-        normalizedPool === normalizedSource || normalizedPool === normalizedConfigName ||
-        normalizedPool.includes(normalizedSource) || normalizedSource.includes(normalizedPool) ||
-        (normalizedConfigName && (normalizedPool.includes(normalizedConfigName) || normalizedConfigName.includes(normalizedPool)))
-      ) {
-        stationName = poolStationName;
-        stationSongs = poolSongs;
-        console.log(`[SONG-SELECT] 🔗 Fuzzy match: "${seq.radioSource}" → "${poolStationName}" (${poolSongs.length} músicas)`);
-        break;
-      }
-    }
-  }
-
-  if (stationSongs.length > 0) {
-    console.log(`[SONG-SELECT] 🎯 Estação "${stationName}" → ${stationSongs.length} músicas (source: ${seq.radioSource})`);
-  } else {
-    console.warn(`[SONG-SELECT] ⚠️ POOL VAZIO para "${seq.radioSource}" (resolved: "${stationName}"). Pool keys: [${Object.keys(songsByStation).join(', ')}]`);
-  }
-
-  const stationStyle = ctx.stations.find(s => s.id === seq.radioSource)?.styles?.[0] || 'POP/VARIADO';
+  const stationStyle = ctx.stations.find(s => s.id === seq.radioSource)?.styles?.[0] ||
+    ctx.stations.find(s => s.name.toLowerCase() === stationName.toLowerCase())?.styles?.[0] ||
+    'POP/VARIADO';
 
   if (stationName && stationSongIndex[stationName] === undefined) {
     stationSongIndex[stationName] = 0;
@@ -180,7 +200,7 @@ export async function selectSongForSlot(
         blockTime: timeStr, type: 'used',
         title: carryOverSong.title, artist: carryOverSong.artist,
         station: carryOverSong.station, style: carryOverSong.style,
-        reason: '✅ Carry-over do bloco anterior (já baixada)',
+        reason: `[P0] Carry-over do bloco anterior (já baixada)`,
       });
       break;
     }
@@ -230,7 +250,7 @@ export async function selectSongForSlot(
                   blockTime: timeStr, type: 'used',
                   title: candidate.title, artist: candidate.artist,
                   station: candidate.station, style: candidate.style,
-                  reason: '✅ Baixada just-in-time antes do bloco',
+                  reason: `[P1] Baixada just-in-time antes do bloco`,
                 });
                 break;
               }
@@ -280,7 +300,7 @@ export async function selectSongForSlot(
             blockTime: timeStr, type: 'substituted',
             title: rankSong.title, artist: rankSong.artist,
             station: 'TOP50', style: rankSong.style,
-            reason: `TOP50 substituto (posição ${sortedRanking.indexOf(rankSong) + 1})`,
+            reason: `[P2] TOP50 substituto (posição ${sortedRanking.indexOf(rankSong) + 1})`,
             substituteFor: stationName || 'UNKNOWN',
           });
           break;
@@ -289,12 +309,21 @@ export async function selectSongForSlot(
     }
   }
 
-  // PRIORITY 3: DNA/Style match — with JIT download for missing songs
+  // PRIORITY 3: DNA/Style match — prioritize same-style stations, with JIT download
   if (!selectedSong) {
     const downloadTimeoutP3 = isFullDay ? 30000 : 720000;
     let attemptedDownloadP3 = false;
 
-    for (const [otherStation, songs] of Object.entries(songsByStation)) {
+    // Sort stations: same-style first to maximize sequence affinity
+    const sortedStations = Object.entries(songsByStation).sort(([nameA], [nameB]) => {
+      const styleA = ctx.stations.find(s => s.name === nameA)?.styles?.[0] || '';
+      const styleB = ctx.stations.find(s => s.name === nameB)?.styles?.[0] || '';
+      if (styleA === stationStyle && styleB !== stationStyle) return -1;
+      if (styleB === stationStyle && styleA !== stationStyle) return 1;
+      return 0;
+    });
+
+    for (const [otherStation, songs] of sortedStations) {
       if (otherStation === stationName) continue;
       for (const candidate of songs) {
         if (candidate.style !== stationStyle) continue;
@@ -310,7 +339,7 @@ export async function selectSongForSlot(
               blockTime: timeStr, type: 'substituted',
               title: candidate.title, artist: candidate.artist,
               station: candidate.station, style: candidate.style,
-              reason: `DNA similar: ${stationStyle}`, substituteFor: stationName || 'UNKNOWN',
+            reason: `[P3] DNA similar: ${stationStyle} (de ${otherStation})`, substituteFor: stationName || 'UNKNOWN',
             });
             break;
           } else if (!attemptedDownloadP3) {
@@ -326,7 +355,7 @@ export async function selectSongForSlot(
                   blockTime: timeStr, type: 'substituted',
                   title: candidate.title, artist: candidate.artist,
                   station: candidate.station, style: candidate.style,
-                  reason: `DNA similar JIT: ${stationStyle}`, substituteFor: stationName || 'UNKNOWN',
+                reason: `[P3] DNA similar JIT: ${stationStyle} (de ${otherStation})`, substituteFor: stationName || 'UNKNOWN',
                 });
                 break;
               }
@@ -373,7 +402,7 @@ export async function selectSongForSlot(
             blockTime: timeStr, type: 'substituted',
             title: candidate.title, artist: candidate.artist,
             station: candidate.station, style: candidate.style,
-            reason: 'Pool geral (priorizado por frescor)',
+            reason: '[P4] Pool geral (priorizado por frescor)',
           });
           break;
         } else if (!attemptedDownloadP4) {
@@ -389,7 +418,7 @@ export async function selectSongForSlot(
                 blockTime: timeStr, type: 'substituted',
                 title: candidate.title, artist: candidate.artist,
                 station: candidate.station, style: candidate.style,
-                reason: 'Pool geral JIT (baixada just-in-time)',
+                reason: '[P4] Pool geral JIT (baixada just-in-time)',
               });
               break;
             }
@@ -427,7 +456,7 @@ export async function selectSongForSlot(
             blockTime: timeStr, type: 'substituted',
             title: rankSong.title, artist: rankSong.artist,
             station: 'CURADORIA', style: rankSong.style,
-            reason: 'Curadoria automática do ranking',
+            reason: '[P5] Curadoria automática do ranking',
           });
           break;
         }
@@ -461,7 +490,7 @@ export async function selectSongForSlot(
   const stationPoolSize = stationSongs?.length || 0;
   const allPoolSize = allSongsPool.length;
   const rankingSize = ctx.rankingSongs.length;
-  console.warn(`[SONG-SELECT] ❌ CORINGA usado para slot "${seq.radioSource}" (resolved: "${stationName}")`);
+  console.warn(`[SONG-SELECT] ❌ [P6] CORINGA usado para slot P${seq.position} "${seq.radioSource}" (resolved: "${stationName}", resolvedBy: "${resolvedBy}")`);
   console.warn(`[SONG-SELECT] ❌ DIAGNÓSTICO:`);
   console.warn(`  - Pool da estação "${stationName}": ${stationPoolSize} músicas`);
   console.warn(`  - Pool geral: ${allPoolSize} músicas`);
@@ -480,7 +509,7 @@ export async function selectSongForSlot(
     blockTime: timeStr, type: 'substituted',
     title: ctx.coringaCode, artist: 'CORINGA',
     station: 'FALLBACK',
-    reason: `Nenhuma música válida encontrada (pool: ${stationPoolSize}, geral: ${allPoolSize}, ranking: ${rankingSize})`,
+    reason: `[P6] Nenhuma música válida encontrada para P${seq.position} (pool: ${stationPoolSize}, geral: ${allPoolSize}, ranking: ${rankingSize})`,
   });
   return ctx.coringaCode;
 }
