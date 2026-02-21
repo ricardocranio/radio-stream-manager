@@ -13,7 +13,7 @@
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import type { BlockResult, BlockLogItem, BlockStats, GradeContext } from './types';
 import type { WeekDay } from '@/types/radio';
-import { isElectronEnv, FULL_DAY_NAMES_BY_INDEX } from './constants';
+import { getIsElectronEnv, FULL_DAY_NAMES_BY_INDEX } from './constants';
 
 /** Configuration for folder-based blocks */
 export interface FolderBlockConfig {
@@ -91,7 +91,7 @@ function getRomanceEdition(hour: number, minute: number): number {
  * List MP3 files from a folder using Electron API.
  */
 async function listMp3Files(folderPath: string): Promise<string[]> {
-  if (!isElectronEnv || !window.electronAPI?.listFolderFiles) return [];
+  if (!getIsElectronEnv() || !window.electronAPI?.listFolderFiles) return [];
 
   try {
     const result = await window.electronAPI.listFolderFiles({
