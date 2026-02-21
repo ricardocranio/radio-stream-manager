@@ -1,19 +1,19 @@
 /**
- * Song Selection Logic (Priority 0-6)
+ * Song Selection Logic — Priority Hierarchy
  * 
- * Handles the hierarchical selection of songs for normal blocks:
- * P0: Carry-over (songs from previous blocks, now downloaded)
- * P1: Station Pool (songs from configured station)
- * P2: TOP50 substitute
- * P3: DNA/Style match from other stations (same style affinity)
- * P4: General Pool (sorted by freshness - most recent first)
- * P5: Curadoria (random from ranking)
- * P6: Coringa wildcard
+ * Order: P1 → P0 → P0.5 → P0.75 → P2 → P3 → P4 → P5 → P6
  * 
- * The sequence configured by the user is STRICTLY respected:
- * - Each position maps to a specific radioSource
- * - Resolution follows: legacy ID → station UUID → exact name → case-insensitive → fuzzy
- * - Every slot logs which priority level filled it (P0-P6)
+ * P1:    Station Pool — songs from the configured radio station (PRIMARY source)
+ * P0:    Carry-over — songs from previous blocks now downloaded
+ * P0.5:  Fresh 30min — captures from any station in the last 30 minutes
+ * P0.75: TOP25 — songs from the ranking TOP25
+ * P2:    TOP50 substitute — positions 26-50 from ranking
+ * P3:    DNA/Style match — songs from other stations with same style
+ * P4:    General Pool — any available song sorted by freshness
+ * P5:    Curadoria — random ranking song
+ * P6:    Coringa — wildcard fallback code (mus/rom/jov)
+ * 
+ * Each level includes JIT download support for missing library files.
  */
 
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
@@ -187,15 +187,93 @@ export async function selectSongForSlot(
 
   let selectedSong: SongEntry | null = null;
 
-  // PRIORITY 0: Carry-over songs
-  const carryOverForStation = carryOverByStation[stationName] || [];
-  for (const carryOverSong of carryOverForStation) {
-    const key = `${carryOverSong.title.toLowerCase()}-${carryOverSong.artist.toLowerCase()}`;
-    const normalizedArtist = carryOverSong.artist.toLowerCase().trim();
-    if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(carryOverSong.title, carryOverSong.artist, timeStr, isFullDay)) {
+  // Helper: check candidate validity
+  const isValidCandidate = (title: string, artist: string) => {
+    const key = `${title.toLowerCase()}-${artist.toLowerCase()}`;
+    const normalizedArtist = artist.toLowerCase().trim();
+    return !usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(title, artist, timeStr, isFullDay);
+  };
+
+  const downloadTimeoutMs = isFullDay ? 30000 : 720000;
+
+  // ============================================================
+  // PRIORITY 1: Station Pool (primary source — the configured radio)
+  // This is the MAIN source: songs from the exact station in the sequence
+  // ============================================================
+  if (!selectedSong) {
+    let attemptedDownload = false;
+
+    // Sort by freshness (most recent scrapedAt first)
+    const freshnessSorted = [...stationSongs].sort((a, b) => {
+      if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
+      if (a.scrapedAt) return -1;
+      if (b.scrapedAt) return 1;
+      return 0;
+    });
+
+    for (const candidate of freshnessSorted) {
+      if (!isValidCandidate(candidate.title, candidate.artist)) continue;
+
+      const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+      if (libraryResult.exists) {
+        const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+        selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+        logs.push({
+          blockTime: timeStr, type: 'used',
+          title: candidate.title, artist: candidate.artist,
+          station: candidate.station, style: candidate.style,
+          reason: `[P1] Pool da estação "${stationName}" (resolvedBy: ${resolvedBy})`,
+        });
+        break;
+      } else if (!attemptedDownload) {
+        attemptedDownload = true;
+        console.log(`[SONG-SELECT] 🔍 [P1] "${candidate.artist} - ${candidate.title}" ausente, tentando download JIT...`);
+        const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
+        if (downloaded) {
+          const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+          if (recheck.exists) {
+            const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+            selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+            logs.push({
+              blockTime: timeStr, type: 'used',
+              title: candidate.title, artist: candidate.artist,
+              station: candidate.station, style: candidate.style,
+              reason: `[P1] Baixada JIT de "${stationName}"`,
+            });
+            break;
+          }
+        }
+        console.log(`[SONG-SELECT] ⚠️ [P1] Download não disponível a tempo, continuando...`);
+      }
+
+      // Mark as missing + carry-over
+      if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
+        ctx.addMissingSong({
+          id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          title: candidate.title, artist: candidate.artist,
+          station: stationName || 'UNKNOWN',
+          timestamp: new Date(), status: 'missing', dna: stationStyle,
+          urgency: 'grade',
+        });
+      }
+      ctx.addCarryOverSong({
+        title: candidate.title, artist: candidate.artist,
+        station: stationName || 'UNKNOWN', style: stationStyle,
+        targetBlock: timeStr,
+      });
+    }
+  }
+
+  // ============================================================
+  // PRIORITY P0: Carry-over (songs from previous blocks, now downloaded)
+  // ============================================================
+  if (!selectedSong) {
+    const carryOverForStation = carryOverByStation[stationName] || [];
+    for (const carryOverSong of carryOverForStation) {
+      if (!isValidCandidate(carryOverSong.title, carryOverSong.artist)) continue;
       selectedSong = carryOverSong;
-      usedInBlock.add(key);
-      usedArtistsInBlock.add(normalizedArtist);
+      usedInBlock.add(`${carryOverSong.title.toLowerCase()}-${carryOverSong.artist.toLowerCase()}`);
+      usedArtistsInBlock.add(carryOverSong.artist.toLowerCase().trim());
       logs.push({
         blockTime: timeStr, type: 'used',
         title: carryOverSong.title, artist: carryOverSong.artist,
@@ -206,112 +284,99 @@ export async function selectSongForSlot(
     }
   }
 
-  // PRIORITY 1: Station pool — sorted by FRESHNESS (most recent first) to match Preview
+  // ============================================================
+  // PRIORITY P0.5: Fresh captures (last 30 minutes from ANY station)
+  // Prioritizes what's playing RIGHT NOW on competitors
+  // ============================================================
   if (!selectedSong) {
-    // Determine download wait time: 12 min for incremental builds, 30s for full-day builds
-    const downloadTimeoutMs = isFullDay ? 30000 : 720000; // 30s vs 12 minutes
-    let attemptedDownload = false; // Only attempt one download per slot to avoid blocking
+    const now = new Date();
+    const thirtyMinAgo = new Date(now.getTime() - 30 * 60 * 1000);
 
-    // Sort by freshness (most recent scrapedAt first) — same logic as GradePreviewCard
-    const freshnessSorted = [...stationSongs].sort((a, b) => {
-      if (a.scrapedAt && b.scrapedAt) {
-        return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
-      }
-      if (a.scrapedAt) return -1;
-      if (b.scrapedAt) return 1;
-      return 0;
-    });
+    // Get fresh songs from all stations, sorted by most recent
+    const freshSongs = allSongsPool
+      .filter(s => s.scrapedAt && new Date(s.scrapedAt) >= thirtyMinAgo)
+      .sort((a, b) => new Date(b.scrapedAt!).getTime() - new Date(a.scrapedAt!).getTime());
 
-    for (const candidate of freshnessSorted) {
-      const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
-      const normalizedArtist = candidate.artist.toLowerCase().trim();
-      
-      if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-        const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
-        if (libraryResult.exists) {
-          const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-          selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-          break;
-        } else {
-          // Song exists in DB but not in library — try immediate download
-          if (!attemptedDownload) {
-            attemptedDownload = true;
-            console.log(`[SONG-SELECT] 🔍 Música "${candidate.artist} - ${candidate.title}" ausente na biblioteca, tentando download imediato...`);
-            
-            const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
-            
-            if (downloaded) {
-              // Re-check library after download
-              const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
-              if (recheck.exists) {
-                const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-                selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-                logs.push({
-                  blockTime: timeStr, type: 'used',
-                  title: candidate.title, artist: candidate.artist,
-                  station: candidate.station, style: candidate.style,
-                  reason: `[P1] Baixada just-in-time antes do bloco`,
-                });
-                break;
-              }
-            }
-            
-            // Download failed or timed out — log and continue to find available alternative
-            console.log(`[SONG-SELECT] ⚠️ Download não disponível a tempo, buscando alternativa disponível...`);
-          }
-
-          // Mark as missing with GRADE urgency + carry-over for future blocks
-          if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
-            ctx.addMissingSong({
-              id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              title: candidate.title, artist: candidate.artist,
-              station: stationName || 'UNKNOWN',
-              timestamp: new Date(), status: 'missing', dna: stationStyle,
-              urgency: 'grade',
-            });
-          }
-          ctx.addCarryOverSong({
-            title: candidate.title, artist: candidate.artist,
-            station: stationName || 'UNKNOWN', style: stationStyle,
-            targetBlock: timeStr,
-          });
-        }
+    for (const candidate of freshSongs) {
+      if (!isValidCandidate(candidate.title, candidate.artist)) continue;
+      const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+      if (libraryResult.exists) {
+        const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+        selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+        const minutesAgo = Math.round((now.getTime() - new Date(candidate.scrapedAt!).getTime()) / 60000);
+        logs.push({
+          blockTime: timeStr, type: 'used',
+          title: candidate.title, artist: candidate.artist,
+          station: candidate.station, style: candidate.style,
+          reason: `[P0.5] Captura fresca (${minutesAgo}min atrás, de ${candidate.station})`,
+        });
+        break;
       }
     }
   }
 
-  // PRIORITY 2: TOP50 substitute
+  // ============================================================
+  // PRIORITY P0.75: TOP25 ranking songs
+  // ============================================================
+  if (!selectedSong) {
+    const top25 = [...ctx.rankingSongs]
+      .sort((a, b) => b.plays - a.plays)
+      .slice(0, 25);
+
+    for (const rankSong of top25) {
+      if (!isValidCandidate(rankSong.title, rankSong.artist)) continue;
+      const libraryResult = await ctx.findSongInLibrary(rankSong.artist, rankSong.title);
+      if (libraryResult.exists) {
+        const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
+        selectedSong = {
+          title: rankSong.title, artist: rankSong.artist,
+          station: 'TOP25', style: rankSong.style,
+          filename: correctFilename, existsInLibrary: true,
+        };
+        const pos = top25.indexOf(rankSong) + 1;
+        logs.push({
+          blockTime: timeStr, type: 'used',
+          title: rankSong.title, artist: rankSong.artist,
+          station: 'TOP25', style: rankSong.style,
+          reason: `[P0.75] TOP25 ranking (posição #${pos})`,
+        });
+        break;
+      }
+    }
+  }
+
+  // ============================================================
+  // PRIORITY P2: TOP50 substitute (positions 26-50)
+  // ============================================================
   if (!selectedSong) {
     const sortedRanking = [...ctx.rankingSongs].sort((a, b) => b.plays - a.plays);
     for (const rankSong of sortedRanking) {
-      const key = `${rankSong.title.toLowerCase()}-${rankSong.artist.toLowerCase()}`;
-      const normalizedArtist = rankSong.artist.toLowerCase().trim();
-      if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
-        const libraryResult = await ctx.findSongInLibrary(rankSong.artist, rankSong.title);
-        if (libraryResult.exists) {
-          const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
-          selectedSong = {
-            title: rankSong.title, artist: rankSong.artist,
-            station: 'TOP50', style: rankSong.style,
-            filename: correctFilename, existsInLibrary: true,
-          };
-          stats.substituted++;
-          logs.push({
-            blockTime: timeStr, type: 'substituted',
-            title: rankSong.title, artist: rankSong.artist,
-            station: 'TOP50', style: rankSong.style,
-            reason: `[P2] TOP50 substituto (posição ${sortedRanking.indexOf(rankSong) + 1})`,
-            substituteFor: stationName || 'UNKNOWN',
-          });
-          break;
-        }
+      if (!isValidCandidate(rankSong.title, rankSong.artist)) continue;
+      const libraryResult = await ctx.findSongInLibrary(rankSong.artist, rankSong.title);
+      if (libraryResult.exists) {
+        const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
+        selectedSong = {
+          title: rankSong.title, artist: rankSong.artist,
+          station: 'TOP50', style: rankSong.style,
+          filename: correctFilename, existsInLibrary: true,
+        };
+        stats.substituted++;
+        logs.push({
+          blockTime: timeStr, type: 'substituted',
+          title: rankSong.title, artist: rankSong.artist,
+          station: 'TOP50', style: rankSong.style,
+          reason: `[P2] TOP50 substituto (posição ${sortedRanking.indexOf(rankSong) + 1})`,
+          substituteFor: stationName || 'UNKNOWN',
+        });
+        break;
       }
     }
   }
 
-  // PRIORITY 3: DNA/Style match — prioritize same-style stations, with JIT download
+  // ============================================================
+  // PRIORITY P3: DNA/Style match — same-style stations first, with JIT download
+  // ============================================================
   if (!selectedSong) {
-    const downloadTimeoutP3 = isFullDay ? 30000 : 720000;
     let attemptedDownloadP3 = false;
 
     // Sort stations: same-style first to maximize sequence affinity
@@ -327,72 +392,8 @@ export async function selectSongForSlot(
       if (otherStation === stationName) continue;
       for (const candidate of songs) {
         if (candidate.style !== stationStyle) continue;
-        const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
-        const normalizedArtist = candidate.artist.toLowerCase().trim();
-        if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
-          const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
-          if (libraryResult.exists) {
-            const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-            selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-            stats.substituted++;
-            logs.push({
-              blockTime: timeStr, type: 'substituted',
-              title: candidate.title, artist: candidate.artist,
-              station: candidate.station, style: candidate.style,
-            reason: `[P3] DNA similar: ${stationStyle} (de ${otherStation})`, substituteFor: stationName || 'UNKNOWN',
-            });
-            break;
-          } else if (!attemptedDownloadP3) {
-            attemptedDownloadP3 = true;
-            const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutP3);
-            if (downloaded) {
-              const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
-              if (recheck.exists) {
-                const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-                selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-                stats.substituted++;
-                logs.push({
-                  blockTime: timeStr, type: 'substituted',
-                  title: candidate.title, artist: candidate.artist,
-                  station: candidate.station, style: candidate.style,
-                reason: `[P3] DNA similar JIT: ${stationStyle} (de ${otherStation})`, substituteFor: stationName || 'UNKNOWN',
-                });
-                break;
-              }
-            }
-            if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
-              ctx.addMissingSong({
-                id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                title: candidate.title, artist: candidate.artist,
-                station: otherStation, timestamp: new Date(), status: 'missing',
-                dna: stationStyle, urgency: 'grade',
-              });
-            }
-          }
-        }
-      }
-      if (selectedSong) break;
-    }
-  }
+        if (!isValidCandidate(candidate.title, candidate.artist)) continue;
 
-  // PRIORITY 4: General Pool (freshness-sorted) — with JIT download
-  if (!selectedSong) {
-    const downloadTimeoutP4 = isFullDay ? 30000 : 720000;
-    let attemptedDownloadP4 = false;
-
-    const freshSortedPool = [...allSongsPool].sort((a, b) => {
-      if (a.scrapedAt && b.scrapedAt) {
-        return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
-      }
-      if (a.scrapedAt) return -1;
-      if (b.scrapedAt) return 1;
-      return 0;
-    });
-
-    for (const candidate of freshSortedPool) {
-      const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
-      const normalizedArtist = candidate.artist.toLowerCase().trim();
-      if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) {
         const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
         if (libraryResult.exists) {
           const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
@@ -402,12 +403,12 @@ export async function selectSongForSlot(
             blockTime: timeStr, type: 'substituted',
             title: candidate.title, artist: candidate.artist,
             station: candidate.station, style: candidate.style,
-            reason: '[P4] Pool geral (priorizado por frescor)',
+            reason: `[P3] DNA similar: ${stationStyle} (de ${otherStation})`, substituteFor: stationName || 'UNKNOWN',
           });
           break;
-        } else if (!attemptedDownloadP4) {
-          attemptedDownloadP4 = true;
-          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutP4);
+        } else if (!attemptedDownloadP3) {
+          attemptedDownloadP3 = true;
+          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
           if (downloaded) {
             const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
             if (recheck.exists) {
@@ -418,7 +419,7 @@ export async function selectSongForSlot(
                 blockTime: timeStr, type: 'substituted',
                 title: candidate.title, artist: candidate.artist,
                 station: candidate.station, style: candidate.style,
-                reason: '[P4] Pool geral JIT (baixada just-in-time)',
+                reason: `[P3] DNA similar JIT: ${stationStyle} (de ${otherStation})`, substituteFor: stationName || 'UNKNOWN',
               });
               break;
             }
@@ -427,39 +428,96 @@ export async function selectSongForSlot(
             ctx.addMissingSong({
               id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               title: candidate.title, artist: candidate.artist,
-              station: candidate.station, timestamp: new Date(), status: 'missing',
-              dna: candidate.style, urgency: 'grade',
+              station: otherStation, timestamp: new Date(), status: 'missing',
+              dna: stationStyle, urgency: 'grade',
             });
           }
+        }
+      }
+      if (selectedSong) break;
+    }
+  }
+
+  // ============================================================
+  // PRIORITY P4: General Pool (freshness-sorted) — with JIT download
+  // ============================================================
+  if (!selectedSong) {
+    let attemptedDownloadP4 = false;
+
+    const freshSortedPool = [...allSongsPool].sort((a, b) => {
+      if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
+      if (a.scrapedAt) return -1;
+      if (b.scrapedAt) return 1;
+      return 0;
+    });
+
+    for (const candidate of freshSortedPool) {
+      if (!isValidCandidate(candidate.title, candidate.artist)) continue;
+      const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+      if (libraryResult.exists) {
+        const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+        selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+        stats.substituted++;
+        logs.push({
+          blockTime: timeStr, type: 'substituted',
+          title: candidate.title, artist: candidate.artist,
+          station: candidate.station, style: candidate.style,
+          reason: '[P4] Pool geral (priorizado por frescor)',
+        });
+        break;
+      } else if (!attemptedDownloadP4) {
+        attemptedDownloadP4 = true;
+        const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
+        if (downloaded) {
+          const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+          if (recheck.exists) {
+            const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+            selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+            stats.substituted++;
+            logs.push({
+              blockTime: timeStr, type: 'substituted',
+              title: candidate.title, artist: candidate.artist,
+              station: candidate.station, style: candidate.style,
+              reason: '[P4] Pool geral JIT (baixada just-in-time)',
+            });
+            break;
+          }
+        }
+        if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
+          ctx.addMissingSong({
+            id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            title: candidate.title, artist: candidate.artist,
+            station: candidate.station, timestamp: new Date(), status: 'missing',
+            dna: candidate.style, urgency: 'grade',
+          });
         }
       }
     }
   }
 
-  // PRIORITY 5: Curadoria (random ranking song)
+  // ============================================================
+  // PRIORITY P5: Curadoria (random ranking song)
+  // ============================================================
   if (!selectedSong) {
     const shuffledRanking = [...ctx.rankingSongs].sort(() => Math.random() - 0.5);
     for (const rankSong of shuffledRanking) {
-      const key = `${rankSong.title.toLowerCase()}-${rankSong.artist.toLowerCase()}`;
-      const normalizedArtist = rankSong.artist.toLowerCase().trim();
-      if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
-        const libraryResult = await ctx.findSongInLibrary(rankSong.artist, rankSong.title);
-        if (libraryResult.exists) {
-          const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
-          selectedSong = {
-            title: rankSong.title, artist: rankSong.artist,
-            station: 'CURADORIA', style: rankSong.style,
-            filename: correctFilename, existsInLibrary: true,
-          };
-          stats.substituted++;
-          logs.push({
-            blockTime: timeStr, type: 'substituted',
-            title: rankSong.title, artist: rankSong.artist,
-            station: 'CURADORIA', style: rankSong.style,
-            reason: '[P5] Curadoria automática do ranking',
-          });
-          break;
-        }
+      if (!isValidCandidate(rankSong.title, rankSong.artist)) continue;
+      const libraryResult = await ctx.findSongInLibrary(rankSong.artist, rankSong.title);
+      if (libraryResult.exists) {
+        const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
+        selectedSong = {
+          title: rankSong.title, artist: rankSong.artist,
+          station: 'CURADORIA', style: rankSong.style,
+          filename: correctFilename, existsInLibrary: true,
+        };
+        stats.substituted++;
+        logs.push({
+          blockTime: timeStr, type: 'substituted',
+          title: rankSong.title, artist: rankSong.artist,
+          station: 'CURADORIA', style: rankSong.style,
+          reason: '[P5] Curadoria automática do ranking',
+        });
+        break;
       }
     }
   }
