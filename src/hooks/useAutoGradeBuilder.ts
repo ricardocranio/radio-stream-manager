@@ -542,8 +542,9 @@ export function useAutoGradeBuilder() {
 
     // === Special Programs ===
 
-    // Weekend template blocks (entire day uses predefined templates)
-    if (!isWeekday(targetDay)) {
+    // Saturday template blocks (entire day uses predefined templates)
+    // Sunday follows normal monitoring-based sequence (user-configured)
+    if (targetDay === 'sab') {
       const weekendResult = generateWeekendTemplateBlock(hour, minute, timeStr);
       if (weekendResult) return weekendResult;
     }
