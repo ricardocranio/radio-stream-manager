@@ -575,13 +575,13 @@ export function useAutoGradeBuilder() {
       return await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx);
     }
 
-    // Madrugada (00:00-04:30)
-    if (hour >= 0 && hour <= 4) {
+    // Madrugada (00:00-04:30) - weekdays only; Sunday follows user sequence
+    if (hour >= 0 && hour <= 4 && isWeekday(targetDay)) {
       return generateMadrugada(hour, minute, songsByStation, stats, isFullDay, ctx, programName);
     }
 
-    // Sertanejo Nossa (05:00-07:30)
-    if (hour >= 5 && hour <= 7) {
+    // Sertanejo Nossa (05:00-07:30) - weekdays only; Sunday follows user sequence
+    if (hour >= 5 && hour <= 7 && isWeekday(targetDay)) {
       return generateSertanejoNossa(hour, minute, songsByStation, stats, isFullDay, ctx);
     }
 
