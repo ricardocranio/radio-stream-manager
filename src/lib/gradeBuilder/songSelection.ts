@@ -1,19 +1,22 @@
 /**
- * Song Selection Logic — Priority Hierarchy
+ * Song Selection Logic — Priority Hierarchy (STRICT MONITORING)
  * 
- * Order: P1 → P0 → P1.5 → P0.5 → P0.75 → P4 → P5 → P6
+ * The grade MUST follow the monitoring sequence. Each position in the sequence
+ * specifies a radio station, and songs MUST come from that station's captures.
+ * Randomness is only acceptable as the absolute last resort.
  * 
- * P1:    Station Pool — songs from the configured radio station (PRIMARY, up to 3 JIT)
+ * Order: P1 → P0 → P1.5 → P0.75 → P4 → P5 → P6
+ * 
+ * P1:    Station Pool — songs from the configured radio station (8 JIT attempts)
  * P0:    Carry-over — songs from previous blocks now downloaded
- * P1.5:  DNA/Style match — songs from other stations with same style (up to 2 JIT)
- * P0.5:  Fresh 30min — captures from any station in the last 30 minutes
+ * P1.5:  DNA/Style match — songs from other stations with same style (4 JIT attempts)
  * P0.75: TOP25 — songs from the ranking TOP25
- * P4:    General Pool — any available song sorted by freshness (up to 2 JIT)
+ * P4:    General Pool — STYLE-FILTERED first, then any (3 JIT for same style)
  * P5:    Curadoria — random ranking song
  * P6:    Coringa — wildcard fallback code (mus/rom/jov)
  * 
- * Each level includes JIT download support for missing library files.
- * P1 tries up to 3 downloads to maximize use of captured monitoring data.
+ * P0.5 (fresh from ANY station) was REMOVED because it caused random selection
+ * that broke the monitoring sequence identity.
  */
 
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
@@ -199,11 +202,12 @@ export async function selectSongForSlot(
   // ============================================================
   // PRIORITY 1: Station Pool (primary source — the configured radio)
   // This is the MAIN source: songs from the exact station in the sequence
-  // Tries up to 3 JIT downloads to maximize use of captured songs
+  // Tries up to 8 JIT downloads to MAXIMIZE use of captured monitoring data
+  // The grade MUST follow the monitoring sequence — this is the whole point of the system
   // ============================================================
   if (!selectedSong) {
     let jitAttemptsP1 = 0;
-    const maxJitAttemptsP1 = 3; // Try up to 3 JIT downloads for the target station
+    const maxJitAttemptsP1 = 8; // Try up to 8 JIT downloads — be aggressive to follow monitoring
 
     // Sort by freshness (most recent scrapedAt first)
     const freshnessSorted = [...stationSongs].sort((a, b) => {
@@ -292,7 +296,7 @@ export async function selectSongForSlot(
   // ============================================================
   if (!selectedSong) {
     let jitAttemptsDNA = 0;
-    const maxJitAttemptsDNA = 2;
+    const maxJitAttemptsDNA = 4; // More aggressive to maintain musical identity
 
     // Sort stations: same-style first to maximize sequence affinity
     const sortedStations = Object.entries(songsByStation).sort(([nameA], [nameB]) => {
@@ -354,34 +358,11 @@ export async function selectSongForSlot(
   }
 
   // ============================================================
-  // PRIORITY P0.5: Fresh captures (last 30 minutes from ANY station)
-  // Only reached if no same-style station had a match
+  // P0.5 REMOVED — Fresh captures from "ANY station" caused random selection
+  // that broke the monitoring sequence. The grade must follow the configured
+  // station order. If the target station has no songs, P1.5 (same style)
+  // already covers the need for fresh content while maintaining musical identity.
   // ============================================================
-  if (!selectedSong) {
-    const now = new Date();
-    const thirtyMinAgo = new Date(now.getTime() - 30 * 60 * 1000);
-
-    const freshSongs = allSongsPool
-      .filter(s => s.scrapedAt && new Date(s.scrapedAt) >= thirtyMinAgo)
-      .sort((a, b) => new Date(b.scrapedAt!).getTime() - new Date(a.scrapedAt!).getTime());
-
-    for (const candidate of freshSongs) {
-      if (!isValidCandidate(candidate.title, candidate.artist)) continue;
-      const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
-      if (libraryResult.exists) {
-        const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-        selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-        const minutesAgo = Math.round((now.getTime() - new Date(candidate.scrapedAt!).getTime()) / 60000);
-        logs.push({
-          blockTime: timeStr, type: 'used',
-          title: candidate.title, artist: candidate.artist,
-          station: candidate.station, style: candidate.style,
-          reason: `[P0.5] Captura fresca (${minutesAgo}min atrás, de ${candidate.station})`,
-        });
-        break;
-      }
-    }
-  }
 
   // ============================================================
   // PRIORITY P0.75: TOP25 Ranking — use highest-ranked songs from curated ranking
@@ -413,34 +394,43 @@ export async function selectSongForSlot(
   }
 
   // ============================================================
-  // PRIORITY P4: General Pool (freshness-sorted) — with JIT download (up to 2 attempts)
+  // PRIORITY P4: General Pool — STYLE-FILTERED FIRST, then any (with JIT)
+  // Prioritizes songs matching the target station's style to maintain identity
   // ============================================================
   if (!selectedSong) {
     let jitAttemptsP4 = 0;
-    const maxJitAttemptsP4 = 2;
+    const maxJitAttemptsP4 = 3;
 
-    const freshSortedPool = [...allSongsPool].sort((a, b) => {
+    // Sort: same-style songs first, then by freshness within each group
+    const styleFilteredPool = [...allSongsPool].sort((a, b) => {
+      // Same style as target station gets priority
+      const aStyleMatch = a.style === stationStyle ? 0 : 1;
+      const bStyleMatch = b.style === stationStyle ? 0 : 1;
+      if (aStyleMatch !== bStyleMatch) return aStyleMatch - bStyleMatch;
+      // Within same priority, sort by freshness
       if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
       if (a.scrapedAt) return -1;
       if (b.scrapedAt) return 1;
       return 0;
     });
 
-    for (const candidate of freshSortedPool) {
+    for (const candidate of styleFilteredPool) {
       if (!isValidCandidate(candidate.title, candidate.artist)) continue;
       const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
       if (libraryResult.exists) {
         const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
         selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
         stats.substituted++;
+        const styleInfo = candidate.style === stationStyle ? 'mesmo estilo' : 'estilo diferente';
         logs.push({
           blockTime: timeStr, type: 'substituted',
           title: candidate.title, artist: candidate.artist,
           station: candidate.station, style: candidate.style,
-          reason: '[P4] Pool geral (priorizado por frescor)',
+          reason: `[P4] Pool geral (${styleInfo}, de ${candidate.station})`,
         });
         break;
-      } else if (jitAttemptsP4 < maxJitAttemptsP4) {
+      } else if (jitAttemptsP4 < maxJitAttemptsP4 && candidate.style === stationStyle) {
+        // Only JIT download for same-style songs in P4
         jitAttemptsP4++;
         const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
         if (downloaded) {
@@ -453,7 +443,7 @@ export async function selectSongForSlot(
               blockTime: timeStr, type: 'substituted',
               title: candidate.title, artist: candidate.artist,
               station: candidate.station, style: candidate.style,
-              reason: `[P4] Pool geral JIT ${jitAttemptsP4} (baixada just-in-time)`,
+              reason: `[P4] Pool geral JIT ${jitAttemptsP4} (mesmo estilo, de ${candidate.station})`,
             });
             break;
           }
