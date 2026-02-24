@@ -309,7 +309,14 @@ export async function selectSongForSlot(
 
     for (const [otherStation, songs] of sortedStations) {
       if (otherStation === stationName) continue;
-      for (const candidate of songs) {
+      // Sort by freshness within each station
+      const freshSorted = [...songs].sort((a, b) => {
+        if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
+        if (a.scrapedAt) return -1;
+        if (b.scrapedAt) return 1;
+        return 0;
+      });
+      for (const candidate of freshSorted) {
         if (candidate.style !== stationStyle) continue;
         if (!isValidCandidate(candidate.title, candidate.artist)) continue;
 
