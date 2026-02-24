@@ -1,19 +1,19 @@
 /**
  * Song Selection Logic — Priority Hierarchy
  * 
- * Order: P1 → P0 → P0.5 → P0.75 → P2 → P3 → P4 → P5 → P6
+ * Order: P1 → P0 → P1.5 → P0.5 → P0.75 → P4 → P5 → P6
  * 
- * P1:    Station Pool — songs from the configured radio station (PRIMARY source)
+ * P1:    Station Pool — songs from the configured radio station (PRIMARY, up to 3 JIT)
  * P0:    Carry-over — songs from previous blocks now downloaded
+ * P1.5:  DNA/Style match — songs from other stations with same style (up to 2 JIT)
  * P0.5:  Fresh 30min — captures from any station in the last 30 minutes
  * P0.75: TOP25 — songs from the ranking TOP25
- * P2:    TOP50 substitute — positions 26-50 from ranking
- * P3:    DNA/Style match — songs from other stations with same style
- * P4:    General Pool — any available song sorted by freshness
+ * P4:    General Pool — any available song sorted by freshness (up to 2 JIT)
  * P5:    Curadoria — random ranking song
  * P6:    Coringa — wildcard fallback code (mus/rom/jov)
  * 
  * Each level includes JIT download support for missing library files.
+ * P1 tries up to 3 downloads to maximize use of captured monitoring data.
  */
 
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
@@ -199,9 +199,11 @@ export async function selectSongForSlot(
   // ============================================================
   // PRIORITY 1: Station Pool (primary source — the configured radio)
   // This is the MAIN source: songs from the exact station in the sequence
+  // Tries up to 3 JIT downloads to maximize use of captured songs
   // ============================================================
   if (!selectedSong) {
-    let attemptedDownload = false;
+    let jitAttemptsP1 = 0;
+    const maxJitAttemptsP1 = 3; // Try up to 3 JIT downloads for the target station
 
     // Sort by freshness (most recent scrapedAt first)
     const freshnessSorted = [...stationSongs].sort((a, b) => {
@@ -225,9 +227,9 @@ export async function selectSongForSlot(
           reason: `[P1] Pool da estação "${stationName}" (resolvedBy: ${resolvedBy})`,
         });
         break;
-      } else if (!attemptedDownload) {
-        attemptedDownload = true;
-        console.log(`[SONG-SELECT] 🔍 [P1] "${candidate.artist} - ${candidate.title}" ausente, tentando download JIT...`);
+      } else if (jitAttemptsP1 < maxJitAttemptsP1) {
+        jitAttemptsP1++;
+        console.log(`[SONG-SELECT] 🔍 [P1] "${candidate.artist} - ${candidate.title}" ausente, tentativa JIT ${jitAttemptsP1}/${maxJitAttemptsP1}...`);
         const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
         if (downloaded) {
           const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
@@ -238,12 +240,12 @@ export async function selectSongForSlot(
               blockTime: timeStr, type: 'used',
               title: candidate.title, artist: candidate.artist,
               station: candidate.station, style: candidate.style,
-              reason: `[P1] Baixada JIT de "${stationName}"`,
+              reason: `[P1] Baixada JIT de "${stationName}" (tentativa ${jitAttemptsP1})`,
             });
             break;
           }
         }
-        console.log(`[SONG-SELECT] ⚠️ [P1] Download não disponível a tempo, continuando...`);
+        console.log(`[SONG-SELECT] ⚠️ [P1] JIT ${jitAttemptsP1}/${maxJitAttemptsP1} falhou, continuando...`);
       }
 
       // Mark as missing + carry-over
@@ -289,7 +291,8 @@ export async function selectSongForSlot(
   // Keeps the musical identity of the monitoring sequence intact
   // ============================================================
   if (!selectedSong) {
-    let attemptedDownloadDNA = false;
+    let jitAttemptsDNA = 0;
+    const maxJitAttemptsDNA = 2;
 
     // Sort stations: same-style first to maximize sequence affinity
     const sortedStations = Object.entries(songsByStation).sort(([nameA], [nameB]) => {
@@ -318,8 +321,8 @@ export async function selectSongForSlot(
             reason: `[P1.5] DNA similar: ${stationStyle} (de ${otherStation})`, substituteFor: stationName || 'UNKNOWN',
           });
           break;
-        } else if (!attemptedDownloadDNA) {
-          attemptedDownloadDNA = true;
+        } else if (jitAttemptsDNA < maxJitAttemptsDNA) {
+          jitAttemptsDNA++;
           const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
           if (downloaded) {
             const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
@@ -331,7 +334,7 @@ export async function selectSongForSlot(
                 blockTime: timeStr, type: 'substituted',
                 title: candidate.title, artist: candidate.artist,
                 station: candidate.station, style: candidate.style,
-                reason: `[P1.5] DNA similar JIT: ${stationStyle} (de ${otherStation})`, substituteFor: stationName || 'UNKNOWN',
+                reason: `[P1.5] DNA similar JIT ${jitAttemptsDNA}: ${stationStyle} (de ${otherStation})`, substituteFor: stationName || 'UNKNOWN',
               });
               break;
             }
@@ -381,10 +384,40 @@ export async function selectSongForSlot(
   }
 
   // ============================================================
-  // PRIORITY P4: General Pool (freshness-sorted) — with JIT download
+  // PRIORITY P0.75: TOP25 Ranking — use highest-ranked songs from curated ranking
+  // ============================================================
+  if (!selectedSong && ctx.rankingSongs.length > 0) {
+    const top25 = [...ctx.rankingSongs]
+      .sort((a, b) => b.plays - a.plays)
+      .slice(0, 25);
+
+    for (const rankSong of top25) {
+      if (!isValidCandidate(rankSong.title, rankSong.artist)) continue;
+      const libraryResult = await ctx.findSongInLibrary(rankSong.artist, rankSong.title);
+      if (libraryResult.exists) {
+        const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
+        selectedSong = {
+          title: rankSong.title, artist: rankSong.artist,
+          station: 'TOP25', style: rankSong.style,
+          filename: correctFilename, existsInLibrary: true,
+        };
+        logs.push({
+          blockTime: timeStr, type: 'used',
+          title: rankSong.title, artist: rankSong.artist,
+          station: 'TOP25', style: rankSong.style,
+          reason: `[P0.75] TOP25 posição ${top25.indexOf(rankSong) + 1}`,
+        });
+        break;
+      }
+    }
+  }
+
+  // ============================================================
+  // PRIORITY P4: General Pool (freshness-sorted) — with JIT download (up to 2 attempts)
   // ============================================================
   if (!selectedSong) {
-    let attemptedDownloadP4 = false;
+    let jitAttemptsP4 = 0;
+    const maxJitAttemptsP4 = 2;
 
     const freshSortedPool = [...allSongsPool].sort((a, b) => {
       if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
@@ -407,8 +440,8 @@ export async function selectSongForSlot(
           reason: '[P4] Pool geral (priorizado por frescor)',
         });
         break;
-      } else if (!attemptedDownloadP4) {
-        attemptedDownloadP4 = true;
+      } else if (jitAttemptsP4 < maxJitAttemptsP4) {
+        jitAttemptsP4++;
         const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
         if (downloaded) {
           const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
@@ -420,7 +453,7 @@ export async function selectSongForSlot(
               blockTime: timeStr, type: 'substituted',
               title: candidate.title, artist: candidate.artist,
               station: candidate.station, style: candidate.style,
-              reason: '[P4] Pool geral JIT (baixada just-in-time)',
+              reason: `[P4] Pool geral JIT ${jitAttemptsP4} (baixada just-in-time)`,
             });
             break;
           }
