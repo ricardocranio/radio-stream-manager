@@ -18,7 +18,7 @@ import {
   DAY_CODE_MAP, FULL_DAY_NAME_MAP,
   DAY_CODES_BY_INDEX, FULL_DAY_NAMES_BY_INDEX, WEEKDAY_KEYS,
   ARTIST_REPETITION_MINUTES, DEFAULT_MINUTES_BEFORE_BLOCK,
-  isElectronEnv,
+  getIsElectronEnv,
 } from '@/lib/gradeBuilder/constants';
 import { sanitizeGradeFilename, sanitizeGradeLine, createLineSanitizer } from '@/lib/gradeBuilder/sanitize';
 import {
@@ -225,7 +225,7 @@ export function useAutoGradeBuilder() {
   // ==================== File Operations ====================
 
   const renameFilesInGradeContent = useCallback(async (gradeContent: string): Promise<void> => {
-    if (!isElectronEnv || !window.electronAPI?.renameMusicFile) return;
+    if (!getIsElectronEnv() || !window.electronAPI?.renameMusicFile) return;
     const filenameMatches = gradeContent.match(/"([^"]+\.(?:mp3|MP3))"/g);
     if (!filenameMatches) return;
     const uniqueFilenames = new Set<string>();
@@ -728,7 +728,7 @@ export function useAutoGradeBuilder() {
   // ==================== Full Day Grade ====================
 
   const buildFullDayGrade = useCallback(async () => {
-    if (!isElectronEnv || !window.electronAPI?.saveGradeFile) {
+    if (!getIsElectronEnv() || !window.electronAPI?.saveGradeFile) {
       toast({ title: '⚠️ Modo Web', description: 'Geração de grade disponível apenas no aplicativo desktop.' });
       return;
     }
@@ -876,7 +876,7 @@ export function useAutoGradeBuilder() {
   // ==================== Incremental Build (silent, in-memory) ====================
 
   const buildGrade = useCallback(async (forceWrite: boolean = false, forceRegenerate: boolean = false) => {
-    const isWebOnly = !isElectronEnv || !window.electronAPI?.saveGradeFile;
+    const isWebOnly = !getIsElectronEnv() || !window.electronAPI?.saveGradeFile;
 
     try {
       const blocks = getBlockTimes();
@@ -998,7 +998,7 @@ export function useAutoGradeBuilder() {
 
   const flushGradeToDisk = useCallback(async () => {
     const pending = pendingGradeRef.current;
-    if (!pending || !isElectronEnv || !window.electronAPI?.saveGradeFile) {
+    if (!pending || !getIsElectronEnv() || !window.electronAPI?.saveGradeFile) {
       console.log('[AUTO-GRADE] Nada pendente para escrita');
       return;
     }
@@ -1061,7 +1061,7 @@ export function useAutoGradeBuilder() {
   // Auto-build effect: builds silently in memory every 6 min, writes TXT only at 10 min before block
   useEffect(() => {
     if (!state.isAutoEnabled) return;
-    const isWebOnly = !isElectronEnv;
+    const isWebOnly = !getIsElectronEnv();
     console.log(`[AUTO-GRADE] ⏰ Modo automático ATIVO - monta silenciosamente, escreve ${state.minutesBeforeBlock} min antes do bloco`);
     let lastBuiltBlock = '';
     let lastWrittenBlock = '';
@@ -1142,6 +1142,6 @@ export function useAutoGradeBuilder() {
     toggleAutoGeneration,
     setMinutesBeforeBlock,
     clearUsedSongs,
-    isElectron: isElectronEnv,
+    isElectron: getIsElectronEnv(),
   };
 }
