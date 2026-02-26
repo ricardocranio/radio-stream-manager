@@ -608,14 +608,10 @@ export function VozBrasilView() {
 
             {/* URL Preview */}
             <div className="p-3 rounded-lg bg-background/50 border border-border">
-              <p className="text-xs text-muted-foreground mb-2">URLs de hoje:</p>
-              <div className="space-y-1">
-                {getDownloadUrls().map((url, idx) => (
-                  <code key={idx} className="text-[10px] text-primary/80 break-all block">
-                    {idx + 1}. {url}
-                  </code>
-                ))}
-              </div>
+              <p className="text-xs text-muted-foreground mb-2">URL de hoje:</p>
+              <code className="text-[10px] text-primary/80 break-all block">
+                {getDownloadUrls()[0]}
+              </code>
             </div>
 
             {/* Schedule Info */}
