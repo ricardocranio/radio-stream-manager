@@ -5,6 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 const CLEANUP_INTERVAL = 60 * 60 * 1000; // Run every hour
 const MAX_DATA_AGE_HOURS = 24; // Data older than 24h gets cleaned
 const MAX_SONGS_PER_STATION = 40; // Maximum songs to keep per station
+const MAX_MISSING_SONGS = 200; // Maximum missing songs to keep
+const MISSING_ERROR_MAX_AGE = 60 * 60 * 1000; // 1 hour for error entries
 
 /**
  * Hook that performs automatic cleanup of old data
@@ -127,6 +129,54 @@ export function useAutoCleanup() {
 
     // Clean excess songs per station (keep only 50 most recent)
     await cleanExcessSongsPerStation();
+
+    // === Clean missing songs list ===
+    const currentMissing = useRadioStore.getState().missingSongs;
+    const now2 = Date.now();
+    
+    // 1. Remove songs already downloaded (status !== 'missing')
+    // 2. Remove error entries older than 1 hour
+    // 3. Remove duplicates (keep most recent by timestamp)
+    const seen = new Map<string, typeof currentMissing[0]>();
+    const cleaned = currentMissing.filter(song => {
+      // Remove non-missing status (downloaded, error resolved)
+      if (song.status === 'downloaded') return false;
+      
+      // Remove old error entries (>1h)
+      if (song.status === 'error') {
+        const songTime = new Date(song.timestamp).getTime();
+        if (now2 - songTime > MISSING_ERROR_MAX_AGE) return false;
+      }
+      
+      // Deduplicate by artist+title (keep most recent)
+      const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
+      const existing = seen.get(key);
+      if (existing) {
+        const existingTime = new Date(existing.timestamp).getTime();
+        const currentTime = new Date(song.timestamp).getTime();
+        if (currentTime > existingTime) {
+          seen.set(key, song);
+        }
+        return false;
+      }
+      seen.set(key, song);
+      return true;
+    });
+    
+    // 4. Apply max limit (keep most recent)
+    let finalMissing = cleaned;
+    if (finalMissing.length > MAX_MISSING_SONGS) {
+      finalMissing = [...finalMissing]
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, MAX_MISSING_SONGS);
+    }
+    
+    if (finalMissing.length < currentMissing.length) {
+      const removed = currentMissing.length - finalMissing.length;
+      useRadioStore.getState().setMissingSongs(finalMissing);
+      console.log(`[CLEANUP] 🧹 Lista Faltando: removidas ${removed} entradas (duplicatas, baixadas, erros antigos). Restam: ${finalMissing.length}`);
+      cleanedCount += removed;
+    }
 
     if (cleanedCount > 0) {
       console.log(`[CLEANUP] 🧹 Cleaned ${cleanedCount} old local entries (>${MAX_DATA_AGE_HOURS}h)`);
