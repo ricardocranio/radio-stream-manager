@@ -121,7 +121,7 @@ export async function generateFolderBasedBlock(
   ctx: GradeContext,
   config?: FolderBlockConfig
 ): Promise<BlockResult> {
-  const cfg = config || HAPPY_HOUR_CONFIG;
+  const cfg = { ...(config || HAPPY_HOUR_CONFIG), coringa: ctx.coringaCode };
   const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
   const logs: BlockLogItem[] = [];
 

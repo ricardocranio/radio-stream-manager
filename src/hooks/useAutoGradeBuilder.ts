@@ -560,8 +560,15 @@ export function useAutoGradeBuilder() {
     }
 
     // Folder-based blocks (17:00-18:30 Happy Hour) - weekdays only
+    // Falls through to normal sequence logic if local folders are empty
     if (isFolderBasedBlock(hour, minute) && isWeekday(targetDay)) {
-      return generateFolderBasedBlock(hour, minute, stats, isFullDay, ctx);
+      const folderResult = await generateFolderBasedBlock(hour, minute, stats, isFullDay, ctx);
+      // If folder block has real songs (not all coringas), use it
+      if (folderResult && folderResult.logs.some(l => l.type === 'used')) {
+        return folderResult;
+      }
+      console.log(`[GRADE] 📂 Pastas do Happy Hour vazias às ${timeStr}, usando sequência normal`);
+      // Fall through to normal block logic below
     }
 
     // Romance blocks (22:00-00:00) - folder-based with fixed content
