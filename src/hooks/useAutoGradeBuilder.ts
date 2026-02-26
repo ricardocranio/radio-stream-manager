@@ -540,56 +540,73 @@ export function useAutoGradeBuilder() {
     const fixedItems = getFixedContentForTime(hour, minute, targetDay);
     const ctx = buildGradeContext();
 
-    // === Special Programs ===
+    // === Check if a scheduled sequence overrides special programs ===
+    const hasScheduledSequence = scheduledSequences
+      .filter(s => s.enabled)
+      .some(s => {
+        const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
+        const currentDay = targetDay || dayMap[new Date().getDay()];
+        if (s.weekDays.length > 0 && !s.weekDays.includes(currentDay)) return false;
+        const timeMinutes = hour * 60 + minute;
+        const startMin = s.startHour * 60 + s.startMinute;
+        const endMin = s.endHour * 60 + s.endMinute;
+        if (endMin <= startMin) return timeMinutes >= startMin || timeMinutes < endMin;
+        return timeMinutes >= startMin && timeMinutes < endMin;
+      });
 
-    // Saturday template blocks (entire day uses predefined templates)
-    // Sunday follows normal monitoring-based sequence (user-configured)
+    // === Special Programs (only when NO scheduled sequence overrides) ===
+
+    // Saturday template blocks ALWAYS apply (predefined templates)
     if (targetDay === 'sab') {
       const weekendResult = generateWeekendTemplateBlock(hour, minute, timeStr);
       if (weekendResult) return weekendResult;
     }
 
-    // Voz do Brasil (21:00 weekdays)
+    // Voz do Brasil (21:00 weekdays) - ALWAYS applies (obrigatório por lei)
     if (hour === 21 && minute === 0 && isWeekday(targetDay)) {
       return generateVozDoBrasil(timeStr);
     }
 
-    // Misturadão (20:00, 20:30 weekdays)
-    if ((hour === 20 && (minute === 0 || minute === 30)) && isWeekday(targetDay)) {
-      return await generateMisturadao(hour, minute, ctx, targetDay);
-    }
-
-    // Folder-based blocks (17:00-18:30 Happy Hour) - weekdays only
-    // Falls through to normal sequence logic if local folders are empty
-    if (isFolderBasedBlock(hour, minute) && isWeekday(targetDay)) {
-      const folderResult = await generateFolderBasedBlock(hour, minute, stats, isFullDay, ctx);
-      // If folder block has real songs (not all coringas), use it
-      if (folderResult && folderResult.logs.some(l => l.type === 'used')) {
-        return folderResult;
+    // If a scheduled sequence is active, skip ALL other special programs
+    // and go straight to normal sequence-based block generation
+    if (hasScheduledSequence) {
+      console.log(`[GRADE] 📅 Sequência agendada ativa às ${timeStr} — sobrepondo programas especiais`);
+    } else {
+      // Misturadão (20:00, 20:30 weekdays)
+      if ((hour === 20 && (minute === 0 || minute === 30)) && isWeekday(targetDay)) {
+        return await generateMisturadao(hour, minute, ctx, targetDay);
       }
-      console.log(`[GRADE] 📂 Pastas do Happy Hour vazias às ${timeStr}, usando sequência normal`);
-      // Fall through to normal block logic below
-    }
 
-    // Romance blocks (22:00-00:00) - folder-based with fixed content
-    if (isRomanceBlock(hour, minute) && isWeekday(targetDay)) {
-      return generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay);
-    }
+      // Folder-based blocks (17:00-18:30 Happy Hour) - weekdays only
+      // Falls through to normal sequence logic if local folders are empty
+      if (isFolderBasedBlock(hour, minute) && isWeekday(targetDay)) {
+        const folderResult = await generateFolderBasedBlock(hour, minute, stats, isFullDay, ctx);
+        if (folderResult && folderResult.logs.some(l => l.type === 'used')) {
+          return folderResult;
+        }
+        console.log(`[GRADE] 📂 Pastas do Happy Hour vazias às ${timeStr}, usando sequência normal`);
+      }
 
-    // TOP50 blocks
-    const top50Item = fixedItems.find(fc => fc.type === 'top50');
-    if (top50Item) {
-      return await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx);
-    }
+      // Romance blocks (22:00-00:00) - folder-based with fixed content
+      if (isRomanceBlock(hour, minute) && isWeekday(targetDay)) {
+        return generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay);
+      }
 
-    // Madrugada (00:00-04:30) - weekdays only; Sunday follows user sequence
-    if (hour >= 0 && hour <= 4 && isWeekday(targetDay)) {
-      return generateMadrugada(hour, minute, songsByStation, stats, isFullDay, ctx, programName);
-    }
+      // TOP50 blocks
+      const top50Item = fixedItems.find(fc => fc.type === 'top50');
+      if (top50Item) {
+        return await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx);
+      }
 
-    // Sertanejo Nossa (05:00-07:30) - weekdays only; Sunday follows user sequence
-    if (hour >= 5 && hour <= 7 && isWeekday(targetDay)) {
-      return generateSertanejoNossa(hour, minute, songsByStation, stats, isFullDay, ctx);
+      // Madrugada (00:00-04:30) - weekdays only
+      if (hour >= 0 && hour <= 4 && isWeekday(targetDay)) {
+        return generateMadrugada(hour, minute, songsByStation, stats, isFullDay, ctx, programName);
+      }
+
+      // Sertanejo Nossa (05:00-07:30) - weekdays only
+      if (hour >= 5 && hour <= 7 && isWeekday(targetDay)) {
+        return generateSertanejoNossa(hour, minute, songsByStation, stats, isFullDay, ctx);
+      }
     }
 
     // === Normal Block Logic ===
