@@ -494,6 +494,65 @@ export async function selectSongForSlot(
     }
   }
 
+  // ============================================================
+  // PRIORITY P5.5: Random from Local Folders — pick a random MP3
+  // from the configured music folders as last resort before coringa
+  // ============================================================
+  if (!selectedSong && ctx.musicFolders.length > 0) {
+    const isElectronEnv = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+    if (isElectronEnv && window.electronAPI?.listFolderFiles) {
+      console.log(`[SONG-SELECT] 📂 [P5.5] Tentando random de pastas locais...`);
+      // Collect files from all music folders
+      const allFolderFiles: string[] = [];
+      for (const folder of ctx.musicFolders) {
+        try {
+          const result = await window.electronAPI.listFolderFiles({ folder, extension: '.mp3' });
+          if (result.success && result.files.length > 0) {
+            allFolderFiles.push(...result.files.map(f => f.name));
+          }
+        } catch (err) {
+          console.warn(`[SONG-SELECT] [P5.5] Erro listando pasta ${folder}:`, err);
+        }
+      }
+
+      if (allFolderFiles.length > 0) {
+        // Shuffle for randomness
+        const shuffled = [...allFolderFiles].sort(() => Math.random() - 0.5);
+
+        for (const filename of shuffled) {
+          const baseName = filename.replace(/\.mp3$/i, '');
+          const parts = baseName.split(' - ');
+          const artist = parts[0]?.trim() || '';
+          const title = parts.slice(1).join(' - ')?.trim() || baseName;
+          const key = `${title.toLowerCase()}-${artist.toLowerCase()}`;
+          const normalizedArtist = artist.toLowerCase().trim();
+
+          if (usedInBlock.has(key)) continue;
+          if (normalizedArtist && usedArtistsInBlock.has(normalizedArtist)) continue;
+          if (ctx.isRecentlyUsed(title, artist, timeStr, isFullDay)) continue;
+
+          const sanitized = sanitizeFilename(filename).toUpperCase();
+          selectedSong = {
+            title, artist,
+            station: 'PASTA LOCAL', style: 'VARIADO',
+            filename: sanitized, existsInLibrary: true,
+          };
+          stats.substituted++;
+          logs.push({
+            blockTime: timeStr, type: 'substituted',
+            title, artist,
+            station: 'PASTA LOCAL', style: 'VARIADO',
+            reason: `[P5.5] Random de pasta local`,
+          });
+          break;
+        }
+        if (selectedSong) {
+          console.log(`[SONG-SELECT] ✅ [P5.5] Encontrada: ${selectedSong.artist} - ${selectedSong.title}`);
+        }
+      }
+    }
+  }
+
   // If a song was selected
   if (selectedSong) {
     usedInBlock.add(`${selectedSong.title.toLowerCase()}-${selectedSong.artist.toLowerCase()}`);
