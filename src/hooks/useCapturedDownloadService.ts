@@ -155,14 +155,14 @@ export function useCapturedDownloadService() {
     if (isProcessingRef.current) return;
 
     try {
-      // Fetch last 24h of captured songs
-      const threshold = subHours(new Date(), 24).toISOString();
+      // Fetch last 6h of captured songs (freshness priority)
+      const threshold = subHours(new Date(), 6).toISOString();
       const { data, error } = await supabase
         .from('scraped_songs')
-        .select('id, artist, title, station_name')
+        .select('id, artist, title, station_name, scraped_at')
         .gte('scraped_at', threshold)
         .order('scraped_at', { ascending: false })
-        .limit(500);
+        .limit(200);
 
       if (error || !data) return;
 
