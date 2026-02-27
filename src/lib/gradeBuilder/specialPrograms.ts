@@ -321,6 +321,42 @@ export async function generateMadrugada(
  * Generate Sertanejo Nossa block (05:00-07:30).
  * Alternates Liberdade FM and Positiva FM. Coringa: clas.
  */
+/**
+ * Generate TOP10 block (18:30 weekdays).
+ * Fixed template with sports news and music mix blocks.
+ */
+export function generateTop10Block(
+  hour: number,
+  minute: number,
+  ctx: GradeContext,
+  targetDay?: WeekDay
+): BlockResult {
+  const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+  const dayName = ctx.getFullDayName(targetDay);
+  const logs: BlockLogItem[] = [];
+
+  const esporte01 = `AS_ULTIMAS_DO_ESPORTE_EDICAO01_${dayName}.mp3`;
+  const esporte02 = `AS_ULTIMAS_DO_ESPORTE_EDICAO02_${dayName}.mp3`;
+  const top10_01 = `TOP_10_MIX_BLOCO01_${dayName}.MP3`;
+  const top10_02 = `TOP_10_MIX_BLOCO02_${dayName}.MP3`;
+
+  logs.push({
+    blockTime: timeStr,
+    type: 'fixed',
+    title: 'TOP 10 MIX',
+    artist: `${esporte01}, ${top10_01}, ${esporte02}, ${top10_02}`,
+    station: 'FIXO',
+    reason: 'Programa especial TOP10 com esporte e mix',
+  });
+
+  return {
+    line: ctx.sanitizeGradeLine(
+      `${timeStr} (ID=TOP10) "${esporte01}",vhtn,"${top10_01}",vht,mus,vhtn,"${esporte02}",vhtn,"${top10_02}",vhtn,mus`
+    ),
+    logs,
+  };
+}
+
 export async function generateSertanejoNossa(
   hour: number,
   minute: number,
