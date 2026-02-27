@@ -2201,37 +2201,75 @@ ipcMain.handle('scrape-voz-download-url', async () => {
 });
 
 // IPC handler for Voz do Brasil download
+// Flow: Download to temp folder → Rename → Move to final folder
 ipcMain.handle('download-voz-brasil', async (event, params) => {
-  const { url, outputFolder, filename } = params;
+  const { url, outputFolder, filename, tempFolder } = params;
+  
+  // Use a temp subfolder inside outputFolder for the initial download
+  const tempDir = tempFolder || path.join(outputFolder, '_temp');
+  const tempFilename = `voz_download_${Date.now()}.mp3`;
   
   console.log(`[VOZ] Download request: ${filename}`);
   console.log(`[VOZ] URL: ${url}`);
-  console.log(`[VOZ] Folder: ${outputFolder}`);
+  console.log(`[VOZ] Temp: ${tempDir}/${tempFilename}`);
+  console.log(`[VOZ] Final: ${outputFolder}/${filename}`);
   
   try {
-    const result = await downloadFile(url, outputFolder, filename, (progress, downloaded, total) => {
-      // Send progress to renderer
+    // Ensure temp and final directories exist
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    if (!fs.existsSync(outputFolder)) fs.mkdirSync(outputFolder, { recursive: true });
+    
+    // Step 1: Download to temp folder
+    const result = await downloadFile(url, tempDir, tempFilename, (progress, downloaded, total) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('voz-download-progress', { progress, downloaded, total });
       }
     });
     
-    // Show notification
-    showNotification(
-      '📻 A Voz do Brasil',
-      `Download concluído: ${filename}`,
-      () => {
-        shell.openPath(outputFolder);
-      }
-    );
+    if (!result.success) return result;
     
-    return result;
+    const tempFilePath = path.join(tempDir, tempFilename);
+    const finalFilePath = path.join(outputFolder, filename);
+    
+    // Step 2: Check file size before moving
+    if (fs.existsSync(tempFilePath)) {
+      const stats = fs.statSync(tempFilePath);
+      
+      // Step 3: Rename & move to final destination
+      // Remove existing final file if present
+      if (fs.existsSync(finalFilePath)) {
+        fs.unlinkSync(finalFilePath);
+        console.log(`[VOZ] Removed existing: ${filename}`);
+      }
+      
+      fs.renameSync(tempFilePath, finalFilePath);
+      console.log(`[VOZ] ✅ Moved: ${tempFilename} → ${filename}`);
+      
+      // Cleanup temp dir if empty
+      try {
+        const remaining = fs.readdirSync(tempDir);
+        if (remaining.length === 0) fs.rmdirSync(tempDir);
+      } catch (e) { /* ignore */ }
+      
+      // Show notification
+      showNotification(
+        '📻 A Voz do Brasil',
+        `Download concluído: ${filename}`,
+        () => { shell.openPath(outputFolder); }
+      );
+      
+      return { success: true, fileSize: stats.size };
+    }
+    
+    return { success: false, error: 'Arquivo temporário não encontrado após download' };
   } catch (error) {
     console.error('[VOZ] Download error:', error);
-    return {
-      success: false,
-      error: error.message || 'Erro ao baixar arquivo',
-    };
+    // Cleanup temp file on error
+    try {
+      const tempFilePath = path.join(tempDir, tempFilename);
+      if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+    } catch (e) { /* ignore */ }
+    return { success: false, error: error.message || 'Erro ao baixar arquivo' };
   }
 });
 
