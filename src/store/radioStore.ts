@@ -317,6 +317,10 @@ const defaultConfig: SystemConfig = {
   blockedSongs: [
     'Jefi - Marquinha De Fita',
     'Olivia - Homem De Papel',
+    'Eurides Nunes - FARROUPILHA',
+    'CIRCUS MUSIC - THE HIT CREW KIDS',
+    'PADRE MARCELO ROSSI - *',
+    'Xuxa - *',
   ],
 };
 
