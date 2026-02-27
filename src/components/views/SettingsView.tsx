@@ -597,42 +597,6 @@ export function SettingsView() {
               O sistema vasculha recursivamente todas as subpastas procurando arquivos de áudio (.mp3, .flac, .wav, .m4a, .aac, .ogg, .wma)
             </p>
 
-            {/* Vinhetas Folder */}
-            <div className="space-y-2 pt-4 border-t border-border">
-              <Label className="flex items-center gap-2">
-                <Music className="w-4 h-4 text-primary" />
-                Pasta de Vinhetas (VHT)
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Pasta com arquivos .mp3 de vinhetas. O código "vht" na grade será substituído por um arquivo aleatório desta pasta, sem repetição até esgotar todas.
-              </p>
-              <div className="flex items-center gap-2">
-                <Input
-                  value={localConfig.vinhetasFolder || ''}
-                  onChange={(e) =>
-                    setLocalConfig((prev) => ({ ...prev, vinhetasFolder: e.target.value }))
-                  }
-                  placeholder="C:\Playlist\Vinhetas"
-                  className="flex-1 font-mono text-sm"
-                />
-                {typeof window !== 'undefined' && window.electronAPI?.selectFolder && (
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={async () => {
-                      const selectedFolder = await window.electronAPI!.selectFolder();
-                      if (selectedFolder) {
-                        setLocalConfig((prev) => ({ ...prev, vinhetasFolder: selectedFolder }));
-                        toast({ title: '📁 Pasta de vinhetas selecionada', description: selectedFolder });
-                      }
-                    }}
-                  >
-                    <FolderOpen className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-            </div>
-
             {/* Similarity Threshold Slider */}
             <div className="space-y-2 pt-4 border-t border-border">
               <div className="flex items-center justify-between mb-2">

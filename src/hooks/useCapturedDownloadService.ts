@@ -155,39 +155,29 @@ export function useCapturedDownloadService() {
     if (isProcessingRef.current) return;
 
     try {
-      // Fetch last 6h of captured songs (freshness priority)
-      const threshold = subHours(new Date(), 6).toISOString();
+      // Fetch last 24h of captured songs
+      const threshold = subHours(new Date(), 24).toISOString();
       const { data, error } = await supabase
         .from('scraped_songs')
-        .select('id, artist, title, station_name, scraped_at')
+        .select('id, artist, title, station_name')
         .gte('scraped_at', threshold)
         .order('scraped_at', { ascending: false })
-        .limit(200);
+        .limit(500);
 
       if (error || !data) return;
 
       // Deduplicate by artist+title and filter blocked songs
-      const blockedExact = new Set<string>();
-      const blockedArtists = new Set<string>();
-      (useRadioStore.getState().config.blockedSongs || []).forEach(s => {
-        const lower = s.toLowerCase().trim();
-        if (lower.endsWith(' - *')) {
-          blockedArtists.add(lower.replace(' - *', ''));
-        } else {
-          blockedExact.add(lower);
-        }
-      });
-      const isSongBlocked = (artist: string, title: string) => {
-        const a = artist.trim().toLowerCase();
-        return blockedExact.has(`${a} - ${title.trim().toLowerCase()}`) || blockedArtists.has(a);
-      };
+      const blockedSet = new Set<string>(
+        (useRadioStore.getState().config.blockedSongs || []).map(s => s.toLowerCase().trim())
+      );
       const seen = new Set<string>();
       const unique: CapturedQueueItem[] = [];
       for (const song of data) {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
         if (seen.has(key) || processedRef.current.has(key)) continue;
         // Check blocked list
-        if (isSongBlocked(song.artist, song.title)) continue;
+        const blockedKey = `${song.artist.trim()} - ${song.title.trim()}`.toLowerCase();
+        if (blockedSet.has(blockedKey)) continue;
         seen.add(key);
         unique.push(song);
       }

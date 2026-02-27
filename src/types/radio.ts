@@ -66,8 +66,6 @@ export interface SystemConfig {
   similarityThreshold?: number;
   // Blocked songs in "Artist - Title" format
   blockedSongs?: string[];
-  // Folder for vinhetas (VHT) - dynamic resolution
-  vinhetasFolder?: string;
 }
 
 export interface SequenceConfig {

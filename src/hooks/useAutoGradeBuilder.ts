@@ -28,7 +28,6 @@ import {
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
 import { batchFindSongsInLibrary, findSongInLibrary as findSongInLibraryFn } from '@/lib/gradeBuilder/batchLibrary';
 import { isFolderBasedBlock, generateFolderBasedBlock, isRomanceBlock, generateRomanceBlock } from '@/lib/gradeBuilder/folderPrograms';
-import { resolveVhtInLine, resetVhtResolver } from '@/lib/gradeBuilder/vhtResolver';
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
@@ -84,8 +83,8 @@ export function useAutoGradeBuilder() {
   const buildIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const usedSongsRef = useRef<UsedSong[]>([]);
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
-  /** Tracks built blocks: timeKey → built line. If line contains coringa, it's "partial" and can be retried */
-  const builtBlocksRef = useRef<Map<string, string>>(new Map());
+  /** Tracks which block time keys (e.g. "18:00") have already been assembled and locked */
+  const builtBlocksRef = useRef<Set<string>>(new Set());
 
   // ==================== Utility Helpers ====================
 
@@ -386,23 +385,10 @@ export function useAutoGradeBuilder() {
     const stationNameToStyle: Record<string, string> = {};
     const seenSongs = new Set<string>();
 
-    // Build blocked songs lists for fast lookup
-    const blockedExact = new Set<string>();
-    const blockedArtists = new Set<string>();
-    (config.blockedSongs || []).forEach(s => {
-      const lower = s.toLowerCase().trim();
-      if (lower.endsWith(' - *')) {
-        blockedArtists.add(lower.replace(' - *', ''));
-      } else {
-        blockedExact.add(lower);
-      }
-    });
-
-    const isSongBlocked = (artist: string, title: string) => {
-      const a = artist.trim().toLowerCase();
-      const blockedKey = `${a} - ${title.trim().toLowerCase()}`;
-      return blockedExact.has(blockedKey) || blockedArtists.has(a);
-    };
+    // Build blocked songs set for fast lookup
+    const blockedSet = new Set<string>(
+      (config.blockedSongs || []).map(s => s.toLowerCase().trim())
+    );
 
     stations.forEach(s => {
       stationNameToStyle[s.name] = s.styles?.[0] || 'POP/VARIADO';
@@ -414,8 +400,9 @@ export function useAutoGradeBuilder() {
       if (seenSongs.has(songKey)) return;
       seenSongs.add(songKey);
 
-      // Check if song is blocked
-      if (isSongBlocked(song.artist, song.title)) return;
+      // Check if song is blocked (Artist - Title format)
+      const blockedKey = `${song.artist.trim()} - ${song.title.trim()}`.toLowerCase();
+      if (blockedSet.has(blockedKey)) return;
       if (!songsByStation[song.station_name]) songsByStation[song.station_name] = [];
       if (songsByStation[song.station_name].length < maxPerStation) {
         const style = stationNameToStyle[song.station_name] || stationNameToStyle[song.station_name.toLowerCase()] || 'POP/VARIADO';
@@ -786,7 +773,6 @@ export function useAutoGradeBuilder() {
       console.log('[AUTO-GRADE] 🚀 Building full day grade with progressive saving...');
       logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
       clearUsedSongs();
-      resetVhtResolver(); // Reset VHT cycle for fresh grade
 
       const songsByStation = await fetchAllRecentSongs();
       const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
@@ -818,9 +804,7 @@ export function useAutoGradeBuilder() {
           }
 
           const result = await generateBlockLine(hour, minute, songsByStation, stats, true, targetDay);
-          // Resolve VHT placeholders with random vinheta files
-          const resolvedLine = await resolveVhtInLine(result.line, config.vinhetasFolder || '', filterChars);
-          lines.push(resolvedLine);
+          lines.push(result.line);
           allLogs.push(...result.logs);
           blockCount++;
 
@@ -932,34 +916,18 @@ export function useAutoGradeBuilder() {
         console.log(`[AUTO-GRADE] 🔓 Force regenerate: locks limpos para ${currentTimeKey} e ${nextTimeKey}`);
       }
 
-      // Check which blocks are already locked (fully built, no coringas)
-      const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
-      const currentBuiltLine = builtBlocksRef.current.get(currentTimeKey);
-      const nextBuiltLine = builtBlocksRef.current.get(nextTimeKey);
-      
-      // A block is truly "locked" only if it was built AND has no coringa positions
-      const hasCoringa = (line: string | undefined) => {
-        if (!line) return false;
-        // Extract the content part after the (ID=...) prefix
-        const contentMatch = line.match(/\)\s+(.+)$/);
-        if (!contentMatch) return false;
-        const parts = contentMatch[1].split(',vht,');
-        return parts.some(p => p.trim() === coringaCode);
-      };
-      
-      const currentLocked = currentBuiltLine !== undefined && !hasCoringa(currentBuiltLine);
-      const nextLocked = nextBuiltLine !== undefined && !hasCoringa(nextBuiltLine);
-      const currentNeedsPartialRetry = currentBuiltLine !== undefined && hasCoringa(currentBuiltLine);
-      const nextNeedsPartialRetry = nextBuiltLine !== undefined && hasCoringa(nextBuiltLine);
+      // Check which blocks are already locked (already built)
+      const currentLocked = builtBlocksRef.current.has(currentTimeKey);
+      const nextLocked = builtBlocksRef.current.has(nextTimeKey);
 
       if (currentLocked && nextLocked) {
-        console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} completos (sem coringa), pulando`);
+        console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já montados, pulando`);
         return;
       }
 
       setState(prev => ({ ...prev, isBuilding: true, error: null }));
 
-      // Read existing file first (Electron only) — moved up from below since we removed the old setState
+      // Read existing file first (Electron only)
       let existingContent = '';
       if (!isWebOnly) {
         try {
@@ -984,136 +952,23 @@ export function useAutoGradeBuilder() {
       const allLogs: BlockLogItem[] = [];
 
       // Always use the FULL song pool from monitoring (scraped_songs + radio_historico)
+      // A narrow 1h window misses songs captured earlier, causing unnecessary Coringas
       const fullPool = await fetchAllRecentSongs();
 
-      /**
-       * Partial retry: given an existing block line with some coringa positions,
-       * rebuild only those positions while keeping the resolved ones intact.
-       */
-      const partialRetryBlock = async (
-        blockHour: number, blockMinute: number, existingLine: string,
-        pool: Record<string, SongEntry[]>
-      ): Promise<BlockResult | null> => {
-        const contentMatch = existingLine.match(/^(\d{2}:\d{2}\s+\(ID=[^)]+\)\s+)(.+)$/);
-        if (!contentMatch) return null;
-        
-        const prefix = contentMatch[1];
-        const parts = contentMatch[2].split(',vht,');
-        const coringaIndices = parts.map((p, i) => p.trim() === coringaCode ? i : -1).filter(i => i >= 0);
-        
-        if (coringaIndices.length === 0) return null;
-        
-        console.log(`[AUTO-GRADE] 🔧 Retry parcial ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')}: ${coringaIndices.length} posições coringa de ${parts.length}`);
-        
-        const timeStr = `${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')}`;
-        const targetDay = (['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const)[new Date().getDay()];
-        const activeSequence = getActiveSequenceForBlock(blockHour, blockMinute, targetDay);
-        const ctx = buildGradeContext();
-        
-        const allSongsPool: SongEntry[] = [];
-        for (const stationSongs of Object.values(pool)) {
-          allSongsPool.push(...stationSongs);
-        }
-        
-        // Populate usedInBlock with already-resolved songs to avoid duplicates
-        const usedInBlock = new Set<string>();
-        const usedArtistsInBlock = new Set<string>();
-        for (let i = 0; i < parts.length; i++) {
-          if (coringaIndices.includes(i)) continue;
-          // Extract artist-title from quoted filename: "ARTIST - TITLE.MP3"
-          const fileMatch = parts[i].trim().match(/^"(.+?)\.mp3"$/i);
-          if (fileMatch) {
-            const dashIdx = fileMatch[1].indexOf(' - ');
-            if (dashIdx > 0) {
-              const artist = fileMatch[1].substring(0, dashIdx).toLowerCase().trim();
-              const title = fileMatch[1].substring(dashIdx + 3).toLowerCase().trim();
-              usedInBlock.add(`${title}-${artist}`);
-              usedArtistsInBlock.add(artist);
-            }
-          }
-        }
-        
-        const blockLogs: BlockLogItem[] = [];
-        const blockStats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
-        const stationSongIndex: Record<string, number> = {};
-        const carryOverByStation: Record<string, SongEntry[]> = {};
-        
-        const selCtx = {
-          timeStr, isFullDay: false, usedInBlock, usedArtistsInBlock,
-          songsByStation: pool, allSongsPool, carryOverByStation, stationSongIndex,
-          logs: blockLogs, stats: blockStats,
-        };
-        
-        let replaced = 0;
-        for (const idx of coringaIndices) {
-          if (idx < activeSequence.length) {
-            const seq = activeSequence[idx];
-            const specialResult = await handleSpecialSequenceType(seq, blockHour, blockMinute, selCtx, ctx, targetDay);
-            if (specialResult !== null && specialResult !== coringaCode) {
-              parts[idx] = specialResult;
-              replaced++;
-            } else if (specialResult === null) {
-              const songStr = await selectSongForSlot(seq, selCtx, ctx);
-              if (songStr !== coringaCode) {
-                parts[idx] = songStr;
-                replaced++;
-              }
-            }
-          }
-        }
-        
-        if (replaced === 0) {
-          console.log(`[AUTO-GRADE] ⚠️ Retry parcial sem sucesso — nenhuma coringa resolvida`);
-          return null;
-        }
-        
-        console.log(`[AUTO-GRADE] ✅ Retry parcial: ${replaced}/${coringaIndices.length} coringas resolvidas`);
-        const newLine = `${prefix}${parts.join(',vht,')}`;
-        const sanitizedLine = sanitizeGradeLine(newLine, filterChars);
-        return { line: sanitizedLine, logs: blockLogs };
-      };
-
       if (!currentLocked) {
-        if (currentNeedsPartialRetry && currentBuiltLine) {
-          // Partial retry: only fill coringa positions
-          const retryResult = await partialRetryBlock(blocks.current.hour, blocks.current.minute, currentBuiltLine, fullPool);
-          if (retryResult) {
-            lineMap.set(currentTimeKey, retryResult.line);
-            builtBlocksRef.current.set(currentTimeKey, retryResult.line);
-            allLogs.push(...retryResult.logs);
-          } else {
-            lineMap.set(currentTimeKey, currentBuiltLine);
-          }
-        } else {
-          const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats);
-          lineMap.set(currentTimeKey, currentResult.line);
-          builtBlocksRef.current.set(currentTimeKey, currentResult.line);
-          allLogs.push(...currentResult.logs);
-        }
-        const finalLine = builtBlocksRef.current.get(currentTimeKey);
-        const status = finalLine && !hasCoringa(finalLine) ? '🔒 completo' : '🔧 parcial (tem coringa)';
-        console.log(`[AUTO-GRADE] ${status} Bloco ${currentTimeKey} (pool: ${Object.keys(fullPool).length} estações)`);
+        const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats);
+        lineMap.set(currentTimeKey, currentResult.line);
+        allLogs.push(...currentResult.logs);
+        builtBlocksRef.current.add(currentTimeKey);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} montado em memória (pool: ${Object.keys(fullPool).length} estações)`);
       }
 
       if (!nextLocked) {
-        if (nextNeedsPartialRetry && nextBuiltLine) {
-          const retryResult = await partialRetryBlock(blocks.next.hour, blocks.next.minute, nextBuiltLine, fullPool);
-          if (retryResult) {
-            lineMap.set(nextTimeKey, retryResult.line);
-            builtBlocksRef.current.set(nextTimeKey, retryResult.line);
-            allLogs.push(...retryResult.logs);
-          } else {
-            lineMap.set(nextTimeKey, nextBuiltLine);
-          }
-        } else {
-          const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats);
-          lineMap.set(nextTimeKey, nextResult.line);
-          builtBlocksRef.current.set(nextTimeKey, nextResult.line);
-          allLogs.push(...nextResult.logs);
-        }
-        const finalLine = builtBlocksRef.current.get(nextTimeKey);
-        const status = finalLine && !hasCoringa(finalLine) ? '🔒 completo' : '🔧 parcial (tem coringa)';
-        console.log(`[AUTO-GRADE] ${status} Bloco ${nextTimeKey} (pool: ${Object.keys(fullPool).length} estações)`);
+        const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats);
+        lineMap.set(nextTimeKey, nextResult.line);
+        allLogs.push(...nextResult.logs);
+        builtBlocksRef.current.add(nextTimeKey);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} montado em memória (pool: ${Object.keys(fullPool).length} estações)`);
       }
 
       if (allLogs.length > 0) {
@@ -1160,8 +1015,7 @@ export function useAutoGradeBuilder() {
     }
   }, [
     getBlockTimes, fetchSongsForBlock, fetchAllRecentSongs, generateBlockLine,
-    getDayCode, config.gradeFolder, config.coringaCode, addBlockLogs,
-    getActiveSequenceForBlock, buildGradeContext, filterChars,
+    getDayCode, config.gradeFolder, addBlockLogs,
   ]);
 
   // ==================== Flush to Disk (only at 10min before block) ====================
@@ -1174,13 +1028,7 @@ export function useAutoGradeBuilder() {
     }
 
     try {
-      // Resolve VHT placeholders before writing to disk
-      const resolvedLineMap = new Map<string, string>();
-      for (const [time, line] of pending.lineMap) {
-        const resolvedLine = await resolveVhtInLine(line, config.vinhetasFolder || '', config.filterCharacters);
-        resolvedLineMap.set(time, resolvedLine);
-      }
-      const sortedContent = Array.from(resolvedLineMap.keys()).sort().map(t => resolvedLineMap.get(t)).join('\n');
+      const sortedContent = Array.from(pending.lineMap.keys()).sort().map(t => pending.lineMap.get(t)).join('\n');
       await renameFilesInGradeContent(sortedContent);
 
       const result = await window.electronAPI.saveGradeFile({
@@ -1207,7 +1055,7 @@ export function useAutoGradeBuilder() {
       logSystemError('GRADE', 'error', 'Erro ao escrever grade no disco', errorMessage);
       toast({ title: '❌ Erro na escrita', description: errorMessage, variant: 'destructive' });
     }
-  }, [renameFilesInGradeContent, config.gradeFolder, config.vinhetasFolder, config.filterCharacters, addGradeHistory, defaultSequence.length, getProgramForHour, toast]);
+  }, [renameFilesInGradeContent, config.gradeFolder, addGradeHistory, defaultSequence.length, getProgramForHour, toast]);
 
   // ==================== Timer & Auto Build ====================
 

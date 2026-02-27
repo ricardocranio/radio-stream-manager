@@ -66,6 +66,8 @@ export function useVozBrasilService() {
     
     const uniqueUrls = [
       `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
+      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-2025/@@download/file`,
+      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}-1/@@download/file`,
     ];
     
     const filename = `VozDoBrasil_${day}-${month}-${year}.mp3`;

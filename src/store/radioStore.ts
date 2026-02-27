@@ -311,16 +311,10 @@ const defaultConfig: SystemConfig = {
   powerSavingMode: false,
   // Similarity threshold for music library matching (0.5 to 0.95)
   similarityThreshold: 0.75,
-  // Vinhetas folder for dynamic VHT resolution
-  vinhetasFolder: 'C:\\Playlist\\Vinhetas',
   // Blocked songs (Artist - Title format)
   blockedSongs: [
     'Jefi - Marquinha De Fita',
     'Olivia - Homem De Papel',
-    'Eurides Nunes - FARROUPILHA',
-    'CIRCUS MUSIC - THE HIT CREW KIDS',
-    'PADRE MARCELO ROSSI - *',
-    'Xuxa - *',
   ],
 };
 

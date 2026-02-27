@@ -24,7 +24,6 @@ export function useInitializeFolders() {
         config.gradeFolder,
         config.contentFolder,
         config.vozBrasilFolder,
-        config.vinhetasFolder,
         deezerConfig.downloadFolder,
         ...config.musicFolders,
       ].filter(Boolean);
@@ -53,5 +52,5 @@ export function useInitializeFolders() {
     };
 
     initializeFolders();
-  }, [config.gradeFolder, config.contentFolder, config.vozBrasilFolder, config.vinhetasFolder, config.musicFolders, deezerConfig.downloadFolder]);
+  }, [config.gradeFolder, config.contentFolder, config.vozBrasilFolder, config.musicFolders, deezerConfig.downloadFolder]);
 }

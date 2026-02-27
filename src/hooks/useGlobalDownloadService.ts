@@ -29,7 +29,6 @@ const PRIORITY_STATION_BOOST = 100;
 const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 const MAX_RETRIES_BEFORE_COOLDOWN = 3;
 const ARL_CHECK_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
-const MAX_QUEUE_SIZE = 50; // Maximum items in download queue
 
 export interface DownloadServiceState {
   queueLength: number;
@@ -391,16 +390,19 @@ export function useGlobalDownloadService() {
           .map(s => s.name.toLowerCase())
       );
 
-      // Calculate priority for each new song before adding
-      const scoredSongs = newToQueue.map(song => {
+      for (const song of newToQueue) {
         const downloadKey = getDownloadKey(song);
+        processedSongsRef.current.add(downloadKey);
+        
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
         let priority = rankingMap.get(key) || 0;
         
         if (song.urgency === 'grade') {
           priority += PRIORITY_GRADE_BOOST;
+          console.log(`[DL-SVC] 🚨 Prioridade URGENTE (Grade): ${song.artist} - ${song.title}`);
         } else if (song.urgency === 'sequence') {
           priority += PRIORITY_SEQUENCE_BOOST;
+          console.log(`[DL-SVC] ⚡ Prioridade ALTA (Sequência): ${song.artist} - ${song.title}`);
         }
         
         const isPriorityStation = priorityStationNames.has(song.station?.toLowerCase() || '');
@@ -408,43 +410,10 @@ export function useGlobalDownloadService() {
           priority += PRIORITY_STATION_BOOST;
         }
 
-        return { song, downloadKey, priority };
-      });
-
-      // Sort by priority (grade first)
-      scoredSongs.sort((a, b) => b.priority - a.priority);
-
-      let added = 0;
-      for (const { song, downloadKey, priority } of scoredSongs) {
-        // Enforce queue limit — but ALWAYS allow grade-urgency items
-        if (downloadQueueRef.current.length >= MAX_QUEUE_SIZE && song.urgency !== 'grade') {
-          continue;
-        }
-
-        processedSongsRef.current.add(downloadKey);
-        
-        if (song.urgency === 'grade') {
-          console.log(`[DL-SVC] 🚨 Prioridade URGENTE (Grade): ${song.artist} - ${song.title}`);
-        } else if (song.urgency === 'sequence') {
-          console.log(`[DL-SVC] ⚡ Prioridade ALTA (Sequência): ${song.artist} - ${song.title}`);
-        }
-
         downloadQueueRef.current.push({ song, retryCount: 0, priority });
-        added++;
-      }
-
-      // If queue exceeds limit after adding grade items, trim lowest priority non-grade items
-      if (downloadQueueRef.current.length > MAX_QUEUE_SIZE) {
-        downloadQueueRef.current.sort((a, b) => b.priority - a.priority);
-        const overflow = downloadQueueRef.current.length - MAX_QUEUE_SIZE;
-        // Remove from the end (lowest priority)
-        downloadQueueRef.current.splice(MAX_QUEUE_SIZE, overflow);
-        console.log(`[DL-SVC] ✂️ Fila cortada: removidos ${overflow} itens de baixa prioridade (limite: ${MAX_QUEUE_SIZE})`);
       }
       
-      if (added > 0) {
-        console.log(`[DL-SVC] 📥 +${added} na fila (total: ${downloadQueueRef.current.length}, limite: ${MAX_QUEUE_SIZE})`);
-      }
+      console.log(`[DL-SVC] 📥 +${newToQueue.length} na fila (total: ${downloadQueueRef.current.length})`);
       setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
       useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
       
