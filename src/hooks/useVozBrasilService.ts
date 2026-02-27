@@ -7,6 +7,7 @@
 
 import { useRef, useCallback } from 'react';
 import { useRadioStore } from '@/store/radioStore';
+import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 const MIN_FILE_SIZE_BYTES = 40 * 1024 * 1024; // 40MB minimum to avoid saving error pages
@@ -89,6 +90,7 @@ export function useVozBrasilService() {
             continue;
           }
           console.log(`[VOZ-SVC] ✅ Download concluído: ${filename} (${result.fileSize ? (result.fileSize / 1024 / 1024).toFixed(1) + 'MB' : '?'})`);
+          useAutoDownloadStore.getState().setVozBrasilFailed(false);
           return true;
         } else {
           console.log(`[VOZ-SVC] URL ${i + 1} falhou: ${result.error}`);
@@ -99,6 +101,7 @@ export function useVozBrasilService() {
     }
 
     console.log('[VOZ-SVC] ❌ Todas as URLs falharam');
+    useAutoDownloadStore.getState().setVozBrasilFailed(true, 'Download falhou — verifique a conexão e tente manualmente');
     return false;
   }, [cleanupOldFiles]);
 

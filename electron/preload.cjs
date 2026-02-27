@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   downloadVozBrasil: (params) => ipcRenderer.invoke('download-voz-brasil', params),
   cleanupVozBrasil: (params) => ipcRenderer.invoke('cleanup-voz-brasil', params),
   scrapeVozDownloadUrl: () => ipcRenderer.invoke('scrape-voz-download-url'),
+  recoverTempFiles: (params) => ipcRenderer.invoke('recover-temp-files', params),
   onVozDownloadProgress: (callback) => ipcRenderer.on('voz-download-progress', (_, progress) => callback(progress)),
   
   // Grade file operations

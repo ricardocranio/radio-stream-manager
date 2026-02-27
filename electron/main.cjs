@@ -2331,6 +2331,57 @@ ipcMain.handle('cleanup-voz-brasil', async (event, params) => {
   }
 });
 
+// IPC handler to recover orphaned files from _temp folders
+ipcMain.handle('recover-temp-files', async (event, params) => {
+  const { baseFolder } = params;
+  
+  console.log(`[TEMP-RECOVERY] Scanning for orphaned files in: ${baseFolder}`);
+  let recovered = 0;
+  
+  try {
+    if (!fs.existsSync(baseFolder)) return { success: true, recovered: 0 };
+    
+    // Check for _temp subfolder directly in baseFolder
+    const tempFolder = path.join(baseFolder, '_temp');
+    if (fs.existsSync(tempFolder)) {
+      const tempFiles = fs.readdirSync(tempFolder).filter(f => /\.(mp3|flac)$/i.test(f));
+      
+      for (const file of tempFiles) {
+        const tempPath = path.join(tempFolder, file);
+        const finalPath = path.join(baseFolder, file);
+        
+        try {
+          const stat = fs.statSync(tempPath);
+          // Only recover files > 500KB (valid audio)
+          if (stat.size > 500 * 1024) {
+            if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+            fs.renameSync(tempPath, finalPath);
+            console.log(`[TEMP-RECOVERY] ✅ Recovered: ${file}`);
+            recovered++;
+          } else {
+            fs.unlinkSync(tempPath);
+            console.log(`[TEMP-RECOVERY] 🗑️ Deleted corrupt: ${file}`);
+          }
+        } catch (e) {
+          console.error(`[TEMP-RECOVERY] Error processing ${file}:`, e.message);
+        }
+      }
+      
+      // Cleanup empty temp folder
+      try {
+        const remaining = fs.readdirSync(tempFolder);
+        if (remaining.length === 0) fs.rmdirSync(tempFolder);
+      } catch (e) {}
+    }
+    
+    console.log(`[TEMP-RECOVERY] Done: ${recovered} file(s) recovered`);
+    return { success: true, recovered };
+  } catch (error) {
+    console.error('[TEMP-RECOVERY] Error:', error);
+    return { success: false, error: error.message, recovered };
+  }
+});
+
 // =============== GRADE FILE SAVING ===============
 
 // IPC handler to save grade file
