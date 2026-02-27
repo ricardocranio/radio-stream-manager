@@ -68,7 +68,7 @@ export function useVozBrasilService() {
       `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
     ];
     
-    const filename = `VozDoBrasil_${day}-${month}-${year}.mp3`;
+    const filename = `Voz do Brasil.mp3`;
 
     console.log('[VOZ-SVC] 📻 Iniciando download...');
 
