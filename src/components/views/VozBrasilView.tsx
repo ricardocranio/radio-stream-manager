@@ -31,7 +31,7 @@ interface DownloadStatus {
 const defaultConfig: VozBrasilConfig = {
   enabled: true,
   downloadFolder: 'C:\\Playlist\\A Voz do Brasil',
-  scheduleTime: '20:35',
+  scheduleTime: '20:25',
   retryIntervalMinutes: 3,
   maxRetries: 5,
   cleanupTime: '23:59',
@@ -169,8 +169,6 @@ export function VozBrasilView() {
     const year = now.getFullYear();
     return [
       `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
-      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-2025/@@download/file`,
-      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}-1/@@download/file`,
     ];
   };
 
@@ -501,7 +499,7 @@ export function VozBrasilView() {
             <Radio className="w-7 h-7 text-green-500 shrink-0" />
             <span className="truncate">A Voz do Brasil</span>
           </h2>
-          <p className="text-muted-foreground text-sm">Download automático do programa obrigatório (Seg-Sex 20:35)</p>
+          <p className="text-muted-foreground text-sm">Download automático do programa obrigatório (Seg-Sex 20:25)</p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <Badge variant={config.enabled ? 'default' : 'secondary'} className={config.enabled ? 'bg-green-500/20 text-green-400 border-green-500/30' : ''}>
