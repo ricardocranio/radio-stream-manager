@@ -592,6 +592,11 @@ export function useAutoGradeBuilder() {
         return generateTop10Block(hour, minute, ctx, targetDay);
       }
 
+      // TOP50 Ranking (19:00/19:30 weekdays) - positions 20→01 from ranking
+      if (hour === 19 && (minute === 0 || minute === 30) && isWeekday(targetDay)) {
+        return await generateTop50Block(hour, minute, 10, ctx);
+      }
+
       // Misturadão (20:00, 20:30 weekdays)
       if ((hour === 20 && (minute === 0 || minute === 30)) && isWeekday(targetDay)) {
         return await generateMisturadao(hour, minute, ctx, targetDay);
