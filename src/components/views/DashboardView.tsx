@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Shield } from 'lucide-react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Shield, Download, XCircle } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
@@ -361,6 +361,64 @@ export function DashboardView() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Download Stats + Voz do Brasil Alert */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Download Stats Card */}
+        <Card className="glass-card border-blue-500/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Download className="w-4 h-4 text-blue-400" />
+              <span className="text-sm font-medium text-foreground">Downloads Hoje</span>
+              {useAutoDownloadStore.getState().isProcessing && (
+                <Loader2 className="w-3 h-3 text-blue-400 animate-spin ml-auto" />
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <p className="text-xl font-bold text-green-400">{useAutoDownloadStore.getState().dailyStats.downloaded}</p>
+                <p className="text-[10px] text-muted-foreground">Baixados</p>
+              </div>
+              <div>
+                <p className="text-xl font-bold text-red-400">{useAutoDownloadStore.getState().dailyStats.failed}</p>
+                <p className="text-[10px] text-muted-foreground">Falhas</p>
+              </div>
+              <div>
+                <p className="text-xl font-bold text-muted-foreground">{useAutoDownloadStore.getState().queueLength}</p>
+                <p className="text-[10px] text-muted-foreground">Na Fila</p>
+              </div>
+            </div>
+            {useAutoDownloadStore.getState().tempRetryCount > 0 && (
+              <p className="text-[10px] text-amber-400 mt-2">
+                🔄 {useAutoDownloadStore.getState().tempRetryCount} arquivo(s) recuperados da pasta _temp
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Voz do Brasil Alert */}
+        {useAutoDownloadStore.getState().vozBrasilFailed && (
+          <Card className="glass-card border-red-500/30 bg-red-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <XCircle className="w-4 h-4 text-red-500" />
+                <span className="text-sm font-bold text-red-400">⚠️ Voz do Brasil — Falha!</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {useAutoDownloadStore.getState().vozBrasilLastError || 'Download falhou. Verifique a conexão e tente manualmente.'}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2 border-red-500/30 text-red-400 hover:bg-red-500/10"
+                onClick={() => useAutoDownloadStore.getState().setVozBrasilFailed(false)}
+              >
+                Dispensar
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Station Distribution removed for cleaner UI */}

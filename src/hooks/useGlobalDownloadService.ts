@@ -134,6 +134,7 @@ export function useGlobalDownloadService() {
       if (result?.success) {
         if (result.skipped) {
           console.log(`[DL-SVC] ⏭️ Skipped (exists): ${song.artist} - ${song.title}`);
+          useAutoDownloadStore.getState().incrementDailyStat('skipped');
         } else if ((result as any).verifiedFile) {
           console.log(`[DL-SVC] ✅ Verificado: ${song.artist} - ${song.title} → ${(result as any).verifiedFile}`);
         } else {
@@ -157,6 +158,7 @@ export function useGlobalDownloadService() {
           duration,
         };
         useRadioStore.getState().addDownloadHistory(historyEntry);
+        useAutoDownloadStore.getState().incrementDailyStat('downloaded');
         return true;
       } else {
         const errorMsg = result?.error || 'Download failed';
@@ -180,6 +182,7 @@ export function useGlobalDownloadService() {
           duration,
         };
         useRadioStore.getState().addDownloadHistory(historyEntry);
+        useAutoDownloadStore.getState().incrementDailyStat('failed');
         return false;
       }
     } catch (error) {
@@ -460,8 +463,23 @@ export function useGlobalDownloadService() {
     };
   }, [checkNewMissingSongs]);
 
-  /** Start the download check interval + ARL health check. Returns cleanup function. */
+  /** Start the download check interval + ARL health check + temp recovery. Returns cleanup function. */
   const start = useCallback(() => {
+    // Recover orphaned temp files on startup
+    if (isElectron && (window.electronAPI as any)?.recoverTempFiles) {
+      const { deezerConfig } = useRadioStore.getState();
+      if (deezerConfig.downloadFolder) {
+        (window.electronAPI as any).recoverTempFiles({ baseFolder: deezerConfig.downloadFolder })
+          .then((result: any) => {
+            if (result?.recovered > 0) {
+              console.log(`[DL-SVC] 🔄 Recuperados ${result.recovered} arquivo(s) da pasta _temp`);
+              useAutoDownloadStore.getState().setTempRetryCount(result.recovered);
+            }
+          })
+          .catch((err: any) => console.warn('[DL-SVC] Temp recovery failed:', err));
+      }
+    }
+
     // Download check every 100 seconds
     downloadIntervalRef.current = setInterval(() => {
       const { isRunning } = useRadioStore.getState();

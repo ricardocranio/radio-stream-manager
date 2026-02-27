@@ -285,6 +285,7 @@ interface ElectronAPI {
   cleanupVozBrasil: (params: VozCleanupParams) => Promise<VozCleanupResult>;
   scrapeVozDownloadUrl: () => Promise<{ success: boolean; url: string | null; error?: string }>;
   onVozDownloadProgress: (callback: (progress: VozDownloadProgress) => void) => void;
+  recoverTempFiles: (params: { baseFolder: string }) => Promise<{ success: boolean; recovered: number; error?: string }>;
   
   // Grade file operations
   saveGradeFile: (params: GradeFileParams) => Promise<GradeFileResult>;
