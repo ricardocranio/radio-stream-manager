@@ -16,6 +16,8 @@ export function Header() {
   const autoDownloadQueue = useAutoDownloadStore((s) => s.queueLength);
   const activeDownload = useAutoDownloadStore((s) => s.activeDownload);
   const arlValid = useAutoDownloadStore((s) => s.arlValid);
+  const deezerEnabled = useRadioStore((s) => s.deezerConfig.enabled);
+  const deezerArl = useRadioStore((s) => s.deezerConfig.arl);
   const capturedDlProcessing = useCapturedDownloadStore((s) => s.isProcessing);
   const capturedDlQueue = useCapturedDownloadStore((s) => s.queueLength);
   const { theme, setTheme } = useTheme();
@@ -89,8 +91,8 @@ export function Header() {
           </Button>
         )}
 
-        {/* ARL Invalid Warning */}
-        {!arlValid && (
+        {/* ARL Invalid Warning - only show when Deezer is enabled and has ARL configured */}
+        {deezerEnabled && deezerArl && !arlValid && (
           <Badge variant="destructive" className="gap-1.5 text-xs">
             <AlertTriangle className="w-3 h-3" />
             ARL Inválida
