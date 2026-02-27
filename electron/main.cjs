@@ -1146,6 +1146,7 @@ ipcMain.handle('check-file-in-subfolders', async (event, { baseFolder, artist, t
 });
 
 // Deezer Download Handler using deemix CLI
+// Flow: Download to _temp folder → Verify integrity → Rename to input name → Move to final folder
 ipcMain.handle('download-from-deezer', async (event, params) => {
   const { artist, title, arl, outputFolder, quality, stationName } = params;
   
@@ -1155,10 +1156,17 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
     ? path.join(outputFolder, sanitizedStation)
     : outputFolder;
   
+  // Use a _temp subfolder for downloads to prevent automation from reading incomplete files
+  const tempDownloadFolder = path.join(finalOutputFolder, '_temp');
+  
+  // The desired final filename based on monitoring input
+  const desiredFilename = `${artist} - ${title}.mp3`;
+  
   console.log(`[DEEMIX] === Starting download ===`);
   console.log(`[DEEMIX] Track: ${artist} - ${title}`);
   console.log(`[DEEMIX] Station: ${stationName || 'N/A'}`);
-  console.log(`[DEEMIX] Output: ${finalOutputFolder}`);
+  console.log(`[DEEMIX] Temp: ${tempDownloadFolder}`);
+  console.log(`[DEEMIX] Final: ${finalOutputFolder}/${desiredFilename}`);
   console.log(`[DEEMIX] Quality: ${quality}`);
   
   // Check if file already exists in any subfolder (anti-duplicate)
@@ -1191,31 +1199,33 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
     
     console.log(`[DEEMIX] Using command: ${deemixCommand}`);
 
-    // Ensure output folder exists (use finalOutputFolder for station subfolders)
-    if (!fs.existsSync(finalOutputFolder)) {
-      console.log(`[DEEMIX] Creating output folder: ${finalOutputFolder}`);
-      try {
-        fs.mkdirSync(finalOutputFolder, { recursive: true });
-      } catch (mkdirError) {
-        console.error(`[DEEMIX] Failed to create folder: ${mkdirError.message}`);
-        return {
-          success: false,
-          error: `Não foi possível criar a pasta: ${finalOutputFolder}. Verifique as permissões.`
-        };
+    // Ensure temp and final folders exist
+    for (const folder of [finalOutputFolder, tempDownloadFolder]) {
+      if (!fs.existsSync(folder)) {
+        console.log(`[DEEMIX] Creating folder: ${folder}`);
+        try {
+          fs.mkdirSync(folder, { recursive: true });
+        } catch (mkdirError) {
+          console.error(`[DEEMIX] Failed to create folder: ${mkdirError.message}`);
+          return {
+            success: false,
+            error: `Não foi possível criar a pasta: ${folder}. Verifique as permissões.`
+          };
+        }
       }
     }
 
-    // Verify folder is writable
+    // Verify temp folder is writable
     try {
-      const testFile = path.join(finalOutputFolder, '.deemix_test');
+      const testFile = path.join(tempDownloadFolder, '.deemix_test');
       fs.writeFileSync(testFile, 'test', 'utf8');
       fs.unlinkSync(testFile);
-      console.log(`[DEEMIX] Output folder is writable`);
+      console.log(`[DEEMIX] Temp folder is writable`);
     } catch (writeError) {
       console.error(`[DEEMIX] Folder not writable: ${writeError.message}`);
       return {
         success: false,
-        error: `Pasta não tem permissão de escrita: ${finalOutputFolder}`
+        error: `Pasta não tem permissão de escrita: ${tempDownloadFolder}`
       };
     }
 
@@ -1249,16 +1259,15 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
     };
     const deemixQuality = qualityMap[quality] || '320';
 
-    // Get files BEFORE download to detect the new file
+    // Get files BEFORE download in temp folder to detect the new file
     let filesBefore = new Set();
     try {
-      filesBefore = new Set(fs.readdirSync(finalOutputFolder));
+      filesBefore = new Set(fs.readdirSync(tempDownloadFolder));
     } catch (e) { /* folder may not exist yet */ }
 
-    // Run deemix CLI using the detected command — NO TIMEOUT to never kill downloads
+    // Run deemix CLI — download to temp folder
     return new Promise((resolve) => {
-      // Build the full command string - use finalOutputFolder for station subfolder
-      const fullCommand = `${deemixCommand} "${deezerUrl}" -p "${finalOutputFolder}" -b ${deemixQuality}`;
+      const fullCommand = `${deemixCommand} "${deezerUrl}" -p "${tempDownloadFolder}" -b ${deemixQuality}`;
 
       console.log(`[DEEMIX] Executing: ${fullCommand}`);
       console.log(`[DEEMIX] ⏳ Sem timeout — processo será aguardado até concluir.`);
@@ -1279,7 +1288,7 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
           // Only log — never kill. If the process was externally killed, report it
           if (error.killed || error.signal === 'SIGTERM') {
             console.error('[DEEMIX] ⚠️ Processo foi terminado EXTERNAMENTE (não por timeout)');
-            cleanupPartialFiles(finalOutputFolder, filesBefore);
+            cleanupPartialFiles(tempDownloadFolder, filesBefore);
             resolve({ 
               success: false, 
               error: 'Processo deemix foi interrompido externamente. O download será tentado novamente.',
@@ -1313,10 +1322,10 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
         // Wait a moment for filesystem sync, then verify
         setTimeout(() => {
           try {
-            const filesAfter = fs.readdirSync(finalOutputFolder);
+            const filesAfter = fs.readdirSync(tempDownloadFolder);
             const newFiles = filesAfter.filter(f => !filesBefore.has(f) && /\.(mp3|flac|MP3|FLAC)$/i.test(f));
             
-            console.log(`[DEEMIX] New files detected: ${newFiles.length}`);
+            console.log(`[DEEMIX] New files detected in temp: ${newFiles.length}`);
             
             if (newFiles.length === 0) {
               console.error('[DEEMIX] ❌ No new audio file found after download!');
@@ -1331,52 +1340,38 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
             // Verify file integrity for each new file
             let validFile = null;
             for (const newFile of newFiles) {
-              const filePath = path.join(finalOutputFolder, newFile);
+              const filePath = path.join(tempDownloadFolder, newFile);
               const stat = fs.statSync(filePath);
               const fileSizeKB = Math.round(stat.size / 1024);
               
               console.log(`[DEEMIX] Checking: ${newFile} (${fileSizeKB} KB)`);
               
-              // Minimum size check: MP3 should be at least 500KB for a real song
-              // (a 3-min MP3 at 128kbps ≈ 2.8MB, at 320kbps ≈ 7MB)
               if (stat.size < 500 * 1024) {
-                console.error(`[DEEMIX] ❌ File too small (${fileSizeKB} KB) — likely corrupted or partial: ${newFile}`);
-                // Delete the corrupt file
-                try {
-                  fs.unlinkSync(filePath);
-                  console.log(`[DEEMIX] 🗑️ Deleted corrupt file: ${newFile}`);
-                } catch (delErr) {
-                  console.error(`[DEEMIX] Could not delete corrupt file: ${delErr.message}`);
-                }
+                console.error(`[DEEMIX] ❌ File too small (${fileSizeKB} KB): ${newFile}`);
+                try { fs.unlinkSync(filePath); } catch (e) {}
                 continue;
               }
               
-              // MP3 header verification: check for ID3 tag or MP3 sync word
+              // MP3 header verification
               try {
                 const headerBuffer = Buffer.alloc(10);
                 const fd = fs.openSync(filePath, 'r');
                 fs.readSync(fd, headerBuffer, 0, 10, 0);
                 fs.closeSync(fd);
                 
-                const hasID3 = headerBuffer[0] === 0x49 && headerBuffer[1] === 0x44 && headerBuffer[2] === 0x33; // "ID3"
-                const hasMP3Sync = (headerBuffer[0] === 0xFF && (headerBuffer[1] & 0xE0) === 0xE0); // MP3 sync
-                const hasFLAC = headerBuffer[0] === 0x66 && headerBuffer[1] === 0x4C && headerBuffer[2] === 0x61 && headerBuffer[3] === 0x43; // "fLaC"
+                const hasID3 = headerBuffer[0] === 0x49 && headerBuffer[1] === 0x44 && headerBuffer[2] === 0x33;
+                const hasMP3Sync = (headerBuffer[0] === 0xFF && (headerBuffer[1] & 0xE0) === 0xE0);
+                const hasFLAC = headerBuffer[0] === 0x66 && headerBuffer[1] === 0x4C && headerBuffer[2] === 0x61 && headerBuffer[3] === 0x43;
                 
                 if (!hasID3 && !hasMP3Sync && !hasFLAC) {
-                  console.error(`[DEEMIX] ❌ Invalid audio header for: ${newFile}`);
-                  try {
-                    fs.unlinkSync(filePath);
-                    console.log(`[DEEMIX] 🗑️ Deleted invalid file: ${newFile}`);
-                  } catch (delErr) {
-                    console.error(`[DEEMIX] Could not delete: ${delErr.message}`);
-                  }
+                  console.error(`[DEEMIX] ❌ Invalid audio header: ${newFile}`);
+                  try { fs.unlinkSync(filePath); } catch (e) {}
                   continue;
                 }
               } catch (headerErr) {
                 console.warn(`[DEEMIX] Could not verify header: ${headerErr.message}, accepting file`);
               }
               
-              // File passed all checks
               validFile = newFile;
               console.log(`[DEEMIX] ✅ File integrity OK: ${newFile} (${fileSizeKB} KB)`);
               break;
@@ -1392,14 +1387,43 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
               return;
             }
             
+            // === RENAME & MOVE: temp → final folder with input name ===
+            const tempFilePath = path.join(tempDownloadFolder, validFile);
+            const finalFilePath = path.join(finalOutputFolder, desiredFilename);
+            
+            try {
+              // Remove existing file in final folder if present
+              if (fs.existsSync(finalFilePath)) {
+                fs.unlinkSync(finalFilePath);
+                console.log(`[DEEMIX] Removed existing: ${desiredFilename}`);
+              }
+              
+              // Move (rename) from temp to final with desired name
+              fs.renameSync(tempFilePath, finalFilePath);
+              console.log(`[DEEMIX] ✅ Moved: ${validFile} → ${desiredFilename}`);
+              
+              // Cleanup: remove any other new files in temp
+              for (const f of newFiles) {
+                if (f !== validFile) {
+                  try { fs.unlinkSync(path.join(tempDownloadFolder, f)); } catch (e) {}
+                }
+              }
+              
+              // Remove temp folder if empty
+              try {
+                const remaining = fs.readdirSync(tempDownloadFolder);
+                if (remaining.length === 0) fs.rmdirSync(tempDownloadFolder);
+              } catch (e) {}
+            } catch (moveError) {
+              console.error(`[DEEMIX] ⚠️ Move failed: ${moveError.message}, file remains in temp`);
+            }
+            
             // Show Windows notification (only for manual downloads, not auto)
             if (!stationName) {
               showNotification(
                 '✅ Download Concluído',
-                `${track.artist.name} - ${track.title}`,
-                () => {
-                  shell.openPath(finalOutputFolder);
-                }
+                `${artist} - ${title}`,
+                () => { shell.openPath(finalOutputFolder); }
               );
             }
 
@@ -1415,21 +1439,21 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
               output: stdout,
               outputFolder: finalOutputFolder,
               stationFolder: sanitizedStation,
-              verifiedFile: validFile,
-              message: `Download concluído e verificado: ${track.artist.name} - ${track.title}`
+              verifiedFile: desiredFilename,
+              message: `Download concluído: ${artist} - ${title}`
             });
           } catch (verifyError) {
             console.error('[DEEMIX] Verification error:', verifyError.message);
             resolve({ 
-              success: true, // Still return success if deemix didn't error
+              success: true,
               track: { id: track.id, title: track.title, artist: track.artist.name, album: track.album?.title, duration: track.duration },
               output: stdout,
               outputFolder: finalOutputFolder,
               stationFolder: sanitizedStation,
-              message: `Download concluído (verificação parcial): ${track.artist.name} - ${track.title}`
+              message: `Download concluído (verificação parcial): ${artist} - ${title}`
             });
           }
-        }, 1500); // 1.5s delay for filesystem sync
+        }, 1500);
       });
     });
     
