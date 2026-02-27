@@ -227,7 +227,7 @@ export async function generateTop50Block(
   });
 
   return {
-    line: ctx.sanitizeGradeLine(`${timeStr} (ID=TOP50) ${top50Songs.map(s => s === ctx.coringaCode ? s : `"${s}"`).join(',vht,')}`),
+    line: ctx.sanitizeGradeLine(`${timeStr} (ID=TOP50) ${top50Songs.map(s => s === ctx.coringaCode ? s : `"${s}"`).join(',vhtn,')}`),
     logs,
   };
 }
