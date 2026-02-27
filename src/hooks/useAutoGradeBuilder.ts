@@ -386,10 +386,23 @@ export function useAutoGradeBuilder() {
     const stationNameToStyle: Record<string, string> = {};
     const seenSongs = new Set<string>();
 
-    // Build blocked songs set for fast lookup
-    const blockedSet = new Set<string>(
-      (config.blockedSongs || []).map(s => s.toLowerCase().trim())
-    );
+    // Build blocked songs lists for fast lookup
+    const blockedExact = new Set<string>();
+    const blockedArtists = new Set<string>();
+    (config.blockedSongs || []).forEach(s => {
+      const lower = s.toLowerCase().trim();
+      if (lower.endsWith(' - *')) {
+        blockedArtists.add(lower.replace(' - *', ''));
+      } else {
+        blockedExact.add(lower);
+      }
+    });
+
+    const isSongBlocked = (artist: string, title: string) => {
+      const a = artist.trim().toLowerCase();
+      const blockedKey = `${a} - ${title.trim().toLowerCase()}`;
+      return blockedExact.has(blockedKey) || blockedArtists.has(a);
+    };
 
     stations.forEach(s => {
       stationNameToStyle[s.name] = s.styles?.[0] || 'POP/VARIADO';
@@ -401,9 +414,8 @@ export function useAutoGradeBuilder() {
       if (seenSongs.has(songKey)) return;
       seenSongs.add(songKey);
 
-      // Check if song is blocked (Artist - Title format)
-      const blockedKey = `${song.artist.trim()} - ${song.title.trim()}`.toLowerCase();
-      if (blockedSet.has(blockedKey)) return;
+      // Check if song is blocked
+      if (isSongBlocked(song.artist, song.title)) return;
       if (!songsByStation[song.station_name]) songsByStation[song.station_name] = [];
       if (songsByStation[song.station_name].length < maxPerStation) {
         const style = stationNameToStyle[song.station_name] || stationNameToStyle[song.station_name.toLowerCase()] || 'POP/VARIADO';
