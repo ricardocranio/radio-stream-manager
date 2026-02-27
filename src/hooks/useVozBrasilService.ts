@@ -66,8 +66,6 @@ export function useVozBrasilService() {
     
     const uniqueUrls = [
       `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}/@@download/file`,
-      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-2025/@@download/file`,
-      `https://radiogov.ebc.com.br/programas/a-voz-do-brasil-download/${day}-${month}-${year}-1/@@download/file`,
     ];
     
     const filename = `VozDoBrasil_${day}-${month}-${year}.mp3`;
@@ -113,7 +111,7 @@ export function useVozBrasilService() {
 
     let config = {
       enabled: true,
-      scheduleTime: '20:35',
+      scheduleTime: '20:25',
       cleanupTime: '23:59',
       downloadFolder: 'C:\\Playlist\\A Voz do Brasil',
     };
@@ -134,7 +132,7 @@ export function useVozBrasilService() {
       const now = new Date();
       const todayStr = now.toDateString();
       
-      let currentConfig = { enabled: true, scheduleTime: '20:35', cleanupTime: '23:59', downloadFolder: 'C:\\Playlist\\A Voz do Brasil' };
+      let currentConfig = { enabled: true, scheduleTime: '20:25', cleanupTime: '23:59', downloadFolder: 'C:\\Playlist\\A Voz do Brasil' };
       try {
         const saved = localStorage.getItem('vozBrasilConfig');
         if (saved) currentConfig = { ...currentConfig, ...JSON.parse(saved) };
@@ -191,8 +189,8 @@ export function useVozBrasilService() {
       const { isRunning } = useRadioStore.getState();
       if (!isRunning || !isWeekday(now) || lastDownloadDateRef.current === todayStr) return;
       
-      const timeParts = (currentConfig.scheduleTime || '20:35').split(':');
-      const scheduleTotalMinutes = (parseInt(timeParts[0], 10) || 20) * 60 + (parseInt(timeParts[1], 10) || 35);
+      const timeParts = (currentConfig.scheduleTime || '20:25').split(':');
+      const scheduleTotalMinutes = (parseInt(timeParts[0], 10) || 20) * 60 + (parseInt(timeParts[1], 10) || 25);
       
       if (currentTotalMinutes >= scheduleTotalMinutes && currentTotalMinutes <= scheduleTotalMinutes + 30) {
         console.log('[VOZ-SVC] ⏰ Janela de download!');
@@ -207,7 +205,7 @@ export function useVozBrasilService() {
     };
 
     // Log schedule info
-    const timeParts = (config.scheduleTime || '20:35').split(':');
+    const timeParts = (config.scheduleTime || '20:25').split(':');
     const cleanupParts = (config.cleanupTime || '23:59').split(':');
     console.log(`[VOZ-SVC] ⏰ Download: ${timeParts[0]}:${timeParts[1]} (Seg-Sex) | Limpeza: ${cleanupParts[0]}:${cleanupParts[1]}`);
 
