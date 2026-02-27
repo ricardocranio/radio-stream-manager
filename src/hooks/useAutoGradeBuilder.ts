@@ -28,6 +28,7 @@ import {
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
 import { batchFindSongsInLibrary, findSongInLibrary as findSongInLibraryFn } from '@/lib/gradeBuilder/batchLibrary';
 import { isFolderBasedBlock, generateFolderBasedBlock, isRomanceBlock, generateRomanceBlock } from '@/lib/gradeBuilder/folderPrograms';
+import { resolveVhtInLine, resetVhtResolver } from '@/lib/gradeBuilder/vhtResolver';
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
@@ -773,6 +774,7 @@ export function useAutoGradeBuilder() {
       console.log('[AUTO-GRADE] 🚀 Building full day grade with progressive saving...');
       logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
       clearUsedSongs();
+      resetVhtResolver(); // Reset VHT cycle for fresh grade
 
       const songsByStation = await fetchAllRecentSongs();
       const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
@@ -804,7 +806,9 @@ export function useAutoGradeBuilder() {
           }
 
           const result = await generateBlockLine(hour, minute, songsByStation, stats, true, targetDay);
-          lines.push(result.line);
+          // Resolve VHT placeholders with random vinheta files
+          const resolvedLine = await resolveVhtInLine(result.line, config.vinhetasFolder || '', filterChars);
+          lines.push(resolvedLine);
           allLogs.push(...result.logs);
           blockCount++;
 
@@ -1158,7 +1162,13 @@ export function useAutoGradeBuilder() {
     }
 
     try {
-      const sortedContent = Array.from(pending.lineMap.keys()).sort().map(t => pending.lineMap.get(t)).join('\n');
+      // Resolve VHT placeholders before writing to disk
+      const resolvedLineMap = new Map<string, string>();
+      for (const [time, line] of pending.lineMap) {
+        const resolvedLine = await resolveVhtInLine(line, config.vinhetasFolder || '', config.filterCharacters);
+        resolvedLineMap.set(time, resolvedLine);
+      }
+      const sortedContent = Array.from(resolvedLineMap.keys()).sort().map(t => resolvedLineMap.get(t)).join('\n');
       await renameFilesInGradeContent(sortedContent);
 
       const result = await window.electronAPI.saveGradeFile({
@@ -1185,7 +1195,7 @@ export function useAutoGradeBuilder() {
       logSystemError('GRADE', 'error', 'Erro ao escrever grade no disco', errorMessage);
       toast({ title: '❌ Erro na escrita', description: errorMessage, variant: 'destructive' });
     }
-  }, [renameFilesInGradeContent, config.gradeFolder, addGradeHistory, defaultSequence.length, getProgramForHour, toast]);
+  }, [renameFilesInGradeContent, config.gradeFolder, config.vinhetasFolder, config.filterCharacters, addGradeHistory, defaultSequence.length, getProgramForHour, toast]);
 
   // ==================== Timer & Auto Build ====================
 
