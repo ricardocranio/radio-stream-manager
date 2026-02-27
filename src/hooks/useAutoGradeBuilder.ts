@@ -23,7 +23,7 @@ import {
 import { sanitizeGradeFilename, sanitizeGradeLine, createLineSanitizer } from '@/lib/gradeBuilder/sanitize';
 import {
   generateVozDoBrasil, generateMisturadao,
-  generateTop50Block, generateMadrugada, generateSertanejoNossa,
+  generateTop50Block, generateTop10Block, generateMadrugada, generateSertanejoNossa,
 } from '@/lib/gradeBuilder/specialPrograms';
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
 import { batchFindSongsInLibrary, findSongInLibrary as findSongInLibraryFn } from '@/lib/gradeBuilder/batchLibrary';
@@ -572,6 +572,11 @@ export function useAutoGradeBuilder() {
     if (hasScheduledSequence) {
       console.log(`[GRADE] 📅 Sequência agendada ativa às ${timeStr} — sobrepondo programas especiais`);
     } else {
+      // TOP10 (18:30 weekdays) - fixed template with sports + mix
+      if (hour === 18 && minute === 30 && isWeekday(targetDay)) {
+        return generateTop10Block(hour, minute, ctx, targetDay);
+      }
+
       // Misturadão (20:00, 20:30 weekdays)
       if ((hour === 20 && (minute === 0 || minute === 30)) && isWeekday(targetDay)) {
         return await generateMisturadao(hour, minute, ctx, targetDay);
