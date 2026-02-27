@@ -117,7 +117,7 @@ function installDeemix() {
       });
     }
 
-    const installCommand = `${pythonStatus.command} install deemix --user`;
+    const installCommand = `${pythonStatus.command} install deemix --upgrade --user`;
     console.log(`Installing deemix with: ${installCommand}`);
 
     exec(installCommand, { timeout: 300000 }, (error, stdout, stderr) => {
@@ -127,7 +127,7 @@ function installDeemix() {
         console.error('stdout:', stdout);
         
         // Try without --user flag
-        const fallbackCommand = `${pythonStatus.command} install deemix`;
+        const fallbackCommand = `${pythonStatus.command} install deemix --upgrade`;
         console.log(`Trying fallback: ${fallbackCommand}`);
         
         exec(fallbackCommand, { timeout: 300000 }, (error2, stdout2, stderr2) => {
