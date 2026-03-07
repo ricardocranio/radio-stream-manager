@@ -56,8 +56,9 @@ export function useDailyReset() {
     // Signal auto-download to reset its queue
     resetQueue();
     
-    // Mark this reset as completed
-    const today = new Date().toISOString().split('T')[0];
+    // Mark this reset as completed (use local date, NOT UTC)
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     setLastResetKey(today, hour);
     
     console.log(`[DAILY RESET] ✅ Reset completed at ${timeLabel}`);
@@ -84,7 +85,7 @@ export function useDailyReset() {
   const checkAndReset = useCallback(() => {
     const now = new Date();
     const currentHour = now.getHours();
-    const today = now.toISOString().split('T')[0];
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const lastResetKey = getLastResetKey();
     
     // Check if current hour matches any reset hour
