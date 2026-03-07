@@ -91,11 +91,13 @@ export function useAutoGradeBuilder() {
   const usedSongsRef = useRef<UsedSong[]>([]);
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
   /** Tracks which block time keys (e.g. "18:00") have already been assembled and locked */
-  const builtBlocksRef = useRef<Set<string>>(() => {
-    const dc = DAY_CODES_BY_INDEX[new Date().getDay()];
-    const p = loadGradeFromStorage(dc);
-    return p?.lockedBlocks || new Set<string>();
-  });
+  const builtBlocksRef = useRef<Set<string>>(
+    (() => {
+      const dc = DAY_CODES_BY_INDEX[new Date().getDay()];
+      const p = loadGradeFromStorage(dc);
+      return p?.lockedBlocks || new Set<string>();
+    })()
+  );
 
   // Restore pendingGradeRef from localStorage on mount
   const pendingGradeRestored = useRef(false);
