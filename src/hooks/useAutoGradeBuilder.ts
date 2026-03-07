@@ -202,6 +202,7 @@ export function useAutoGradeBuilder() {
     usedSongsRef.current = [];
     carryOverSongsRef.current = [];
     builtBlocksRef.current.clear();
+    clearGradeStorage();
   }, []);
 
   const addCarryOverSong = useCallback((song: Omit<CarryOverSong, 'addedAt'>) => {
