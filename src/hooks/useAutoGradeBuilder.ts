@@ -593,21 +593,65 @@ export function useAutoGradeBuilder() {
       };
     }
 
-    // 20:00 — TOP50 FDS (positions 20 down to 11)
+    // 20:00 — TOP50 FDS (positions 20 down to 11) - com músicas reais do ranking
     if (hour === 20 && minute === 0) {
-      const positions = Array.from({ length: 10 }, (_, i) => `"POSICAO${(20 - i).toString().padStart(2, '0')}.MP3"`);
+      const sorted = [...ctx.rankingSongs].sort((a, b) => b.plays - a.plays);
+      const blockSongs: string[] = [];
+      const blockLogs: BlockLogItem[] = [];
+      
+      for (let i = 19; i >= 10 && blockSongs.length < 10; i--) {
+        if (i >= sorted.length) {
+          blockSongs.push(ctx.coringaCode);
+          continue;
+        }
+        const song = sorted[i];
+        const libraryResult = await ctx.findSongInLibrary(song.artist, song.title);
+        if (libraryResult.exists) {
+          const realFilename = libraryResult.filename || sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
+          blockSongs.push(`"${realFilename}"`);
+          ctx.markSongAsUsed(song.title, song.artist, timeStr);
+          blockLogs.push({ blockTime: timeStr, type: 'used', title: song.title, artist: song.artist, station: 'RANKING', reason: `TOP50 FDS posição ${i + 1}` });
+        } else {
+          blockSongs.push(ctx.coringaCode);
+          blockLogs.push({ blockTime: timeStr, type: 'substituted', title: ctx.coringaCode, artist: song.artist, station: 'RANKING', reason: `TOP50 FDS posição ${i + 1} - não encontrada` });
+        }
+      }
+      while (blockSongs.length < 10) blockSongs.push(ctx.coringaCode);
+      
       return {
-        line: `${timeStr} (ID=SABADO) ${positions.join(',vht,')}`,
-        logs: [{ blockTime: timeStr, type: 'fixed', title: 'TOP50 FDS Pos 20-11', artist: 'POSICAO20-11', station: 'TOP50', reason: 'TOP50 FDS bloco 1' }],
+        line: ctx.sanitizeGradeLine(`${timeStr} (ID=SABADO) ${blockSongs.join(',vht,')}`),
+        logs: blockLogs,
       };
     }
 
-    // 20:30 — TOP50 FDS (positions 01 up to 10)
+    // 20:30 — TOP50 FDS (positions 10 down to 01, posição 01 é a ÚLTIMA)
     if (hour === 20 && minute === 30) {
-      const positions = Array.from({ length: 10 }, (_, i) => `"POSICAO${(i + 1).toString().padStart(2, '0')}.MP3"`);
+      const sorted = [...ctx.rankingSongs].sort((a, b) => b.plays - a.plays);
+      const blockSongs: string[] = [];
+      const blockLogs: BlockLogItem[] = [];
+      
+      for (let i = 9; i >= 0 && blockSongs.length < 10; i--) {
+        if (i >= sorted.length) {
+          blockSongs.push(ctx.coringaCode);
+          continue;
+        }
+        const song = sorted[i];
+        const libraryResult = await ctx.findSongInLibrary(song.artist, song.title);
+        if (libraryResult.exists) {
+          const realFilename = libraryResult.filename || sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
+          blockSongs.push(`"${realFilename}"`);
+          ctx.markSongAsUsed(song.title, song.artist, timeStr);
+          blockLogs.push({ blockTime: timeStr, type: 'used', title: song.title, artist: song.artist, station: 'RANKING', reason: `TOP50 FDS posição ${i + 1}` });
+        } else {
+          blockSongs.push(ctx.coringaCode);
+          blockLogs.push({ blockTime: timeStr, type: 'substituted', title: ctx.coringaCode, artist: song.artist, station: 'RANKING', reason: `TOP50 FDS posição ${i + 1} - não encontrada` });
+        }
+      }
+      while (blockSongs.length < 10) blockSongs.push(ctx.coringaCode);
+      
       return {
-        line: `${timeStr} (ID=SABADO) ${positions.join(',vht,')}`,
-        logs: [{ blockTime: timeStr, type: 'fixed', title: 'TOP50 FDS Pos 01-10', artist: 'POSICAO01-10', station: 'TOP50', reason: 'TOP50 FDS bloco 2' }],
+        line: ctx.sanitizeGradeLine(`${timeStr} (ID=SABADO) ${blockSongs.join(',vht,')}`),
+        logs: blockLogs,
       };
     }
 
