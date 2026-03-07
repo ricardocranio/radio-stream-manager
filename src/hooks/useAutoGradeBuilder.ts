@@ -420,19 +420,110 @@ export function useAutoGradeBuilder() {
 
   // ==================== Weekend Template Generator ====================
 
+  // Station rotation for Saturday monitoring-based music
+  const SATURDAY_STATION_ROTATION = ['Mix FM', 'Metropolitana', 'Positividade', 'Clube', 'BH', 'Clube'];
+  const saturdayStationIndexRef = useRef(0);
+
+  /**
+   * Replace 'mus' codes in a template line with real songs from the monitoring
+   * station rotation: Mix FM → Metropolitana → Positividade → Clube → BH → Clube (cyclic).
+   * Falls back to 'mus' if no song is available from the current station.
+   */
+  const replaceMusWithMonitoring = useCallback(async (
+    templateLine: string,
+    songsByStation: Record<string, SongEntry[]>,
+    ctx: GradeContext,
+    timeStr: string,
+    logs: BlockLogItem[]
+  ): Promise<string> => {
+    // Split by comma, find 'mus' tokens (case-insensitive)
+    const parts = templateLine.split(',');
+    const usedKeys = new Set<string>();
+
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i].trim().toLowerCase() !== 'mus') continue;
+
+      // Try stations in rotation order, cycling through
+      let found = false;
+      for (let attempt = 0; attempt < SATURDAY_STATION_ROTATION.length; attempt++) {
+        const stationName = SATURDAY_STATION_ROTATION[saturdayStationIndexRef.current % SATURDAY_STATION_ROTATION.length];
+        saturdayStationIndexRef.current++;
+
+        // Find pool for this station (flexible matching)
+        let pool: SongEntry[] = [];
+        for (const [poolName, poolSongs] of Object.entries(songsByStation)) {
+          const norm1 = poolName.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const norm2 = stationName.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (norm1.includes(norm2) || norm2.includes(norm1)) {
+            pool = poolSongs;
+            break;
+          }
+        }
+
+        if (pool.length === 0) continue;
+
+        // Pick first available song not yet used
+        for (const candidate of pool) {
+          const key = `${candidate.artist.toLowerCase().trim()}|${candidate.title.toLowerCase().trim()}`;
+          if (usedKeys.has(key)) continue;
+          if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr)) continue;
+
+          const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+          if (libraryResult.exists) {
+            const realFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+            parts[i] = `"${realFilename}"`;
+            usedKeys.add(key);
+            ctx.markSongAsUsed(candidate.title, candidate.artist, timeStr);
+            logs.push({
+              blockTime: timeStr,
+              type: 'used',
+              title: candidate.title,
+              artist: candidate.artist,
+              station: stationName,
+              style: candidate.style,
+              reason: `Sábado monitoramento (${stationName})`,
+            });
+            found = true;
+            break;
+          }
+        }
+        if (found) break;
+      }
+
+      // If not found after trying all stations, keep 'mus' as fallback
+      if (!found) {
+        // Advance rotation anyway to avoid getting stuck
+        saturdayStationIndexRef.current++;
+      }
+    }
+
+    return parts.join(',');
+  }, []);
+
   /**
    * Generates weekend (SAB/DOM) blocks using predefined templates.
    * Returns null if no template matches (falls through to normal logic).
+   * Now async: replaces 'mus' codes with real monitoring songs (except Mega Funk which uses 'fun').
    */
-  const generateWeekendTemplateBlock = useCallback((hour: number, minute: number, timeStr: string): BlockResult | null => {
+  const generateWeekendTemplateBlock = useCallback(async (
+    hour: number,
+    minute: number,
+    timeStr: string,
+    songsByStation: Record<string, SongEntry[]>,
+    ctx: GradeContext
+  ): Promise<BlockResult | null> => {
     const musLine = 'mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus';
+
+    // Helper to build result and replace mus with monitoring
+    const buildWithMonitoring = async (line: string, logs: BlockLogItem[]): Promise<BlockResult> => {
+      const resolvedLine = await replaceMusWithMonitoring(line, songsByStation, ctx, timeStr, logs);
+      return { line: resolvedLine, logs };
+    };
 
     // 00:00-07:30 — Regular music blocks
     if (hour >= 0 && hour <= 7) {
-      return {
-        line: `${timeStr} (ID=SABADO) ${musLine}`,
-        logs: [{ blockTime: timeStr, type: 'fixed', title: 'Weekend Music', artist: '', station: 'TEMPLATE', reason: 'Bloco musical FDS' }],
-      };
+      const logs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: 'Weekend Music', artist: '', station: 'TEMPLATE', reason: 'Bloco musical FDS' }];
+      return buildWithMonitoring(`${timeStr} (ID=SABADO) ${musLine}`, logs);
     }
 
     // 08:00-11:30 — Shake Mix (8 blocks)
@@ -442,10 +533,8 @@ export function useAutoGradeBuilder() {
       const ed = blockNum.toString().padStart(2, '0');
       const fixedFile = `"SHAKE_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3"`;
       const musicSlots = ',vht,mus'.repeat(10);
-      return {
-        line: `${timeStr} (ID=SABADO) ${fixedFile}${musicSlots}`,
-        logs: [{ blockTime: timeStr, type: 'fixed', title: `Shake Mix Bloco ${ed}`, artist: `SHAKE_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Shake Mix FDS' }],
-      };
+      const logs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: `Shake Mix Bloco ${ed}`, artist: `SHAKE_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Shake Mix FDS' }];
+      return buildWithMonitoring(`${timeStr} (ID=SABADO) ${fixedFile}${musicSlots}`, logs);
     }
 
     // 12:00-15:30 — Mega Mix (8 blocks) + music
@@ -456,15 +545,11 @@ export function useAutoGradeBuilder() {
       };
       const blockNum = blockMap[timeStr] || 1;
       const ed = blockNum.toString().padStart(2, '0');
-      // First block: fixed,VHTN,mus,vht,mus,vht,mus,vht,mus
-      // Other blocks: fixed,VHTN,VHTN,mus,vht,mus,vht,mus,vht,mus
       const suffix = blockNum === 1
         ? ',VHTN,mus,vht,mus,vht,mus,vht,mus'
         : ',VHTN,VHTN,mus,vht,mus,vht,mus,vht,mus';
-      return {
-        line: `${timeStr} (ID=SABADO) "MEGA_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3"${suffix}`,
-        logs: [{ blockTime: timeStr, type: 'fixed', title: `Mega Mix Bloco ${ed}`, artist: `MEGA_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Mega Mix FDS' }],
-      };
+      const logs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: `Mega Mix Bloco ${ed}`, artist: `MEGA_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Mega Mix FDS' }];
+      return buildWithMonitoring(`${timeStr} (ID=SABADO) "MEGA_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3"${suffix}`, logs);
     }
 
     // 16:00-17:30 — Sem Parar (4 blocks)
@@ -472,13 +557,11 @@ export function useAutoGradeBuilder() {
       const blockMap: Record<string, number> = { '16:00': 1, '16:30': 2, '17:00': 3, '17:30': 4 };
       const blockNum = blockMap[timeStr] || 1;
       const ed = blockNum.toString().padStart(2, '0');
-      return {
-        line: `${timeStr} (ID=SABADO) VHTN,"SEM_PARAR_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,mus,vht,mus,vht,mus,vht,mus`,
-        logs: [{ blockTime: timeStr, type: 'fixed', title: `Sem Parar Bloco ${ed}`, artist: `SEM_PARAR_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Sem Parar FDS' }],
-      };
+      const logs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: `Sem Parar Bloco ${ed}`, artist: `SEM_PARAR_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Sem Parar FDS' }];
+      return buildWithMonitoring(`${timeStr} (ID=SABADO) VHTN,"SEM_PARAR_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,mus,vht,mus,vht,mus,vht,mus`, logs);
     }
 
-    // 18:00-19:30 — Mega Funk (4 blocks, ID=TOP10 for 18h, TOP50 for 19h)
+    // 18:00-19:30 — Mega Funk (4 blocks) — NÃO substitui, mantém 'fun'
     if (hour >= 18 && hour <= 19) {
       const blockMap: Record<string, number> = { '18:00': 1, '18:30': 2, '19:00': 3, '19:30': 4 };
       const blockNum = blockMap[timeStr] || 1;
@@ -513,18 +596,15 @@ export function useAutoGradeBuilder() {
       const blockMap: Record<string, number> = { '21:00': 1, '21:30': 2, '22:00': 3, '22:30': 4, '23:00': 5, '23:30': 8 };
       const blockNum = blockMap[timeStr] || 1;
       const ed = blockNum.toString().padStart(2, '0');
-      // 21:30 has a slightly different pattern (MUS first after fixed, no leading VHTN before MUS)
       const content = timeStr === '21:30'
         ? `VHTN,"CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3",MUS,VHTN,MUS,VHTN,MUS,VHTN,MUS,VHTN,MUS`
         : `VHTN,"CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,MUS,VHTN,MUS,VHTN,MUS,VHTN,MUS`;
-      return {
-        line: `${timeStr} (ID=SABADO) ${content}`,
-        logs: [{ blockTime: timeStr, type: 'fixed', title: `Conexão Mix Bloco ${ed}`, artist: `CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Conexão Mix FDS' }],
-      };
+      const logs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: `Conexão Mix Bloco ${ed}`, artist: `CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Conexão Mix FDS' }];
+      return buildWithMonitoring(`${timeStr} (ID=SABADO) ${content}`, logs);
     }
 
     return null;
-  }, []);
+  }, [replaceMusWithMonitoring]);
 
   // ==================== Block Generation ====================
 
