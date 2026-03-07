@@ -204,6 +204,7 @@ export function useAutoGradeBuilder() {
     carryOverSongsRef.current = [];
     builtBlocksRef.current.clear();
     clearGradeStorage();
+    resetVinhetaPool();
   }, []);
 
   const addCarryOverSong = useCallback((song: Omit<CarryOverSong, 'addedAt'>) => {
