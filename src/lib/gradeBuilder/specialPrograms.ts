@@ -101,7 +101,7 @@ export async function generateMisturadao(
     const misturadao01 = `MISTURADAO_BLOCO01_${dayName}.mp3`;
     const misturadao02 = `MISTURADAO_BLOCO02_${dayName}.mp3`;
     const posicao05 = await getRankingFilename(5);
-    const posicao02 = await getRankingFilename(2);
+    const posicao04 = await getRankingFilename(4);
     
     logs.push({
       blockTime: timeStr,
@@ -113,14 +113,14 @@ export async function generateMisturadao(
     });
     
     return {
-      line: ctx.sanitizeGradeLine(`${timeStr} (ID=MISTURADAO) "${misturadao01}",vht,"${posicao05}",vht,"${misturadao02}",vht,"${posicao02}"`),
+      line: ctx.sanitizeGradeLine(`${timeStr} (ID=MISTURADAO) "${misturadao01}",vht,"${posicao05}",vht,"${misturadao02}",vht,"${posicao04}"`),
       logs,
     };
   } else {
     const misturadao03 = `MISTURADAO_BLOCO03_${dayName}.mp3`;
     const misturadao04 = `MISTURADAO_BLOCO04_${dayName}.mp3`;
-    const posicao08 = await getRankingFilename(8);
-    const posicao09 = await getRankingFilename(9);
+    const posicao02 = await getRankingFilename(2);
+    const posicao01 = await getRankingFilename(1);
     
     logs.push({
       blockTime: timeStr,
@@ -131,8 +131,9 @@ export async function generateMisturadao(
       reason: `Formato especial com ranking (posições usadas: ${[...usedPositions].join(', ') || 'nenhuma'})`,
     });
     
+    // posicao01 é a ÚLTIMA música do bloco (grand finale)
     return {
-      line: ctx.sanitizeGradeLine(`${timeStr} (ID=MISTURADAO) "${misturadao03}",vht,"${posicao08}",vht,"${misturadao04}",vht,"${posicao09}"`),
+      line: ctx.sanitizeGradeLine(`${timeStr} (ID=MISTURADAO) "${misturadao03}",vht,"${posicao02}",vht,"${misturadao04}",vht,"${posicao01}"`),
       logs,
     };
   }
