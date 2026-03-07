@@ -327,9 +327,19 @@ export function useAutoGradeBuilder() {
       const baseDate = targetDate || new Date();
       const blockTime = new Date(baseDate);
       blockTime.setHours(blockHour, blockMinute, 0, 0);
-      const windowEnd = blockTime.toISOString();
+      // Use local-to-ISO conversion to avoid UTC date shift
+      const formatLocalISO = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const h = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        const s = String(d.getSeconds()).padStart(2, '0');
+        return `${y}-${m}-${day}T${h}:${min}:${s}`;
+      };
+      const windowEnd = formatLocalISO(blockTime);
       // Use a 24h window instead of 1h to capture all available monitoring data
-      const windowStart = new Date(blockTime.getTime() - 24 * 60 * 60 * 1000).toISOString();
+      const windowStart = formatLocalISO(new Date(blockTime.getTime() - 24 * 60 * 60 * 1000));
       console.log(`[AUTO-GRADE] 🕐 Buscando músicas para bloco ${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')} (janela de 24h)`);
 
       const { data, error } = await supabase
