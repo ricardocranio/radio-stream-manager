@@ -31,6 +31,7 @@ import { isRomanceBlock, generateRomanceBlock } from '@/lib/gradeBuilder/folderP
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
+import { hasUnresolvedSongTokens, mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
 
 interface AutoGradeState {
   isBuilding: boolean;
@@ -1012,18 +1013,14 @@ export function useAutoGradeBuilder() {
         console.log(`[AUTO-GRADE] 🔓 Force regenerate: locks limpos para ${currentTimeKey} e ${nextTimeKey}`);
       }
 
-      // Check which blocks are already locked (already built)
+      // Check lock state first (in-memory cycle lock)
       const currentLocked = builtBlocksRef.current.has(currentTimeKey);
       const nextLocked = builtBlocksRef.current.has(nextTimeKey);
 
-      if (currentLocked && nextLocked) {
-        console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já montados, pulando`);
-        return;
-      }
+      // Start from pending in-memory map to preserve already assembled lines (web + desktop)
+      const lineMap = new Map<string, string>(pendingGradeRef.current?.lineMap || []);
 
-      setState(prev => ({ ...prev, isBuilding: true, error: null }));
-
-      // Read existing file first (Electron only)
+      // Read existing file and overlay into lineMap (Electron only)
       let existingContent = '';
       if (!isWebOnly) {
         try {
@@ -1034,7 +1031,6 @@ export function useAutoGradeBuilder() {
         } catch { /* ignore */ }
       }
 
-      const lineMap = new Map<string, string>();
       if (existingContent) {
         for (const line of existingContent.split('\n')) {
           const trimmed = line.trim();
@@ -1044,6 +1040,35 @@ export function useAutoGradeBuilder() {
         }
       }
 
+      const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
+      const currentExistingLine = lineMap.get(currentTimeKey);
+      const nextExistingLine = lineMap.get(nextTimeKey);
+
+      // Manual refresh should regenerate only unresolved placeholders (fallback/coringa)
+      const shouldBuildCurrent = forceRegenerate
+        ? !currentExistingLine || hasUnresolvedSongTokens(currentExistingLine, coringaCode)
+        : !currentLocked;
+      const shouldBuildNext = forceRegenerate
+        ? !nextExistingLine || hasUnresolvedSongTokens(nextExistingLine, coringaCode)
+        : !nextLocked;
+
+      if (!shouldBuildCurrent && !shouldBuildNext) {
+        console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já resolvidos, pulando`);
+        builtBlocksRef.current.add(currentTimeKey);
+        builtBlocksRef.current.add(nextTimeKey);
+        setState(prev => ({
+          ...prev,
+          isBuilding: false,
+          lastBuildTime: new Date(),
+          currentBlock: currentTimeKey,
+          nextBlock: nextTimeKey,
+          pendingGradeLines: new Map(lineMap),
+        }));
+        return;
+      }
+
+      setState(prev => ({ ...prev, isBuilding: true, error: null }));
+
       const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: BlockLogItem[] = [];
 
@@ -1051,20 +1076,26 @@ export function useAutoGradeBuilder() {
       // A narrow 1h window misses songs captured earlier, causing unnecessary Coringas
       const fullPool = await fetchAllRecentSongs();
 
-      if (!currentLocked) {
+      if (shouldBuildCurrent) {
         const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats);
-        lineMap.set(currentTimeKey, currentResult.line);
+        const mergedCurrentLine = currentExistingLine
+          ? mergeGradeLinePreservingResolved(currentExistingLine, currentResult.line, coringaCode)
+          : currentResult.line;
+        lineMap.set(currentTimeKey, mergedCurrentLine);
         allLogs.push(...currentResult.logs);
         builtBlocksRef.current.add(currentTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} montado em memória (pool: ${Object.keys(fullPool).length} estações)`);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} atualizado (somente faltantes quando aplicável)`);
       }
 
-      if (!nextLocked) {
+      if (shouldBuildNext) {
         const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats);
-        lineMap.set(nextTimeKey, nextResult.line);
+        const mergedNextLine = nextExistingLine
+          ? mergeGradeLinePreservingResolved(nextExistingLine, nextResult.line, coringaCode)
+          : nextResult.line;
+        lineMap.set(nextTimeKey, mergedNextLine);
         allLogs.push(...nextResult.logs);
         builtBlocksRef.current.add(nextTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} montado em memória (pool: ${Object.keys(fullPool).length} estações)`);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} atualizado (somente faltantes quando aplicável)`);
       }
 
       if (allLogs.length > 0) {
@@ -1092,7 +1123,7 @@ export function useAutoGradeBuilder() {
       setState(prev => ({
         ...prev, isBuilding: false, lastBuildTime: new Date(),
         currentBlock: currentTimeKey, nextBlock: nextTimeKey,
-        blocksGenerated: prev.blocksGenerated + (currentLocked ? 0 : 1) + (nextLocked ? 0 : 1),
+        blocksGenerated: prev.blocksGenerated + (shouldBuildCurrent ? 1 : 0) + (shouldBuildNext ? 1 : 0),
         skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
         pendingGradeLines: new Map(lineMap),
       }));
