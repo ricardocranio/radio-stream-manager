@@ -32,6 +32,7 @@ import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
 import { hasUnresolvedSongTokens, mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
+import { saveGradeToStorage, loadGradeFromStorage, clearGradeStorage } from '@/lib/gradeBuilder/gradePersistence';
 
 interface AutoGradeState {
   isBuilding: boolean;
