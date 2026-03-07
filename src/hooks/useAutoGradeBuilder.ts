@@ -975,7 +975,8 @@ export function useAutoGradeBuilder() {
           }
 
           const result = await generateBlockLine(hour, minute, songsByStation, stats, true, targetDay);
-          lines.push(result.line);
+          const resolvedLine = await resolveVinhetasInLine(result.line);
+          lines.push(resolvedLine);
           allLogs.push(...result.logs);
           blockCount++;
 
@@ -1155,9 +1156,10 @@ export function useAutoGradeBuilder() {
 
       if (shouldBuildCurrent) {
         const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats);
+        const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line);
         const mergedCurrentLine = currentExistingLine
-          ? mergeGradeLinePreservingResolved(currentExistingLine, currentResult.line, coringaCode)
-          : currentResult.line;
+          ? mergeGradeLinePreservingResolved(currentExistingLine, resolvedCurrentLine, coringaCode)
+          : resolvedCurrentLine;
         lineMap.set(currentTimeKey, mergedCurrentLine);
         allLogs.push(...currentResult.logs);
         builtBlocksRef.current.add(currentTimeKey);
@@ -1166,9 +1168,10 @@ export function useAutoGradeBuilder() {
 
       if (shouldBuildNext) {
         const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats);
+        const resolvedNextLine = await resolveVinhetasInLine(nextResult.line);
         const mergedNextLine = nextExistingLine
-          ? mergeGradeLinePreservingResolved(nextExistingLine, nextResult.line, coringaCode)
-          : nextResult.line;
+          ? mergeGradeLinePreservingResolved(nextExistingLine, resolvedNextLine, coringaCode)
+          : resolvedNextLine;
         lineMap.set(nextTimeKey, mergedNextLine);
         allLogs.push(...nextResult.logs);
         builtBlocksRef.current.add(nextTimeKey);
