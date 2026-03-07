@@ -35,19 +35,18 @@ export function sanitizeFilename(filename: string): string {
   result = result.replace(/\s*feat\.?\s*/gi, ' feat ');
   result = result.replace(/\s*ft\.?\s*/gi, ' feat ');
   
-  // REMOVE parentheses AND their content completely: (Ao Vivo), (Acústico), etc.
-  // These suffixes cause issues with radio automation systems
-  result = result.replace(/\s*\([^)]*\)\s*/g, ' ');
+  // PRESERVE parentheses and their content: (Ao Vivo), (Acústico), etc.
+  // These match the actual filenames on disk and are needed by the automation system
   
-  // REMOVE brackets AND their content completely: [Live], [Remix], etc.
+  // REMOVE brackets AND their content: [Live], [Remix], etc.
+  // Brackets are typically metadata not part of the filename
   result = result.replace(/\s*\[[^\]]*\]\s*/g, ' ');
   
   // Remove accents BEFORE removing special characters
   result = removeAccents(result);
   
-  // Remove remaining special characters except: letters, numbers, spaces, dash, dot, underscore
-  // Specifically remove: ´ ` ~ ' " , ; : ! ? @ # $ % ^ * + = | \ / < >
-  result = result.replace(/[^a-zA-Z0-9\s\-._]/g, '');
+  // Remove remaining special characters except: letters, numbers, spaces, dash, dot, underscore, parens
+  result = result.replace(/[^a-zA-Z0-9\s\-._()]/g, '');
   
   // Ensure proper "Artist - Title" format (single dash with spaces)
   result = result.replace(/\s*-\s*/g, ' - ');
