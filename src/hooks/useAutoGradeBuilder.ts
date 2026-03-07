@@ -250,21 +250,16 @@ export function useAutoGradeBuilder() {
   // ==================== File Operations ====================
 
   const renameFilesInGradeContent = useCallback(async (gradeContent: string): Promise<void> => {
-    if (!getIsElectronEnv() || !window.electronAPI?.renameMusicFile) return;
+    // FAIL-SAFE: never rename physical music files from grade generation.
+    // This avoids any risk of mismatching filenames on disk (e.g. Artist A file renamed as Artist B).
+    if (!gradeContent) return;
+
     const filenameMatches = gradeContent.match(/"([^"]+\.(?:mp3|MP3))"/g);
-    if (!filenameMatches) return;
-    const uniqueFilenames = new Set<string>();
-    filenameMatches.forEach(match => uniqueFilenames.add(match.slice(1, -1)));
-    for (const sanitizedName of uniqueFilenames) {
-      if (/^[A-Z0-9_]+\.MP3$/.test(sanitizedName)) continue;
-      if (['mus', 'rom', 'clas'].includes(sanitizedName.toLowerCase())) continue;
-      try {
-        await window.electronAPI.renameMusicFile({ musicFolders: config.musicFolders, currentFilename: sanitizedName, newFilename: sanitizedName });
-      } catch (err) {
-        console.warn(`[RENAME] Warning: Could not process "${sanitizedName}":`, err);
-      }
+    const total = filenameMatches?.length || 0;
+    if (total > 0) {
+      console.log(`[RENAME] 🔒 Renomeação em disco desativada por segurança (${total} referências na grade).`);
     }
-  }, [config.musicFolders]);
+  }, []);
 
   const processFixedContentFilename = useCallback((fileName: string, hour: number, minute: number, editionIndex: number, targetDay?: WeekDay): string => {
     const fullDayName = getFullDayName(targetDay);
