@@ -6,7 +6,7 @@
 const LINE_HEADER_REGEX = /^(\d{2}:\d{2}\s+\((?:FIXO\s+)?ID=[^)]+\)\s*)(.*)$/i;
 
 function normalizeToken(token: string): string {
-  return token.replaceAll('"', '').trim().toUpperCase();
+  return token.replace(/"/g, '').trim().toUpperCase();
 }
 
 function getFallbackCodes(coringaCode?: string): Set<string> {
