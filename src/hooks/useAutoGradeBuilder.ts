@@ -1142,6 +1142,9 @@ export function useAutoGradeBuilder() {
       // Store in memory buffer
       pendingGradeRef.current = { lineMap, filename, blockKey: nextTimeKey };
 
+      // Persist to localStorage for refresh survival
+      saveGradeToStorage(lineMap, builtBlocksRef.current, dayCode);
+
       // Update state for UI preview (silent - no file write)
       setState(prev => ({
         ...prev, isBuilding: false, lastBuildTime: new Date(),
@@ -1151,7 +1154,7 @@ export function useAutoGradeBuilder() {
         pendingGradeLines: new Map(lineMap),
       }));
 
-      console.log(`[AUTO-GRADE] 📋 Grade montada em memória${isWebOnly ? ' (modo web - preview only)' : ' (aguardando janela de 10min para escrita)'}`);
+      console.log(`[AUTO-GRADE] 📋 Grade montada em memória e persistida${isWebOnly ? ' (modo web - preview only)' : ' (aguardando janela de 10min para escrita)'}`);
 
       // Only write to disk if forceWrite is true and in Electron mode
       if (forceWrite && !isWebOnly) {
