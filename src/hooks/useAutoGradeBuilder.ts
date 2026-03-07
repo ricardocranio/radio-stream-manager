@@ -638,7 +638,7 @@ export function useAutoGradeBuilder() {
 
     // Saturday template blocks ALWAYS apply (predefined templates)
     if (targetDay === 'sab') {
-      const weekendResult = generateWeekendTemplateBlock(hour, minute, timeStr);
+      const weekendResult = await generateWeekendTemplateBlock(hour, minute, timeStr, songsByStation, ctx);
       if (weekendResult) return weekendResult;
     }
 
