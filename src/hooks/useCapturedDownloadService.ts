@@ -149,10 +149,47 @@ export function useCapturedDownloadService() {
     useCapturedDownloadStore.getState().setQueueLength(0);
   }, [downloadOne]);
 
+  // === ARL HEALTH CHECK (forced before each batch) ===
+  const checkArlBeforeBatch = useCallback(async (): Promise<boolean> => {
+    const { deezerConfig } = useRadioStore.getState();
+    if (!deezerConfig.enabled || !deezerConfig.arl) return false;
+
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      if (!supabaseUrl || !supabaseKey) return true; // skip check if no env
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/validate-deezer-arl`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify({ arl: deezerConfig.arl }),
+      });
+
+      const data = await resp.json();
+      if (data?.valid !== true) {
+        console.warn('[CAP-DL] ⚠️ ARL INVÁLIDA! Downloads pausados.');
+        return false;
+      }
+      console.log('[CAP-DL] ✅ ARL válida, prosseguindo com downloads.');
+      return true;
+    } catch (err) {
+      console.warn('[CAP-DL] ⚠️ Falha ao validar ARL, prosseguindo mesmo assim:', err);
+      return true; // allow on network error to avoid blocking
+    }
+  }, []);
+
   const checkAndDownload = useCallback(async () => {
     const { isRunning, deezerConfig } = useRadioStore.getState();
     if (!isRunning || !deezerConfig.enabled || !deezerConfig.arl || !deezerConfig.autoDownload) return;
     if (isProcessingRef.current) return;
+
+    // Force ARL validation before processing
+    const arlValid = await checkArlBeforeBatch();
+    if (!arlValid) return;
 
     try {
       // Fetch last 24h of captured songs
