@@ -689,7 +689,7 @@ export function useAutoGradeBuilder() {
     } else {
       // TOP10 (18:30 weekdays) - fixed template with sports + mix
       if (hour === 18 && minute === 30 && isWeekday(targetDay)) {
-        return generateTop10Block(hour, minute, ctx, targetDay);
+        return await generateTop10Block(hour, minute, ctx, targetDay);
       }
 
       // TOP50 Ranking (19:00/19:30 weekdays) - positions 20→01 from ranking
