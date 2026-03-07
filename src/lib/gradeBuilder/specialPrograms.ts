@@ -325,12 +325,12 @@ export async function generateMadrugada(
  * Generate TOP10 block (18:30 weekdays).
  * Fixed template with sports news and music mix blocks.
  */
-export function generateTop10Block(
+export async function generateTop10Block(
   hour: number,
   minute: number,
   ctx: GradeContext,
   targetDay?: WeekDay
-): BlockResult {
+): Promise<BlockResult> {
   const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
   const dayName = ctx.getFullDayName(targetDay);
   const logs: BlockLogItem[] = [];
@@ -340,18 +340,63 @@ export function generateTop10Block(
   const top10_01 = `TOP_10_MIX_BLOCO01_${dayName}.MP3`;
   const top10_02 = `TOP_10_MIX_BLOCO02_${dayName}.MP3`;
 
+  // Get real ranking songs for the 2 music slots (positions 1 and 2)
+  const sortedRanking = [...ctx.rankingSongs].sort((a, b) => b.plays - a.plays);
+  const usedPositions = new Set<number>();
+
+  const getRankingSong = async (preferredPos: number): Promise<string> => {
+    for (let offset = 0; offset < sortedRanking.length; offset++) {
+      const pos = preferredPos + offset;
+      if (pos < 1 || pos > sortedRanking.length || usedPositions.has(pos)) continue;
+      
+      const song = sortedRanking[pos - 1];
+      if (ctx.isRecentlyUsed(song.title, song.artist, timeStr)) continue;
+
+      const libraryResult = await ctx.findSongInLibrary(song.artist, song.title);
+      if (libraryResult.exists) {
+        usedPositions.add(pos);
+        ctx.markSongAsUsed(song.title, song.artist, timeStr);
+        const realFilename = libraryResult.filename || sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
+        
+        logs.push({
+          blockTime: timeStr,
+          type: 'used',
+          title: song.title,
+          artist: song.artist,
+          station: 'RANKING',
+          reason: `TOP10 posição ${pos}`,
+        });
+        
+        return `"${realFilename}"`;
+      }
+    }
+    
+    logs.push({
+      blockTime: timeStr,
+      type: 'substituted',
+      title: ctx.coringaCode,
+      artist: 'CORINGA',
+      station: 'RANKING',
+      reason: `TOP10 sem música do ranking disponível para posição ${preferredPos}`,
+    });
+    return ctx.coringaCode;
+  };
+
+  const musica01 = await getRankingSong(1);
+  const musica02 = await getRankingSong(2);
+
   logs.push({
     blockTime: timeStr,
     type: 'fixed',
     title: 'TOP 10 MIX',
     artist: `${esporte01}, ${top10_01}, ${esporte02}, ${top10_02}`,
     station: 'FIXO',
-    reason: 'Programa especial TOP10 com esporte e mix',
+    reason: `Programa especial TOP10 com esporte, mix e ranking (posições ${[...usedPositions].join(', ') || 'nenhuma'})`,
   });
 
   return {
     line: ctx.sanitizeGradeLine(
-      `${timeStr} (ID=TOP10) "${esporte01}",vhtn,"${top10_01}",vht,mus,vhtn,"${esporte02}",vhtn,"${top10_02}",vhtn,mus`
+      `${timeStr} (ID=TOP10) "${esporte01}",vhtn,"${top10_01}",vht,${musica01},vhtn,"${esporte02}",vhtn,"${top10_02}",vhtn,${musica02}`
     ),
     logs,
   };
