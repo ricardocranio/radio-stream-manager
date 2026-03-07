@@ -32,6 +32,7 @@ import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
 import { hasUnresolvedSongTokens, mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
+import { saveGradeToStorage, loadGradeFromStorage, clearGradeStorage } from '@/lib/gradeBuilder/gradePersistence';
 
 interface AutoGradeState {
   isBuilding: boolean;
@@ -68,16 +69,21 @@ export function useAutoGradeBuilder() {
   const { addBlockLogs } = useGradeLogStore();
   const filterChars = config.filterCharacters;
 
-  const [state, setState] = useState<AutoGradeState>({
-    isBuilding: false, lastBuildTime: null,
-    currentBlock: '--:--', nextBlock: '--:--',
-    lastSavedFile: null, error: null, blocksGenerated: 0,
-    isAutoEnabled: true, nextBuildIn: 0,
-    minutesBeforeBlock: DEFAULT_MINUTES_BEFORE_BLOCK,
-    fullDayProgress: 0, fullDayTotal: 0,
-    skippedSongs: 0, substitutedSongs: 0, missingSongs: 0,
-    currentProcessingSong: null, currentProcessingBlock: null, lastSaveProgress: 0,
-    pendingGradeLines: new Map(),
+  const [state, setState] = useState<AutoGradeState>(() => {
+    // Restore persisted grade from localStorage on mount
+    const dayCode = DAY_CODES_BY_INDEX[new Date().getDay()];
+    const persisted = loadGradeFromStorage(dayCode);
+    return {
+      isBuilding: false, lastBuildTime: null,
+      currentBlock: '--:--', nextBlock: '--:--',
+      lastSavedFile: null, error: null, blocksGenerated: 0,
+      isAutoEnabled: true, nextBuildIn: 0,
+      minutesBeforeBlock: DEFAULT_MINUTES_BEFORE_BLOCK,
+      fullDayProgress: 0, fullDayTotal: 0,
+      skippedSongs: 0, substitutedSongs: 0, missingSongs: 0,
+      currentProcessingSong: null, currentProcessingBlock: null, lastSaveProgress: 0,
+      pendingGradeLines: persisted?.lineMap || new Map(),
+    };
   });
 
   const lastBuildRef = useRef<string | null>(null);
@@ -85,7 +91,24 @@ export function useAutoGradeBuilder() {
   const usedSongsRef = useRef<UsedSong[]>([]);
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
   /** Tracks which block time keys (e.g. "18:00") have already been assembled and locked */
-  const builtBlocksRef = useRef<Set<string>>(new Set());
+  const builtBlocksRef = useRef<Set<string>>(
+    (() => {
+      const dc = DAY_CODES_BY_INDEX[new Date().getDay()];
+      const p = loadGradeFromStorage(dc);
+      return p?.lockedBlocks || new Set<string>();
+    })()
+  );
+
+  // Restore pendingGradeRef from localStorage on mount
+  const pendingGradeRestored = useRef(false);
+  if (!pendingGradeRestored.current) {
+    pendingGradeRestored.current = true;
+    const dayCode = DAY_CODES_BY_INDEX[new Date().getDay()];
+    const persisted = loadGradeFromStorage(dayCode);
+    if (persisted && persisted.lineMap.size > 0) {
+      console.log(`[AUTO-GRADE] 💾 Grade restaurada do localStorage: ${persisted.lineMap.size} blocos, ${persisted.lockedBlocks.size} locks`);
+    }
+  }
 
   // ==================== Utility Helpers ====================
 
@@ -179,6 +202,7 @@ export function useAutoGradeBuilder() {
     usedSongsRef.current = [];
     carryOverSongsRef.current = [];
     builtBlocksRef.current.clear();
+    clearGradeStorage();
   }, []);
 
   const addCarryOverSong = useCallback((song: Omit<CarryOverSong, 'addedAt'>) => {
@@ -967,6 +991,9 @@ export function useAutoGradeBuilder() {
           const timeMatch = line.match(/^(\d{2}:\d{2})/);
           if (timeMatch) fullDayLineMap.set(timeMatch[1], line);
         }
+        // Persist full-day grade to localStorage
+        const allBlockKeys = new Set(fullDayLineMap.keys());
+        saveGradeToStorage(fullDayLineMap, allBlockKeys, dayCode);
         setState(prev => ({
           ...prev, isBuilding: false, lastBuildTime: new Date(), lastSavedFile: filename,
           blocksGenerated: prev.blocksGenerated + 48, fullDayProgress: 48, fullDayTotal: 0,
@@ -1119,6 +1146,9 @@ export function useAutoGradeBuilder() {
       // Store in memory buffer
       pendingGradeRef.current = { lineMap, filename, blockKey: nextTimeKey };
 
+      // Persist to localStorage for refresh survival
+      saveGradeToStorage(lineMap, builtBlocksRef.current, dayCode);
+
       // Update state for UI preview (silent - no file write)
       setState(prev => ({
         ...prev, isBuilding: false, lastBuildTime: new Date(),
@@ -1128,7 +1158,7 @@ export function useAutoGradeBuilder() {
         pendingGradeLines: new Map(lineMap),
       }));
 
-      console.log(`[AUTO-GRADE] 📋 Grade montada em memória${isWebOnly ? ' (modo web - preview only)' : ' (aguardando janela de 10min para escrita)'}`);
+      console.log(`[AUTO-GRADE] 📋 Grade montada em memória e persistida${isWebOnly ? ' (modo web - preview only)' : ' (aguardando janela de 10min para escrita)'}`);
 
       // Only write to disk if forceWrite is true and in Electron mode
       if (forceWrite && !isWebOnly) {
