@@ -238,7 +238,7 @@ export function useCapturedDownloadService() {
     } catch (err) {
       console.error('[CAP-DL] Erro ao buscar capturadas:', err);
     }
-  }, [processQueue]);
+  }, [processQueue, checkArlBeforeBatch]);
 
   const start = useCallback(() => {
     // Initial check after 30s (let other services start first)
