@@ -990,6 +990,9 @@ export function useAutoGradeBuilder() {
           const timeMatch = line.match(/^(\d{2}:\d{2})/);
           if (timeMatch) fullDayLineMap.set(timeMatch[1], line);
         }
+        // Persist full-day grade to localStorage
+        const allBlockKeys = new Set(fullDayLineMap.keys());
+        saveGradeToStorage(fullDayLineMap, allBlockKeys, dayCode);
         setState(prev => ({
           ...prev, isBuilding: false, lastBuildTime: new Date(), lastSavedFile: filename,
           blocksGenerated: prev.blocksGenerated + 48, fullDayProgress: 48, fullDayTotal: 0,
