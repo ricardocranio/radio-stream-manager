@@ -33,6 +33,7 @@ import type {
 } from '@/lib/gradeBuilder/types';
 import { hasUnresolvedSongTokens, mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
 import { saveGradeToStorage, loadGradeFromStorage, clearGradeStorage } from '@/lib/gradeBuilder/gradePersistence';
+import { resolveVinhetasInLine, resolveVinhetasInGrade, resetVinhetaPool } from '@/lib/gradeBuilder/vinhetaResolver';
 
 interface AutoGradeState {
   isBuilding: boolean;
