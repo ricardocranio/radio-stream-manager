@@ -1230,10 +1230,12 @@ export function useAutoGradeBuilder() {
       const minutesUntilBlock = currentMinute < 30 ? 30 - currentMinute : 60 - currentMinute;
       const blockKey = `${targetBlockHour.toString().padStart(2, '0')}:${targetBlockMinute.toString().padStart(2, '0')}`;
 
-      // Clear locks when we transition to a new block cycle
+      // Clear only the NEXT block lock when transitioning to a new cycle
+      // The current block (already playing) stays locked unless it has unresolved fallbacks
       if (lastBuiltBlock && lastBuiltBlock !== blockKey) {
-        console.log(`[AUTO-GRADE] 🔓 Novo ciclo de blocos (${lastBuiltBlock} → ${blockKey}), limpando locks antigos`);
-        builtBlocksRef.current.clear();
+        console.log(`[AUTO-GRADE] 🔓 Novo ciclo de blocos (${lastBuiltBlock} → ${blockKey}), limpando lock do próximo bloco`);
+        builtBlocksRef.current.delete(blockKey);
+        // Keep current block locked — it's already playing and should not change
         lastBuiltBlock = '';
       }
 
