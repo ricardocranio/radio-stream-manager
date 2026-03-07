@@ -1339,15 +1339,24 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
             
             // Verify file integrity for each new file
             let validFile = null;
+            const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30MB — a normal MP3 (320kbps, 5min) is ~12MB
             for (const newFile of newFiles) {
               const filePath = path.join(tempDownloadFolder, newFile);
               const stat = fs.statSync(filePath);
               const fileSizeKB = Math.round(stat.size / 1024);
+              const fileSizeMB = (stat.size / (1024 * 1024)).toFixed(1);
               
               console.log(`[DEEMIX] Checking: ${newFile} (${fileSizeKB} KB)`);
               
               if (stat.size < 500 * 1024) {
                 console.error(`[DEEMIX] ❌ File too small (${fileSizeKB} KB): ${newFile}`);
+                try { fs.unlinkSync(filePath); } catch (e) {}
+                continue;
+              }
+              
+              // Reject abnormally large files (audio data repeating bug)
+              if (stat.size > MAX_FILE_SIZE) {
+                console.error(`[DEEMIX] ❌ File too large (${fileSizeMB} MB) — likely corrupted with repeated audio: ${newFile}`);
                 try { fs.unlinkSync(filePath); } catch (e) {}
                 continue;
               }
@@ -1373,7 +1382,7 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
               }
               
               validFile = newFile;
-              console.log(`[DEEMIX] ✅ File integrity OK: ${newFile} (${fileSizeKB} KB)`);
+              console.log(`[DEEMIX] ✅ File integrity OK: ${newFile} (${fileSizeMB} MB)`);
               break;
             }
             
