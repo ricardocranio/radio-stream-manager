@@ -1339,7 +1339,7 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
             
             // Verify file integrity for each new file
             let validFile = null;
-            const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30MB — a normal MP3 (320kbps, 5min) is ~12MB
+            const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB — MP3 normal raramente passa disso
             for (const newFile of newFiles) {
               const filePath = path.join(tempDownloadFolder, newFile);
               const stat = fs.statSync(filePath);
