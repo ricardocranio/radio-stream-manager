@@ -70,6 +70,27 @@ export function useCapturedDownloadService() {
       if (result?.success) {
         markSongAsDownloaded(song.artist, song.title, result.output);
 
+        // Read ID3 genre from downloaded file and update DB
+        try {
+          const { config } = useRadioStore.getState();
+          const verifiedFile = result.verifiedFile || `${song.artist} - ${song.title}.mp3`;
+          const id3Result = await window.electronAPI?.readId3Genre?.({
+            filePath: verifiedFile,
+            musicFolders: config.musicFolders,
+          });
+          if (id3Result?.success && id3Result.genre) {
+            const normalizedGenre = normalizeId3Genre(id3Result.genre);
+            await supabase
+              .from('scraped_songs')
+              .update({ ai_genre: normalizedGenre, ai_energy: genreToEnergy(normalizedGenre) })
+              .eq('id', song.id);
+            console.log(`[CAP-DL] 🏷️ ID3 genre: ${id3Result.genre} → ${normalizedGenre}`);
+          }
+        } catch (e) {
+          // Non-critical — don't fail the download
+          console.warn('[CAP-DL] ID3 genre read failed:', e);
+        }
+
         const entry: DownloadHistoryEntry = {
           id: crypto.randomUUID(),
           songId: song.id,
