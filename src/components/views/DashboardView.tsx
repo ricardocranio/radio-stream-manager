@@ -236,69 +236,10 @@ export function DashboardView() {
 
   return (
     <div className="p-4 md:p-6 space-y-5 animate-fade-in">
-      {/* === PRIMARY METRICS — Studio Meter Strip === */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          {
-            label: 'Total Capturadas',
-            value: realtimeStats.isLoading ? '...' : realtimeStats.totalSongs.toLocaleString(),
-            sub: 'Banco de dados',
-            icon: Music,
-            color: 'primary',
-            glow: '185 100% 48%',
-          },
-          {
-            label: 'Últimas 24h',
-            value: realtimeStats.isLoading ? '...' : realtimeStats.songsLast24h.toLocaleString(),
-            sub: 'Tempo real',
-            icon: TrendingUp,
-            color: 'success',
-            glow: '155 85% 42%',
-          },
-          {
-            label: 'Emissoras Ativas',
-            value: realtimeStats.isLoading ? '...' : realtimeStats.activeStations,
-            sub: 'Monitorando',
-            icon: Radio,
-            color: 'primary',
-            glow: '185 100% 48%',
-          },
-          {
-            label: 'Faltando',
-            value: missingSongs.filter(s => s.status === 'missing').length,
-            sub: 'No Banco Musical',
-            icon: AlertTriangle,
-            color: 'destructive',
-            glow: '0 80% 55%',
-          },
-        ].map((stat, i) => {
-          const Icon = stat.icon;
-          return (
-            <div key={i} className="glass-card p-4 group hover:border-border/80 transition-all duration-300">
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{stat.label}</p>
-                  <p className="text-2xl font-bold text-foreground tabular-nums font-mono">{stat.value}</p>
-                  <p className={`text-[10px] text-${stat.color} flex items-center gap-1 opacity-70`}>
-                    <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: `hsl(${stat.glow})`, boxShadow: `0 0 6px hsl(${stat.glow} / 0.5)` }} />
-                    {stat.sub}
-                  </p>
-                </div>
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center opacity-40 group-hover:opacity-70 transition-opacity"
-                  style={{ background: `hsl(${stat.glow} / 0.1)` }}
-                >
-                  <Icon className="w-4.5 h-4.5" style={{ color: `hsl(${stat.glow})` }} />
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* === SECONDARY METRICS — Compact Strip === */}
+      {/* === METRICS — Compact Strip === */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Última Hora', value: realtimeStats.isLoading ? '...' : realtimeStats.songsLastHour.toLocaleString(), icon: Zap, glow: '24 100% 55%' },
+          { label: 'Faltando', value: missingSongs.filter(s => s.status === 'missing').length, icon: AlertTriangle, glow: '0 80% 55%' },
           { label: 'Banco Musical', value: libraryStats.isLoading ? '...' : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%' },
           { label: 'Ranking TOP25', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%' },
         ].map((stat, i) => {
