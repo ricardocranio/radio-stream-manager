@@ -194,7 +194,7 @@ export function GradePreviewCard() {
   }, [isBlockShort, isLoading, nextBlockTime, blockDuration, gradeBuilder]);
 
   return (
-    <Card className="glass-card border-amber-500/20">
+    <Card className={`glass-card ${isBlockShort ? 'border-red-500/40' : isBlockOk ? 'border-green-500/20' : 'border-amber-500/20'}`}>
       <CardHeader className="pb-3 border-b border-border">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
