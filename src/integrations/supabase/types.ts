@@ -41,6 +41,42 @@ export type Database = {
         }
         Relationships: []
       }
+      radio_historico_stats: {
+        Row: {
+          artist: string
+          created_at: string
+          first_seen: string
+          id: string
+          last_seen: string
+          play_count: number
+          source: string | null
+          station_name: string
+          title: string
+        }
+        Insert: {
+          artist: string
+          created_at?: string
+          first_seen: string
+          id?: string
+          last_seen: string
+          play_count?: number
+          source?: string | null
+          station_name: string
+          title: string
+        }
+        Update: {
+          artist?: string
+          created_at?: string
+          first_seen?: string
+          id?: string
+          last_seen?: string
+          play_count?: number
+          source?: string | null
+          station_name?: string
+          title?: string
+        }
+        Relationships: []
+      }
       radio_stations: {
         Row: {
           created_at: string
@@ -91,6 +127,8 @@ export type Database = {
       }
       scraped_songs: {
         Row: {
+          ai_energy: string | null
+          ai_genre: string | null
           artist: string
           id: string
           is_now_playing: boolean | null
@@ -101,6 +139,8 @@ export type Database = {
           title: string
         }
         Insert: {
+          ai_energy?: string | null
+          ai_genre?: string | null
           artist: string
           id?: string
           is_now_playing?: boolean | null
@@ -111,6 +151,8 @@ export type Database = {
           title: string
         }
         Update: {
+          ai_energy?: string | null
+          ai_genre?: string | null
           artist?: string
           id?: string
           is_now_playing?: boolean | null
@@ -181,6 +223,7 @@ export type Database = {
     }
     Functions: {
       cleanup_excess_scraped_songs: { Args: never; Returns: undefined }
+      compress_radio_historico: { Args: never; Returns: Json }
     }
     Enums: {
       [_ in never]: never

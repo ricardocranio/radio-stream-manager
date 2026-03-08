@@ -12,6 +12,11 @@ import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
+// Auto-recovery: track consecutive failures per station
+const stationFailureMap = new Map<string, { count: number; pausedUntil: number }>();
+const MAX_CONSECUTIVE_FAILURES = 3;
+const PAUSE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
+
 export interface ScrapeStats {
   lastScrape: Date | null;
   successCount: number;
@@ -20,6 +25,7 @@ export interface ScrapeStats {
   isRunning: boolean;
   currentStation: string | null;
   failedStations: string[];
+  pausedStations: string[];
 }
 
 export function useGlobalScrapingService(
@@ -36,6 +42,7 @@ export function useGlobalScrapingService(
     isRunning: false,
     currentStation: null,
     failedStations: [],
+    pausedStations: [],
   });
 
   const scrapeStation = useCallback(async (stationName: string, scrapeUrl: string) => {
@@ -64,11 +71,31 @@ export function useGlobalScrapingService(
 
   const scrapeAllStations = useCallback(async (_forceRefresh = false) => {
     const { stations, addCapturedSong, addMissingSong, missingSongs, config } = useRadioStore.getState();
-    const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl);
+    const now = Date.now();
+    
+    // Auto-recovery: filter out paused stations and unpause expired ones
+    const pausedStationNames: string[] = [];
+    for (const [name, info] of stationFailureMap.entries()) {
+      if (info.pausedUntil > now) {
+        pausedStationNames.push(name);
+      } else if (info.pausedUntil > 0 && info.pausedUntil <= now) {
+        // Unpause: reset failure count, give another chance
+        console.log(`[SCRAPE-SVC] 🔄 Auto-recovery: ${name} retomando após pausa`);
+        stationFailureMap.set(name, { count: 0, pausedUntil: 0 });
+      }
+    }
+
+    const enabledStations = stations.filter(s => 
+      s.enabled && s.scrapeUrl && !pausedStationNames.includes(s.name)
+    );
     
     if (enabledStations.length === 0) {
-      console.log('[SCRAPE-SVC] No enabled stations');
+      console.log('[SCRAPE-SVC] No enabled stations (or all paused)');
       return { successCount: 0, errorCount: 0, newSongsCount: 0, missingCount: 0 };
+    }
+
+    if (pausedStationNames.length > 0) {
+      console.log(`[SCRAPE-SVC] ⏸️ ${pausedStationNames.length} emissoras pausadas por falhas: ${pausedStationNames.join(', ')}`);
     }
 
     console.log(`[SCRAPE-SVC] 📡 Scraping ${enabledStations.length} stations...`);
@@ -78,6 +105,7 @@ export function useGlobalScrapingService(
       isRunning: true,
       lastScrape: new Date(),
       failedStations: [],
+      pausedStations: pausedStationNames,
     }));
 
     let successCount = 0;
@@ -191,6 +219,11 @@ export function useGlobalScrapingService(
           const { stationName, nowPlaying, recentSongs, scrapeUrl } = result.value;
           const stationStyle = station.styles?.[0] || 'POP/VARIADO';
           
+          // Auto-recovery: reset failure count on success
+          if (stationFailureMap.has(stationName)) {
+            stationFailureMap.set(stationName, { count: 0, pausedUntil: 0 });
+          }
+          
           if (nowPlaying) {
             const { isMissing } = await processSong(
               nowPlaying.title,
@@ -222,6 +255,15 @@ export function useGlobalScrapingService(
             : station?.name;
           if (stationName) {
             failedStations.push(stationName);
+            
+            // Auto-recovery: track consecutive failures
+            const current = stationFailureMap.get(stationName) || { count: 0, pausedUntil: 0 };
+            current.count++;
+            if (current.count >= MAX_CONSECUTIVE_FAILURES) {
+              current.pausedUntil = Date.now() + PAUSE_DURATION_MS;
+              console.warn(`[SCRAPE-SVC] ⚠️ ${stationName}: ${current.count} falhas consecutivas → pausada por 30min`);
+            }
+            stationFailureMap.set(stationName, current);
           }
         }
       }
@@ -231,6 +273,10 @@ export function useGlobalScrapingService(
       }
     }
 
+    const currentPausedStations = Array.from(stationFailureMap.entries())
+      .filter(([_, info]) => info.pausedUntil > Date.now())
+      .map(([name]) => name);
+
     setScrapeStats(prev => ({
       ...prev,
       isRunning: false,
@@ -239,6 +285,7 @@ export function useGlobalScrapingService(
       errorCount: prev.errorCount + errorCount,
       totalSongs: prev.totalSongs + newSongsCount,
       failedStations,
+      pausedStations: currentPausedStations,
     }));
 
     if (successCount > 0 || errorCount > 0) {
