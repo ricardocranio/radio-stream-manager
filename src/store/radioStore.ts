@@ -285,6 +285,7 @@ const defaultConfig: SystemConfig = {
   // V21 additions
   vozBrasilFolder: 'C:\\Playlist\\A Voz do Brasil',
   vozBrasilTime: '20:35',
+  vinhetasFolder: 'C:\\Playlist\\Vinhetas',
   dnaLearningFile: 'C:\\Playlist\\pgm\\Grades\\dna_learning.json',
   inventoryCacheDuration: 3600,
   hardResetInterval: 3600,

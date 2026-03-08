@@ -52,6 +52,7 @@ export interface SystemConfig {
   // V21 additions
   vozBrasilFolder?: string;
   vozBrasilTime?: string;
+  vinhetasFolder?: string;
   dnaLearningFile?: string;
   inventoryCacheDuration?: number;
   hardResetInterval?: number;
