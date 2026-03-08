@@ -1,3 +1,5 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -152,58 +154,68 @@ async function fetchTritonNowPlaying(streamUrl: string, stationName: string): Pr
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
     
-    const url = `https://np.tritondigital.com/public/nowplaying?mountName=${mountName}&numberToFetch=10&eventType=track`;
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/xml, text/xml' },
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+    // Try both 'track' and no eventType filter
+    const urls = [
+      `https://np.tritondigital.com/public/nowplaying?mountName=${mountName}&numberToFetch=10&eventType=track`,
+      `https://np.tritondigital.com/public/nowplaying?mountName=${mountName}&numberToFetch=10`,
+    ];
     
-    if (!response.ok) {
-      return { success: false, stationName, error: `Triton HTTP ${response.status}`, scrapedAt: new Date().toISOString() };
-    }
-    
-    const xml = await response.text();
-    const blocks = xml.split('</nowplaying-info>');
-    const songs: ScrapedSong[] = [];
-    let nowPlaying: ScrapedSong | undefined;
-    
-    for (const block of blocks) {
-      const artistMatch = block.match(/<property\s+name="track_artist_name"[^>]*>([^<]+)<\/property>/i);
-      const titleMatch = block.match(/<property\s+name="cue_title"[^>]*>([^<]+)<\/property>/i);
-      
-      if (artistMatch?.[1] && titleMatch?.[1]) {
-        const artist = artistMatch[1].trim();
-        const title = titleMatch[1].trim();
-        if (artist.length < 2 || title.length < 2) continue;
+    for (const url of urls) {
+      try {
+        const response = await fetch(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/xml, text/xml' },
+          signal: controller.signal,
+        });
         
-        const rejectPatterns = [
-          /COMERCIAL|VINHETA|INSTITUCIONAL|PROPAGANDA|SPOT|BREAK/i,
-          /^(RÁDIO|RADIO)\s/i,
-          /^(BH FM|BAND FM|CLUBE FM|MIX FM|GLOBO|METROPOLITANA)/i,
-        ];
-        if (rejectPatterns.some(p => p.test(artist) || p.test(title))) continue;
+        if (!response.ok) continue;
         
-        const song: ScrapedSong = { artist, title, timestamp: new Date().toISOString() };
+        const xml = await response.text();
+        if (xml.includes('<nowplaying-info-list/>')) continue; // Empty response
         
-        if (!nowPlaying) {
-          nowPlaying = song;
-          console.log(`[${stationName}] Triton now playing: ${artist} - ${title}`);
-        } else if (!songs.some(s => s.artist === artist && s.title === title)) {
-          songs.push(song);
+        const blocks = xml.split('</nowplaying-info>');
+        const songs: ScrapedSong[] = [];
+        let nowPlaying: ScrapedSong | undefined;
+        
+        for (const block of blocks) {
+          const artistMatch = block.match(/<property\s+name="track_artist_name"[^>]*>([^<]+)<\/property>/i);
+          const titleMatch = block.match(/<property\s+name="cue_title"[^>]*>([^<]+)<\/property>/i);
+          
+          if (artistMatch?.[1] && titleMatch?.[1]) {
+            const artist = artistMatch[1].trim();
+            const title = titleMatch[1].trim();
+            if (artist.length < 2 || title.length < 2) continue;
+            
+            const rejectPatterns = [
+              /COMERCIAL|VINHETA|INSTITUCIONAL|PROPAGANDA|SPOT|BREAK/i,
+              /^(RÁDIO|RADIO)\s/i,
+              /^(BH FM|BAND FM|CLUBE FM|MIX FM|GLOBO|METROPOLITANA)/i,
+            ];
+            if (rejectPatterns.some(p => p.test(artist) || p.test(title))) continue;
+            
+            const song: ScrapedSong = { artist, title, timestamp: new Date().toISOString() };
+            
+            if (!nowPlaying) {
+              nowPlaying = song;
+              console.log(`[${stationName}] Triton now playing: ${artist} - ${title}`);
+            } else if (!songs.some(s => s.artist === artist && s.title === title)) {
+              songs.push(song);
+            }
+            if (songs.length >= 5) break;
+          }
         }
-        if (songs.length >= 5) break;
-      }
+        
+        if (nowPlaying) {
+          clearTimeout(timeoutId);
+          return {
+            success: true, stationName, nowPlaying, recentSongs: songs,
+            source: 'triton-api', scrapedAt: new Date().toISOString(),
+          };
+        }
+      } catch { /* try next URL */ }
     }
     
-    return {
-      success: !!nowPlaying,
-      stationName,
-      nowPlaying,
-      recentSongs: songs,
-      source: 'triton-api',
-      scrapedAt: new Date().toISOString(),
-    };
+    clearTimeout(timeoutId);
+    return { success: false, stationName, error: 'No Triton data', scrapedAt: new Date().toISOString() };
   } catch {
     return { success: false, stationName, error: 'Triton API error', scrapedAt: new Date().toISOString() };
   }
@@ -226,9 +238,9 @@ async function resolveStreamUrl(streamUrl: string): Promise<string> {
 async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise<RadioScrapeResult> {
   try {
     const resolvedUrl = await resolveStreamUrl(streamUrl);
-    
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     const response = await fetch(resolvedUrl, {
       headers: { 'Icy-MetaData': '1', 'User-Agent': 'WinampMPEG/5.0', 'Accept': '*/*' },
@@ -246,7 +258,9 @@ async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise
     let bytesRead = 0;
     const chunks: Uint8Array[] = [];
 
-    while (bytesRead < metaInt + 8192) {
+    // Read enough bytes to get past the first audio block and into metadata
+    const targetBytes = metaInt + 16384;
+    while (bytesRead < targetBytes) {
       const { done, value } = await reader.read();
       if (done || !value) break;
       chunks.push(value);
@@ -278,6 +292,10 @@ async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise
     const artist = streamTitle.substring(0, dashIdx).trim();
     const title = streamTitle.substring(dashIdx + 3).trim();
 
+    if (artist.length < 2 || title.length < 2) {
+      return { success: false, stationName, error: 'Invalid metadata content', scrapedAt: new Date().toISOString() };
+    }
+
     return {
       success: true, stationName,
       nowPlaying: { artist, title, timestamp: new Date().toISOString() },
@@ -285,6 +303,79 @@ async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise
     };
   } catch {
     return { success: false, stationName, error: 'ICY fetch failed', scrapedAt: new Date().toISOString() };
+  }
+}
+
+// ===== Database Fallback: get last known song from scraped_songs =====
+
+async function fetchFromDatabase(stationName: string): Promise<RadioScrapeResult> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Get the most recent songs for this station (last 30 minutes)
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { data: songs, error } = await supabase
+      .from('scraped_songs')
+      .select('title, artist, scraped_at, source')
+      .eq('station_name', stationName)
+      .gte('scraped_at', thirtyMinAgo)
+      .order('scraped_at', { ascending: false })
+      .limit(6);
+
+    if (error || !songs || songs.length === 0) {
+      // Try wider window (2 hours) for less active stations
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const { data: olderSongs } = await supabase
+        .from('scraped_songs')
+        .select('title, artist, scraped_at, source')
+        .eq('station_name', stationName)
+        .gte('scraped_at', twoHoursAgo)
+        .order('scraped_at', { ascending: false })
+        .limit(6);
+
+      if (!olderSongs || olderSongs.length === 0) {
+        return { success: false, stationName, error: 'No recent data in database', scrapedAt: new Date().toISOString() };
+      }
+
+      const nowPlaying: ScrapedSong = {
+        artist: olderSongs[0].artist,
+        title: olderSongs[0].title,
+        timestamp: olderSongs[0].scraped_at,
+      };
+
+      const recentSongs: ScrapedSong[] = olderSongs.slice(1).map(s => ({
+        artist: s.artist, title: s.title, timestamp: s.scraped_at,
+      }));
+
+      console.log(`[${stationName}] DB fallback (2h): ${nowPlaying.artist} - ${nowPlaying.title}`);
+      return {
+        success: true, stationName, nowPlaying, recentSongs,
+        source: `db-cache(${olderSongs[0].source || 'unknown'})`,
+        scrapedAt: new Date().toISOString(),
+      };
+    }
+
+    const nowPlaying: ScrapedSong = {
+      artist: songs[0].artist,
+      title: songs[0].title,
+      timestamp: songs[0].scraped_at,
+    };
+
+    const recentSongs: ScrapedSong[] = songs.slice(1).map(s => ({
+      artist: s.artist, title: s.title, timestamp: s.scraped_at,
+    }));
+
+    console.log(`[${stationName}] DB fallback: ${nowPlaying.artist} - ${nowPlaying.title}`);
+    return {
+      success: true, stationName, nowPlaying, recentSongs,
+      source: `db-cache(${songs[0].source || 'unknown'})`,
+      scrapedAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    console.error(`[${stationName}] DB fallback error:`, err);
+    return { success: false, stationName, error: 'Database fallback failed', scrapedAt: new Date().toISOString() };
   }
 }
 
@@ -323,7 +414,7 @@ Deno.serve(async (req) => {
     const orbUrl = getOnlineRadioBoxUrl(formattedUrl, safeName);
     const targetUrl = orbUrl || formattedUrl;
 
-    console.log(`Scraping: ${targetUrl} (for ${safeName})`);
+    console.log(`Scraping: ${targetUrl} (for ${safeName})${streamUrl ? ` [stream: ${streamUrl.substring(0, 60)}]` : ''}`);
 
     // === Source 1: OnlineRadioBox ===
     const controller = new AbortController();
@@ -373,8 +464,15 @@ Deno.serve(async (req) => {
       }
     }
 
+    // === Source 4: Database Fallback (last known data from Python monitor or auto-scrape) ===
+    console.log(`[${safeName}] All live sources failed, trying DB fallback`);
+    const dbResult = await fetchFromDatabase(safeName);
+    if (dbResult.success) {
+      return new Response(JSON.stringify(dbResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     return new Response(
-      JSON.stringify({ success: false, stationName: safeName, error: 'No data from any source', scrapedAt: new Date().toISOString() }),
+      JSON.stringify({ success: false, stationName: safeName, error: 'No playlist data found', scrapedAt: new Date().toISOString() }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
