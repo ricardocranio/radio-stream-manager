@@ -364,29 +364,57 @@ export function useAutoGradeBuilder() {
 
   const fetchAllRecentSongs = useCallback(async (retryCount = 0): Promise<Record<string, SongEntry[]>> => {
     try {
-      // Fetch from both scraped_songs and radio_historico in parallel for maximum pool
-      const [scrapedResult, historicoResult] = await Promise.all([
-        supabase
+      // Fetch scraped_songs and radio_historico independently to handle partial failures
+      let scrapedData: Array<{ title: string; artist: string; station_name: string; scraped_at: string }> = [];
+      let historicoData: Array<{ title: string; artist: string; station_name: string; captured_at: string }> = [];
+
+      try {
+        const scrapedResult = await supabase
           .from('scraped_songs')
           .select('title, artist, station_name, scraped_at')
           .order('scraped_at', { ascending: false })
-          .limit(3000),
-        supabase
+          .limit(3000);
+        
+        if (scrapedResult.error) {
+          console.warn(`[AUTO-GRADE] ⚠️ scraped_songs falhou: ${scrapedResult.error.message || scrapedResult.error.code || JSON.stringify(scrapedResult.error)}`);
+        } else {
+          scrapedData = scrapedResult.data || [];
+        }
+      } catch (e) {
+        console.warn('[AUTO-GRADE] ⚠️ scraped_songs exception:', e instanceof Error ? e.message : e);
+      }
+
+      try {
+        const historicoResult = await supabase
           .from('radio_historico')
           .select('title, artist, station_name, captured_at')
           .order('captured_at', { ascending: false })
-          .limit(1500),
-      ]);
-
-      if (scrapedResult.error) {
-        const errMsg = scrapedResult.error.message || JSON.stringify(scrapedResult.error);
-        throw new Error(`scraped_songs: ${errMsg}`);
+          .limit(1500);
+        
+        if (historicoResult.error) {
+          console.warn(`[AUTO-GRADE] ⚠️ radio_historico falhou: ${historicoResult.error.message || historicoResult.error.code || JSON.stringify(historicoResult.error)}`);
+        } else {
+          historicoData = historicoResult.data || [];
+        }
+      } catch (e) {
+        console.warn('[AUTO-GRADE] ⚠️ radio_historico exception:', e instanceof Error ? e.message : e);
       }
 
-      // Merge both sources, normalizing historico timestamps
+      // If both failed, retry or report
+      if (scrapedData.length === 0 && historicoData.length === 0) {
+        if (retryCount < 2) {
+          console.log(`[AUTO-GRADE] 🔄 Nenhum dado obtido. Retry ${retryCount + 1}/2 em 3s...`);
+          await new Promise(r => setTimeout(r, 3000));
+          return fetchAllRecentSongs(retryCount + 1);
+        }
+        logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', 'Ambas as tabelas retornaram vazio ou com erro após 3 tentativas');
+        return {};
+      }
+
+      // Merge both sources
       const allData = [
-        ...(scrapedResult.data || []),
-        ...(historicoResult.data || []).map(h => ({
+        ...scrapedData,
+        ...historicoData.map(h => ({
           title: h.title,
           artist: h.artist,
           station_name: h.station_name,
@@ -405,14 +433,13 @@ export function useAutoGradeBuilder() {
       }
 
       const deduplicated = Array.from(seen.values());
-      console.log(`[AUTO-GRADE] Pool ampliado: ${scrapedResult.data?.length || 0} scraped + ${historicoResult.data?.length || 0} histórico = ${deduplicated.length} únicas`);
+      console.log(`[AUTO-GRADE] Pool ampliado: ${scrapedData.length} scraped + ${historicoData.length} histórico = ${deduplicated.length} únicas`);
 
       return buildSongsByStation(deduplicated, 300);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
       console.error('[AUTO-GRADE] Error fetching all songs:', errorMsg);
       
-      // Retry up to 2 times with 3s delay
       if (retryCount < 2) {
         console.log(`[AUTO-GRADE] 🔄 Retry ${retryCount + 1}/2 em 3s...`);
         await new Promise(r => setTimeout(r, 3000));
