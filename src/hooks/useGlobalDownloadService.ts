@@ -27,6 +27,7 @@ const PRIORITY_SEQUENCE_BOOST = 200;
 const PRIORITY_STATION_BOOST = 100;
 
 const MAX_RETRIES = 3; // After 3 failures, remove from queue permanently
+const ARL_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 export interface DownloadServiceState {
   queueLength: number;
