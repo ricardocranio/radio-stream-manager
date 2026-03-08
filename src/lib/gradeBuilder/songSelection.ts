@@ -251,18 +251,22 @@ export async function selectSongForSlot(
       return 0;
     });
 
-    for (const candidate of freshnessSorted) {
+    // Apply smart scoring (genre + energy) as tiebreaker within freshness groups
+    const smartSorted = applySmartScoring(freshnessSorted, timeStr, selCtx.previousEnergy);
+
+    for (const candidate of smartSorted) {
       if (!isValidCandidate(candidate.title, candidate.artist)) continue;
 
       const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
       if (libraryResult.exists) {
         const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
         selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+        selCtx.previousEnergy = (candidate as any).ai_energy || null;
         logs.push({
           blockTime: timeStr, type: 'used',
           title: candidate.title, artist: candidate.artist,
           station: candidate.station, style: candidate.style,
-          reason: `[P1] Pool da estação "${stationName}" (resolvedBy: ${resolvedBy})`,
+          reason: `[P1] Pool da estação "${stationName}" (resolvedBy: ${resolvedBy}) [smart]`,
         });
         break;
       } else if (jitAttemptsP1 < maxJitAttemptsP1) {
