@@ -235,18 +235,22 @@ export function useRealtimeStats() {
   }, [loadStats, getEffectiveInterval, powerSavingMode]);
 
   // Subscribe to realtime updates via centralized manager
+  // Use a ref to avoid re-subscribing when persistedStore changes
+  const persistedStoreRef = useRef(persistedStore);
+  persistedStoreRef.current = persistedStore;
+
   useEffect(() => {
     const unsubscribe = realtimeManager.subscribe(
       'scraped_songs',
       STATS_SUBSCRIBER_ID,
       (payload) => {
         const newSong = payload.new as { title: string; artist: string; station_name: string; scraped_at: string };
-        persistedStore.updateFromNewSong(newSong);
+        persistedStoreRef.current.updateFromNewSong(newSong);
       }
     );
 
     return unsubscribe;
-  }, [persistedStore]);
+  }, []); // stable — no deps needed
 
   return { stats, refresh: loadStats };
 }
