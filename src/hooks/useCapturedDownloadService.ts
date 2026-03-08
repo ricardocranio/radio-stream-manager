@@ -94,8 +94,8 @@ export function useCapturedDownloadService() {
     if (!isElectron || !window.electronAPI?.downloadFromDeezer) return 'error';
 
     // Block if ARL is invalid
-    const { useAutoDownloadStore } = await import('@/store/autoDownloadStore');
-    if (!useAutoDownloadStore.getState().arlValid) {
+    const autoStore = (await import('@/store/autoDownloadStore')).useAutoDownloadStore;
+    if (!autoStore.getState().arlValid) {
       console.warn(`[CAP-DL] ⏸️ ARL inválida, pulando: ${song.artist} - ${song.title}`);
       return 'error';
     }
