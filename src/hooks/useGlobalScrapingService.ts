@@ -12,6 +12,11 @@ import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
+// Auto-recovery: track consecutive failures per station
+const stationFailureMap = new Map<string, { count: number; pausedUntil: number }>();
+const MAX_CONSECUTIVE_FAILURES = 3;
+const PAUSE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
+
 export interface ScrapeStats {
   lastScrape: Date | null;
   successCount: number;
@@ -20,6 +25,7 @@ export interface ScrapeStats {
   isRunning: boolean;
   currentStation: string | null;
   failedStations: string[];
+  pausedStations: string[];
 }
 
 export function useGlobalScrapingService(
