@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Station folder management
   ensureStationFolders: (params) => ipcRenderer.invoke('ensure-station-folders', params),
   checkFileInSubfolders: (params) => ipcRenderer.invoke('check-file-in-subfolders', params),
+  purgeBlockedFiles: (params) => ipcRenderer.invoke('purge-blocked-files', params),
   checkDeemix: () => ipcRenderer.invoke('check-deemix'),
   checkPython: () => ipcRenderer.invoke('check-python'),
   installDeemix: () => ipcRenderer.invoke('install-deemix'),

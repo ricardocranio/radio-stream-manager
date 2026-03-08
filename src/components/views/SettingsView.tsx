@@ -916,7 +916,48 @@ export function SettingsView() {
               <p className="text-xs text-muted-foreground mt-2">
                 Músicas específicas que serão bloqueadas da grade e dos downloads automáticos. 
                 Use o formato <span className="font-semibold">Artista - Título</span>, uma por linha.
+                Use <span className="font-semibold">Artista - *</span> para bloquear todas as músicas de um artista.
               </p>
+              {typeof window !== 'undefined' && window.electronAPI?.isElectron && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="mt-3"
+                  onClick={async () => {
+                    if (!window.electronAPI?.purgeBlockedFiles) return;
+                    const parsedBlocked = blockedSongs.split('\n').map(s => s.trim()).filter(Boolean);
+                    const parsedForbidden = forbiddenWords.split(',').map(w => w.trim()).filter(Boolean);
+                    const allFolders = [
+                      ...config.musicFolders,
+                      deezerConfig.downloadFolder,
+                    ].filter(Boolean);
+                    
+                    toast({ title: '🔍 Escaneando pastas...', description: 'Procurando arquivos bloqueados no disco.' });
+                    
+                    try {
+                      const result = await window.electronAPI.purgeBlockedFiles({
+                        musicFolders: allFolders,
+                        blockedSongs: parsedBlocked,
+                        forbiddenWords: parsedForbidden,
+                      });
+                      
+                      if (result.deletedCount > 0) {
+                        toast({ 
+                          title: `🗑️ ${result.deletedCount} arquivo(s) removido(s)`, 
+                          description: result.deleted.slice(0, 3).map(f => f.split('\\').pop()).join(', ') + (result.deletedCount > 3 ? ` e mais ${result.deletedCount - 3}...` : ''),
+                        });
+                      } else {
+                        toast({ title: '✅ Nenhum arquivo bloqueado encontrado', description: 'As pastas estão limpas.' });
+                      }
+                    } catch (err: any) {
+                      toast({ title: '❌ Erro ao purgar', description: err.message, variant: 'destructive' });
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Apagar arquivos bloqueados do disco
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

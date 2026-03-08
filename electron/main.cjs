@@ -1386,6 +1386,73 @@ ipcMain.handle('check-file-in-subfolders', async (event, { baseFolder, artist, t
   return checkFileExistsInSubfolders(baseFolder, searchPattern);
 });
 
+// IPC: Purge blocked songs from disk
+ipcMain.handle('purge-blocked-files', async (event, { musicFolders, blockedSongs, forbiddenWords }) => {
+  console.log('[PURGE] Starting purge of blocked files...');
+  const deleted = [];
+  const errors = [];
+  
+  // Build matching logic
+  const blockedList = (blockedSongs || []).map(s => s.toLowerCase().trim());
+  const blockedExact = new Set(blockedList.filter(s => !s.endsWith(' - *')));
+  const blockedWildcardArtists = blockedList
+    .filter(s => s.endsWith(' - *'))
+    .map(s => s.replace(/ - \*$/, ''));
+  const forbiddenLower = (forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
+  
+  const isBlockedFile = (filename) => {
+    // Remove extension and normalize
+    const baseName = path.basename(filename, path.extname(filename)).toLowerCase();
+    // Try to split "ARTIST - TITLE" format
+    const dashIdx = baseName.indexOf(' - ');
+    let artist = baseName;
+    let title = '';
+    if (dashIdx > 0) {
+      artist = baseName.substring(0, dashIdx).trim();
+      title = baseName.substring(dashIdx + 3).trim();
+    }
+    const key = dashIdx > 0 ? `${artist} - ${title}` : baseName;
+    
+    if (blockedExact.has(key)) return true;
+    if (blockedWildcardArtists.some(blocked => artist === blocked || artist.includes(blocked))) return true;
+    if (forbiddenLower.some(word => artist.includes(word) || title.includes(word) || baseName.includes(word))) return true;
+    return false;
+  };
+  
+  const scanFolder = (folder) => {
+    try {
+      if (!fs.existsSync(folder)) return;
+      const items = fs.readdirSync(folder, { withFileTypes: true });
+      for (const item of items) {
+        const fullPath = path.join(folder, item.name);
+        if (item.isDirectory()) {
+          scanFolder(fullPath); // Recurse into subfolders
+        } else if (/\.(mp3|flac|wav|ogg|m4a)$/i.test(item.name)) {
+          if (isBlockedFile(item.name)) {
+            try {
+              fs.unlinkSync(fullPath);
+              deleted.push(fullPath);
+              console.log(`[PURGE] 🗑️ Deleted: ${fullPath}`);
+            } catch (delErr) {
+              errors.push({ file: fullPath, error: delErr.message });
+              console.error(`[PURGE] ❌ Failed to delete: ${fullPath} - ${delErr.message}`);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      errors.push({ file: folder, error: err.message });
+    }
+  };
+  
+  for (const folder of (musicFolders || [])) {
+    scanFolder(folder);
+  }
+  
+  console.log(`[PURGE] Complete: ${deleted.length} files deleted, ${errors.length} errors`);
+  return { success: true, deleted, errors, deletedCount: deleted.length };
+});
+
 // Deezer Download Handler using deemix CLI
 // Flow: Download to _temp folder → Verify integrity → Rename to input name → Move to final folder
 ipcMain.handle('download-from-deezer', async (event, params) => {
