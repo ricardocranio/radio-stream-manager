@@ -461,11 +461,34 @@ async function processStation(
         parsed.nowPlaying = { ...tritonResult, timestamp: new Date().toISOString() };
         sourceUsed = 'triton-api';
         
-        // Also try to get recent songs from Triton
         const recentSongs = await fetchTritonRecent(mountName, station.name);
         if (recentSongs.length > 0) {
           parsed.recentSongs = recentSongs;
         }
+      } else {
+        // Try Triton without eventType filter (some stations use different event types)
+        try {
+          const altUrl = `https://np.tritondigital.com/public/nowplaying?mountName=${mountName}&numberToFetch=5`;
+          const controller = new AbortController();
+          const tid = setTimeout(() => controller.abort(), 6000);
+          const resp = await fetch(altUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/xml, text/xml' },
+            signal: controller.signal,
+          });
+          clearTimeout(tid);
+          if (resp.ok) {
+            const xml = await resp.text();
+            if (!xml.includes('<nowplaying-info-list/>')) {
+              const artistM = xml.match(/<property\s+name="track_artist_name"[^>]*>([^<]+)<\/property>/i);
+              const titleM = xml.match(/<property\s+name="cue_title"[^>]*>([^<]+)<\/property>/i);
+              if (artistM?.[1] && titleM?.[1] && artistM[1].trim().length >= 2 && titleM[1].trim().length >= 2) {
+                parsed.nowPlaying = { artist: artistM[1].trim(), title: titleM[1].trim(), timestamp: new Date().toISOString() };
+                sourceUsed = 'triton-api-alt';
+                console.log(`[${station.name}] Triton (alt): ${artistM[1].trim()} - ${titleM[1].trim()}`);
+              }
+            }
+          }
+        } catch { /* ignore alt attempt */ }
       }
     }
   }
