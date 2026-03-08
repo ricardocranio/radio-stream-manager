@@ -2320,6 +2320,183 @@ ipcMain.handle('get-music-library-stats', async (event, params) => {
     return { success: false, count: 0, folders: 0 };
   }
 });
+
+// =============== MP3 DURATION READER ===============
+
+// In-memory duration cache (persists across IPC calls within session)
+const durationCache = new Map();
+
+/**
+ * Read MP3 duration from file by parsing MPEG frame headers.
+ * Supports CBR and estimates VBR from file size.
+ * Returns duration in seconds, or 0 on failure.
+ */
+function getMP3Duration(filePath) {
+  try {
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+    
+    // Read first 16KB to find MPEG frame header
+    const fd = fs.openSync(filePath, 'r');
+    const headerBuf = Buffer.alloc(16384);
+    fs.readSync(fd, headerBuf, 0, 16384, 0);
+    fs.closeSync(fd);
+    
+    // Skip ID3v2 tag if present
+    let offset = 0;
+    if (headerBuf[0] === 0x49 && headerBuf[1] === 0x44 && headerBuf[2] === 0x33) {
+      const size = (headerBuf[6] << 21) | (headerBuf[7] << 14) | (headerBuf[8] << 7) | headerBuf[9];
+      offset = 10 + size;
+    }
+    
+    // Find first MPEG sync word (0xFF 0xE0+)
+    let searchBuf = headerBuf;
+    if (offset > 0 && offset < fileSize) {
+      const fd2 = fs.openSync(filePath, 'r');
+      searchBuf = Buffer.alloc(Math.min(4096, fileSize - offset));
+      fs.readSync(fd2, searchBuf, 0, searchBuf.length, offset);
+      fs.closeSync(fd2);
+    }
+    const searchStart = offset > 0 ? 0 : offset;
+    
+    for (let i = searchStart; i < searchBuf.length - 4; i++) {
+      if (searchBuf[i] === 0xFF && (searchBuf[i + 1] & 0xE0) === 0xE0) {
+        const b1 = searchBuf[i + 1];
+        const b2 = searchBuf[i + 2];
+        
+        const versionBits = (b1 >> 3) & 0x03;
+        const layerBits = (b1 >> 1) & 0x03;
+        const bitrateIndex = (b2 >> 4) & 0x0F;
+        const sampleRateIndex = (b2 >> 2) & 0x03;
+        
+        if (bitrateIndex === 0 || bitrateIndex === 15 || sampleRateIndex === 3) continue;
+        if (layerBits === 0 || versionBits === 1) continue;
+        
+        const bitrateTables = {
+          '3_1': [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0],
+          '3_3': [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0],
+          '3_2': [0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0],
+          '2_1': [0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256, 0],
+          '2_3': [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0],
+          '2_2': [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0],
+        };
+        
+        const sampleRates = {
+          3: [44100, 48000, 32000],
+          2: [22050, 24000, 16000],
+          0: [11025, 12000, 8000],
+        };
+        
+        const version = versionBits === 3 ? 3 : 2;
+        const layer = layerBits;
+        const tableKey = `${version}_${layer}`;
+        const bitrateTable = bitrateTables[tableKey] || bitrateTables['3_3'];
+        const bitrate = bitrateTable[bitrateIndex];
+        
+        const sampleRateArr = sampleRates[versionBits] || sampleRates[3];
+        const sampleRate = sampleRateArr[sampleRateIndex];
+        
+        if (bitrate > 0 && sampleRate > 0) {
+          const audioSize = fileSize - (offset > 0 ? offset : i);
+          const durationSec = (audioSize * 8) / (bitrate * 1000);
+          
+          if (durationSec > 0 && durationSec < 3600) {
+            return Math.round(durationSec);
+          }
+        }
+        break;
+      }
+    }
+    
+    // Fallback: estimate from file size assuming 192kbps
+    const estimatedDuration = (fileSize * 8) / (192 * 1000);
+    if (estimatedDuration > 0 && estimatedDuration < 3600) {
+      return Math.round(estimatedDuration);
+    }
+    
+    return 0;
+  } catch (error) {
+    console.error(`[DURATION] Error reading ${filePath}:`, error.message);
+    return 0;
+  }
+}
+
+/**
+ * Get duration of a file by filename, searching through music folders.
+ * Results are cached in memory.
+ */
+function getFileDuration(filename, musicFolders) {
+  const cacheKey = filename.toLowerCase().replace(/^"|"$/g, '');
+  if (durationCache.has(cacheKey)) {
+    return durationCache.get(cacheKey);
+  }
+  
+  const cleanName = filename.replace(/^"|"$/g, '');
+  
+  for (const folder of musicFolders) {
+    const findFile = (dir) => {
+      try {
+        if (!fs.existsSync(dir)) return null;
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            const result = findFile(fullPath);
+            if (result) return result;
+          } else if (entry.name.toLowerCase() === cleanName.toLowerCase()) {
+            return fullPath;
+          }
+        }
+        return null;
+      } catch (e) { return null; }
+    };
+    
+    const filePath = findFile(folder);
+    if (filePath) {
+      const ext = path.extname(filePath).toLowerCase();
+      let duration = 0;
+      if (ext === '.mp3') {
+        duration = getMP3Duration(filePath);
+      } else {
+        try {
+          const stat = fs.statSync(filePath);
+          duration = Math.round((stat.size * 8) / (192 * 1000));
+        } catch (e) {}
+      }
+      
+      if (duration > 0) {
+        durationCache.set(cacheKey, duration);
+        return duration;
+      }
+    }
+  }
+  
+  return 0;
+}
+
+// IPC: Get duration of a single file
+ipcMain.handle('get-file-duration', async (event, { filename, musicFolders }) => {
+  try {
+    const duration = getFileDuration(filename, musicFolders);
+    return { success: true, duration };
+  } catch (error) {
+    return { success: false, duration: 0, error: error.message };
+  }
+});
+
+// IPC: Get durations of multiple files in batch
+ipcMain.handle('get-file-durations-batch', async (event, { filenames, musicFolders }) => {
+  try {
+    const results = {};
+    for (const filename of filenames) {
+      results[filename] = getFileDuration(filename, musicFolders);
+    }
+    return { success: true, durations: results };
+  } catch (error) {
+    return { success: false, durations: {}, error: error.message };
+  }
+});
+
 // =============== VOZ DO BRASIL DOWNLOAD ===============
 
 // Download file from URL to specified folder
