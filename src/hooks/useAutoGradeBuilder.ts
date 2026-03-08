@@ -935,7 +935,7 @@ export function useAutoGradeBuilder() {
     // Pre-calculate fixed content duration if present
     if (fixedContentFile) {
       let fixedDuration = DEFAULT_FIXED_DURATION_SEC;
-      if (isElectron && window.electronAPI?.getFileDuration) {
+      if (getIsElectronEnv() && window.electronAPI?.getFileDuration) {
         try {
           const cleanName = fixedContentFile.replace(/^"|"$/g, '');
           const allFolders = [...config.musicFolders, config.contentFolder, config.gradeFolder].filter(Boolean);
@@ -950,7 +950,7 @@ export function useAutoGradeBuilder() {
 
     // Helper to get duration of a song file
     const getSongDuration = async (songStr: string): Promise<number> => {
-      if (!isElectron || !window.electronAPI?.getFileDuration) return DEFAULT_SONG_DURATION_SEC;
+      if (!getIsElectronEnv() || !window.electronAPI?.getFileDuration) return DEFAULT_SONG_DURATION_SEC;
       // Only query for quoted filenames (real files), not codes like 'mus', 'rom', etc.
       if (!songStr.startsWith('"')) return DEFAULT_SONG_DURATION_SEC;
       const cleanName = songStr.replace(/^"|"$/g, '');
