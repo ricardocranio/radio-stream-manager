@@ -279,6 +279,8 @@ interface ElectronAPI {
   checkSongExists: (params: CheckSongParams) => Promise<CheckSongResult>;
   findSongMatch: (params: CheckSongParams) => Promise<CheckSongResult>;
   getMusicLibraryStats: (params: MusicLibraryStatsParams) => Promise<MusicLibraryStatsResult>;
+  getFileDuration: (params: { filename: string; musicFolders: string[] }) => Promise<{ success: boolean; duration: number; error?: string }>;
+  getFileDurationsBatch: (params: { filenames: string[]; musicFolders: string[] }) => Promise<{ success: boolean; durations: Record<string, number>; error?: string }>;
   
   // Voz do Brasil download
   downloadVozBrasil: (params: VozDownloadParams) => Promise<VozDownloadResult>;
