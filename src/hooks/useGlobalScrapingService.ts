@@ -273,6 +273,10 @@ export function useGlobalScrapingService(
       }
     }
 
+    const currentPausedStations = Array.from(stationFailureMap.entries())
+      .filter(([_, info]) => info.pausedUntil > Date.now())
+      .map(([name]) => name);
+
     setScrapeStats(prev => ({
       ...prev,
       isRunning: false,
@@ -281,6 +285,7 @@ export function useGlobalScrapingService(
       errorCount: prev.errorCount + errorCount,
       totalSongs: prev.totalSongs + newSongsCount,
       failedStations,
+      pausedStations: currentPausedStations,
     }));
 
     if (successCount > 0 || errorCount > 0) {
