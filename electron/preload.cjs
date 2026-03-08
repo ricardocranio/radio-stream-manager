@@ -62,6 +62,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readGradeFile: (params) => ipcRenderer.invoke('read-grade-file', params),
   listFolderFiles: (params) => ipcRenderer.invoke('list-folder-files', params),
   renameMusicFile: (params) => ipcRenderer.invoke('rename-music-file', params),
+  scanFixLibrary: (params) => ipcRenderer.invoke('scan-fix-library', params),
+  onLibFixProgress: (callback) => ipcRenderer.on('lib-fix-progress', (_, progress) => callback(progress)),
   scanBpmTags: (params) => ipcRenderer.invoke('scan-bpm-tags', params),
   saveBpmCache: (params) => ipcRenderer.invoke('save-bpm-cache', params),
   loadBpmCache: (params) => ipcRenderer.invoke('load-bpm-cache', params),

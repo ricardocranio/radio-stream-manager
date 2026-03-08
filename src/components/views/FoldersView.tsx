@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Folder, FolderPlus, Trash2, Save, HardDrive, Music } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Folder, FolderPlus, Trash2, Save, HardDrive, Music, Wrench, Loader2 } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,8 @@ export function FoldersView() {
   const { config, setConfig } = useRadioStore();
   const { toast } = useToast();
   const [localConfig, setLocalConfig] = useState(config);
+  const [isFixing, setIsFixing] = useState(false);
+  const [fixProgress, setFixProgress] = useState<{ scanned: number; renamed: number; current: string } | null>(null);
 
   const handleSave = () => {
     setConfig(localConfig);
@@ -82,6 +84,79 @@ export function FoldersView() {
             </div>
             <p className="text-xs text-muted-foreground">
               Vá para <strong>Configurações → Banco Musical</strong> para adicionar ou remover pastas.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Library Fix Tool */}
+        <Card className="glass-card border-primary/20">
+          <CardHeader className="border-b border-border">
+            <CardTitle className="flex items-center gap-2">
+              <Wrench className="w-5 h-5 text-primary" />
+              Corrigir Nomes da Biblioteca
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Escaneia todos os MP3 das pastas musicais, lê as <strong>ID3 tags</strong> reais 
+              (artista e título embutidos no arquivo) e renomeia automaticamente os que estiverem errados.
+            </p>
+            {fixProgress && (
+              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 space-y-1">
+                <p className="text-sm font-mono text-primary">
+                  📂 {fixProgress.scanned} escaneados · ✅ {fixProgress.renamed} renomeados
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {fixProgress.current}
+                </p>
+              </div>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isFixing || !window.electronAPI?.scanFixLibrary}
+              onClick={async () => {
+                if (!window.electronAPI?.scanFixLibrary) {
+                  toast({ title: '⚠️ Disponível apenas no Electron', variant: 'destructive' });
+                  return;
+                }
+                setIsFixing(true);
+                setFixProgress(null);
+                
+                // Listen for progress
+                const cleanup = window.electronAPI.onLibFixProgress?.((progress) => {
+                  setFixProgress(progress);
+                });
+                
+                try {
+                  const result = await window.electronAPI.scanFixLibrary({ musicFolders: config.musicFolders });
+                  toast({
+                    title: '✅ Biblioteca corrigida',
+                    description: `${result.scanned} arquivos escaneados, ${result.renamed} renomeados, ${result.errors} erros`,
+                  });
+                  setFixProgress({ scanned: result.scanned, renamed: result.renamed, current: 'Concluído!' });
+                } catch (err) {
+                  toast({ title: '❌ Erro ao corrigir biblioteca', description: String(err), variant: 'destructive' });
+                } finally {
+                  setIsFixing(false);
+                }
+              }}
+              className="w-full"
+            >
+              {isFixing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Corrigindo...
+                </>
+              ) : (
+                <>
+                  <Wrench className="w-4 h-4 mr-2" />
+                  Corrigir Nomes Automaticamente
+                </>
+              )}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              ⚡ Não baixa nada — apenas renomeia arquivos existentes baseado nas ID3 tags.
             </p>
           </CardContent>
         </Card>
