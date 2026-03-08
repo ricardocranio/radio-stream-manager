@@ -983,38 +983,38 @@ export function useAutoGradeBuilder() {
 
       // TOP10 (18:30 weekdays)
       if (hour === 18 && minute === 30 && isWeekday(targetDay)) {
-        return await generateTop10Block(hour, minute, ctx, targetDay);
+        return fillBlockIfShort(await generateTop10Block(hour, minute, ctx, targetDay));
       }
 
       // TOP50 Ranking (19:00/19:30 weekdays)
       if (hour === 19 && (minute === 0 || minute === 30) && isWeekday(targetDay)) {
-        return await generateTop50Block(hour, minute, 10, ctx);
+        return fillBlockIfShort(await generateTop50Block(hour, minute, 10, ctx));
       }
 
       // Misturadão (20:00, 20:30 weekdays)
       if ((hour === 20 && (minute === 0 || minute === 30)) && isWeekday(targetDay)) {
-        return await generateMisturadao(hour, minute, ctx, targetDay);
+        return fillBlockIfShort(await generateMisturadao(hour, minute, ctx, targetDay));
       }
 
       // Romance blocks (22:00-00:00)
       if (isRomanceBlock(hour, minute) && isWeekday(targetDay)) {
-        return generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay);
+        return fillBlockIfShort(await generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay));
       }
 
       // TOP50 blocks (skip on Sunday)
       const top50Item = targetDay !== 'dom' ? fixedItems.find(fc => fc.type === 'top50') : undefined;
       if (top50Item) {
-        return await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx);
+        return fillBlockIfShort(await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx));
       }
 
       // Madrugada (00:00-04:30) - weekdays only
       if (hour >= 0 && hour <= 4 && isWeekday(targetDay)) {
-        return generateMadrugada(hour, minute, songsByStation, stats, isFullDay, ctx, programName);
+        return fillBlockIfShort(await generateMadrugada(hour, minute, songsByStation, stats, isFullDay, ctx, programName));
       }
 
       // Sertanejo Nossa (05:00-07:30) - weekdays only
       if (hour >= 5 && hour <= 7 && isWeekday(targetDay)) {
-        return generateSertanejoNossa(hour, minute, songsByStation, stats, isFullDay, ctx);
+        return fillBlockIfShort(await generateSertanejoNossa(hour, minute, songsByStation, stats, isFullDay, ctx));
       }
     }
 
