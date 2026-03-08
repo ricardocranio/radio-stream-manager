@@ -351,14 +351,15 @@ export async function selectSongForSlot(
 
     for (const [otherStation, songs] of sortedStations) {
       if (otherStation === stationName) continue;
-      // Sort by freshness within each station
+      // Sort by freshness within each station, then apply smart scoring
       const freshSorted = [...songs].sort((a, b) => {
         if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
         if (a.scrapedAt) return -1;
         if (b.scrapedAt) return 1;
         return 0;
       });
-      for (const candidate of freshSorted) {
+      const smartDnaSorted = applySmartScoring(freshSorted, timeStr, selCtx.previousEnergy);
+      for (const candidate of smartDnaSorted) {
         if (candidate.style !== stationStyle) continue;
         if (!isValidCandidate(candidate.title, candidate.artist)) continue;
 
