@@ -1936,9 +1936,17 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
                 console.log(`[DEEMIX] Removed existing: ${finalFilename}`);
               }
               
-              // Move from temp to final with ID3/Deezer metadata name
-              fs.renameSync(tempFilePath, finalFilePath);
-              console.log(`[DEEMIX] ✅ Moved & renamed: ${finalFilename}`);
+              // Move from temp to final — try rename first, fallback to copy+delete
+              // (renameSync fails across different drives/partitions)
+              try {
+                fs.renameSync(tempFilePath, finalFilePath);
+                console.log(`[DEEMIX] ✅ Moved (rename): ${finalFilename}`);
+              } catch (renameErr) {
+                console.log(`[DEEMIX] ⚠️ Rename failed (${renameErr.code || renameErr.message}), using copy+delete fallback...`);
+                fs.copyFileSync(tempFilePath, finalFilePath);
+                fs.unlinkSync(tempFilePath);
+                console.log(`[DEEMIX] ✅ Moved (copy+delete): ${finalFilename}`);
+              }
               
               // Cleanup: remove any other new files in temp
               for (const f of newFiles) {
@@ -1953,7 +1961,16 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
                 if (remaining.length === 0) fs.rmdirSync(tempDownloadFolder);
               } catch (e) {}
             } catch (moveError) {
-              console.error(`[DEEMIX] ⚠️ Move failed: ${moveError.message}, file remains in temp`);
+              console.error(`[DEEMIX] ❌ Move failed completely: ${moveError.message}`);
+              // Last resort: try to copy even if delete fails
+              try {
+                if (!fs.existsSync(finalFilePath) && fs.existsSync(tempFilePath)) {
+                  fs.copyFileSync(tempFilePath, finalFilePath);
+                  console.log(`[DEEMIX] ✅ Emergency copy succeeded: ${finalFilename}`);
+                }
+              } catch (emergencyErr) {
+                console.error(`[DEEMIX] ❌ Emergency copy also failed: ${emergencyErr.message}`);
+              }
             }
             
             // Show Windows notification (only for manual downloads, not auto)
@@ -2981,8 +2998,16 @@ ipcMain.handle('download-voz-brasil', async (event, params) => {
         console.log(`[VOZ] Removed existing: ${filename}`);
       }
       
-      fs.renameSync(tempFilePath, finalFilePath);
-      console.log(`[VOZ] ✅ Moved: ${tempFilename} → ${filename}`);
+      // Move from temp to final — try rename first, fallback to copy+delete
+      try {
+        fs.renameSync(tempFilePath, finalFilePath);
+        console.log(`[VOZ] ✅ Moved (rename): ${tempFilename} → ${filename}`);
+      } catch (renameErr) {
+        console.log(`[VOZ] ⚠️ Rename failed (${renameErr.code || renameErr.message}), using copy+delete...`);
+        fs.copyFileSync(tempFilePath, finalFilePath);
+        fs.unlinkSync(tempFilePath);
+        console.log(`[VOZ] ✅ Moved (copy+delete): ${tempFilename} → ${filename}`);
+      }
       
       // Cleanup temp dir if empty
       try {
