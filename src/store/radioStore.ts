@@ -629,6 +629,17 @@ export const useRadioStore = create<RadioState>()(
       // Auto Scrape Setting
       autoScrapeEnabled: false,
       setAutoScrapeEnabled: (autoScrapeEnabled) => set({ autoScrapeEnabled }),
+
+      // Song Aliases (corrections)
+      songAliases: [
+        { id: 'default-1', fromArtist: 'naldo lima', fromTitle: 'retrovisor', toArtist: 'Gusttavo Lima', toTitle: 'Retrovisor' },
+      ],
+      setSongAliases: (songAliases) => set({ songAliases }),
+      addSongAlias: (alias) => set((state) => ({ songAliases: [...state.songAliases, alias] })),
+      removeSongAlias: (id) => set((state) => ({ songAliases: state.songAliases.filter(a => a.id !== id) })),
+      updateSongAlias: (id, updates) => set((state) => ({
+        songAliases: state.songAliases.map(a => a.id === id ? { ...a, ...updates } : a),
+      })),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
@@ -648,6 +659,7 @@ export const useRadioStore = create<RadioState>()(
         gradeHistory: state.gradeHistory,
         rankingSongs: state.rankingSongs,
         autoScrapeEnabled: state.autoScrapeEnabled,
+        songAliases: state.songAliases,
       }),
       // Handle Date objects that get serialized as strings
       onRehydrateStorage: () => (state) => {
