@@ -839,8 +839,9 @@ export function useAutoGradeBuilder() {
 
     const blockLogs: BlockLogItem[] = [];
 
-    // Fixed content handling — SKIPPED when a scheduled sequence is active
-    const fixedItem = hasScheduledSequence ? undefined : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil');
+    // Fixed content handling — SKIPPED on Sunday (DOM.txt = 100% monitoring) and when a scheduled sequence is active
+    const isSunday = targetDay === 'dom';
+    const fixedItem = (hasScheduledSequence || isSunday) ? undefined : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil');
     let fixedContentFile: string | null = null;
     let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
 
@@ -856,6 +857,8 @@ export function useAutoGradeBuilder() {
         title: fixedItem.name, artist: finalFileName,
         station: 'FIXO', reason: `Conteúdo fixo com dia: ${getDayCode(targetDay)}`,
       });
+    } else if (isSunday) {
+      console.log(`[GRADE] 🌞 Domingo: conteúdo fixo ignorado às ${timeStr} — 100% monitoramento`);
     } else if (hasScheduledSequence && fixedItems.some(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil')) {
       console.log(`[GRADE] ⏭️ Conteúdo fixo ignorado às ${timeStr} — sequência agendada ativa`);
     }
