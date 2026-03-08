@@ -1165,7 +1165,7 @@ export function useAutoGradeBuilder() {
     
     const blockMinutes = (finalDurationSec / 60).toFixed(1);
     const durationStatus = finalDurationSec >= MIN_BLOCK_DURATION_SEC ? '✅' : '⚠️';
-    console.log(`[AUTO-GRADE] ⏱️ ${durationStatus} Bloco ${timeStr}: ${allContent.length} itens (${vhtCount} VHTs = ${(totalVhtDurationSec/60).toFixed(1)}min), total ${blockMinutes} min (alvo: 29-32 min)`);
+    console.log(`[AUTO-GRADE] ⏱️ ${durationStatus} Bloco ${timeStr}: ${allContent.length} itens (${vhtCount} VHTs × ${VHT_DURATION_SEC.toFixed(1)}s = ${(totalVhtDurationSec/60).toFixed(1)}min), total ${blockMinutes} min (alvo: 29-32 min)`);
 
     const lineContent = allContent.join(',vht,');
     return {
