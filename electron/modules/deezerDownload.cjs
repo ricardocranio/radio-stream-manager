@@ -1,0 +1,326 @@
+// =============== DEEZER DOWNLOAD HANDLER ===============
+const { ipcMain, shell } = require('electron');
+const { exec } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const { sanitizeFolderName, checkFileExistsInSubfolders, cleanupPartialFiles } = require('./utils.cjs');
+const deemixModule = require('./deemix.cjs');
+
+let _getMainWindow = null;
+let _showNotification = null;
+
+function register({ getMainWindow, showNotification }) {
+  _getMainWindow = getMainWindow;
+  _showNotification = showNotification;
+
+  ipcMain.handle('download-from-deezer', async (event, params) => {
+    const { artist, title, arl, outputFolder, quality, stationName } = params;
+    
+    const sanitizedStation = stationName ? sanitizeFolderName(stationName) : null;
+    const finalOutputFolder = sanitizedStation 
+      ? path.join(outputFolder, sanitizedStation)
+      : outputFolder;
+    const tempDownloadFolder = path.join(finalOutputFolder, '_temp');
+    const desiredFilename = `${artist} - ${title}.mp3`;
+    
+    console.log(`[DEEMIX] === Starting download ===`);
+    console.log(`[DEEMIX] Track: ${artist} - ${title}`);
+    console.log(`[DEEMIX] Station: ${stationName || 'N/A'}`);
+    console.log(`[DEEMIX] Temp: ${tempDownloadFolder}`);
+    console.log(`[DEEMIX] Final: ${finalOutputFolder}/${desiredFilename}`);
+    console.log(`[DEEMIX] Quality: ${quality}`);
+    
+    if (stationName) {
+      const existingCheck = checkFileExistsInSubfolders(outputFolder, `${artist} - ${title}`);
+      if (existingCheck.exists) {
+        console.log(`[DEEMIX] File already exists at: ${existingCheck.path}`);
+        return {
+          success: true, skipped: true, existingPath: existingCheck.path,
+          existingStation: existingCheck.station,
+          message: `Arquivo já existe em ${existingCheck.station || 'pasta principal'}`
+        };
+      }
+    }
+    
+    try {
+      const deemixInstalled = await deemixModule.checkDeemixInstalled();
+      if (!deemixInstalled) {
+        return { success: false, error: 'deemix não está instalado. Instale com: pip install deemix', needsInstall: true };
+      }
+      
+      const deemixCommand = deemixModule.getDeemixCommand();
+      console.log(`[DEEMIX] Using command: ${deemixCommand}`);
+
+      for (const folder of [finalOutputFolder, tempDownloadFolder]) {
+        if (!fs.existsSync(folder)) {
+          try { fs.mkdirSync(folder, { recursive: true }); }
+          catch (mkdirError) {
+            return { success: false, error: `Não foi possível criar a pasta: ${folder}. Verifique as permissões.` };
+          }
+        }
+      }
+
+      try {
+        const testFile = path.join(tempDownloadFolder, '.deemix_test');
+        fs.writeFileSync(testFile, 'test', 'utf8');
+        fs.unlinkSync(testFile);
+      } catch (writeError) {
+        return { success: false, error: `Pasta não tem permissão de escrita: ${tempDownloadFolder}` };
+      }
+
+      deemixModule.saveArlToDeemixConfig(arl);
+
+      console.log(`[DEEMIX] Searching Deezer API...`);
+      let track;
+      try {
+        track = await deemixModule.searchDeezerTrack(artist, title);
+        console.log(`[DEEMIX] Found: ${track.artist.name} - ${track.title} (ID: ${track.id})`);
+      } catch (searchError) {
+        return { success: false, error: `Música não encontrada no Deezer: ${artist} - ${title}` };
+      }
+      
+      const deezerUrl = track.link || `https://www.deezer.com/track/${track.id}`;
+      const qualityMap = { 'MP3_128': '128', 'MP3_320': '320', 'FLAC': 'flac' };
+      const deemixQuality = qualityMap[quality] || '320';
+
+      let filesBefore = new Set();
+      try { filesBefore = new Set(fs.readdirSync(tempDownloadFolder)); } catch (e) {}
+
+      return new Promise((resolve) => {
+        const fullCommand = `${deemixCommand} "${deezerUrl}" -p "${tempDownloadFolder}" -b ${deemixQuality}`;
+        console.log(`[DEEMIX] Executing: ${fullCommand}`);
+        
+        const downloadStartTime = Date.now();
+        
+        const childProcess = exec(fullCommand, { timeout: 0, maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+          const elapsedSec = Math.round((Date.now() - downloadStartTime) / 1000);
+          console.log(`[DEEMIX] Process finished after ${elapsedSec}s`);
+          console.log(`[DEEMIX] STDOUT: ${stdout}`);
+          if (stderr) console.log(`[DEEMIX] STDERR: ${stderr}`);
+          
+          if (error) {
+            if (error.killed || error.signal === 'SIGTERM') {
+              cleanupPartialFiles(tempDownloadFolder, filesBefore);
+              resolve({ success: false, error: 'Processo deemix foi interrompido externamente.', output: stdout + stderr });
+              return;
+            }
+            
+            let errorMessage = stderr || error.message;
+            if (errorMessage.includes('arl') || errorMessage.includes('ARL') || errorMessage.includes('login')) {
+              errorMessage = 'ARL inválida ou expirada. Obtenha uma nova ARL nos cookies do Deezer.';
+            } else if (errorMessage.includes('premium') || errorMessage.includes('Premium')) {
+              errorMessage = 'Esta música requer conta Premium do Deezer.';
+            } else if (errorMessage.includes('not found') || errorMessage.includes('não encontr')) {
+              errorMessage = 'Música não encontrada no Deezer.';
+            }
+            
+            resolve({ success: false, error: errorMessage, output: stdout + stderr });
+            return;
+          }
+
+          setTimeout(() => {
+            try {
+              const filesAfter = fs.readdirSync(tempDownloadFolder);
+              const newFiles = filesAfter.filter(f => !filesBefore.has(f) && /\.(mp3|flac|MP3|FLAC)$/i.test(f));
+              
+              if (newFiles.length === 0) {
+                resolve({ success: false, error: 'Download aparentemente concluiu mas nenhum arquivo de áudio foi encontrado.', output: stdout + stderr });
+                return;
+              }
+              
+              let validFile = null;
+              const MAX_FILE_SIZE = 15 * 1024 * 1024;
+              for (const newFile of newFiles) {
+                const filePath = path.join(tempDownloadFolder, newFile);
+                const stat = fs.statSync(filePath);
+                const fileSizeKB = Math.round(stat.size / 1024);
+                const fileSizeMB = (stat.size / (1024 * 1024)).toFixed(1);
+                
+                if (stat.size < 500 * 1024) {
+                  try { fs.unlinkSync(filePath); } catch (e) {}
+                  continue;
+                }
+                if (stat.size > MAX_FILE_SIZE) {
+                  try { fs.unlinkSync(filePath); } catch (e) {}
+                  continue;
+                }
+                
+                try {
+                  const headerBuffer = Buffer.alloc(10);
+                  const fd = fs.openSync(filePath, 'r');
+                  fs.readSync(fd, headerBuffer, 0, 10, 0);
+                  fs.closeSync(fd);
+                  
+                  const hasID3 = headerBuffer[0] === 0x49 && headerBuffer[1] === 0x44 && headerBuffer[2] === 0x33;
+                  const hasMP3Sync = (headerBuffer[0] === 0xFF && (headerBuffer[1] & 0xE0) === 0xE0);
+                  const hasFLAC = headerBuffer[0] === 0x66 && headerBuffer[1] === 0x4C && headerBuffer[2] === 0x61 && headerBuffer[3] === 0x43;
+                  
+                  if (!hasID3 && !hasMP3Sync && !hasFLAC) {
+                    try { fs.unlinkSync(filePath); } catch (e) {}
+                    continue;
+                  }
+                } catch (headerErr) {
+                  // Accept file if header check fails
+                }
+                
+                validFile = newFile;
+                console.log(`[DEEMIX] ✅ File integrity OK: ${newFile} (${fileSizeMB} MB)`);
+                break;
+              }
+              
+              if (!validFile) {
+                resolve({ success: false, error: 'Download concluiu mas o arquivo está corrompido ou incompleto.', output: stdout + stderr });
+                return;
+              }
+              
+              // Read ID3 tags from downloaded file
+              const tempFilePath = path.join(tempDownloadFolder, validFile);
+              let id3Artist = null;
+              let id3Title = null;
+              
+              try {
+                const buf = Buffer.alloc(4096);
+                const fd = fs.openSync(tempFilePath, 'r');
+                fs.readSync(fd, buf, 0, 4096, 0);
+                fs.closeSync(fd);
+                
+                if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) {
+                  const parseID3Frames = (buffer, headerSize) => {
+                    let offset = 10;
+                    const result = {};
+                    while (offset < headerSize - 10) {
+                      const frameId = buffer.slice(offset, offset + 4).toString('ascii');
+                      if (frameId === '\x00\x00\x00\x00') break;
+                      const frameSize = (buffer[offset+4] << 24) | (buffer[offset+5] << 16) | (buffer[offset+6] << 8) | buffer[offset+7];
+                      if (frameSize <= 0 || frameSize > headerSize) break;
+                      const frameData = buffer.slice(offset + 10, offset + 10 + frameSize);
+                      
+                      if (frameId === 'TPE1' || frameId === 'TIT2') {
+                        const encoding = frameData[0];
+                        let text = '';
+                        if (encoding === 0) text = frameData.slice(1).toString('latin1').replace(/\0/g, '');
+                        else if (encoding === 1) text = frameData.slice(3).toString('utf16le').replace(/\0/g, '');
+                        else if (encoding === 3) text = frameData.slice(1).toString('utf8').replace(/\0/g, '');
+                        if (frameId === 'TPE1') result.artist = text.trim();
+                        if (frameId === 'TIT2') result.title = text.trim();
+                      }
+                      offset += 10 + frameSize;
+                    }
+                    return result;
+                  };
+                  
+                  const id3Size = ((buf[6] & 0x7F) << 21) | ((buf[7] & 0x7F) << 14) | ((buf[8] & 0x7F) << 7) | (buf[9] & 0x7F);
+                  const tags = parseID3Frames(buf, Math.min(id3Size + 10, 4096));
+                  if (tags.artist) id3Artist = tags.artist;
+                  if (tags.title) id3Title = tags.title;
+                  console.log(`[DEEMIX] 🏷️ ID3 Tags: Artist="${id3Artist || '?'}", Title="${id3Title || '?'}"`);
+                }
+              } catch (tagErr) {
+                console.warn(`[DEEMIX] ⚠️ Could not read ID3 tags: ${tagErr.message}`);
+              }
+              
+              const finalArtist = (id3Artist || track.artist.name || artist).replace(/[<>:"/\\|?*]/g, '').trim();
+              const finalTitle = (id3Title || track.title || title).replace(/[<>:"/\\|?*]/g, '').trim();
+              const finalFilename = `${finalArtist} - ${finalTitle}.mp3`;
+              const finalFilePath = path.join(finalOutputFolder, finalFilename);
+              
+              console.log(`[DEEMIX] 📛 Rename: "${validFile}" → "${finalFilename}"`);
+              
+              try {
+                if (fs.existsSync(finalFilePath)) {
+                  fs.unlinkSync(finalFilePath);
+                }
+                
+                try {
+                  fs.renameSync(tempFilePath, finalFilePath);
+                  console.log(`[DEEMIX] ✅ Moved (rename): ${finalFilename}`);
+                } catch (renameErr) {
+                  fs.copyFileSync(tempFilePath, finalFilePath);
+                  fs.unlinkSync(tempFilePath);
+                  console.log(`[DEEMIX] ✅ Moved (copy+delete): ${finalFilename}`);
+                }
+                
+                for (const f of newFiles) {
+                  if (f !== validFile) {
+                    try { fs.unlinkSync(path.join(tempDownloadFolder, f)); } catch (e) {}
+                  }
+                }
+                try {
+                  const remaining = fs.readdirSync(tempDownloadFolder);
+                  if (remaining.length === 0) fs.rmdirSync(tempDownloadFolder);
+                } catch (e) {}
+              } catch (moveError) {
+                try {
+                  if (!fs.existsSync(finalFilePath) && fs.existsSync(tempFilePath)) {
+                    fs.copyFileSync(tempFilePath, finalFilePath);
+                  }
+                } catch (emergencyErr) {}
+              }
+              
+              if (!stationName) {
+                _showNotification('✅ Download Concluído', `${finalArtist} - ${finalTitle}`, () => { shell.openPath(finalOutputFolder); });
+              }
+
+              resolve({ 
+                success: true, 
+                track: { id: track.id, title: track.title, artist: track.artist.name, album: track.album.title, duration: track.duration },
+                output: stdout, outputFolder: finalOutputFolder, stationFolder: sanitizedStation,
+                verifiedFile: finalFilename,
+                message: `Download concluído: ${finalArtist} - ${finalTitle}`
+              });
+            } catch (verifyError) {
+              resolve({ 
+                success: true,
+                track: { id: track.id, title: track.title, artist: track.artist.name, album: track.album?.title, duration: track.duration },
+                output: stdout, outputFolder: finalOutputFolder, stationFolder: sanitizedStation,
+                message: `Download concluído (verificação parcial): ${artist} - ${title}`
+              });
+            }
+          }, 1500);
+        });
+      });
+      
+    } catch (error) {
+      console.error('[DEEMIX] Download error:', error);
+      return { success: false, error: error.message || 'Erro ao baixar do Deezer' };
+    }
+  });
+
+  ipcMain.handle('notify-batch-complete', (event, { completed, failed, total, outputFolder }) => {
+    const mainWindow = _getMainWindow();
+    _showNotification(
+      '📦 Download em Lote Concluído',
+      `✅ ${completed} baixadas | ❌ ${failed} falharam | Total: ${total}`,
+      () => {
+        if (outputFolder) { shell.openPath(outputFolder); }
+        else if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
+      }
+    );
+  });
+
+  ipcMain.handle('open-folder', (event, folderPath) => {
+    try {
+      if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+      }
+      shell.openPath(folderPath);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('ensure-folder', (event, folderPath) => {
+    try {
+      if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+        return { success: true, created: true };
+      }
+      return { success: true, created: false };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+}
+
+module.exports = { register };
