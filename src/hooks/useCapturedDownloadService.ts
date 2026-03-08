@@ -214,7 +214,12 @@ export function useCapturedDownloadService() {
         const key = `${artist.trim()} - ${title.trim()}`.toLowerCase();
         if (blockedExact.has(key)) return true;
         const artistLower = artist.trim().toLowerCase();
-        return blockedWildcardArtists.some(blocked => artistLower === blocked || artistLower.includes(blocked));
+        const titleLower = title.trim().toLowerCase();
+        if (blockedWildcardArtists.some(blocked => artistLower === blocked || artistLower.includes(blocked))) return true;
+        // Also check forbiddenWords
+        const forbiddenLower = (useRadioStore.getState().config.forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
+        if (forbiddenLower.some(word => artistLower.includes(word) || titleLower.includes(word))) return true;
+        return false;
       };
       
       const seen = new Set<string>();
