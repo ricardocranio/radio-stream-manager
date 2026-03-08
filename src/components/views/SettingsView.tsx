@@ -50,7 +50,6 @@ export function SettingsView() {
   const [fillStations, setFillStations] = useState(
     config.fillPriorityStations?.join(', ') || 'BH FM, Metropolitana FM, Metropolitana'
   );
-  );
   
   // Refs to track if filters have changed
   const filtersSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
