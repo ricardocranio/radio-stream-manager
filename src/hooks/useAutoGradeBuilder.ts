@@ -1113,10 +1113,6 @@ export function useAutoGradeBuilder() {
       });
     }
 
-    const blockMinutes = (accumulatedDurationSec / 60).toFixed(1);
-    const durationStatus = accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC ? '✅' : '⚠️';
-    console.log(`[AUTO-GRADE] ⏱️ ${durationStatus} Bloco ${timeStr}: ${songs.length} músicas, ${blockMinutes} min (alvo: 29-32 min)`);
-
     // Insert fixed content at configured position
     let allContent: string[] = [...songs];
     if (fixedContentFile) {
@@ -1133,11 +1129,23 @@ export function useAutoGradeBuilder() {
       }
     }
 
+    // === RECALCULATE TOTAL DURATION INCLUDING ALL VHT SEPARATORS ===
+    // VHT separators: number of elements - 1 (between each content item)
+    const vhtCount = allContent.length > 1 ? allContent.length - 1 : 0;
+    const totalVhtDurationSec = vhtCount * VHT_DURATION_SEC;
+    // accumulatedDurationSec already has partial VHT, so recalculate cleanly:
+    // Total = fixed content duration + all song durations + VHT separators
+    const finalDurationSec = accumulatedDurationSec + totalVhtDurationSec - ((songs.length > 1 ? songs.length - 1 : 0) * VHT_DURATION_SEC);
+    
+    const blockMinutes = (finalDurationSec / 60).toFixed(1);
+    const durationStatus = finalDurationSec >= MIN_BLOCK_DURATION_SEC ? '✅' : '⚠️';
+    console.log(`[AUTO-GRADE] ⏱️ ${durationStatus} Bloco ${timeStr}: ${allContent.length} itens (${vhtCount} VHTs = ${(totalVhtDurationSec/60).toFixed(1)}min), total ${blockMinutes} min (alvo: 29-32 min)`);
+
     const lineContent = allContent.join(',vht,');
     return {
       line: sanitizeGradeLine(`${timeStr} (ID=${programName}) ${lineContent}`, filterChars),
       logs: blockLogs,
-      durationMinutes: parseFloat((accumulatedDurationSec / 60).toFixed(1)),
+      durationMinutes: parseFloat((finalDurationSec / 60).toFixed(1)),
     };
   }, [
     getProgramForHour, getFixedContentForTime, isWeekday,
