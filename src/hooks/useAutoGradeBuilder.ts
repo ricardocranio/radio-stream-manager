@@ -825,45 +825,45 @@ export function useAutoGradeBuilder() {
         return timeMinutes >= startMin && timeMinutes < endMin;
       });
 
-    // === Special Programs (only when NO scheduled sequence overrides) ===
-
-    // Saturday template blocks ALWAYS apply (predefined templates)
-    if (targetDay === 'sab') {
-      const weekendResult = await generateWeekendTemplateBlock(hour, minute, timeStr, songsByStation, ctx);
-      if (weekendResult) return weekendResult;
-    }
-
-    // Voz do Brasil (21:00-21:30 weekdays) - ALWAYS applies, 60min program
-    // Both 21:00 and 21:30 blocks are consumed by Voz do Brasil
-    if (hour === 21 && (minute === 0 || minute === 30) && isWeekday(targetDay)) {
-      if (minute === 0) {
-        return generateVozDoBrasil(timeStr);
-      }
-      // 21:30 — continuation of Voz do Brasil, skip block generation
-      return {
-        line: '21:30 (FIXO ID=VOZ DO BRASIL) vht,vozbrasil',
-        logs: [{
-          blockTime: '21:30',
-          type: 'fixed' as const,
-          title: 'A Voz do Brasil (continuação)',
-          artist: 'Governo Federal',
-          station: 'EBC',
-          reason: 'Programa de 60 minutos — bloco 21:30 absorvido',
-        }],
-      };
-    }
-
-    // If a scheduled sequence is active, skip ALL other special programs
-    // and go straight to normal sequence-based block generation
+    // === SEQUÊNCIA AGENDADA TEM PRIORIDADE ABSOLUTA ===
+    // Quando há sequência agendada ativa, pula TODOS os programas especiais,
+    // templates de sábado e conteúdo fixo — vai direto para geração baseada na sequência.
     if (hasScheduledSequence) {
-      console.log(`[GRADE] 📅 Sequência agendada ativa às ${timeStr} — sobrepondo programas especiais`);
+      console.log(`[GRADE] 📅 Sequência agendada ativa às ${timeStr} — sobrepondo TUDO (programas especiais, templates, conteúdo fixo)`);
+      // Fall through to Normal Block Logic below
     } else {
-      // TOP10 (18:30 weekdays) - fixed template with sports + mix
+      // === Special Programs (only when NO scheduled sequence overrides) ===
+
+      // Saturday template blocks
+      if (targetDay === 'sab') {
+        const weekendResult = await generateWeekendTemplateBlock(hour, minute, timeStr, songsByStation, ctx);
+        if (weekendResult) return weekendResult;
+      }
+
+      // Voz do Brasil (21:00-21:30 weekdays) - obrigatório por lei
+      if (hour === 21 && (minute === 0 || minute === 30) && isWeekday(targetDay)) {
+        if (minute === 0) {
+          return generateVozDoBrasil(timeStr);
+        }
+        return {
+          line: '21:30 (FIXO ID=VOZ DO BRASIL) vht,vozbrasil',
+          logs: [{
+            blockTime: '21:30',
+            type: 'fixed' as const,
+            title: 'A Voz do Brasil (continuação)',
+            artist: 'Governo Federal',
+            station: 'EBC',
+            reason: 'Programa de 60 minutos — bloco 21:30 absorvido',
+          }],
+        };
+      }
+
+      // TOP10 (18:30 weekdays)
       if (hour === 18 && minute === 30 && isWeekday(targetDay)) {
         return await generateTop10Block(hour, minute, ctx, targetDay);
       }
 
-      // TOP50 Ranking (19:00/19:30 weekdays) - positions 20→01 from ranking
+      // TOP50 Ranking (19:00/19:30 weekdays)
       if (hour === 19 && (minute === 0 || minute === 30) && isWeekday(targetDay)) {
         return await generateTop50Block(hour, minute, 10, ctx);
       }
@@ -873,12 +873,12 @@ export function useAutoGradeBuilder() {
         return await generateMisturadao(hour, minute, ctx, targetDay);
       }
 
-      // Romance blocks (22:00-00:00) - folder-based with fixed content
+      // Romance blocks (22:00-00:00)
       if (isRomanceBlock(hour, minute) && isWeekday(targetDay)) {
         return generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay);
       }
 
-      // TOP50 blocks (skip on Sunday — 100% monitoring)
+      // TOP50 blocks (skip on Sunday)
       const top50Item = targetDay !== 'dom' ? fixedItems.find(fc => fc.type === 'top50') : undefined;
       if (top50Item) {
         return await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx);
