@@ -656,158 +656,88 @@ export function DashboardView() {
         </CardContent>
       </Card>
 
-      {/* Status Panel and Grade History */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        {/* Status Panel */}
-        <Card className="glass-card">
-          <CardHeader className="border-b border-border py-3">
-            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-              <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-primary" />
-              Status do Sistema
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 md:p-4 space-y-3 md:space-y-4">
-            <div className="space-y-2 md:space-y-3">
-              <div className="flex items-center justify-between p-2 md:p-3 rounded-lg bg-secondary/50">
-                <span className="text-xs md:text-sm text-muted-foreground">Status</span>
-                <Badge className={isRunning ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'}>
-                  {isRunning ? 'Ativo' : 'Parado'}
-                </Badge>
-              </div>
-              
-              <div className="flex items-center justify-between p-2 md:p-3 rounded-lg bg-secondary/50">
-                <span className="text-xs md:text-sm text-muted-foreground">Intervalo</span>
-                <span className="text-xs md:text-sm font-mono text-foreground">{config.updateIntervalMinutes} min</span>
-              </div>
-
-              <div className="p-2 md:p-3 rounded-lg bg-secondary/50 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs md:text-sm text-muted-foreground flex items-center gap-1 md:gap-2">
-                    <Timer className="w-3 h-3 md:w-4 md:h-4" />
-                    Próxima Grade
-                  </span>
-                  <div className="text-right">
-                    <span className={`text-xs md:text-sm font-mono ${nextGradeSeconds <= 60 ? 'text-amber-500 animate-pulse' : 'text-primary'}`}>
-                      {nextGradeCountdown}
-                    </span>
-                    {isRunning && (
-                      <p className="text-[10px] md:text-xs text-muted-foreground">
-                        Bloco {nextBlockTime} (monta às {buildTime})
-                      </p>
-                    )}
-                  </div>
-                </div>
-                {isRunning && (
-                  <Progress 
-                    value={Math.max(0, 100 - (nextGradeSeconds / 600) * 100)} 
-                    className="h-1"
-                  />
-                )}
-              </div>
-
-              <div className="p-2 md:p-3 rounded-lg bg-secondary/50 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs md:text-sm text-muted-foreground">🧹 Auto-Clean</span>
-                  <span className={`text-xs md:text-sm font-mono ${autoCleanSeconds <= 60 ? 'text-amber-500 animate-pulse' : 'text-foreground'}`}>
-                    {autoCleanCountdown}
-                  </span>
-                </div>
-                {isRunning && (
-                  <Progress 
-                    value={Math.max(0, 100 - (autoCleanSeconds / 3600) * 100)} 
-                    className="h-1"
-                  />
-                )}
-              </div>
+      {/* Status Panel */}
+      <Card className="glass-card">
+        <CardHeader className="border-b border-border py-3">
+          <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+            <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+            Status do Sistema
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-3 md:p-4 space-y-3 md:space-y-4">
+          <div className="space-y-2 md:space-y-3">
+            <div className="flex items-center justify-between p-2 md:p-3 rounded-lg bg-secondary/50">
+              <span className="text-xs md:text-sm text-muted-foreground">Status</span>
+              <Badge className={isRunning ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'}>
+                {isRunning ? 'Ativo' : 'Parado'}
+              </Badge>
+            </div>
+            
+            <div className="flex items-center justify-between p-2 md:p-3 rounded-lg bg-secondary/50">
+              <span className="text-xs md:text-sm text-muted-foreground">Intervalo</span>
+              <span className="text-xs md:text-sm font-mono text-foreground">{config.updateIntervalMinutes} min</span>
             </div>
 
-            {/* Audio Visualizer */}
-            <div className="pt-3 md:pt-4 border-t border-border">
-              <p className="text-[10px] md:text-xs text-muted-foreground mb-2 md:mb-3">Atividade</p>
-              <div className="flex items-end justify-center gap-1 h-10 md:h-12">
-                {[...Array(16)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-1.5 md:w-2 bg-primary rounded-full animate-wave"
-                    style={{
-                      height: `${Math.random() * 100}%`,
-                      animationDelay: `${i * 0.1}s`,
-                      opacity: isRunning ? 1 : 0.3,
-                    }}
-                  />
-                ))}
+            <div className="p-2 md:p-3 rounded-lg bg-secondary/50 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs md:text-sm text-muted-foreground flex items-center gap-1 md:gap-2">
+                  <Timer className="w-3 h-3 md:w-4 md:h-4" />
+                  Próxima Grade
+                </span>
+                <div className="text-right">
+                  <span className={`text-xs md:text-sm font-mono ${nextGradeSeconds <= 60 ? 'text-amber-500 animate-pulse' : 'text-primary'}`}>
+                    {nextGradeCountdown}
+                  </span>
+                  {isRunning && (
+                    <p className="text-[10px] md:text-xs text-muted-foreground">
+                      Bloco {nextBlockTime} (monta às {buildTime})
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Grade History */}
-        <Card className="glass-card">
-          <CardHeader className="border-b border-border py-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-                <History className="w-4 h-4 md:w-5 md:h-5 text-primary" />
-                Histórico de Grades
-              </CardTitle>
-              {gradeHistory.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearGradeHistory}
-                  className="text-muted-foreground hover:text-destructive h-7 md:h-8 text-xs"
-                >
-                  <Trash2 className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                  Limpar
-                </Button>
+              {isRunning && (
+                <Progress 
+                  value={Math.max(0, 100 - (nextGradeSeconds / 600) * 100)} 
+                  className="h-1"
+                />
               )}
             </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[240px] md:h-[280px]">
-              {displayGradeHistory.length === 0 ? (
-                <div className="p-6 text-center text-muted-foreground">
-                  <History className="w-6 h-6 md:w-8 md:h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Nenhuma grade gerada ainda</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-border">
-                  {displayGradeHistory.slice(0, 10).map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="p-2 md:p-3 flex items-center justify-between hover:bg-secondary/30 transition-colors"
-                    >
-                      <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                        <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                          <span className="text-xs md:text-sm font-bold text-primary">{entry.blockTime}</span>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-foreground text-xs md:text-sm truncate">{entry.programName}</p>
-                          <p className="text-[10px] md:text-xs text-muted-foreground">
-                            {format(new Date(entry.timestamp), "HH:mm:ss", { locale: ptBR })}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 md:gap-2 shrink-0">
-                        <Badge variant="outline" className="font-mono text-[10px] md:text-xs border-success/40 text-success bg-success/10">
-                          ✓ {entry.songsFound}
-                        </Badge>
-                        {entry.songsMissing > 0 && (
-                          <Badge variant="outline" className="font-mono text-[10px] md:text-xs border-destructive/40 text-destructive bg-destructive/10">
-                            ✗ {entry.songsMissing}
-                          </Badge>
-                        )}
-                        <span className="text-[10px] md:text-xs text-muted-foreground ml-1">
-                          / {entry.songsProcessed}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+
+            <div className="p-2 md:p-3 rounded-lg bg-secondary/50 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs md:text-sm text-muted-foreground">🧹 Auto-Clean</span>
+                <span className={`text-xs md:text-sm font-mono ${autoCleanSeconds <= 60 ? 'text-amber-500 animate-pulse' : 'text-foreground'}`}>
+                  {autoCleanCountdown}
+                </span>
+              </div>
+              {isRunning && (
+                <Progress 
+                  value={Math.max(0, 100 - (autoCleanSeconds / 3600) * 100)} 
+                  className="h-1"
+                />
               )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      </div>
+            </div>
+          </div>
+
+          {/* Audio Visualizer */}
+          <div className="pt-3 md:pt-4 border-t border-border">
+            <p className="text-[10px] md:text-xs text-muted-foreground mb-2 md:mb-3">Atividade</p>
+            <div className="flex items-end justify-center gap-1 h-10 md:h-12">
+              {[...Array(16)].map((_, i) => (
+                <div
+                  key={i}
+                  className="w-1.5 md:w-2 bg-primary rounded-full animate-wave"
+                  style={{
+                    height: `${Math.random() * 100}%`,
+                    animationDelay: `${i * 0.1}s`,
+                    opacity: isRunning ? 1 : 0.3,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* System Reset Card */}
       <Card className="glass-card border-destructive/30 bg-gradient-to-r from-destructive/5 to-transparent">
