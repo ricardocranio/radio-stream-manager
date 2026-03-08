@@ -354,6 +354,7 @@ export function useAutoGradeBuilder() {
       fixedContent: fixedContent as GradeContext['fixedContent'],
       stations: stations.map(s => ({ id: s.id, name: s.name, styles: s.styles })),
       musicFolders: config.musicFolders,
+      artistBlackouts: config.artistBlackouts,
     };
   }, [
     isRecentlyUsed, findSongInLibrary, batchFind, markSongAsUsed,

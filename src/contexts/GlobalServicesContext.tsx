@@ -22,6 +22,8 @@ import { useGlobalScrapingService, ScrapeStats } from '@/hooks/useGlobalScraping
 import { useCapturedDownloadService } from '@/hooks/useCapturedDownloadService';
 import { useVozBrasilService } from '@/hooks/useVozBrasilService';
 import { useBackgroundMaintenance } from '@/hooks/useBackgroundMaintenance';
+import { useServiceWatchdog } from '@/hooks/useServiceWatchdog';
+import { useDailyReport } from '@/hooks/useDailyReport';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -57,6 +59,8 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   const capturedDownloadService = useCapturedDownloadService();
   const vozBrasilService = useVozBrasilService();
   const maintenanceService = useBackgroundMaintenance();
+  const watchdogService = useServiceWatchdog();
+  const dailyReportService = useDailyReport();
 
   // ============= INITIALIZATION (runs once) =============
   useEffect(() => {
