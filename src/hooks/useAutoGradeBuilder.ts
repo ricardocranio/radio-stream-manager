@@ -1335,6 +1335,7 @@ export function useAutoGradeBuilder() {
       // A narrow 1h window misses songs captured earlier, causing unnecessary Coringas
       const fullPool = await fetchAllRecentSongs();
 
+      const durationMap = new Map(prev.pendingBlockDurations);
       if (shouldBuildCurrent) {
         const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats, false, targetDay);
         const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
@@ -1343,6 +1344,7 @@ export function useAutoGradeBuilder() {
           ? mergeGradeLinePreservingResolved(currentExistingLine, resolvedCurrentLine, coringaCode)
           : resolvedCurrentLine;
         lineMap.set(currentTimeKey, mergedCurrentLine);
+        if (currentResult.durationMinutes) durationMap.set(currentTimeKey, currentResult.durationMinutes);
         allLogs.push(...currentResult.logs);
         builtBlocksRef.current.add(currentTimeKey);
         console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} atualizado (somente faltantes quando aplicável)`);
@@ -1356,6 +1358,7 @@ export function useAutoGradeBuilder() {
           ? mergeGradeLinePreservingResolved(nextExistingLine, resolvedNextLine, coringaCode)
           : resolvedNextLine;
         lineMap.set(nextTimeKey, mergedNextLine);
+        if (nextResult.durationMinutes) durationMap.set(nextTimeKey, nextResult.durationMinutes);
         allLogs.push(...nextResult.logs);
         builtBlocksRef.current.add(nextTimeKey);
         console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} atualizado (somente faltantes quando aplicável)`);
