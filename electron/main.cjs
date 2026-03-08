@@ -1704,16 +1704,69 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
               return;
             }
             
-            // === RENAME & MOVE: temp → final folder using DEEZER API METADATA (most reliable) ===
-            // Use track.artist.name and track.title from Deezer's official API response
-            const cleanArtist = (track.artist.name || artist).replace(/[<>:"/\\|?*]/g, '').trim();
-            const cleanTitle = (track.title || title).replace(/[<>:"/\\|?*]/g, '').trim();
-            const deezerFilename = `${cleanArtist} - ${cleanTitle}.mp3`;
-            
+            // === READ ID3 TAGS FROM DOWNLOADED FILE (most reliable source) ===
             const tempFilePath = path.join(tempDownloadFolder, validFile);
-            const finalFilePath = path.join(finalOutputFolder, deezerFilename);
+            let id3Artist = null;
+            let id3Title = null;
             
-            console.log(`[DEEMIX] 📛 Rename: "${validFile}" → "${deezerFilename}" (via Deezer API metadata)`);
+            try {
+              const buf = Buffer.alloc(4096);
+              const fd = fs.openSync(tempFilePath, 'r');
+              fs.readSync(fd, buf, 0, 4096, 0);
+              fs.closeSync(fd);
+              
+              // Parse ID3v2 header
+              if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) { // "ID3"
+                const parseID3Frames = (buffer, headerSize) => {
+                  let offset = 10; // skip ID3v2 header
+                  const result = {};
+                  while (offset < headerSize - 10) {
+                    const frameId = buffer.slice(offset, offset + 4).toString('ascii');
+                    if (frameId === '\x00\x00\x00\x00') break;
+                    const frameSize = (buffer[offset+4] << 24) | (buffer[offset+5] << 16) | (buffer[offset+6] << 8) | buffer[offset+7];
+                    if (frameSize <= 0 || frameSize > headerSize) break;
+                    const frameData = buffer.slice(offset + 10, offset + 10 + frameSize);
+                    
+                    if (frameId === 'TPE1' || frameId === 'TIT2') {
+                      // Text encoding: first byte is encoding indicator
+                      const encoding = frameData[0];
+                      let text = '';
+                      if (encoding === 0) { // ISO-8859-1
+                        text = frameData.slice(1).toString('latin1').replace(/\0/g, '');
+                      } else if (encoding === 1) { // UTF-16 with BOM
+                        const bom = (frameData[1] << 8) | frameData[2];
+                        const enc = bom === 0xFFFE ? 'utf16le' : 'utf16le';
+                        text = frameData.slice(3).toString(enc).replace(/\0/g, '');
+                      } else if (encoding === 3) { // UTF-8
+                        text = frameData.slice(1).toString('utf8').replace(/\0/g, '');
+                      }
+                      if (frameId === 'TPE1') result.artist = text.trim();
+                      if (frameId === 'TIT2') result.title = text.trim();
+                    }
+                    offset += 10 + frameSize;
+                  }
+                  return result;
+                };
+                
+                const id3Size = ((buf[6] & 0x7F) << 21) | ((buf[7] & 0x7F) << 14) | ((buf[8] & 0x7F) << 7) | (buf[9] & 0x7F);
+                const tags = parseID3Frames(buf, Math.min(id3Size + 10, 4096));
+                
+                if (tags.artist) id3Artist = tags.artist;
+                if (tags.title) id3Title = tags.title;
+                console.log(`[DEEMIX] 🏷️ ID3 Tags: Artist="${id3Artist || '?'}", Title="${id3Title || '?'}"`);
+              }
+            } catch (tagErr) {
+              console.warn(`[DEEMIX] ⚠️ Could not read ID3 tags: ${tagErr.message}`);
+            }
+            
+            // === PRIORITY: ID3 tags > Deezer API > monitoring input ===
+            const finalArtist = (id3Artist || track.artist.name || artist).replace(/[<>:"/\\|?*]/g, '').trim();
+            const finalTitle = (id3Title || track.title || title).replace(/[<>:"/\\|?*]/g, '').trim();
+            const finalFilename = `${finalArtist} - ${finalTitle}.mp3`;
+            
+            const finalFilePath = path.join(finalOutputFolder, finalFilename);
+            
+            console.log(`[DEEMIX] 📛 Rename: "${validFile}" → "${finalFilename}" (fonte: ${id3Artist ? 'ID3 tags' : 'Deezer API'})`);
             
             try {
               // Remove existing file in final folder if present
