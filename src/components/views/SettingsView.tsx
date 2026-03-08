@@ -47,6 +47,9 @@ export function SettingsView() {
   const [blockedSongs, setBlockedSongs] = useState(
     config.blockedSongs?.join('\n') || ''
   );
+  const [fillStations, setFillStations] = useState(
+    config.fillPriorityStations?.join(', ') || 'BH FM, Metropolitana FM, Metropolitana'
+  );
   
   // Refs to track if filters have changed
   const filtersSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -109,7 +112,10 @@ export function SettingsView() {
     if (config.blockedSongs) {
       setBlockedSongs(config.blockedSongs.join('\n'));
     }
-  }, [config.forbiddenWords, config.funkWords, config.filterCharacters, config.blockedSongs]);
+    if (config.fillPriorityStations) {
+      setFillStations(config.fillPriorityStations.join(', '));
+    }
+  }, [config.forbiddenWords, config.funkWords, config.filterCharacters, config.blockedSongs, config.fillPriorityStations]);
   
   // Auto-save filter words with debounce
   const autoSaveFilters = useCallback(() => {
@@ -122,16 +128,18 @@ export function SettingsView() {
       const parsedFunk = funkWords.split(',').map(w => w.trim()).filter(Boolean);
       const parsedFilterChars = filterCharacters.split(',').map(w => w.trim()).filter(Boolean);
       const parsedBlocked = blockedSongs.split('\n').map(s => s.trim()).filter(Boolean);
+      const parsedFillStations = fillStations.split(',').map(w => w.trim()).filter(Boolean);
       
       setConfig({ 
         forbiddenWords: parsedForbidden, 
         funkWords: parsedFunk,
         filterCharacters: parsedFilterChars,
         blockedSongs: parsedBlocked,
+        fillPriorityStations: parsedFillStations,
       });
-      console.log('[SETTINGS] ✓ Auto-saved filters:', { forbiddenWords: parsedForbidden.length, funkWords: parsedFunk.length, filterCharacters: parsedFilterChars.length, blockedSongs: parsedBlocked.length });
+      console.log('[SETTINGS] ✓ Auto-saved filters:', { forbiddenWords: parsedForbidden.length, funkWords: parsedFunk.length, filterCharacters: parsedFilterChars.length, blockedSongs: parsedBlocked.length, fillStations: parsedFillStations.length });
     }, 800);
-  }, [forbiddenWords, funkWords, filterCharacters, blockedSongs, setConfig]);
+  }, [forbiddenWords, funkWords, filterCharacters, blockedSongs, fillStations, setConfig]);
   
   // Trigger auto-save when filter words change (skip initial mount)
   const isFiltersMounted = useRef(false);
@@ -148,7 +156,7 @@ export function SettingsView() {
         clearTimeout(filtersSaveTimeoutRef.current);
       }
     };
-  }, [forbiddenWords, funkWords, filterCharacters, blockedSongs, autoSaveFilters]);
+  }, [forbiddenWords, funkWords, filterCharacters, blockedSongs, fillStations, autoSaveFilters]);
 
   const handleReset = () => {
     setLocalConfig(config);
@@ -856,7 +864,33 @@ export function SettingsView() {
           </CardContent>
         </Card>
 
-        {/* Filter Settings */}
+        {/* Fill Priority Stations */}
+        <Card className="glass-card border-amber-500/20">
+          <CardHeader className="border-b border-border">
+            <CardTitle className="flex items-center gap-2">
+              <Music className="w-5 h-5 text-amber-500" />
+              Estações de Preenchimento
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Quando um bloco não atinge 29 minutos, o sistema busca músicas extras destas estações (em ordem de prioridade).
+            </p>
+            <div>
+              <Label className="text-sm">Estações Prioritárias</Label>
+              <Textarea
+                value={fillStations}
+                onChange={(e) => setFillStations(e.target.value)}
+                className="mt-2 font-mono text-xs h-20"
+                placeholder="BH FM, Metropolitana FM, Metropolitana"
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                Nomes das estações separados por vírgula, na ordem de prioridade desejada. O sistema tentará preencher o bloco com músicas dessas estações primeiro.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="glass-card">
           <CardHeader className="border-b border-border">
             <CardTitle className="flex items-center gap-2">

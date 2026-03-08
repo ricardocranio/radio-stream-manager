@@ -67,6 +67,8 @@ export interface SystemConfig {
   similarityThreshold?: number;
   // Blocked songs in "Artist - Title" format
   blockedSongs?: string[];
+  // Priority stations for block duration filling (e.g. ['BH FM', 'Metropolitana FM'])
+  fillPriorityStations?: string[];
 }
 
 export interface SequenceConfig {

@@ -56,6 +56,8 @@ interface AutoGradeState {
   lastSaveProgress: number;
   /** The actual grade lines built by the engine, keyed by block time (e.g. "18:00") */
   pendingGradeLines: Map<string, string>;
+  /** Duration in minutes for each built block, keyed by block time */
+  pendingBlockDurations: Map<string, number>;
 }
 
 export function useAutoGradeBuilder() {
@@ -84,6 +86,7 @@ export function useAutoGradeBuilder() {
       skippedSongs: 0, substitutedSongs: 0, missingSongs: 0,
       currentProcessingSong: null, currentProcessingBlock: null, lastSaveProgress: 0,
       pendingGradeLines: persisted?.lineMap || new Map(),
+      pendingBlockDurations: new Map(),
     };
   });
 
@@ -963,7 +966,9 @@ export function useAutoGradeBuilder() {
 
     // === PRIORITY STATIONS FOR FILLING ===
     // When we need extra songs to fill duration, prefer these stations
-    const FILL_PRIORITY_STATIONS = ['BH FM', 'Metropolitana FM', 'Metropolitana'];
+    const FILL_PRIORITY_STATIONS = config.fillPriorityStations?.length 
+      ? config.fillPriorityStations 
+      : ['BH FM', 'Metropolitana FM', 'Metropolitana'];
 
     // Helper to get songs from priority stations for filling
     const getFillerSong = async (): Promise<string | null> => {
@@ -1060,6 +1065,7 @@ export function useAutoGradeBuilder() {
     return {
       line: sanitizeGradeLine(`${timeStr} (ID=${programName}) ${lineContent}`, filterChars),
       logs: blockLogs,
+      durationMinutes: parseFloat((accumulatedDurationSec / 60).toFixed(1)),
     };
   }, [
     getProgramForHour, getFixedContentForTime, isWeekday,
@@ -1329,6 +1335,7 @@ export function useAutoGradeBuilder() {
       // A narrow 1h window misses songs captured earlier, causing unnecessary Coringas
       const fullPool = await fetchAllRecentSongs();
 
+      const durationMap = new Map(state.pendingBlockDurations);
       if (shouldBuildCurrent) {
         const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats, false, targetDay);
         const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
@@ -1337,6 +1344,7 @@ export function useAutoGradeBuilder() {
           ? mergeGradeLinePreservingResolved(currentExistingLine, resolvedCurrentLine, coringaCode)
           : resolvedCurrentLine;
         lineMap.set(currentTimeKey, mergedCurrentLine);
+        if (currentResult.durationMinutes) durationMap.set(currentTimeKey, currentResult.durationMinutes);
         allLogs.push(...currentResult.logs);
         builtBlocksRef.current.add(currentTimeKey);
         console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} atualizado (somente faltantes quando aplicável)`);
@@ -1350,6 +1358,7 @@ export function useAutoGradeBuilder() {
           ? mergeGradeLinePreservingResolved(nextExistingLine, resolvedNextLine, coringaCode)
           : resolvedNextLine;
         lineMap.set(nextTimeKey, mergedNextLine);
+        if (nextResult.durationMinutes) durationMap.set(nextTimeKey, nextResult.durationMinutes);
         allLogs.push(...nextResult.logs);
         builtBlocksRef.current.add(nextTimeKey);
         console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} atualizado (somente faltantes quando aplicável)`);
@@ -1386,6 +1395,7 @@ export function useAutoGradeBuilder() {
         blocksGenerated: prev.blocksGenerated + (shouldBuildCurrent ? 1 : 0) + (shouldBuildNext ? 1 : 0),
         skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
         pendingGradeLines: new Map(lineMap),
+        pendingBlockDurations: new Map(durationMap),
       }));
 
       console.log(`[AUTO-GRADE] 📋 Grade montada em memória e persistida${isWebOnly ? ' (modo web - preview only)' : ' (aguardando janela de 10min para escrita)'}`);
