@@ -451,20 +451,19 @@ export async function selectSongForSlot(
     let jitAttemptsP4 = 0;
     const maxJitAttemptsP4 = 3;
 
-    // Sort: same-style songs first, then by freshness within each group
+    // Sort: same-style songs first, then by freshness, then smart scoring
     const styleFilteredPool = [...allSongsPool].sort((a, b) => {
-      // Same style as target station gets priority
       const aStyleMatch = a.style === stationStyle ? 0 : 1;
       const bStyleMatch = b.style === stationStyle ? 0 : 1;
       if (aStyleMatch !== bStyleMatch) return aStyleMatch - bStyleMatch;
-      // Within same priority, sort by freshness
       if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
       if (a.scrapedAt) return -1;
       if (b.scrapedAt) return 1;
       return 0;
     });
+    const smartP4Pool = applySmartScoring(styleFilteredPool, timeStr, selCtx.previousEnergy);
 
-    for (const candidate of styleFilteredPool) {
+    for (const candidate of smartP4Pool) {
       if (!isValidCandidate(candidate.title, candidate.artist)) continue;
       const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
       if (libraryResult.exists) {
