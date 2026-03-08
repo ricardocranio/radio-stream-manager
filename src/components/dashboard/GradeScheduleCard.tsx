@@ -200,6 +200,19 @@ export function GradeScheduleCard() {
     const currentMinute = now.getMinutes();
     const currentBlock = currentMinute < 30 ? 0 : 30;
     const pendingLines = gradeBuilder.pendingGradeLines;
+    const dayOfWeek = now.getDay(); // 0=Sun, 6=Sat
+    const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+    const isWeekend = !isWeekday;
+
+    // Helper to check if a dayPattern matches today
+    const matchesDayPattern = (dayPattern: string): boolean => {
+      if (dayPattern === 'ALL') return true;
+      if (dayPattern === 'WEEKDAYS') return isWeekday;
+      if (dayPattern === 'WEEKEND') return isWeekend;
+      // Specific days like "SEG,TER,QUA"
+      const dayNames = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+      return dayPattern.split(',').some(d => d.trim() === dayNames[dayOfWeek]);
+    };
 
     const blockList: BlockInfo[] = [];
     
@@ -214,19 +227,30 @@ export function GradeScheduleCard() {
       
       const timeKey = `${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')}`;
       
-      // Get program name for this hour
+      // Get program name for this hour, considering day-specific programs
       let programName = 'PROGRAMA';
       for (const prog of programs) {
         const [start, end] = prog.timeRange.split('-').map(Number);
         if (blockHour >= start && blockHour <= end) {
+          // Check if this program is day-specific (VOZ_BRASIL = weekdays only)
+          const isVozBrasil = prog.programName.includes('VOZ') || prog.programName.includes('Voz');
+          const isTop50 = prog.programName === 'TOP50' || prog.programName === 'TOP10';
+          
+          // Skip weekday-only programs on weekends
+          if ((isVozBrasil || isTop50) && isWeekend) {
+            continue;
+          }
+          
           programName = prog.programName;
           break;
         }
       }
       
-      // Get fixed content for this time slot
+      // Get fixed content for this time slot, filtered by day pattern
       const slotFixedContent = fixedContent.filter(fc => 
-        fc.enabled && fc.timeSlots.some(ts => ts.hour === blockHour && ts.minute === blockMinute)
+        fc.enabled && 
+        matchesDayPattern(fc.dayPattern) &&
+        fc.timeSlots.some(ts => ts.hour === blockHour && ts.minute === blockMinute)
       );
       
       // SINGLE SOURCE OF TRUTH: read from builder's pendingGradeLines (same as TXT file)
