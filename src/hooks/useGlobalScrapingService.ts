@@ -42,6 +42,7 @@ export function useGlobalScrapingService(
     isRunning: false,
     currentStation: null,
     failedStations: [],
+    pausedStations: [],
   });
 
   const scrapeStation = useCallback(async (stationName: string, scrapeUrl: string) => {
