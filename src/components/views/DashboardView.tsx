@@ -237,11 +237,12 @@ export function DashboardView() {
   return (
     <div className="p-4 md:p-6 space-y-5 animate-fade-in">
       {/* === METRICS — Compact Strip === */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { label: 'Faltando', value: missingSongs.filter(s => s.status === 'missing').length, icon: AlertTriangle, glow: '0 80% 55%' },
           { label: 'Banco Musical', value: libraryStats.isLoading ? '...' : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%' },
           { label: 'Ranking TOP25', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%' },
+          { label: 'Downloads Hoje', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%' },
         ].map((stat, i) => {
           const Icon = stat.icon;
           return (
@@ -259,33 +260,6 @@ export function DashboardView() {
           );
         })}
       </div>
-
-      {/* Download Stats + Voz do Brasil Alert */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {/* Download Stats Card */}
-        <Card className="glass-card border-blue-500/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Download className="w-4 h-4 text-blue-400" />
-              <span className="text-sm font-medium text-foreground">Downloads Hoje</span>
-              {useAutoDownloadStore.getState().isProcessing && (
-                <Loader2 className="w-3 h-3 text-blue-400 animate-spin ml-auto" />
-              )}
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div>
-                <p className="text-xl font-bold text-green-400">{useAutoDownloadStore.getState().dailyStats.downloaded}</p>
-                <p className="text-[10px] text-muted-foreground">Baixados</p>
-              </div>
-              <div>
-                <p className="text-xl font-bold text-red-400">{useAutoDownloadStore.getState().dailyStats.failed}</p>
-                <p className="text-[10px] text-muted-foreground">Falhas</p>
-              </div>
-              <div>
-                <p className="text-xl font-bold text-muted-foreground">{useAutoDownloadStore.getState().queueLength}</p>
-                <p className="text-[10px] text-muted-foreground">Na Fila</p>
-              </div>
-            </div>
             {useAutoDownloadStore.getState().tempRetryCount > 0 && (
               <p className="text-[10px] text-amber-400 mt-2">
                 🔄 {useAutoDownloadStore.getState().tempRetryCount} arquivo(s) recuperados da pasta _temp
