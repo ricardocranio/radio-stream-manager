@@ -251,6 +251,7 @@ export function SettingsView() {
   }, [deezerConfig.arl]);
 
 
+  return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
