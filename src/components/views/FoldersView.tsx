@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Folder, FolderPlus, Trash2, Save, HardDrive } from 'lucide-react';
+import { Folder, FolderPlus, Trash2, Save, HardDrive, Music } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -147,19 +147,37 @@ export function FoldersView() {
             </div>
 
             <div>
-              <Label className="text-xs text-muted-foreground uppercase tracking-wide">
-                Código Coringa
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                <Music className="w-3 h-3" />
+                Pasta de Vinhetas (VHT)
               </Label>
-              <Input
-                value={localConfig.coringaCode}
-                onChange={(e) =>
-                  setLocalConfig((prev) => ({ ...prev, coringaCode: e.target.value }))
-                }
-                className="mt-2 font-mono text-sm w-32"
-                placeholder="mus"
-              />
+              <div className="flex gap-2 mt-2">
+                <Input
+                  value={localConfig.vinhetasFolder || 'C:\\Playlist\\Vinhetas'}
+                  onChange={(e) =>
+                    setLocalConfig((prev) => ({ ...prev, vinhetasFolder: e.target.value }))
+                  }
+                  className="font-mono text-sm flex-1"
+                  placeholder="C:\Playlist\Vinhetas"
+                />
+                {typeof window !== 'undefined' && window.electronAPI?.selectFolder && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const folder = await window.electronAPI!.selectFolder();
+                      if (folder) {
+                        setLocalConfig((prev) => ({ ...prev, vinhetasFolder: folder }));
+                        toast({ title: '📂 Pasta de vinhetas selecionada', description: folder });
+                      }
+                    }}
+                  >
+                    <Folder className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Código usado quando não há música disponível
+                Arquivos .mp3 de vinhetas usados entre músicas na grade (VHT)
               </p>
             </div>
           </CardContent>
