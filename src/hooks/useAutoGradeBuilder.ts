@@ -1335,7 +1335,7 @@ export function useAutoGradeBuilder() {
       // A narrow 1h window misses songs captured earlier, causing unnecessary Coringas
       const fullPool = await fetchAllRecentSongs();
 
-      const durationMap = new Map(prev.pendingBlockDurations);
+      const durationMap = new Map(state.pendingBlockDurations);
       if (shouldBuildCurrent) {
         const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats, false, targetDay);
         const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
