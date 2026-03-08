@@ -261,36 +261,28 @@ export function DashboardView() {
         })}
       </div>
             {useAutoDownloadStore.getState().tempRetryCount > 0 && (
-              <p className="text-[10px] text-amber-400 mt-2">
-                🔄 {useAutoDownloadStore.getState().tempRetryCount} arquivo(s) recuperados da pasta _temp
-              </p>
-            )}
+      {/* Voz do Brasil Alert */}
+      {useAutoDownloadStore.getState().vozBrasilFailed && (
+        <Card className="glass-card border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <XCircle className="w-4 h-4 text-destructive" />
+              <span className="text-sm font-bold text-destructive">⚠️ Voz do Brasil — Falha!</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {useAutoDownloadStore.getState().vozBrasilLastError || 'Download falhou. Verifique a conexão e tente manualmente.'}
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2 border-destructive/30 text-destructive hover:bg-destructive/10"
+              onClick={() => useAutoDownloadStore.getState().setVozBrasilFailed(false)}
+            >
+              Dispensar
+            </Button>
           </CardContent>
         </Card>
-
-        {/* Voz do Brasil Alert */}
-        {useAutoDownloadStore.getState().vozBrasilFailed && (
-          <Card className="glass-card border-red-500/30 bg-red-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <XCircle className="w-4 h-4 text-red-500" />
-                <span className="text-sm font-bold text-red-400">⚠️ Voz do Brasil — Falha!</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {useAutoDownloadStore.getState().vozBrasilLastError || 'Download falhou. Verifique a conexão e tente manualmente.'}
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-2 border-red-500/30 text-red-400 hover:bg-red-500/10"
-                onClick={() => useAutoDownloadStore.getState().setVozBrasilFailed(false)}
-              >
-                Dispensar
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      )}
 
       {/* Station Distribution removed for cleaner UI */}
 
