@@ -97,6 +97,25 @@ export function useGlobalDownloadService() {
       return false;
     }
 
+    // Block check before downloading
+    const { blockedSongs = [], forbiddenWords = [] } = storeState.config;
+    const artistL = song.artist.trim().toLowerCase();
+    const titleL = song.title.trim().toLowerCase();
+    const songKey = `${artistL} - ${titleL}`;
+    const blockedList = blockedSongs.map(s => s.toLowerCase().trim());
+    const blockedExact = new Set(blockedList.filter(s => !s.endsWith(' - *')));
+    const blockedWild = blockedList.filter(s => s.endsWith(' - *')).map(s => s.replace(/ - \*$/, ''));
+    const forbiddenLower = forbiddenWords.map(w => w.toLowerCase().trim()).filter(Boolean);
+    if (
+      blockedExact.has(songKey) ||
+      blockedWild.some(b => artistL === b || artistL.includes(b)) ||
+      forbiddenLower.some(w => artistL.includes(w) || titleL.includes(w))
+    ) {
+      console.log(`[DL-SVC] 🚫 Bloqueada, não será baixada: ${song.artist} - ${song.title}`);
+      useRadioStore.getState().removeMissingSong(song.id);
+      return false;
+    }
+
     // Check ARL validity
     if (!useAutoDownloadStore.getState().arlValid) {
       console.warn(`[DL-SVC] ⏸️ ARL inválida, pulando: ${song.artist} - ${song.title}`);
