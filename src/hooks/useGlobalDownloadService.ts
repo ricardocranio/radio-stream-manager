@@ -513,6 +513,7 @@ export function useGlobalDownloadService() {
     return () => {
       if (downloadIntervalRef.current) clearInterval(downloadIntervalRef.current);
       if (arlCheckIntervalRef.current) clearInterval(arlCheckIntervalRef.current);
+      clearInterval(arlWatchdog);
     };
   }, [checkNewMissingSongs, checkArlHealth]);
 
