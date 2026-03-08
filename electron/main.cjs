@@ -1453,6 +1453,118 @@ ipcMain.handle('purge-blocked-files', async (event, { musicFolders, blockedSongs
   return { success: true, deleted, errors, deletedCount: deleted.length };
 });
 
+// =============== LIBRARY FIX: Scan & Rename by ID3 Tags ===============
+function parseID3TagsFromFile(filePath) {
+  try {
+    const buf = Buffer.alloc(4096);
+    const fd = fs.openSync(filePath, 'r');
+    fs.readSync(fd, buf, 0, 4096, 0);
+    fs.closeSync(fd);
+    
+    if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) { // "ID3"
+      let offset = 10;
+      const id3Size = ((buf[6] & 0x7F) << 21) | ((buf[7] & 0x7F) << 14) | ((buf[8] & 0x7F) << 7) | (buf[9] & 0x7F);
+      const headerSize = Math.min(id3Size + 10, 4096);
+      const result = {};
+      while (offset < headerSize - 10) {
+        const frameId = buf.slice(offset, offset + 4).toString('ascii');
+        if (frameId === '\x00\x00\x00\x00') break;
+        const frameSize = (buf[offset+4] << 24) | (buf[offset+5] << 16) | (buf[offset+6] << 8) | buf[offset+7];
+        if (frameSize <= 0 || frameSize > headerSize) break;
+        const frameData = buf.slice(offset + 10, offset + 10 + frameSize);
+        
+        if (frameId === 'TPE1' || frameId === 'TIT2') {
+          const encoding = frameData[0];
+          let text = '';
+          if (encoding === 0) {
+            text = frameData.slice(1).toString('latin1').replace(/\0/g, '');
+          } else if (encoding === 1) {
+            text = frameData.slice(3).toString('utf16le').replace(/\0/g, '');
+          } else if (encoding === 3) {
+            text = frameData.slice(1).toString('utf8').replace(/\0/g, '');
+          }
+          if (frameId === 'TPE1') result.artist = text.trim();
+          if (frameId === 'TIT2') result.title = text.trim();
+        }
+        offset += 10 + frameSize;
+      }
+      return result;
+    }
+    return {};
+  } catch (e) {
+    return {};
+  }
+}
+
+ipcMain.handle('scan-fix-library', async (event, { musicFolders }) => {
+  console.log('[LIB-FIX] Starting library scan & fix...');
+  const results = { scanned: 0, renamed: 0, skipped: 0, errors: 0, details: [] };
+  
+  const scanFolder = (folder) => {
+    try {
+      if (!fs.existsSync(folder)) return;
+      const items = fs.readdirSync(folder, { withFileTypes: true });
+      for (const item of items) {
+        const fullPath = path.join(folder, item.name);
+        if (item.isDirectory()) {
+          scanFolder(fullPath);
+        } else if (/\.mp3$/i.test(item.name)) {
+          results.scanned++;
+          try {
+            const tags = parseID3TagsFromFile(fullPath);
+            if (!tags.artist || !tags.title) {
+              results.skipped++;
+              continue;
+            }
+            
+            const sanitizedArtist = tags.artist.replace(/[<>:"/\\|?*]/g, '').trim();
+            const sanitizedTitle = tags.title.replace(/[<>:"/\\|?*]/g, '').trim();
+            const correctName = `${sanitizedArtist} - ${sanitizedTitle}.mp3`;
+            
+            if (item.name === correctName) {
+              results.skipped++;
+              continue;
+            }
+            
+            const newPath = path.join(folder, correctName);
+            
+            // Don't overwrite existing files
+            if (fs.existsSync(newPath) && newPath !== fullPath) {
+              results.skipped++;
+              results.details.push({ old: item.name, new: correctName, status: 'skip-exists' });
+              continue;
+            }
+            
+            fs.renameSync(fullPath, newPath);
+            results.renamed++;
+            results.details.push({ old: item.name, new: correctName, status: 'renamed' });
+            console.log(`[LIB-FIX] ✅ "${item.name}" → "${correctName}"`);
+            
+            // Send progress to renderer
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('lib-fix-progress', { 
+                scanned: results.scanned, renamed: results.renamed, current: item.name 
+              });
+            }
+          } catch (fileErr) {
+            results.errors++;
+            results.details.push({ old: item.name, new: '', status: 'error', error: fileErr.message });
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[LIB-FIX] Error scanning ${folder}:`, err.message);
+    }
+  };
+  
+  for (const folder of (musicFolders || [])) {
+    scanFolder(folder);
+  }
+  
+  console.log(`[LIB-FIX] Done: ${results.scanned} scanned, ${results.renamed} renamed, ${results.skipped} skipped, ${results.errors} errors`);
+  return results;
+});
+
 // Deezer Download Handler using deemix CLI
 // Flow: Download to _temp folder → Verify integrity → Read ID3 tags → Rename with real metadata → Move to final folder
 ipcMain.handle('download-from-deezer', async (event, params) => {

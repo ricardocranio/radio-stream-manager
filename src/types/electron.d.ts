@@ -294,6 +294,8 @@ interface ElectronAPI {
   readGradeFile: (params: Omit<GradeFileParams, 'content'>) => Promise<GradeFileResult>;
   listFolderFiles: (params: FolderListParams) => Promise<FolderListResult>;
   renameMusicFile: (params: RenameMusicFileParams) => Promise<RenameMusicFileResult>;
+  scanFixLibrary: (params: { musicFolders: string[] }) => Promise<{ scanned: number; renamed: number; skipped: number; errors: number; details: Array<{ old: string; new: string; status: string; error?: string }> }>;
+  onLibFixProgress: (callback: (progress: { scanned: number; renamed: number; current: string }) => void) => void;
   scanBpmTags: (params: BpmScanParams) => Promise<BpmScanResult>;
   saveBpmCache: (params: BpmCacheSaveParams) => Promise<{ success: boolean; error?: string }>;
   loadBpmCache: (params: BpmCacheLoadParams) => Promise<BpmCacheResult>;
