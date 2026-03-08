@@ -50,9 +50,11 @@ export function SettingsView() {
   
   // Refs to track if filters have changed
   const filtersSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const arlValidationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Track if initial load is complete to avoid auto-save on mount
   const isInitialMount = useRef(true);
+  const isInitialArlMount = useRef(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Helper to update Deezer config - saves immediately to store
