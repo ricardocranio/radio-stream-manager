@@ -28,7 +28,6 @@ import {
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
 import { batchFindSongsInLibrary, findSongInLibrary as findSongInLibraryFn } from '@/lib/gradeBuilder/batchLibrary';
 import { isRomanceBlock, generateRomanceBlock } from '@/lib/gradeBuilder/folderPrograms';
-import { shiftArtistTracker } from '@/lib/gradeBuilder/smartGrade';
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
@@ -1356,7 +1355,6 @@ export function useAutoGradeBuilder() {
       reportServiceHeartbeat('grade-builder');
       logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
       clearUsedSongs();
-      shiftArtistTracker.reset(); // Phase 3: Reset shift tracker for fresh full-day build
 
       const songsByStation = await fetchAllRecentSongs();
       const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
