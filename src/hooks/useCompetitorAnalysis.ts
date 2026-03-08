@@ -133,6 +133,7 @@ export function useCompetitorAnalysis() {
               const exists = await window.electronAPI!.checkSongExists!({
                 artist: entry.artist,
                 title: entry.title,
+                musicFolders: config.musicFolders,
               });
               return { key, exists: !!exists };
             } catch {
