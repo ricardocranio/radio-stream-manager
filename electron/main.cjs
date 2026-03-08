@@ -967,8 +967,23 @@ app.whenReady().then(async () => {
       autoUpdater.checkForUpdates().catch(err => {
         console.log('Auto-update check failed:', err.message);
       });
-    }, 5000); // Wait 5 seconds after startup
+    }, 5000);
   }
+
+  // =============== AUTO-START PYTHON MONITOR ===============
+  // Start the Python radio monitor 10 seconds after app is ready
+  setTimeout(async () => {
+    console.log('[INIT] 🎵 Auto-starting Python radio monitor...');
+    const result = await startPythonMonitor(true);
+    if (result.success) {
+      console.log('[INIT] ✓ Python radio monitor started successfully');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('monitor-status', getMonitorStatus());
+      }
+    } else {
+      console.log('[INIT] ✗ Python radio monitor failed to start:', result.error);
+    }
+  }, 10000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
