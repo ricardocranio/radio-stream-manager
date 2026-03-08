@@ -961,6 +961,38 @@ export function useAutoGradeBuilder() {
       return DEFAULT_SONG_DURATION_SEC;
     };
 
+    // === PRIORITY STATIONS FOR FILLING ===
+    // When we need extra songs to fill duration, prefer these stations
+    const FILL_PRIORITY_STATIONS = ['BH FM', 'Metropolitana FM', 'Metropolitana'];
+
+    // Helper to get songs from priority stations for filling
+    const getFillerSong = async (): Promise<string | null> => {
+      for (const stationName of FILL_PRIORITY_STATIONS) {
+        const pool = songsByStation[stationName] || [];
+        for (const candidate of pool) {
+          const key = `${candidate.title.toLowerCase().trim()}-${candidate.artist.toLowerCase().trim()}`;
+          if (usedInBlock.has(key)) continue;
+          if (usedArtistsInBlock.has(candidate.artist.toLowerCase().trim())) continue;
+          
+          // Check if exists in library
+          const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
+          if (libraryResult.exists) {
+            const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+            usedInBlock.add(key);
+            usedArtistsInBlock.add(candidate.artist.toLowerCase().trim());
+            markSongAsUsed(candidate.title, candidate.artist, timeStr);
+            blockLogs.push({ 
+              blockTime: timeStr, type: 'used', 
+              title: candidate.title, artist: candidate.artist, 
+              station: stationName, reason: `Preenchimento de duração (${stationName})` 
+            });
+            return `"${filename}"`;
+          }
+        }
+      }
+      return null;
+    };
+
     // Keep adding songs until we reach the target duration (29-32 min)
     const maxSongsGuard = 20; // Safety: never more than 20 songs per block
     while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard) {
@@ -971,7 +1003,6 @@ export function useAutoGradeBuilder() {
       const specialResult = await handleSpecialSequenceType(seq, hour, minute, selCtx, ctx, targetDay);
       if (specialResult !== null) {
         const dur = await getSongDuration(specialResult);
-        // Check if adding this song would exceed max
         const projectedTotal = accumulatedDurationSec + dur + (songs.length > 0 ? VHT_DURATION_SEC : 0);
         if (projectedTotal > MAX_BLOCK_DURATION_SEC && accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
         songs.push(specialResult);
@@ -986,6 +1017,24 @@ export function useAutoGradeBuilder() {
       if (projectedTotal > MAX_BLOCK_DURATION_SEC && accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
       songs.push(songStr);
       accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
+    }
+
+    // === FILL WITH PRIORITY STATIONS (BH FM / Metropolitana) ===
+    // If still under 29 min after cycling through sequence, add from priority stations
+    let fillAttempts = 0;
+    const maxFillAttempts = 5;
+    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard && fillAttempts < maxFillAttempts) {
+      fillAttempts++;
+      const fillerSong = await getFillerSong();
+      if (!fillerSong) break;
+      
+      const dur = await getSongDuration(fillerSong);
+      const projectedTotal = accumulatedDurationSec + dur + VHT_DURATION_SEC;
+      if (projectedTotal > MAX_BLOCK_DURATION_SEC && accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
+      
+      songs.push(fillerSong);
+      accumulatedDurationSec += dur + VHT_DURATION_SEC;
+      console.log(`[AUTO-GRADE] ➕ Preenchimento: ${fillerSong} (${(dur / 60).toFixed(1)} min)`);
     }
 
     const blockMinutes = (accumulatedDurationSec / 60).toFixed(1);
