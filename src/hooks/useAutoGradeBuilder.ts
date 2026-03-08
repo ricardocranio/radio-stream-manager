@@ -31,7 +31,7 @@ import { isRomanceBlock, generateRomanceBlock } from '@/lib/gradeBuilder/folderP
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
-import { hasUnresolvedSongTokens, mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
+import { mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
 import { saveGradeToStorage, loadGradeFromStorage, clearGradeStorage } from '@/lib/gradeBuilder/gradePersistence';
 import { resolveVinhetasInLine, resolveVinhetasInGrade, resetVinhetaPool } from '@/lib/gradeBuilder/vinhetaResolver';
 
@@ -1122,7 +1122,9 @@ export function useAutoGradeBuilder() {
       const blocks = getBlockTimes();
       const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
-      const dayCode = getDayCode();
+      const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
+      const targetDay = dayMap[new Date().getDay()];
+      const dayCode = getDayCode(targetDay);
       const filename = `${dayCode}.txt`;
 
       // If forceRegenerate (manual refresh), clear locks so blocks are rebuilt
@@ -1163,12 +1165,13 @@ export function useAutoGradeBuilder() {
       const currentExistingLine = lineMap.get(currentTimeKey);
       const nextExistingLine = lineMap.get(nextTimeKey);
 
-      // Manual refresh should regenerate only unresolved placeholders (fallback/coringa)
+      // Manual refresh should force regeneration of current/next blocks
+      // (important for day-template changes, e.g. sábado/domingo)
       const shouldBuildCurrent = forceRegenerate
-        ? !currentExistingLine || hasUnresolvedSongTokens(currentExistingLine, coringaCode)
+        ? true
         : !currentLocked;
       const shouldBuildNext = forceRegenerate
-        ? !nextExistingLine || hasUnresolvedSongTokens(nextExistingLine, coringaCode)
+        ? true
         : !nextLocked;
 
       if (!shouldBuildCurrent && !shouldBuildNext) {
@@ -1196,7 +1199,7 @@ export function useAutoGradeBuilder() {
       const fullPool = await fetchAllRecentSongs();
 
       if (shouldBuildCurrent) {
-        const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats);
+        const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats, false, targetDay);
         const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line);
         const mergedCurrentLine = currentExistingLine
           ? mergeGradeLinePreservingResolved(currentExistingLine, resolvedCurrentLine, coringaCode)
@@ -1208,7 +1211,7 @@ export function useAutoGradeBuilder() {
       }
 
       if (shouldBuildNext) {
-        const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats);
+        const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats, false, targetDay);
         const resolvedNextLine = await resolveVinhetasInLine(nextResult.line);
         const mergedNextLine = nextExistingLine
           ? mergeGradeLinePreservingResolved(nextExistingLine, resolvedNextLine, coringaCode)
