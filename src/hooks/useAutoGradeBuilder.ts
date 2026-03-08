@@ -1165,12 +1165,13 @@ export function useAutoGradeBuilder() {
       const currentExistingLine = lineMap.get(currentTimeKey);
       const nextExistingLine = lineMap.get(nextTimeKey);
 
-      // Manual refresh should regenerate only unresolved placeholders (fallback/coringa)
+      // Manual refresh should force regeneration of current/next blocks
+      // (important for day-template changes, e.g. sábado/domingo)
       const shouldBuildCurrent = forceRegenerate
-        ? !currentExistingLine || hasUnresolvedSongTokens(currentExistingLine, coringaCode)
+        ? true
         : !currentLocked;
       const shouldBuildNext = forceRegenerate
-        ? !nextExistingLine || hasUnresolvedSongTokens(nextExistingLine, coringaCode)
+        ? true
         : !nextLocked;
 
       if (!shouldBuildCurrent && !shouldBuildNext) {
