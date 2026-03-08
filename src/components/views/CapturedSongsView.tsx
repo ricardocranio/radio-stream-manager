@@ -41,6 +41,8 @@ interface ScrapedSong {
   scraped_at: string;
   is_now_playing: boolean;
   source: string | null;
+  ai_genre: string | null;
+  ai_energy: string | null;
 }
 
 
@@ -66,8 +68,12 @@ export function CapturedSongsView() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStation, setSelectedStation] = useState<string>('all');
+  const [selectedGenre, setSelectedGenre] = useState<string>('all');
+  const [selectedEnergy, setSelectedEnergy] = useState<string>('all');
   const [dateRange, setDateRange] = useState<string>('24h');
   const [stations, setStations] = useState<string[]>([]);
+  const [genres, setGenres] = useState<string[]>([]);
+  const [energies, setEnergies] = useState<string[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
@@ -131,6 +137,12 @@ export function CapturedSongsView() {
 
       setSongs(data || []);
       console.log('[CAPTURED-SONGS] Songs set:', data?.length || 0);
+
+      // Extract unique genres and energies
+      const uniqueGenres = [...new Set((data || []).map(s => s.ai_genre).filter(Boolean))] as string[];
+      const uniqueEnergies = [...new Set((data || []).map(s => s.ai_energy).filter(Boolean))] as string[];
+      setGenres(uniqueGenres.sort());
+      setEnergies(uniqueEnergies.sort());
       
       // Get total count
       const { count: totalCount, error: countError } = await supabase
@@ -266,20 +278,33 @@ export function CapturedSongsView() {
 
   // Filter songs by search term
   const filteredSongs = useMemo(() => {
-    if (!searchTerm) return songs;
-    const term = searchTerm.toLowerCase();
-    return songs.filter(
-      song =>
-        song.title.toLowerCase().includes(term) ||
-        song.artist.toLowerCase().includes(term) ||
-        song.station_name.toLowerCase().includes(term)
-    );
-  }, [songs, searchTerm]);
+    let filtered = songs;
+    
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        song =>
+          song.title.toLowerCase().includes(term) ||
+          song.artist.toLowerCase().includes(term) ||
+          song.station_name.toLowerCase().includes(term)
+      );
+    }
+    
+    if (selectedGenre !== 'all') {
+      filtered = filtered.filter(song => song.ai_genre === selectedGenre);
+    }
+    
+    if (selectedEnergy !== 'all') {
+      filtered = filtered.filter(song => song.ai_energy === selectedEnergy);
+    }
+    
+    return filtered;
+  }, [songs, searchTerm, selectedGenre, selectedEnergy]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedStation, dateRange]);
+  }, [searchTerm, selectedStation, selectedGenre, selectedEnergy, dateRange]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredSongs.length / PAGE_SIZE));
