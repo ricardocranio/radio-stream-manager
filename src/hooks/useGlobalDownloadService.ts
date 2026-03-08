@@ -335,28 +335,22 @@ export function useGlobalDownloadService() {
       }
       
       if (!success) {
-        // Track consecutive failures
-        const failKey = `${item.song.artist.toLowerCase().trim()}|${item.song.title.toLowerCase().trim()}`;
-        const tracker = failureTracker.current.get(failKey) || { count: 0, lastFail: 0 };
-        tracker.count++;
-        tracker.lastFail = Date.now();
-        failureTracker.current.set(failKey, tracker);
-
-        if (tracker.count >= MAX_RETRIES_BEFORE_COOLDOWN) {
-          console.warn(`[DL-SVC] 🕐 ${item.song.artist} - ${item.song.title} falhou ${tracker.count}x. Cooldown de 10 min.`);
-          // Reset status to 'missing' so it can be retried after cooldown
+        // Increment retry count and send to end of queue
+        const newRetryCount = item.retryCount + 1;
+        
+        if (newRetryCount >= MAX_RETRIES) {
+          // 3 failures — remove permanently
+          console.warn(`[DL-SVC] 🗑️ ${item.song.artist} - ${item.song.title} falhou ${newRetryCount}x. Removida definitivamente.`);
+          useRadioStore.getState().removeMissingSong(item.song.id);
+          const failKey = `${item.song.artist.toLowerCase().trim()}|${item.song.title.toLowerCase().trim()}`;
+          failureTracker.current.delete(failKey);
+        } else {
+          // Send to END of queue for retry
+          console.log(`[DL-SVC] 🔄 ${item.song.artist} - ${item.song.title} falhou (tentativa ${newRetryCount}/${MAX_RETRIES}). Vai para o fim da fila.`);
           useRadioStore.getState().updateMissingSong(item.song.id, { status: 'missing' });
-          // Re-add to queue for retry after cooldown
           downloadQueueRef.current.push({
             song: item.song,
-            retryCount: item.retryCount + 1,
-            priority: item.priority,
-            fallbackQuality: false,
-          });
-        } else if (item.retryCount < 2) {
-          downloadQueueRef.current.push({
-            song: item.song,
-            retryCount: item.retryCount + 1,
+            retryCount: newRetryCount,
             priority: item.priority,
           });
         }
