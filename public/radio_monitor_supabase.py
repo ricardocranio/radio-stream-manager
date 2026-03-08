@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════════════════════╗
-║                     MONITOR DE RÁDIOS - TEMPO REAL                            ║
+║                     MONITOR DE RÁDIOS - TEMPO REAL v2.0                      ║
 ║                          INTEGRADO COM SUPABASE                               ║
 ║                                                                               ║
 ║  Monitora "Tocando Agora" e "Últimas Tocadas" de múltiplas rádios            ║
 ║  com atualização automática e envio para banco de dados Supabase             ║
 ║                                                                               ║
-║  CONFIGURAÇÃO: As emissoras são carregadas automaticamente do Supabase!      ║
+║  MELHORIAS v2.0:                                                              ║
+║  - Respeita horários de monitoramento por emissora                           ║
+║  - Reutiliza browser entre ciclos (menos CPU/RAM)                            ║
+║  - Timeout por emissora (evita travamento total)                             ║
+║  - Não limpa tela (preserva logs quando roda via Electron)                   ║
+║  - Suporta tabela special_monitoring                                          ║
+║  - Scraping semi-paralelo (batches de 3)                                     ║
+║  - Signal handling para shutdown limpo                                        ║
 ║                                                                               ║
-║  Autor: Audio Solutions | Data: Janeiro 2026                                  ║
+║  Autor: Audio Solutions | Data: Março 2026                                    ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 """
 
 import subprocess
 import sys
 import os
+import signal
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # AUTO-INSTALAÇÃO DE DEPENDÊNCIAS
@@ -105,13 +113,14 @@ verificar_e_instalar_dependencias()
 
 import asyncio
 import json
+import re
 import socket
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 try:
-    from playwright.async_api import async_playwright, Page
+    from playwright.async_api import async_playwright, Page, Browser
     PLAYWRIGHT_OK = True
 except ImportError:
     PLAYWRIGHT_OK = False
@@ -159,7 +168,7 @@ def supabase_select(table: str, params: dict = None) -> list:
         return []
 
 def verificar_conexao_supabase() -> bool:
-    """Testa conexão com Supabase (pode ser chamado a qualquer momento)"""
+    """Testa conexão com Supabase"""
     try:
         resp = http_requests.get(
             f"{SUPABASE_URL}/rest/v1/radio_stations?select=id&limit=1",
@@ -170,7 +179,7 @@ def verificar_conexao_supabase() -> bool:
     except:
         return False
 
-# Verificar conexão inicial com diagnóstico detalhado
+# Verificar conexão inicial
 SUPABASE_OK = False
 try:
     print("  🔍 Testando conexão com Supabase...")
@@ -189,18 +198,15 @@ try:
         print(f"     Response: {_test.text[:200]}")
 except http_requests.exceptions.ConnectionError as e:
     print(f"  ❌ Erro de conexão: {str(e)[:100]}")
-    print("     Verifique sua internet e se o firewall permite acesso a supabase.co")
 except http_requests.exceptions.Timeout:
     print("  ❌ Timeout ao conectar ao Supabase (>10s)")
-    print("     Sua conexão pode estar lenta ou bloqueada")
 except Exception as e:
     print(f"  ❌ Erro inesperado: {type(e).__name__}: {str(e)[:100]}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CONFIGURAÇÃO LOCAL (FALLBACK) - Usa pasta do usuário para evitar Errno 13
+# CONFIGURAÇÃO LOCAL
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Determinar pasta de dados do usuário
 if os.name == 'nt':
     _DATA_DIR = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'Programador de Radio', 'RadioMonitor')
 else:
@@ -209,10 +215,8 @@ else:
 os.makedirs(_DATA_DIR, exist_ok=True)
 print(f"  📁 Pasta de dados: {_DATA_DIR}")
 
-ARQUIVO_CONFIG = "radios_config.json"
-
 # ═══════════════════════════════════════════════════════════════════════════════
-# PALAVRAS PROIBIDAS E ARTISTAS BLOQUEADOS (filtro local antes de enviar ao banco)
+# PALAVRAS PROIBIDAS E ARTISTAS BLOQUEADOS
 # ═══════════════════════════════════════════════════════════════════════════════
 
 FORBIDDEN_WORDS = [
@@ -229,47 +233,56 @@ BLOCKED_ARTISTS = [
 ]
 
 def is_forbidden(artist: str, title: str) -> bool:
-    """Verifica se a música deve ser bloqueada antes de enviar ao banco"""
+    """Verifica se a música deve ser bloqueada"""
     combined = f"{artist} - {title}".lower()
-    # Check forbidden words in combined text
     for word in FORBIDDEN_WORDS:
         if word in combined:
             return True
-    # Check blocked artists
     artist_lower = artist.lower().strip()
     for blocked in BLOCKED_ARTISTS:
         if blocked in artist_lower:
             return True
     return False
 
-CONFIG_PADRAO = {
-    "configuracao": {
-        "intervalo_minutos": 5,
-        "mostrar_navegador": False,
-        "arquivo_historico": os.path.join(_DATA_DIR, "radio_historico.json"),
-        "arquivo_relatorio": os.path.join(_DATA_DIR, "radio_relatorio.txt")
-    },
-    "radios": []
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAPEAMENTO DE DIAS DA SEMANA
+# ═══════════════════════════════════════════════════════════════════════════════
+
+WEEKDAY_MAP = {
+    0: 'seg', 1: 'ter', 2: 'qua', 3: 'qui', 4: 'sex', 5: 'sab', 6: 'dom'
 }
 
-def carregar_configuracao():
-    """Carrega configuração do arquivo JSON ou cria arquivo padrão"""
-    # Tentar na pasta atual primeiro, depois na pasta de dados
-    for config_path in [ARQUIVO_CONFIG, os.path.join(_DATA_DIR, ARQUIVO_CONFIG)]:
-        if Path(config_path).exists():
-            try:
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                    # Corrigir caminhos de arquivos para pasta de dados
-                    cfg = config.get('configuracao', {})
-                    if 'arquivo_historico' in cfg and not os.path.isabs(cfg['arquivo_historico']):
-                        cfg['arquivo_historico'] = os.path.join(_DATA_DIR, cfg['arquivo_historico'])
-                    if 'arquivo_relatorio' in cfg and not os.path.isabs(cfg['arquivo_relatorio']):
-                        cfg['arquivo_relatorio'] = os.path.join(_DATA_DIR, cfg['arquivo_relatorio'])
-                    return config
-            except Exception as e:
-                print(f"  ⚠️  Erro ao carregar {config_path}: {e}")
-    return CONFIG_PADRAO
+def is_within_schedule(station: dict) -> bool:
+    """Verifica se a emissora deve ser monitorada agora (horário + dia da semana)"""
+    now = datetime.now()
+    current_day = WEEKDAY_MAP[now.weekday()]
+    current_minutes = now.hour * 60 + now.minute
+    
+    # Check weekdays
+    week_days = station.get('monitoring_week_days') or station.get('week_days')
+    if week_days and current_day not in week_days:
+        return False
+    
+    # Check time window
+    start_hour = station.get('monitoring_start_hour') or station.get('start_hour')
+    end_hour = station.get('monitoring_end_hour') or station.get('end_hour')
+    
+    if start_hour is not None and end_hour is not None:
+        start_min = station.get('monitoring_start_minute') or station.get('start_minute') or 0
+        end_min = station.get('monitoring_end_minute') or station.get('end_minute') or 0
+        
+        start_total = start_hour * 60 + start_min
+        end_total = end_hour * 60 + end_min
+        
+        if start_total <= end_total:
+            if not (start_total <= current_minutes <= end_total):
+                return False
+        else:
+            # Overnight schedule (e.g., 22:00 - 06:00)
+            if end_total < current_minutes < start_total:
+                return False
+    
+    return True
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CORES DO TERMINAL
@@ -286,7 +299,6 @@ class Cores:
     CYAN = "\033[96m"
     WHITE = "\033[97m"
 
-# Habilitar cores no Windows
 if os.name == 'nt':
     os.system('')
 
@@ -298,14 +310,13 @@ def cor(c: str, texto: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def parse_song_text(text: str) -> Dict[str, str]:
-    """Extrai título e artista de um texto de música (suporta formato MyTuner multilinhas)"""
+    """Extrai título e artista de um texto de música"""
     if not text:
         return {"title": "", "artist": ""}
     
     text = text.strip()
     
-    # Remover sufixos de tempo do MyTuner (LIVE, "X min ago", "Xh ago", etc)
-    import re
+    # Remover sufixos de tempo do MyTuner
     time_patterns = [
         r'\n?LIVE\s*$',
         r'\n?\d+\s*(min|sec|h)\s*ago\s*$',
@@ -319,10 +330,8 @@ def parse_song_text(text: str) -> Dict[str, str]:
     lines = [l.strip() for l in cleaned.split('\n') if l.strip()]
     
     if len(lines) >= 2:
-        # Primeira linha = título, segunda = artista
         title = lines[0].strip()
         artist = lines[1].strip()
-        # Ignorar se artista parece ser timestamp ou lixo
         if artist and len(artist) > 1 and not re.match(r'^\d{2}:\d{2}$', artist):
             return {"title": title, "artist": artist}
     
@@ -334,10 +343,38 @@ def parse_song_text(text: str) -> Dict[str, str]:
             if len(parts) == 2 and len(parts[0].strip()) > 1 and len(parts[1].strip()) > 1:
                 return {"artist": parts[0].strip(), "title": parts[1].strip()}
     
-    # Fallback: texto inteiro como título
     if lines:
         return {"title": lines[0], "artist": "Desconhecido"}
     return {"title": text, "artist": "Desconhecido"}
+
+CONFIG_PADRAO = {
+    "configuracao": {
+        "intervalo_minutos": 5,
+        "mostrar_navegador": False,
+        "arquivo_historico": os.path.join(_DATA_DIR, "radio_historico.json"),
+        "arquivo_relatorio": os.path.join(_DATA_DIR, "radio_relatorio.txt")
+    },
+    "radios": []
+}
+
+def carregar_configuracao():
+    """Carrega configuração do arquivo JSON"""
+    ARQUIVO_CONFIG = "radios_config.json"
+    for config_path in [ARQUIVO_CONFIG, os.path.join(_DATA_DIR, ARQUIVO_CONFIG)]:
+        if Path(config_path).exists():
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    cfg = config.get('configuracao', {})
+                    if 'arquivo_historico' in cfg and not os.path.isabs(cfg['arquivo_historico']):
+                        cfg['arquivo_historico'] = os.path.join(_DATA_DIR, cfg['arquivo_historico'])
+                    if 'arquivo_relatorio' in cfg and not os.path.isabs(cfg['arquivo_relatorio']):
+                        cfg['arquivo_relatorio'] = os.path.join(_DATA_DIR, cfg['arquivo_relatorio'])
+                    return config
+            except Exception as e:
+                print(f"  ⚠️  Erro ao carregar {config_path}: {e}")
+    return CONFIG_PADRAO
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CLASSE PRINCIPAL
@@ -346,22 +383,40 @@ def parse_song_text(text: str) -> Dict[str, str]:
 class RadioMonitor:
     def __init__(self, config: Dict):
         self.config = config.get('configuracao', {})
-        self.radios = []  # Será carregado do Supabase
+        self.radios: List[Dict] = []
+        self.special_radios: List[Dict] = []
         self.intervalo = self.config.get('intervalo_minutos', 5) * 60
         self.mostrar_navegador = self.config.get('mostrar_navegador', False)
-        self.historico = {}
+        self.historico: Dict = {}
         self.online = True
-        self.supabase_stations = {}  # Mapa nome -> id
+        self.supabase_stations: Dict[str, str] = {}
+        self.browser: Optional[Any] = None  # Persistent browser instance
+        self.running = True  # For graceful shutdown
+        self.cycle_count = 0
+        self.total_captures = 0
+        self.total_blocked = 0
+        self.total_errors = 0
         
-        # SEMPRE forçar caminhos absolutos na pasta de dados do usuário
         self.arquivo_historico = os.path.join(_DATA_DIR, "radio_historico.json")
         self.arquivo_relatorio = os.path.join(_DATA_DIR, "radio_relatorio.txt")
         
-        print(f"  📁 Histórico: {self.arquivo_historico}")
-        print(f"  📁 Relatório: {self.arquivo_relatorio}")
-        
         self.historico = self._carregar_historico()
         
+        # Setup signal handlers for graceful shutdown
+        signal.signal(signal.SIGTERM, self._handle_signal)
+        signal.signal(signal.SIGINT, self._handle_signal)
+        if os.name == 'nt':
+            try:
+                signal.signal(signal.SIGBREAK, self._handle_signal)
+            except:
+                pass
+    
+    def _handle_signal(self, signum, frame):
+        """Handle shutdown signals gracefully"""
+        sig_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
+        print(cor(Cores.YELLOW, f"\n  🛑 Sinal recebido ({sig_name}), encerrando graciosamente..."))
+        self.running = False
+    
     def _carregar_historico(self) -> Dict:
         if Path(self.arquivo_historico).exists():
             try:
@@ -373,6 +428,11 @@ class RadioMonitor:
     
     def _salvar_historico(self):
         try:
+            # Limit historico_completo per station to 200 entries
+            for radio_id, dados in self.historico.get('radios', {}).items():
+                if 'historico_completo' in dados and len(dados['historico_completo']) > 200:
+                    dados['historico_completo'] = dados['historico_completo'][-200:]
+            
             with open(self.arquivo_historico, 'w', encoding='utf-8') as f:
                 json.dump(self.historico, f, ensure_ascii=False, indent=2)
         except Exception as e:
@@ -385,7 +445,8 @@ class RadioMonitor:
                 f.write("           RELATÓRIO DE MONITORAMENTO DE RÁDIOS\n")
                 f.write("═" * 80 + "\n\n")
                 f.write(f"📅 Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
-                f.write(f"📊 Total de rádios: {len(self.radios)}\n\n")
+                f.write(f"📊 Rádios normais: {len(self.radios)} | Especiais: {len(self.special_radios)}\n")
+                f.write(f"📈 Capturas: {self.total_captures} | Bloqueadas: {self.total_blocked} | Erros: {self.total_errors}\n\n")
                 
                 for radio_id, dados in self.historico.get('radios', {}).items():
                     f.write("─" * 80 + "\n")
@@ -414,13 +475,11 @@ class RadioMonitor:
         except:
             return False
     
-    def _limpar_tela(self):
-        os.system('cls' if os.name == 'nt' else 'clear')
-    
     def _exibir_cabecalho(self):
-        self._limpar_tela()
+        """Exibe cabeçalho SEM limpar a tela (preserva logs para Electron)"""
+        print()
         print(cor(Cores.CYAN, "╔" + "═" * 70 + "╗"))
-        print(cor(Cores.CYAN, "║") + cor(Cores.BOLD + Cores.WHITE, "     🎵 MONITOR DE RÁDIOS - SUPABASE EDITION 🎵".center(70)) + cor(Cores.CYAN, "║"))
+        print(cor(Cores.CYAN, "║") + cor(Cores.BOLD + Cores.WHITE, "     🎵 MONITOR DE RÁDIOS v2.0 - SUPABASE EDITION 🎵".center(70)) + cor(Cores.CYAN, "║"))
         print(cor(Cores.CYAN, "╚" + "═" * 70 + "╝"))
         print()
         
@@ -428,19 +487,16 @@ class RadioMonitor:
         supabase_status = cor(Cores.GREEN, "● CONECTADO") if SUPABASE_OK else cor(Cores.RED, "● DESCONECTADO")
         print(f"  Internet: {status}")
         print(f"  Supabase: {supabase_status}")
+        print(f"  Ciclo: #{self.cycle_count} | Capturas: {self.total_captures} | Bloqueadas: {self.total_blocked}")
         print(f"  Última atualização: {self.historico.get('ultima_atualizacao', 'Nunca')}")
         print(f"  Intervalo: {self.config.get('intervalo_minutos', 5)} minutos")
-        print(f"  Rádios ativas: {len(self.radios)}")
-        print(f"  📁 Dados: {_DATA_DIR}")
-        print()
-        print(cor(Cores.YELLOW, "─" * 72))
+        print(f"  Rádios: {len(self.radios)} normais + {len(self.special_radios)} especiais")
         print()
         print(cor(Cores.YELLOW, "─" * 72))
     
     def _carregar_radios_supabase(self) -> List[Dict]:
-        """Carrega as rádios ativas do Supabase via REST API"""
+        """Carrega rádios ativas do Supabase, filtrando por horário/dia"""
         if not SUPABASE_OK:
-            print(cor(Cores.YELLOW, "  ⚠️  Supabase não conectado, usando config local"))
             config = carregar_configuracao()
             return [r for r in config.get('radios', []) if r.get('ativo', True)]
         
@@ -451,12 +507,15 @@ class RadioMonitor:
             })
             
             radios = []
+            skipped = 0
             for station in stations:
+                # Check if within monitoring schedule
+                if not is_within_schedule(station):
+                    skipped += 1
+                    continue
+                
                 url = station.get('scrape_url', '')
-                if 'clubefm' in url.lower():
-                    tipo = 'clubefm'
-                else:
-                    tipo = 'mytuner'
+                tipo = 'clubefm' if 'clubefm' in url.lower() else 'mytuner'
                 
                 radios.append({
                     'nome': station.get('name'),
@@ -467,7 +526,9 @@ class RadioMonitor:
                 
                 self.supabase_stations[station.get('name')] = station.get('id')
             
-            print(cor(Cores.GREEN, f"  ✅ {len(radios)} rádios carregadas do Supabase"))
+            if skipped:
+                print(cor(Cores.YELLOW, f"  ⏰ {skipped} rádios fora do horário de monitoramento"))
+            print(cor(Cores.GREEN, f"  ✅ {len(radios)} rádios ativas para este ciclo"))
             return radios
             
         except Exception as e:
@@ -475,11 +536,46 @@ class RadioMonitor:
             config = carregar_configuracao()
             return [r for r in config.get('radios', []) if r.get('ativo', True)]
     
+    def _carregar_special_monitoring(self) -> List[Dict]:
+        """Carrega emissoras de monitoramento especial do Supabase"""
+        if not SUPABASE_OK:
+            return []
+        
+        try:
+            specials = supabase_select('special_monitoring', {
+                'select': '*',
+                'enabled': 'eq.true'
+            })
+            
+            radios = []
+            for sp in specials:
+                if not is_within_schedule(sp):
+                    continue
+                
+                url = sp.get('scrape_url', '')
+                tipo = 'clubefm' if 'clubefm' in url.lower() else 'mytuner'
+                
+                radios.append({
+                    'nome': sp.get('station_name'),
+                    'url': url,
+                    'tipo': tipo,
+                    'id': sp.get('id'),
+                    'label': sp.get('label', ''),
+                    'is_special': True,
+                })
+            
+            if radios:
+                print(cor(Cores.MAGENTA, f"  🔮 {len(radios)} monitoramentos especiais ativos"))
+            return radios
+            
+        except Exception as e:
+            print(cor(Cores.RED, f"  ❌ Erro ao carregar special_monitoring: {e}"))
+            return []
+    
     async def _enviar_para_supabase(self, dados: Dict, radio: Dict):
         """Envia dados capturados para o Supabase via REST API"""
         global SUPABASE_OK
         if not SUPABASE_OK:
-            print(cor(Cores.YELLOW, f"     ⚠️  Supabase não conectado, pulando envio"))
             return
         
         try:
@@ -487,10 +583,7 @@ class RadioMonitor:
             station_name = dados['nome']
             
             raw_text = dados.get('tocando_agora')
-            print(cor(Cores.BLUE, f"     🔍 Raw tocando_agora: {repr(raw_text)[:100]}"))
-            
             if not raw_text:
-                print(cor(Cores.YELLOW, f"     ⚠️  Sem dados de 'tocando agora' para {station_name}"))
                 return
             
             song_info = parse_song_text(raw_text)
@@ -499,23 +592,19 @@ class RadioMonitor:
             
             print(cor(Cores.BLUE, f"     🔍 Parsed: artist='{artist}' title='{title}'"))
             
-            # Ignorar entradas que parecem ser timestamps ou lixo
-            import re
+            # Ignorar timestamps/lixo
             if re.match(r'^\d{2}:\d{2}$', title) or len(title) < 2:
-                print(cor(Cores.YELLOW, f"     ⚠️  Ignorado (timestamp/lixo): '{title}'"))
                 return
-            
-            # Ignorar se artista é "Desconhecido" e título parece lixo
             if artist == 'Desconhecido' and len(title) < 4:
-                print(cor(Cores.YELLOW, f"     ⚠️  Ignorado (dados insuficientes): '{title}'"))
                 return
             
             # Verificar palavras proibidas e artistas bloqueados
             if is_forbidden(artist, title):
                 print(cor(Cores.RED, f"     🚫 BLOQUEADO: {artist} - {title}"))
+                self.total_blocked += 1
                 return
             
-            # Inserir em scraped_songs (sem station_id se None para evitar FK error)
+            # Inserir em scraped_songs
             song_data = {
                 'station_name': station_name,
                 'title': title,
@@ -523,52 +612,46 @@ class RadioMonitor:
                 'is_now_playing': True,
                 'source': 'python_monitor'
             }
-            if station_id:
+            if station_id and not radio.get('is_special'):
                 song_data['station_id'] = station_id
             
-            print(cor(Cores.BLUE, f"     📤 Enviando para scraped_songs..."))
             ok = supabase_insert('scraped_songs', song_data)
             if ok:
                 print(cor(Cores.GREEN, f"     ☁️  scraped_songs: {artist} - {title}"))
-            else:
-                print(cor(Cores.RED, f"     ❌ Falha ao inserir em scraped_songs"))
+                self.total_captures += 1
             
-            # Inserir também em radio_historico
+            # Inserir em radio_historico
             hist_data = {
                 'station_name': station_name,
                 'artist': artist,
                 'title': title,
                 'source': 'python_monitor'
             }
-            print(cor(Cores.BLUE, f"     📤 Enviando para radio_historico..."))
             ok2 = supabase_insert('radio_historico', hist_data)
             if ok2:
                 print(cor(Cores.CYAN, f"     📜  radio_historico: {artist} - {title}"))
-            else:
-                print(cor(Cores.RED, f"     ❌ Falha ao inserir em radio_historico"))
             
-            # Enviar também últimas tocadas
+            # Enviar últimas tocadas
             for song_text in (dados.get('ultimas_tocadas') or [])[:5]:
                 s = parse_song_text(song_text)
                 t = s['title']
                 a = s['artist']
                 if t and len(t) >= 3 and not re.match(r'^\d{2}:\d{2}$', t) and a != 'Desconhecido':
-                    # Verificar bloqueio antes de enviar
                     if is_forbidden(a, t):
-                        print(cor(Cores.RED, f"     🚫 BLOQUEADO (hist): {a} - {t}"))
+                        self.total_blocked += 1
                         continue
-                    hist2 = {
+                    supabase_insert('radio_historico', {
                         'station_name': station_name,
                         'artist': a,
                         'title': t,
                         'source': 'python_monitor'
-                    }
-                    supabase_insert('radio_historico', hist2)
+                    })
             
         except Exception as e:
             import traceback
             print(cor(Cores.RED, f"     ❌ Erro Supabase: {str(e)}"))
             traceback.print_exc()
+            self.total_errors += 1
     
     async def _extrair_mytuner(self, page: Page, url: str, nome: str) -> Dict:
         dados = {
@@ -577,10 +660,9 @@ class RadioMonitor:
         }
         
         try:
-            await page.goto(url, wait_until='networkidle', timeout=30000)
+            await page.goto(url, wait_until='networkidle', timeout=25000)
             await asyncio.sleep(3)
             
-            # Extrair tocando agora
             resultado = await page.evaluate('''() => {
                 const seletores = ['.latest-song', '.current-song', '.now-playing'];
                 for (const sel of seletores) {
@@ -594,7 +676,6 @@ class RadioMonitor:
             if resultado:
                 dados["tocando_agora"] = resultado
             
-            # Extrair últimas tocadas
             resultado = await page.evaluate('''() => {
                 const songs = [];
                 document.querySelectorAll('a[href*="song"]').forEach(link => {
@@ -616,7 +697,8 @@ class RadioMonitor:
                 dados["ultimas_tocadas"] = resultado
                 
         except Exception as e:
-            dados["erro"] = str(e)
+            dados["erro"] = str(e)[:100]
+            self.total_errors += 1
         
         return dados
     
@@ -627,7 +709,7 @@ class RadioMonitor:
         }
         
         try:
-            await page.goto(url, wait_until='networkidle', timeout=30000)
+            await page.goto(url, wait_until='networkidle', timeout=25000)
             await asyncio.sleep(3)
             
             resultado = await page.evaluate('''() => {
@@ -653,137 +735,212 @@ class RadioMonitor:
                 dados["ultimas_tocadas"] = resultado
                 
         except Exception as e:
-            dados["erro"] = str(e)
+            dados["erro"] = str(e)[:100]
+            self.total_errors += 1
         
         return dados
     
-    def _exibir_radio(self, dados: Dict):
+    def _exibir_radio(self, dados: Dict, is_special: bool = False):
+        prefix = "🔮" if is_special else "📻"
         print()
-        print(cor(Cores.BOLD + Cores.MAGENTA, f"  📻 {dados['nome']}"))
-        print(cor(Cores.BLUE, f"     {dados['url']}"))
-        print()
+        print(cor(Cores.BOLD + Cores.MAGENTA, f"  {prefix} {dados['nome']}"))
+        print(cor(Cores.BLUE, f"     {dados['url'][:60]}"))
         
         if dados["tocando_agora"]:
             print(cor(Cores.GREEN, "     🎵 TOCANDO AGORA:"))
-            print(cor(Cores.WHITE + Cores.BOLD, f"        {dados['tocando_agora']}"))
+            print(cor(Cores.WHITE + Cores.BOLD, f"        {dados['tocando_agora'][:80]}"))
         else:
             print(cor(Cores.YELLOW, "     🎵 TOCANDO AGORA: (não disponível)"))
         
-        print()
-        
         if dados["ultimas_tocadas"]:
-            print(cor(Cores.CYAN, "     📜 ÚLTIMAS TOCADAS:"))
-            for i, m in enumerate(dados["ultimas_tocadas"][:5], 1):
-                print(f"        {i}. {m}")
+            print(cor(Cores.CYAN, f"     📜 ÚLTIMAS TOCADAS: {len(dados['ultimas_tocadas'])} músicas"))
         
         if dados.get("erro"):
-            print(cor(Cores.RED, f"\n     ⚠️  {dados['erro']}"))
+            print(cor(Cores.RED, f"     ⚠️  {dados['erro'][:60]}"))
         
-        print()
-        print(cor(Cores.YELLOW, "─" * 72))
+        print(cor(Cores.YELLOW, "  " + "─" * 68))
+    
+    async def _scrape_single(self, page: Page, radio: Dict) -> Dict:
+        """Scrape a single station with timeout protection"""
+        nome = radio['nome']
+        url = radio['url']
+        tipo = radio['tipo']
+        
+        try:
+            if tipo == 'clubefm':
+                return await asyncio.wait_for(
+                    self._extrair_clubefm(page, url, nome),
+                    timeout=40  # 40s max per station
+                )
+            else:
+                return await asyncio.wait_for(
+                    self._extrair_mytuner(page, url, nome),
+                    timeout=40
+                )
+        except asyncio.TimeoutError:
+            print(cor(Cores.RED, f"     ⏰ TIMEOUT: {nome} (>40s)"))
+            self.total_errors += 1
+            return {
+                "url": url, "nome": nome, "tocando_agora": None,
+                "ultimas_tocadas": [], "timestamp": datetime.now().isoformat(),
+                "erro": "Timeout (>40s)"
+            }
     
     async def _atualizar_todas(self):
+        """Ciclo principal de scraping com browser persistente"""
         global SUPABASE_OK
         
         if not PLAYWRIGHT_OK:
             print(cor(Cores.RED, "❌ Playwright não disponível"))
             return
         
-        # Re-verificar conexão Supabase a cada ciclo
+        # Re-verificar conexão Supabase
         if not SUPABASE_OK:
             print(cor(Cores.YELLOW, "  🔄 Tentando reconectar ao Supabase..."))
             SUPABASE_OK = verificar_conexao_supabase()
             if SUPABASE_OK:
                 print(cor(Cores.GREEN, "  ✅ Supabase reconectado!"))
             else:
-                print(cor(Cores.RED, "  ❌ Supabase ainda indisponível, continuando com modo local"))
+                print(cor(Cores.RED, "  ❌ Supabase indisponível"))
         
-        # Recarregar rádios do Supabase a cada atualização
+        # Carregar rádios (com filtro de horário)
         self.radios = self._carregar_radios_supabase()
+        self.special_radios = self._carregar_special_monitoring()
         
-        if not self.radios:
-            print(cor(Cores.YELLOW, "  ⚠️  Nenhuma rádio configurada!"))
+        all_radios = self.radios + self.special_radios
+        
+        if not all_radios:
+            print(cor(Cores.YELLOW, "  ⚠️  Nenhuma rádio ativa para este horário!"))
             return
         
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=not self.mostrar_navegador)
-            page = await browser.new_page()
+        # Reuse or create browser
+        pw = None
+        try:
+            if not self.browser:
+                pw = await async_playwright().start()
+                self.browser = await pw.chromium.launch(headless=not self.mostrar_navegador)
+                print(cor(Cores.GREEN, "  🌐 Browser Chromium iniciado (persistente)"))
+            
+            page = await self.browser.new_page()
             await page.set_extra_http_headers({
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             })
             
             self._exibir_cabecalho()
             
-            for i, radio in enumerate(self.radios):
-                print(cor(Cores.YELLOW, f"  🔄 Atualizando {radio['nome']} ({i+1}/{len(self.radios)})..."))
+            # Process in batches of 3 for semi-parallel scraping
+            BATCH_SIZE = 3
+            for batch_start in range(0, len(all_radios), BATCH_SIZE):
+                if not self.running:
+                    break
+                    
+                batch = all_radios[batch_start:batch_start + BATCH_SIZE]
                 
-                if radio['tipo'] == 'clubefm':
-                    dados = await self._extrair_clubefm(page, radio['url'], radio['nome'])
-                else:
-                    dados = await self._extrair_mytuner(page, radio['url'], radio['nome'])
-                
-                # Enviar para Supabase
-                await self._enviar_para_supabase(dados, radio)
-                
-                radio_id = radio['nome'].lower().replace(' ', '_')
-                if radio_id not in self.historico["radios"]:
-                    self.historico["radios"][radio_id] = {
-                        "nome": radio['nome'], "url": radio['url'], "historico_completo": []
-                    }
-                
-                if dados["tocando_agora"]:
-                    hist = self.historico["radios"][radio_id].get("historico_completo", [])
-                    if not hist or hist[-1].get("musica") != dados["tocando_agora"]:
-                        hist.append({"musica": dados["tocando_agora"], "timestamp": dados["timestamp"]})
-                        self.historico["radios"][radio_id]["historico_completo"] = hist[-1000:]
-                
-                self.historico["radios"][radio_id]["ultimo_dado"] = dados
-                self._exibir_radio(dados)
+                for radio in batch:
+                    if not self.running:
+                        break
+                    
+                    is_special = radio.get('is_special', False)
+                    label = f" [{radio.get('label', '')}]" if radio.get('label') else ""
+                    idx = all_radios.index(radio) + 1
+                    print(cor(Cores.YELLOW, f"  🔄 [{idx}/{len(all_radios)}] {radio['nome']}{label}..."))
+                    
+                    dados = await self._scrape_single(page, radio)
+                    
+                    # Enviar para Supabase
+                    await self._enviar_para_supabase(dados, radio)
+                    
+                    # Atualizar histórico local
+                    radio_id = radio['nome'].lower().replace(' ', '_')
+                    if radio_id not in self.historico["radios"]:
+                        self.historico["radios"][radio_id] = {
+                            "nome": radio['nome'], "url": radio['url'], "historico_completo": []
+                        }
+                    
+                    if dados["tocando_agora"]:
+                        hist = self.historico["radios"][radio_id].get("historico_completo", [])
+                        if not hist or hist[-1].get("musica") != dados["tocando_agora"]:
+                            hist.append({"musica": dados["tocando_agora"], "timestamp": dados["timestamp"]})
+                            self.historico["radios"][radio_id]["historico_completo"] = hist[-200:]
+                    
+                    self.historico["radios"][radio_id]["ultimo_dado"] = dados
+                    self._exibir_radio(dados, is_special)
             
-            await browser.close()
+            await page.close()
             
-            self.historico["ultima_atualizacao"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            self._salvar_historico()
-            self._salvar_relatorio()
-            
-            print(cor(Cores.GREEN, f"\n  💾 Histórico local: {self.arquivo_historico}"))
-            print(cor(Cores.GREEN, f"  📄 Relatório: {self.arquivo_relatorio}"))
-            if SUPABASE_OK:
-                print(cor(Cores.CYAN, f"  ☁️  Dados sincronizados com Supabase!"))
+        except Exception as e:
+            print(cor(Cores.RED, f"  ❌ Erro no browser: {e}"))
+            self.total_errors += 1
+            # Reset browser on error
+            try:
+                if self.browser:
+                    await self.browser.close()
+            except:
+                pass
+            self.browser = None
+        
+        self.historico["ultima_atualizacao"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        self._salvar_historico()
+        self._salvar_relatorio()
+        
+        print()
+        print(cor(Cores.GREEN, f"  💾 Ciclo #{self.cycle_count} completo — {self.total_captures} capturas totais"))
+        if SUPABASE_OK:
+            print(cor(Cores.CYAN, f"  ☁️  Dados sincronizados com Supabase!"))
     
     async def _aguardar_reconexao(self):
         tentativas = 0
-        while not self._verificar_internet():
+        while not self._verificar_internet() and self.running:
             tentativas += 1
-            self._exibir_cabecalho()
             print(cor(Cores.RED, f"  ⚠️  SEM CONEXÃO - Tentativa {tentativas}"))
             print(f"  Verificando novamente em 30 segundos...")
-            print(cor(Cores.YELLOW, "\n  💡 Histórico salvo localmente."))
             await asyncio.sleep(30)
         
-        self.online = True
-        print(cor(Cores.GREEN, "\n  ✅ CONEXÃO RESTABELECIDA!\n"))
-        await asyncio.sleep(2)
+        if self.running:
+            self.online = True
+            print(cor(Cores.GREEN, "\n  ✅ CONEXÃO RESTABELECIDA!\n"))
+            await asyncio.sleep(2)
+    
+    async def _cleanup(self):
+        """Cleanup resources on shutdown"""
+        print(cor(Cores.YELLOW, "  🧹 Limpando recursos..."))
+        try:
+            if self.browser:
+                await self.browser.close()
+                self.browser = None
+                print(cor(Cores.GREEN, "  ✅ Browser encerrado"))
+        except:
+            pass
+        self._salvar_historico()
+        self._salvar_relatorio()
+        print(cor(Cores.GREEN, "  ✅ Histórico e relatório salvos"))
     
     async def iniciar(self):
-        print(cor(Cores.CYAN, "\n🚀 Iniciando Monitor de Rádios com Supabase...\n"))
+        print(cor(Cores.CYAN, "\n🚀 Iniciando Monitor de Rádios v2.0...\n"))
         
-        # Carregar rádios iniciais
         self.radios = self._carregar_radios_supabase()
+        self.special_radios = self._carregar_special_monitoring()
         
-        print(f"  📻 Rádios ativas: {len(self.radios)}")
+        print(f"  📻 Rádios: {len(self.radios)} normais + {len(self.special_radios)} especiais")
         print()
         
-        while True:
+        while self.running:
             try:
+                self.cycle_count += 1
+                
                 if not self._verificar_internet():
                     self.online = False
                     await self._aguardar_reconexao()
+                    if not self.running:
+                        break
                 
                 self.online = True
                 await self._atualizar_todas()
                 
+                # Countdown with frequent running check
                 for seg in range(self.intervalo, 0, -1):
+                    if not self.running:
+                        break
                     m, s = divmod(seg, 60)
                     sys.stdout.write(f"\r  ⏱️  Próxima atualização em: {m:02d}:{s:02d}  ")
                     sys.stdout.flush()
@@ -793,40 +950,45 @@ class RadioMonitor:
                         self.online = False
                         break
                 
+                print()  # New line after countdown
+                
             except KeyboardInterrupt:
-                print(cor(Cores.YELLOW, "\n\n👋 Monitoramento encerrado."))
-                print(f"   Histórico: {self.arquivo_historico}")
-                print(f"   Relatório: {self.arquivo_relatorio}")
                 break
             except Exception as e:
-                print(cor(Cores.RED, f"\n❌ Erro: {e}"))
+                print(cor(Cores.RED, f"\n❌ Erro no ciclo: {e}"))
+                self.total_errors += 1
                 print("   Tentando novamente em 30 segundos...")
-                await asyncio.sleep(30)
+                for i in range(30):
+                    if not self.running:
+                        break
+                    await asyncio.sleep(1)
+        
+        # Graceful cleanup
+        await self._cleanup()
+        print(cor(Cores.YELLOW, "\n👋 Monitor encerrado graciosamente."))
+        print(f"   Ciclos: {self.cycle_count} | Capturas: {self.total_captures} | Bloqueadas: {self.total_blocked} | Erros: {self.total_errors}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# EXECUÇÃO - INICIA AUTOMATICAMENTE O MONITORAMENTO
+# EXECUÇÃO
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     print()
     print(cor(Cores.CYAN, "╔" + "═" * 60 + "╗"))
-    print(cor(Cores.CYAN, "║") + cor(Cores.BOLD, " 🎵 MONITOR DE RÁDIOS - SUPABASE EDITION ".center(60)) + cor(Cores.CYAN, "║"))
+    print(cor(Cores.CYAN, "║") + cor(Cores.BOLD, " 🎵 MONITOR DE RÁDIOS v2.0 - SUPABASE EDITION ".center(60)) + cor(Cores.CYAN, "║"))
     print(cor(Cores.CYAN, "╚" + "═" * 60 + "╝"))
     print()
     
-    # Carregar configuração local (para intervalo, etc)
     config = carregar_configuracao()
     
-    print()
     if SUPABASE_OK:
         print(cor(Cores.GREEN, "  ✅ Modo Supabase ativo (REST API)!"))
-        print(cor(Cores.CYAN, "  📻 As emissoras serão carregadas automaticamente do banco de dados"))
+        print(cor(Cores.CYAN, "  📻 Emissoras carregadas do banco (radio_stations + special_monitoring)"))
     else:
         print(cor(Cores.YELLOW, "  ⚠️  Supabase não conectado - usando modo local"))
     print()
     print(cor(Cores.CYAN, "  Pressione Ctrl+C a qualquer momento para encerrar."))
     print()
     
-    # Iniciar monitoramento automaticamente
     asyncio.run(RadioMonitor(config).iniciar())
