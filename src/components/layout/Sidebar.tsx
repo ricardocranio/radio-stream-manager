@@ -1,4 +1,4 @@
-import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic, Music, Database, Calendar, BarChart3, ChevronDown } from 'lucide-react';
+import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic, Music, Database, Calendar, BarChart3, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useRadioStore } from '@/store/radioStore';
@@ -45,9 +45,11 @@ interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   onTabHover?: (tab: string) => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-export function Sidebar({ activeTab, onTabChange, onTabHover }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, onTabHover, collapsed = false, onToggleCollapse }: SidebarProps) {
   const { queueLength, isProcessing } = useAutoDownloadStore();
   const missingSongs = useRadioStore((state) => state.missingSongs);
   const missingSongsCount = missingSongs.filter(s => s.status === 'missing').length;
@@ -86,18 +88,20 @@ export function Sidebar({ activeTab, onTabChange, onTabHover }: SidebarProps) {
         key={item.id}
         onClick={() => onTabChange(item.id)}
         onMouseEnter={() => onTabHover?.(item.id)}
+        title={collapsed ? item.label : undefined}
         className={cn(
-          'w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-200',
+          'w-full flex items-center gap-2.5 rounded-lg text-[13px] font-medium transition-all duration-200',
+          collapsed ? 'justify-center px-2 py-2.5' : 'justify-between px-3 py-2',
           isActive
             ? 'nav-item-active text-primary border border-primary/15'
             : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60 border border-transparent'
         )}
       >
-        <div className="flex items-center gap-2.5">
-          <Icon className={cn('w-4 h-4', isActive ? 'text-primary drop-shadow-[0_0_6px_hsl(185_100%_48%/0.5)]' : '')} />
-          <span>{item.label}</span>
+        <div className={cn("flex items-center", collapsed ? 'gap-0' : 'gap-2.5')}>
+          <Icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-primary drop-shadow-[0_0_6px_hsl(185_100%_48%/0.5)]' : '')} />
+          {!collapsed && <span>{item.label}</span>}
         </div>
-        {item.badge !== undefined && (
+        {!collapsed && item.badge !== undefined && (
           <span className={cn(
             "text-[10px] font-bold px-1.5 py-0.5 rounded-md min-w-[20px] text-center",
             item.badgeType === 'dynamic'
@@ -107,45 +111,73 @@ export function Sidebar({ activeTab, onTabChange, onTabHover }: SidebarProps) {
             {item.badge}
           </span>
         )}
+        {collapsed && item.badge !== undefined && (
+          <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-destructive" />
+        )}
       </button>
     );
   };
 
   return (
-    <aside className="w-[240px] min-h-screen flex flex-col border-r border-border"
+    <aside
+      className={cn(
+        "min-h-screen flex flex-col border-r border-border transition-all duration-300 ease-in-out relative",
+        collapsed ? 'w-[60px]' : 'w-[240px]'
+      )}
       style={{
         background: 'linear-gradient(180deg, hsl(225 25% 8%) 0%, hsl(225 25% 6%) 100%)',
       }}
     >
       {/* Logo */}
-      <div className="p-5 pb-4">
-        <div className="flex items-center gap-3">
+      <div className={cn("pb-4", collapsed ? 'p-2 pt-4' : 'p-5')}>
+        <div className={cn("flex items-center", collapsed ? 'justify-center' : 'gap-3')}>
           <div className="relative">
-            <img src={logo} alt="AudioSolutions" className="w-9 h-9 rounded-lg" />
+            <img src={logo} alt="AudioSolutions" className={cn("rounded-lg", collapsed ? 'w-8 h-8' : 'w-9 h-9')} />
             <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-success border-2 border-background"
               style={{ boxShadow: '0 0 6px hsl(155 85% 42% / 0.5)' }}
             />
           </div>
-          <div>
-            <h1 className="font-bold text-base tracking-tight text-foreground">MAKER</h1>
-            <p className="text-[10px] tracking-[0.2em] text-primary font-semibold animate-neon">PROGRAMAÇÃO</p>
-          </div>
+          {!collapsed && (
+            <div>
+              <h1 className="font-bold text-base tracking-tight text-foreground">MAKER</h1>
+              <p className="text-[10px] tracking-[0.2em] text-primary font-semibold animate-neon">PROGRAMAÇÃO</p>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Divider */}
-      <div className="mx-4 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+      <div className="mx-2 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+
+      {/* Collapse toggle */}
+      <button
+        onClick={onToggleCollapse}
+        className="absolute -right-3 top-[72px] z-10 w-6 h-6 rounded-full bg-secondary border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
+        title={collapsed ? 'Expandir menu' : 'Recolher menu'}
+      >
+        {collapsed ? <PanelLeftOpen className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
+      </button>
 
       {/* Dashboard — always at top */}
-      <div className="px-3 pt-3 pb-1">
+      <div className={cn("pt-3 pb-1", collapsed ? 'px-1.5' : 'px-3')}>
         {renderNavButton(dashboardItem)}
       </div>
 
       {/* Navigation Groups */}
-      <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
+      <nav className={cn("flex-1 py-2 space-y-1 overflow-y-auto", collapsed ? 'px-1.5' : 'px-3')}>
         {groupedItems.map(group => {
-          const isCollapsed = collapsedGroups.has(group.id);
+          const isGroupCollapsed = collapsedGroups.has(group.id);
           const hasActiveChild = group.items.some(i => activeTab === i.id);
+
+          if (collapsed) {
+            // In collapsed mode, show just icons with a subtle separator
+            return (
+              <div key={group.id} className="space-y-0.5 py-1">
+                <div className="mx-1 h-px bg-border/30 mb-1" />
+                {group.items.map(renderNavButton)}
+              </div>
+            );
+          }
 
           return (
             <div key={group.id}>
@@ -159,9 +191,9 @@ export function Sidebar({ activeTab, onTabChange, onTabHover }: SidebarProps) {
                   )}
                   {group.label}
                 </span>
-                <ChevronDown className={cn('w-3 h-3 transition-transform duration-200', isCollapsed && '-rotate-90')} />
+                <ChevronDown className={cn('w-3 h-3 transition-transform duration-200', isGroupCollapsed && '-rotate-90')} />
               </button>
-              {!isCollapsed && (
+              {!isGroupCollapsed && (
                 <div className="space-y-0.5 pb-1">
                   {group.items.map(renderNavButton)}
                 </div>
@@ -172,36 +204,42 @@ export function Sidebar({ activeTab, onTabChange, onTabHover }: SidebarProps) {
       </nav>
 
       {/* Status Footer */}
-      <div className="p-3 space-y-2">
+      <div className={cn("space-y-2", collapsed ? 'p-1.5' : 'p-3')}>
         {/* Download activity */}
         {(queueLength > 0 || isProcessing) && (
-          <div className="p-2.5 rounded-lg border border-primary/20"
+          <div className={cn("rounded-lg border border-primary/20", collapsed ? 'p-1.5' : 'p-2.5')}
             style={{ background: 'linear-gradient(135deg, hsl(185 100% 48% / 0.06), hsl(185 100% 48% / 0.02))' }}
           >
-            <div className="flex items-center gap-2 mb-1">
-              <Download className={cn("w-3.5 h-3.5 text-primary", isProcessing && "animate-bounce")} />
-              <span className="text-[11px] font-semibold text-primary">
-                {isProcessing ? 'Baixando...' : 'Na fila'}
-              </span>
+            <div className="flex items-center gap-2">
+              <Download className={cn("w-3.5 h-3.5 text-primary shrink-0", isProcessing && "animate-bounce")} />
+              {!collapsed && (
+                <div>
+                  <span className="text-[11px] font-semibold text-primary">
+                    {isProcessing ? 'Baixando...' : 'Na fila'}
+                  </span>
+                  <p className="text-[10px] text-muted-foreground">
+                    {queueLength} música{queueLength !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              )}
             </div>
-            <p className="text-[10px] text-muted-foreground">
-              {queueLength} música{queueLength !== 1 ? 's' : ''} pendente{queueLength !== 1 ? 's' : ''}
-            </p>
           </div>
         )}
 
         {/* System status */}
-        <div className="p-2.5 rounded-lg border border-border/50 bg-muted/30">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-success"
-              style={{ boxShadow: '0 0 6px hsl(155 85% 42% / 0.5)' }}
-            />
-            <span className="text-[11px] font-medium text-success/80">Sistema Ativo</span>
+        {!collapsed && (
+          <div className="p-2.5 rounded-lg border border-border/50 bg-muted/30">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-success"
+                style={{ boxShadow: '0 0 6px hsl(155 85% 42% / 0.5)' }}
+              />
+              <span className="text-[11px] font-medium text-success/80">Sistema Ativo</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground/60 mt-1 font-mono">
+              v5.1 • PGM-FM
+            </p>
           </div>
-          <p className="text-[10px] text-muted-foreground/60 mt-1 font-mono">
-            v5.1 • PGM-FM
-          </p>
-        </div>
+        )}
       </div>
     </aside>
   );
