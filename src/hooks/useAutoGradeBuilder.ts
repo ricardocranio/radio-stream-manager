@@ -355,8 +355,9 @@ export function useAutoGradeBuilder() {
 
       return buildSongsByStation(data || [], 200);
     } catch (error) {
-      console.error('[AUTO-GRADE] Error fetching songs for block:', error);
-      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
+      const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+      console.error('[AUTO-GRADE] Error fetching songs for block:', errorMsg);
+      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', errorMsg);
       return {};
     }
   }, [stations]);
