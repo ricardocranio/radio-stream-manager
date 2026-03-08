@@ -50,7 +50,7 @@ export interface BlockLogItem {
 export interface BlockResult {
   line: string;
   logs: BlockLogItem[];
-  durationMinutes: number;
+  durationMinutes?: number;
 }
 
 export interface LibraryCheckResult {
