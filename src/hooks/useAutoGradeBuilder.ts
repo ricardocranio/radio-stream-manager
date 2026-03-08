@@ -457,10 +457,19 @@ export function useAutoGradeBuilder() {
     const stationNameToStyle: Record<string, string> = {};
     const seenSongs = new Set<string>();
 
-    // Build blocked songs set for fast lookup
-    const blockedSet = new Set<string>(
-      (config.blockedSongs || []).map(s => s.toLowerCase().trim())
-    );
+    // Build blocked songs matching with wildcard support
+    const blockedList = (config.blockedSongs || []).map(s => s.toLowerCase().trim());
+    const blockedExact = new Set<string>(blockedList.filter(s => !s.endsWith(' - *')));
+    const blockedWildcardArtists = blockedList
+      .filter(s => s.endsWith(' - *'))
+      .map(s => s.replace(/ - \*$/, ''));
+    
+    const isBlocked = (artist: string, title: string): boolean => {
+      const key = `${artist.trim()} - ${title.trim()}`.toLowerCase();
+      if (blockedExact.has(key)) return true;
+      const artistLower = artist.trim().toLowerCase();
+      return blockedWildcardArtists.some(blocked => artistLower === blocked || artistLower.includes(blocked));
+    };
 
     stations.forEach(s => {
       stationNameToStyle[s.name] = s.styles?.[0] || 'POP/VARIADO';
@@ -472,9 +481,8 @@ export function useAutoGradeBuilder() {
       if (seenSongs.has(songKey)) return;
       seenSongs.add(songKey);
 
-      // Check if song is blocked (Artist - Title format)
-      const blockedKey = `${song.artist.trim()} - ${song.title.trim()}`.toLowerCase();
-      if (blockedSet.has(blockedKey)) return;
+      // Check if song is blocked (exact or wildcard)
+      if (isBlocked(song.artist, song.title)) return;
       if (!songsByStation[song.station_name]) songsByStation[song.station_name] = [];
       if (songsByStation[song.station_name].length < maxPerStation) {
         const style = stationNameToStyle[song.station_name] || stationNameToStyle[song.station_name.toLowerCase()] || 'POP/VARIADO';

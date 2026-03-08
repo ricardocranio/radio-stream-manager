@@ -50,9 +50,11 @@ export function SettingsView() {
   
   // Refs to track if filters have changed
   const filtersSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const arlValidationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Track if initial load is complete to avoid auto-save on mount
   const isInitialMount = useRef(true);
+  const isInitialArlMount = useRef(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Helper to update Deezer config - saves immediately to store
@@ -217,6 +219,37 @@ export function SettingsView() {
       });
     }
   };
+
+  // Auto-validate ARL when it changes (debounced 1.5s)
+  useEffect(() => {
+    if (isInitialArlMount.current) {
+      isInitialArlMount.current = false;
+      return;
+    }
+    
+    if (!deezerConfig.arl || !validateArlFormat(deezerConfig.arl)) {
+      if (deezerConfig.arl) {
+        setArlValidation({ status: 'idle' });
+      }
+      return;
+    }
+
+    if (arlValidationTimeoutRef.current) {
+      clearTimeout(arlValidationTimeoutRef.current);
+    }
+
+    arlValidationTimeoutRef.current = setTimeout(() => {
+      console.log('[SETTINGS] Auto-validating ARL...');
+      handleValidateArl();
+    }, 1500);
+
+    return () => {
+      if (arlValidationTimeoutRef.current) {
+        clearTimeout(arlValidationTimeoutRef.current);
+      }
+    };
+  }, [deezerConfig.arl]);
+
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">

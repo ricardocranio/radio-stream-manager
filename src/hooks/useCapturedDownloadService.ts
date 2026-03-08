@@ -204,17 +204,25 @@ export function useCapturedDownloadService() {
       if (error || !data) return;
 
       // Deduplicate by artist+title and filter blocked songs
-      const blockedSet = new Set<string>(
-        (useRadioStore.getState().config.blockedSongs || []).map(s => s.toLowerCase().trim())
-      );
+      const blockedList = (useRadioStore.getState().config.blockedSongs || []).map(s => s.toLowerCase().trim());
+      const blockedExact = new Set<string>(blockedList.filter(s => !s.endsWith(' - *')));
+      const blockedWildcardArtists = blockedList
+        .filter(s => s.endsWith(' - *'))
+        .map(s => s.replace(/ - \*$/, ''));
+      
+      const isBlocked = (artist: string, title: string): boolean => {
+        const key = `${artist.trim()} - ${title.trim()}`.toLowerCase();
+        if (blockedExact.has(key)) return true;
+        const artistLower = artist.trim().toLowerCase();
+        return blockedWildcardArtists.some(blocked => artistLower === blocked || artistLower.includes(blocked));
+      };
+      
       const seen = new Set<string>();
       const unique: CapturedQueueItem[] = [];
       for (const song of data) {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
         if (seen.has(key) || processedRef.current.has(key)) continue;
-        // Check blocked list
-        const blockedKey = `${song.artist.trim()} - ${song.title.trim()}`.toLowerCase();
-        if (blockedSet.has(blockedKey)) continue;
+        if (isBlocked(song.artist, song.title)) continue;
         seen.add(key);
         unique.push(song);
       }
