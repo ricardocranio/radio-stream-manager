@@ -1756,7 +1756,7 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
               output: stdout,
               outputFolder: finalOutputFolder,
               stationFolder: sanitizedStation,
-              verifiedFile: desiredFilename,
+              verifiedFile: validFile,
               message: `Download concluído: ${artist} - ${title}`
             });
           } catch (verifyError) {
