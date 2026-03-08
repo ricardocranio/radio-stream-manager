@@ -140,9 +140,11 @@ const Index = () => {
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onTabHover={handleTabHover} />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <Header />
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto"
+          style={{ background: 'linear-gradient(180deg, hsl(225 25% 7%) 0%, hsl(225 25% 6%) 100%)' }}
+        >
           {/* Dashboard is always mounted (eagerly loaded) */}
           <PersistentTabPanel tabId="dashboard" activeTab={activeTab}>
             <DashboardView />
@@ -150,8 +152,8 @@ const Index = () => {
 
           {/* Lazy views: only mount when first visited, then keep alive */}
           {Object.entries(TAB_COMPONENTS).map(([tabId, Component]) => {
-            if (tabId === 'dashboard') return null; // Already rendered above
-            if (!visitedTabs.has(tabId)) return null; // Not visited yet, don't mount
+            if (tabId === 'dashboard') return null;
+            if (!visitedTabs.has(tabId)) return null;
             return (
               <PersistentTabPanel key={tabId} tabId={tabId} activeTab={activeTab}>
                 <Suspense fallback={<ViewSkeleton />}>
@@ -161,13 +163,15 @@ const Index = () => {
             );
           })}
         </main>
-        <footer className="border-t border-border bg-secondary/30 px-4 py-2 flex items-center justify-center gap-3 text-xs text-muted-foreground">
-          <img src={logo} alt="AudioSolutions" className="h-6 w-6 rounded" />
-          <a href="https://audiosolutions.tech/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">audiosolutions.tech</a>
-          <span className="text-muted-foreground/50">|</span>
-          <span>Desenvolvido por <span className="font-medium text-foreground">Ricardo Amaral</span></span>
-          <span className="text-muted-foreground/50">|</span>
-          <span>Contato: <a href="tel:+5531988467222" className="text-primary hover:underline">+55 (31) 98846-7222</a></span>
+        <footer className="border-t border-border/50 px-4 py-2 flex items-center justify-center gap-3 text-[10px] text-muted-foreground/50"
+          style={{ background: 'hsl(225 25% 6%)' }}
+        >
+          <img src={logo} alt="AudioSolutions" className="h-4 w-4 rounded opacity-40" />
+          <a href="https://audiosolutions.tech/" target="_blank" rel="noopener noreferrer" className="text-primary/40 hover:text-primary/70 transition-colors">audiosolutions.tech</a>
+          <span className="opacity-30">·</span>
+          <span>Ricardo Amaral</span>
+          <span className="opacity-30">·</span>
+          <a href="tel:+5531988467222" className="text-primary/40 hover:text-primary/70 transition-colors">+55 (31) 98846-7222</a>
         </footer>
       </div>
     </div>
