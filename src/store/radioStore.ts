@@ -303,6 +303,8 @@ const defaultConfig: SystemConfig = {
     'Hino do Bahia', 'Hino do Vitória', 'Hino do Sport', 'Hino do Náutico',
     'Hino do Fortaleza', 'Hino do Ceará', 'Hino do Coritiba', 'Hino do Athletico',
     'Mengão', 'Timão', 'Verdão', 'Tricolor', 'Peixe', 'Cruzmaltino',
+    // Artistas/músicas específicas
+    'Eurides Nunes', 'CIRCUS MUSIC', 'THE HIT CREW KIDS', 'PADRE MARCELO ROSSI',
   ],
   funkWords: ['funk', 'mc ', 'sequencia', 'proibidão', 'baile', 'kondzilla', 'gr6'],
   // Default characters to filter from filenames (encoding artifacts, special chars)
@@ -311,10 +313,15 @@ const defaultConfig: SystemConfig = {
   powerSavingMode: false,
   // Similarity threshold for music library matching (0.5 to 0.95)
   similarityThreshold: 0.75,
-  // Blocked songs (Artist - Title format)
+  // Blocked songs (Artist - Title format) — use "Artista - *" to block all songs from an artist
   blockedSongs: [
     'Jefi - Marquinha De Fita',
     'Olivia - Homem De Papel',
+    'Eurides Nunes - FARROUPILHA',
+    'CIRCUS MUSIC - *',
+    'THE HIT CREW KIDS - *',
+    'PADRE MARCELO ROSSI - *',
+    'Xuxa - *',
   ],
 };
 
