@@ -26,8 +26,7 @@ const PRIORITY_GRADE_BOOST = 500;
 const PRIORITY_SEQUENCE_BOOST = 200;
 const PRIORITY_STATION_BOOST = 100;
 
-const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
-const MAX_RETRIES_BEFORE_COOLDOWN = 3;
+const MAX_RETRIES = 3; // After 3 failures, remove from queue permanently
 const ARL_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 export interface DownloadServiceState {
@@ -262,32 +261,40 @@ export function useGlobalDownloadService() {
       // Sort by priority before each pick
       downloadQueueRef.current.sort((a, b) => b.priority - a.priority);
 
-      // Find first item not in cooldown
+      // Find first item that hasn't exceeded max retries
       const now = Date.now();
       let itemIndex = -1;
       for (let i = 0; i < downloadQueueRef.current.length; i++) {
         const item = downloadQueueRef.current[i];
-        const failKey = `${item.song.artist.toLowerCase().trim()}|${item.song.title.toLowerCase().trim()}`;
-        const tracker = failureTracker.current.get(failKey);
-        
-        if (tracker && tracker.count >= MAX_RETRIES_BEFORE_COOLDOWN) {
-          const elapsed = now - tracker.lastFail;
-          if (elapsed < COOLDOWN_MS) {
-            continue; // Still in cooldown
-          }
-          // Cooldown expired — reset and allow retry
-          console.log(`[DL-SVC] ⏰ Cooldown expirado: ${item.song.artist} - ${item.song.title}, tentando novamente...`);
-          tracker.count = 0;
+        if (item.retryCount >= MAX_RETRIES) {
+          continue; // Will be cleaned up below
         }
         itemIndex = i;
         break;
       }
 
-      if (itemIndex === -1) {
-        // All items in cooldown
-        console.log(`[DL-SVC] 😴 Todos os ${downloadQueueRef.current.length} itens em cooldown (10 min). Aguardando...`);
+      // Clean up items that exceeded max retries
+      const before = downloadQueueRef.current.length;
+      downloadQueueRef.current = downloadQueueRef.current.filter(item => {
+        if (item.retryCount >= MAX_RETRIES) {
+          console.log(`[DL-SVC] 🗑️ Removida após ${MAX_RETRIES} falhas: ${item.song.artist} - ${item.song.title}`);
+          useRadioStore.getState().removeMissingSong(item.song.id);
+          const failKey = `${item.song.artist.toLowerCase().trim()}|${item.song.title.toLowerCase().trim()}`;
+          failureTracker.current.delete(failKey);
+          return false;
+        }
+        return true;
+      });
+      if (downloadQueueRef.current.length !== before) {
+        setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
+        useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
+      }
+
+      if (itemIndex === -1 || downloadQueueRef.current.length === 0) {
         break;
       }
+      // Recalculate index after cleanup
+      itemIndex = Math.min(itemIndex, downloadQueueRef.current.length - 1);
 
       const item = downloadQueueRef.current.splice(itemIndex, 1)[0];
       setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
@@ -328,28 +335,22 @@ export function useGlobalDownloadService() {
       }
       
       if (!success) {
-        // Track consecutive failures
-        const failKey = `${item.song.artist.toLowerCase().trim()}|${item.song.title.toLowerCase().trim()}`;
-        const tracker = failureTracker.current.get(failKey) || { count: 0, lastFail: 0 };
-        tracker.count++;
-        tracker.lastFail = Date.now();
-        failureTracker.current.set(failKey, tracker);
-
-        if (tracker.count >= MAX_RETRIES_BEFORE_COOLDOWN) {
-          console.warn(`[DL-SVC] 🕐 ${item.song.artist} - ${item.song.title} falhou ${tracker.count}x. Cooldown de 10 min.`);
-          // Reset status to 'missing' so it can be retried after cooldown
+        // Increment retry count and send to end of queue
+        const newRetryCount = item.retryCount + 1;
+        
+        if (newRetryCount >= MAX_RETRIES) {
+          // 3 failures — remove permanently
+          console.warn(`[DL-SVC] 🗑️ ${item.song.artist} - ${item.song.title} falhou ${newRetryCount}x. Removida definitivamente.`);
+          useRadioStore.getState().removeMissingSong(item.song.id);
+          const failKey = `${item.song.artist.toLowerCase().trim()}|${item.song.title.toLowerCase().trim()}`;
+          failureTracker.current.delete(failKey);
+        } else {
+          // Send to END of queue for retry
+          console.log(`[DL-SVC] 🔄 ${item.song.artist} - ${item.song.title} falhou (tentativa ${newRetryCount}/${MAX_RETRIES}). Vai para o fim da fila.`);
           useRadioStore.getState().updateMissingSong(item.song.id, { status: 'missing' });
-          // Re-add to queue for retry after cooldown
           downloadQueueRef.current.push({
             song: item.song,
-            retryCount: item.retryCount + 1,
-            priority: item.priority,
-            fallbackQuality: false,
-          });
-        } else if (item.retryCount < 2) {
-          downloadQueueRef.current.push({
-            song: item.song,
-            retryCount: item.retryCount + 1,
+            retryCount: newRetryCount,
             priority: item.priority,
           });
         }
