@@ -1250,6 +1250,7 @@ export function useAutoGradeBuilder() {
 
     try {
       console.log('[AUTO-GRADE] 🚀 Building full day grade with progressive saving...');
+      reportServiceHeartbeat('grade-builder');
       logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
       clearUsedSongs();
 
