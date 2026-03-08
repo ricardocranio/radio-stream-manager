@@ -219,6 +219,11 @@ export function useGlobalScrapingService(
           const { stationName, nowPlaying, recentSongs, scrapeUrl } = result.value;
           const stationStyle = station.styles?.[0] || 'POP/VARIADO';
           
+          // Auto-recovery: reset failure count on success
+          if (stationFailureMap.has(stationName)) {
+            stationFailureMap.set(stationName, { count: 0, pausedUntil: 0 });
+          }
+          
           if (nowPlaying) {
             const { isMissing } = await processSong(
               nowPlaying.title,
@@ -250,6 +255,15 @@ export function useGlobalScrapingService(
             : station?.name;
           if (stationName) {
             failedStations.push(stationName);
+            
+            // Auto-recovery: track consecutive failures
+            const current = stationFailureMap.get(stationName) || { count: 0, pausedUntil: 0 };
+            current.count++;
+            if (current.count >= MAX_CONSECUTIVE_FAILURES) {
+              current.pausedUntil = Date.now() + PAUSE_DURATION_MS;
+              console.warn(`[SCRAPE-SVC] ⚠️ ${stationName}: ${current.count} falhas consecutivas → pausada por 30min`);
+            }
+            stationFailureMap.set(stationName, current);
           }
         }
       }
