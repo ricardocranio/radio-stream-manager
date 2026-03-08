@@ -89,6 +89,24 @@ interface SelectionContext {
   stationSongIndex: Record<string, number>;
   logs: BlockLogItem[];
   stats: BlockStats;
+  previousEnergy?: string | null; // Tracks last selected song's energy for smooth transitions
+}
+
+/**
+ * Apply smart scoring (genre + energy) as secondary sort within a candidate list.
+ * Primary sort (freshness/style) is preserved; this only reorders among similar candidates.
+ */
+function applySmartScoring(
+  candidates: SongEntry[],
+  timeStr: string,
+  previousEnergy: string | null | undefined
+): SongEntry[] {
+  return candidates.map(c => ({
+    song: c,
+    smartScore: getGenreScore((c as any).ai_genre, timeStr) - getEnergyTransitionPenalty(previousEnergy, (c as any).ai_energy),
+  }))
+  .sort((a, b) => b.smartScore - a.smartScore)
+  .map(x => x.song);
 }
 
 /**
