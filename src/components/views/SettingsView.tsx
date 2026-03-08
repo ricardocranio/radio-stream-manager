@@ -47,6 +47,10 @@ export function SettingsView() {
   const [blockedSongs, setBlockedSongs] = useState(
     config.blockedSongs?.join('\n') || ''
   );
+  const [fillStations, setFillStations] = useState(
+    config.fillPriorityStations?.join(', ') || 'BH FM, Metropolitana FM, Metropolitana'
+  );
+  );
   
   // Refs to track if filters have changed
   const filtersSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
