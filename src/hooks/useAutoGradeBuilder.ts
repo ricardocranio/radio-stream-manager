@@ -355,13 +355,14 @@ export function useAutoGradeBuilder() {
 
       return buildSongsByStation(data || [], 200);
     } catch (error) {
-      console.error('[AUTO-GRADE] Error fetching songs for block:', error);
-      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
+      const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+      console.error('[AUTO-GRADE] Error fetching songs for block:', errorMsg);
+      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', errorMsg);
       return {};
     }
   }, [stations]);
 
-  const fetchAllRecentSongs = useCallback(async (): Promise<Record<string, SongEntry[]>> => {
+  const fetchAllRecentSongs = useCallback(async (retryCount = 0): Promise<Record<string, SongEntry[]>> => {
     try {
       // Fetch from both scraped_songs and radio_historico in parallel for maximum pool
       const [scrapedResult, historicoResult] = await Promise.all([
@@ -377,7 +378,10 @@ export function useAutoGradeBuilder() {
           .limit(1500),
       ]);
 
-      if (scrapedResult.error) throw scrapedResult.error;
+      if (scrapedResult.error) {
+        const errMsg = scrapedResult.error.message || JSON.stringify(scrapedResult.error);
+        throw new Error(`scraped_songs: ${errMsg}`);
+      }
 
       // Merge both sources, normalizing historico timestamps
       const allData = [
@@ -405,8 +409,17 @@ export function useAutoGradeBuilder() {
 
       return buildSongsByStation(deduplicated, 300);
     } catch (error) {
-      console.error('[AUTO-GRADE] Error fetching all songs:', error);
-      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', String(error));
+      const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
+      console.error('[AUTO-GRADE] Error fetching all songs:', errorMsg);
+      
+      // Retry up to 2 times with 3s delay
+      if (retryCount < 2) {
+        console.log(`[AUTO-GRADE] 🔄 Retry ${retryCount + 1}/2 em 3s...`);
+        await new Promise(r => setTimeout(r, 3000));
+        return fetchAllRecentSongs(retryCount + 1);
+      }
+      
+      logSystemError('GRADE', 'error', 'Erro ao buscar músicas do Supabase', errorMsg);
       return {};
     }
   }, [stations]);
