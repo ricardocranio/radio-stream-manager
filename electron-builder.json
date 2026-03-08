@@ -47,7 +47,11 @@
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "Programador de Radio",
-    "include": "build/installer.nsh"
+    "installerSidebar": null,
+    "uninstallerSidebar": null,
+    "include": "build/installer.nsh",
+    "perMachine": true,
+    "menuCategory": "Programador de Radio"
   },
   "mac": {
     "target": ["dmg"],
