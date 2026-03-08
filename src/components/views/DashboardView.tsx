@@ -286,6 +286,9 @@ export function DashboardView() {
         </Card>
       )}
 
+      {/* Phase 1: Smart Notifications */}
+      <SmartNotificationsCard />
+
       {/* Station Distribution removed for cleaner UI */}
 
       {/* Auto Grade Builder Status */}
