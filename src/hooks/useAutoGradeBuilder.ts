@@ -464,11 +464,18 @@ export function useAutoGradeBuilder() {
       .filter(s => s.endsWith(' - *'))
       .map(s => s.replace(/ - \*$/, ''));
     
+    // Also include forbiddenWords for artist/title filtering
+    const forbiddenLower = (config.forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
+    
     const isBlocked = (artist: string, title: string): boolean => {
       const key = `${artist.trim()} - ${title.trim()}`.toLowerCase();
       if (blockedExact.has(key)) return true;
       const artistLower = artist.trim().toLowerCase();
-      return blockedWildcardArtists.some(blocked => artistLower === blocked || artistLower.includes(blocked));
+      const titleLower = title.trim().toLowerCase();
+      if (blockedWildcardArtists.some(blocked => artistLower === blocked || artistLower.includes(blocked))) return true;
+      // Check forbiddenWords against artist AND title
+      if (forbiddenLower.some(word => artistLower.includes(word) || titleLower.includes(word))) return true;
+      return false;
     };
 
     stations.forEach(s => {
@@ -496,7 +503,7 @@ export function useAutoGradeBuilder() {
     const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
     console.log(`[AUTO-GRADE] Pool: ${stationList}`);
     return songsByStation;
-  }, [stations, config.blockedSongs]);
+  }, [stations, config.blockedSongs, config.forbiddenWords]);
 
   // ==================== Weekend Template Generator ====================
 

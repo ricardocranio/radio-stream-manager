@@ -663,13 +663,15 @@ export function CapturedSongsView() {
             </Select>
 
             {/* Clear Filters */}
-            {(searchTerm || selectedStation !== 'all' || dateRange !== '24h') && (
+            {(searchTerm || selectedStation !== 'all' || selectedGenre !== 'all' || selectedEnergy !== 'all' || dateRange !== '24h') && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedStation('all');
+                  setSelectedGenre('all');
+                  setSelectedEnergy('all');
                   setDateRange('24h');
                 }}
               >
