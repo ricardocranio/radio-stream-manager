@@ -553,6 +553,10 @@ class RadioMonitor:
                 t = s['title']
                 a = s['artist']
                 if t and len(t) >= 3 and not re.match(r'^\d{2}:\d{2}$', t) and a != 'Desconhecido':
+                    # Verificar bloqueio antes de enviar
+                    if is_forbidden(a, t):
+                        print(cor(Cores.RED, f"     🚫 BLOQUEADO (hist): {a} - {t}"))
+                        continue
                     hist2 = {
                         'station_name': station_name,
                         'artist': a,
