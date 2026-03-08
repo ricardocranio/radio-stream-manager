@@ -220,7 +220,37 @@ export function SettingsView() {
     }
   };
 
-  return (
+  // Auto-validate ARL when it changes (debounced 1.5s)
+  useEffect(() => {
+    if (isInitialArlMount.current) {
+      isInitialArlMount.current = false;
+      return;
+    }
+    
+    if (!deezerConfig.arl || !validateArlFormat(deezerConfig.arl)) {
+      if (deezerConfig.arl) {
+        setArlValidation({ status: 'idle' });
+      }
+      return;
+    }
+
+    if (arlValidationTimeoutRef.current) {
+      clearTimeout(arlValidationTimeoutRef.current);
+    }
+
+    arlValidationTimeoutRef.current = setTimeout(() => {
+      console.log('[SETTINGS] Auto-validating ARL...');
+      handleValidateArl();
+    }, 1500);
+
+    return () => {
+      if (arlValidationTimeoutRef.current) {
+        clearTimeout(arlValidationTimeoutRef.current);
+      }
+    };
+  }, [deezerConfig.arl]);
+
+
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
