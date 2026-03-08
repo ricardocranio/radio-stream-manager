@@ -58,7 +58,7 @@ export function useServiceWatchdog() {
       if (stalled.length > 0) {
         const msg = `Serviços possivelmente travados: ${stalled.join(', ')}`;
         console.warn(`[WATCHDOG] ⚠️ ${msg}`);
-        logSystemError('WATCHDOG', 'warning', 'Serviço parado detectado', msg);
+        logSystemError('SYSTEM', 'warning', 'Serviço parado detectado', msg);
       }
     };
 
