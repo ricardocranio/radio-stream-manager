@@ -1395,6 +1395,7 @@ export function useAutoGradeBuilder() {
         blocksGenerated: prev.blocksGenerated + (shouldBuildCurrent ? 1 : 0) + (shouldBuildNext ? 1 : 0),
         skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
         pendingGradeLines: new Map(lineMap),
+        pendingBlockDurations: new Map(durationMap),
       }));
 
       console.log(`[AUTO-GRADE] 📋 Grade montada em memória e persistida${isWebOnly ? ' (modo web - preview only)' : ' (aguardando janela de 10min para escrita)'}`);
