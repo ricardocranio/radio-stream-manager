@@ -541,6 +541,8 @@ export async function selectSongForSlot(
     usedInBlock.add(`${selectedSong.title.toLowerCase()}-${selectedSong.artist.toLowerCase()}`);
     usedArtistsInBlock.add(selectedSong.artist.toLowerCase().trim());
     ctx.markSongAsUsed(selectedSong.title, selectedSong.artist, timeStr);
+    // Track energy for next transition
+    selCtx.previousEnergy = (selectedSong as any).ai_energy || selCtx.previousEnergy;
 
     // Add 'used' log if not already logged by a priority level
     const hasLog = logs.some(l => l.title === selectedSong!.title && l.artist === selectedSong!.artist && l.blockTime === timeStr);
