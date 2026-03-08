@@ -157,6 +157,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    if (action === "compress-history") {
       const { data, error } = await supabase.rpc("compress_radio_historico");
       if (error) throw error;
 
