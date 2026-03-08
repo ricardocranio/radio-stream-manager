@@ -1022,7 +1022,31 @@ app.on('before-quit', () => {
   }
 });
 
-// IPC Handlers for communication with renderer
+// =============== PYTHON MONITOR IPC HANDLERS ===============
+ipcMain.handle('start-python-monitor', async () => {
+  return await startPythonMonitor(false);
+});
+
+ipcMain.handle('stop-python-monitor', () => {
+  return stopPythonMonitor();
+});
+
+ipcMain.handle('restart-python-monitor', async () => {
+  stopPythonMonitor();
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  monitorAutoRestartAttempts = 0;
+  return await startPythonMonitor(false);
+});
+
+ipcMain.handle('get-monitor-status', () => {
+  return getMonitorStatus();
+});
+
+ipcMain.handle('get-monitor-logs', () => {
+  return pythonMonitorLogs;
+});
+
+
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
