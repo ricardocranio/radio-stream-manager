@@ -1454,7 +1454,7 @@ ipcMain.handle('purge-blocked-files', async (event, { musicFolders, blockedSongs
 });
 
 // Deezer Download Handler using deemix CLI
-// Flow: Download to _temp folder → Verify integrity → Rename to input name → Move to final folder
+// Flow: Download to _temp folder → Verify integrity → Move to final folder (keeping original Deezer filename)
 ipcMain.handle('download-from-deezer', async (event, params) => {
   const { artist, title, arl, outputFolder, quality, stationName } = params;
   
@@ -1704,20 +1704,20 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
               return;
             }
             
-            // === RENAME & MOVE: temp → final folder with input name ===
+            // === MOVE: temp → final folder keeping ORIGINAL filename from Deezer ===
             const tempFilePath = path.join(tempDownloadFolder, validFile);
-            const finalFilePath = path.join(finalOutputFolder, desiredFilename);
+            const finalFilePath = path.join(finalOutputFolder, validFile);
             
             try {
               // Remove existing file in final folder if present
               if (fs.existsSync(finalFilePath)) {
                 fs.unlinkSync(finalFilePath);
-                console.log(`[DEEMIX] Removed existing: ${desiredFilename}`);
+                console.log(`[DEEMIX] Removed existing: ${validFile}`);
               }
               
-              // Move (rename) from temp to final with desired name
+              // Move from temp to final keeping original name (NO rename)
               fs.renameSync(tempFilePath, finalFilePath);
-              console.log(`[DEEMIX] ✅ Moved: ${validFile} → ${desiredFilename}`);
+              console.log(`[DEEMIX] ✅ Moved (sem rename): ${validFile}`);
               
               // Cleanup: remove any other new files in temp
               for (const f of newFiles) {
@@ -1756,7 +1756,7 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
               output: stdout,
               outputFolder: finalOutputFolder,
               stationFolder: sanitizedStation,
-              verifiedFile: desiredFilename,
+              verifiedFile: validFile,
               message: `Download concluído: ${artist} - ${title}`
             });
           } catch (verifyError) {
