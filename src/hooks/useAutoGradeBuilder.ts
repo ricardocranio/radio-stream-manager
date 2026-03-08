@@ -1198,7 +1198,7 @@ export function useAutoGradeBuilder() {
       const fullPool = await fetchAllRecentSongs();
 
       if (shouldBuildCurrent) {
-        const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats);
+        const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats, false, targetDay);
         const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line);
         const mergedCurrentLine = currentExistingLine
           ? mergeGradeLinePreservingResolved(currentExistingLine, resolvedCurrentLine, coringaCode)
