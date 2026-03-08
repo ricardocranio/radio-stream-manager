@@ -26,6 +26,8 @@ const LogsView = lazy(() => import('@/components/views/LogsView').then(m => ({ d
 const ExportView = lazy(() => import('@/components/views/ExportView').then(m => ({ default: m.ExportView })));
 const GradeBuilderView = lazy(() => import('@/components/views/GradeBuilderView').then(m => ({ default: m.GradeBuilderView })));
 const TrendsView = lazy(() => import('@/components/views/TrendsView').then(m => ({ default: m.TrendsView })));
+const AnalyticsView = lazy(() => import('@/components/views/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
+const CompetitorView = lazy(() => import('@/components/views/CompetitorView').then(m => ({ default: m.CompetitorView })));
 
 // Prefetch map: preload chunk on hover for instant navigation
 const PREFETCH_MAP: Record<string, () => void> = {
@@ -38,6 +40,8 @@ const PREFETCH_MAP: Record<string, () => void> = {
   fixedcontent: () => import('@/components/views/FixedContentView'),
   ranking: () => import('@/components/views/RankingView'),
   trends: () => import('@/components/views/TrendsView'),
+  analytics: () => import('@/components/views/AnalyticsView'),
+  competitor: () => import('@/components/views/CompetitorView'),
   vozbrasil: () => import('@/components/views/VozBrasilView'),
   specialmonitoring: () => import('@/components/views/SpecialMonitoringView'),
   logs: () => import('@/components/views/LogsView'),
@@ -69,6 +73,8 @@ const TAB_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentTy
   fixedcontent: FixedContentView,
   ranking: RankingView,
   trends: TrendsView,
+  analytics: AnalyticsView,
+  competitor: CompetitorView,
   vozbrasil: VozBrasilView,
   logs: LogsView,
   export: ExportView,

@@ -23,6 +23,8 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { GradePreviewCard } from '@/components/dashboard/GradePreviewCard';
 import { GradeScheduleCard } from '@/components/dashboard/GradeScheduleCard';
+import { SmartNotificationsCard } from '@/components/dashboard/SmartNotificationsCard';
+import { ServiceHealthCard } from '@/components/dashboard/ServiceHealthCard';
 
 export function DashboardView() {
   const { 
@@ -283,6 +285,9 @@ export function DashboardView() {
           </CardContent>
         </Card>
       )}
+
+      {/* Phase 1: Smart Notifications */}
+      <SmartNotificationsCard />
 
       {/* Station Distribution removed for cleaner UI */}
 
@@ -853,6 +858,9 @@ export function DashboardView() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Phase 5: Service Health Dashboard */}
+      <ServiceHealthCard />
     </div>
   );
 }

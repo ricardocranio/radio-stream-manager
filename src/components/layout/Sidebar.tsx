@@ -1,4 +1,4 @@
-import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic, Music, Database, Calendar, BarChart3, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic, Music, Database, Calendar, BarChart3, ChevronDown, PanelLeftClose, PanelLeftOpen, Swords } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useRadioStore } from '@/store/radioStore';
@@ -27,6 +27,8 @@ const staticNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'specialmonitoring', label: 'Monit. Especial', icon: Calendar, group: 'monitor' },
   { id: 'captured', label: 'Capturadas', icon: Database, group: 'monitor' },
   { id: 'trends', label: 'Tendências', icon: BarChart3, group: 'monitor' },
+  { id: 'analytics', label: 'Analytics', icon: Activity, group: 'monitor' },
+  { id: 'competitor', label: 'Competidor', icon: Swords, group: 'monitor' },
   { id: 'sequence', label: 'Sequência', icon: ListMusic, group: 'grade' },
   { id: 'schedule', label: 'Programação', icon: Clock, group: 'grade' },
   { id: 'gradebuilder', label: 'Montagem', icon: FileCode, group: 'grade' },
