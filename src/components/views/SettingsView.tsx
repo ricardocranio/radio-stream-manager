@@ -457,6 +457,47 @@ export function SettingsView() {
                 </div>
 
                 <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="vinhetasFolder">Pasta de Vinhetas</Label>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      id="vinhetasFolder"
+                      value={localConfig.vinhetasFolder || 'C:\\Playlist\\Vinhetas'}
+                      onChange={(e) =>
+                        setLocalConfig((prev) => ({ ...prev, vinhetasFolder: e.target.value }))
+                      }
+                      className="glass-input flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      title="Selecionar pasta"
+                      onClick={async () => {
+                        if (window.electronAPI?.isElectron && window.electronAPI?.selectFolder) {
+                          try {
+                            const folder = await window.electronAPI.selectFolder();
+                            if (folder) {
+                              setLocalConfig((prev) => ({ ...prev, vinhetasFolder: folder }));
+                              toast({ title: '📂 Pasta de vinhetas selecionada', description: folder });
+                            }
+                          } catch (err) {
+                            console.error('Error selecting folder:', err);
+                          }
+                        } else {
+                          toast({ title: '🖥️ Recurso Desktop', description: 'Digite o caminho manualmente.', variant: 'destructive' });
+                        }
+                      }}
+                    >
+                      <FolderOpen className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Pasta com arquivos .mp3 de vinhetas. O código VHT/VHTN na grade será substituído por arquivos desta pasta (sem repetição).
+                  </p>
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="quality">Qualidade do Download</Label>
                   <Select
                     value={deezerConfig.quality}

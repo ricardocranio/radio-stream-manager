@@ -1024,7 +1024,7 @@ export function useAutoGradeBuilder() {
           }
 
           const result = await generateBlockLine(hour, minute, songsByStation, stats, true, targetDay);
-          const resolvedLine = await resolveVinhetasInLine(result.line);
+          const resolvedLine = await resolveVinhetasInLine(result.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
           lines.push(resolvedLine);
           allLogs.push(...result.logs);
           blockCount++;
@@ -1217,7 +1217,7 @@ export function useAutoGradeBuilder() {
 
       if (shouldBuildCurrent) {
         const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats, false, targetDay);
-        const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line);
+        const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
         const forceReplaceCurrent = forceRegenerate || currentSaturdayMismatch;
         const mergedCurrentLine = currentExistingLine && !forceReplaceCurrent
           ? mergeGradeLinePreservingResolved(currentExistingLine, resolvedCurrentLine, coringaCode)
@@ -1230,7 +1230,7 @@ export function useAutoGradeBuilder() {
 
       if (shouldBuildNext) {
         const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats, false, targetDay);
-        const resolvedNextLine = await resolveVinhetasInLine(nextResult.line);
+        const resolvedNextLine = await resolveVinhetasInLine(nextResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
         const forceReplaceNext = forceRegenerate || nextSaturdayMismatch;
         const mergedNextLine = nextExistingLine && !forceReplaceNext
           ? mergeGradeLinePreservingResolved(nextExistingLine, resolvedNextLine, coringaCode)
