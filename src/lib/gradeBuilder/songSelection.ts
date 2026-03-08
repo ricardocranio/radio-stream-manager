@@ -277,14 +277,18 @@ export async function selectSongForSlot(
     const carryOverForStation = carryOverByStation[stationName] || [];
     for (const carryOverSong of carryOverForStation) {
       if (!isValidCandidate(carryOverSong.title, carryOverSong.artist)) continue;
-      selectedSong = carryOverSong;
+      // Verify the carry-over song now exists in library (it was missing before)
+      const libraryResult = await ctx.findSongInLibrary(carryOverSong.artist, carryOverSong.title);
+      if (!libraryResult.exists) continue; // Still missing — skip
+      const correctFilename = libraryResult.filename || sanitizeFilename(`${carryOverSong.artist} - ${carryOverSong.title}.mp3`);
+      selectedSong = { ...carryOverSong, filename: correctFilename, existsInLibrary: true };
       usedInBlock.add(`${carryOverSong.title.toLowerCase()}-${carryOverSong.artist.toLowerCase()}`);
       usedArtistsInBlock.add(carryOverSong.artist.toLowerCase().trim());
       logs.push({
         blockTime: timeStr, type: 'used',
         title: carryOverSong.title, artist: carryOverSong.artist,
         station: carryOverSong.station, style: carryOverSong.style,
-        reason: `[P0] Carry-over do bloco anterior (já baixada)`,
+        reason: `[P0] Carry-over do bloco anterior (verificada na biblioteca)`,
       });
       break;
     }
@@ -613,6 +617,10 @@ export async function handleSpecialSequenceType(
       const key = `${rankSong.title.toLowerCase()}-${rankSong.artist.toLowerCase()}`;
       const normalizedArtist = rankSong.artist.toLowerCase().trim();
       if (!usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(rankSong.title, rankSong.artist, timeStr, isFullDay)) {
+        // Verify song exists in library before adding to grade
+        const libraryResult = await ctx.findSongInLibrary(rankSong.artist, rankSong.title);
+        if (!libraryResult.exists) continue; // Skip missing songs
+        const correctFilename = libraryResult.filename || sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`);
         usedInBlock.add(key);
         usedArtistsInBlock.add(normalizedArtist);
         ctx.markSongAsUsed(rankSong.title, rankSong.artist, timeStr);
@@ -622,13 +630,13 @@ export async function handleSpecialSequenceType(
           station: 'TOP50', style: rankSong.style,
           reason: `TOP50 posição ${sortedRanking.indexOf(rankSong) + 1}`,
         });
-        return `"${sanitizeFilename(`${rankSong.artist} - ${rankSong.title}.mp3`)}"`;
+        return `"${correctFilename}"`;
       }
     }
     logs.push({
       blockTime: timeStr, type: 'substituted',
       title: 'TOP50', artist: 'CORINGA', station: 'FALLBACK',
-      reason: 'Ranking TOP50 vazio',
+      reason: 'Ranking TOP50 vazio ou nenhuma música disponível na biblioteca',
     });
     return ctx.coringaCode;
   }
