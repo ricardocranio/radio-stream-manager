@@ -818,8 +818,8 @@ export function useAutoGradeBuilder() {
         return generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay);
       }
 
-      // TOP50 blocks
-      const top50Item = fixedItems.find(fc => fc.type === 'top50');
+      // TOP50 blocks (skip on Sunday — 100% monitoring)
+      const top50Item = targetDay !== 'dom' ? fixedItems.find(fc => fc.type === 'top50') : undefined;
       if (top50Item) {
         return await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx);
       }
