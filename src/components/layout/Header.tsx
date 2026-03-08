@@ -1,4 +1,4 @@
-import { Power, RefreshCw, Clock, Sun, Moon, Download, AlertTriangle } from 'lucide-react';
+import { Power, RefreshCw, Clock, Sun, Moon, Download, AlertTriangle, Wifi } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useCapturedDownloadStore } from '@/store/capturedDownloadStore';
@@ -21,8 +21,8 @@ export function Header() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Track elapsed time for active download
   useEffect(() => {
     if (!activeDownload) { setElapsed(0); return; }
     const timer = setInterval(() => {
@@ -33,83 +33,89 @@ export function Header() {
 
   useEffect(() => {
     setMounted(true);
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
-  const handleToggle = () => {
-    setIsRunning(!isRunning);
-  };
-
-  const toggleTheme = () => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-  };
-
   return (
-    <header className="h-16 bg-card border-b border-border px-4 md:px-6 flex items-center justify-between">
-      <div className="flex items-center gap-2 md:gap-4">
-        <div className="flex items-center gap-2">
-          {isRunning ? (
-            <div className="live-indicator">
-              <span className="text-xs md:text-sm font-semibold text-destructive uppercase tracking-wider">
-                AO VIVO
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-muted rounded-md">
+    <header className="h-14 border-b border-border px-4 md:px-6 flex items-center justify-between"
+      style={{
+        background: 'linear-gradient(180deg, hsl(225 22% 10%) 0%, hsl(225 25% 7%) 100%)',
+      }}
+    >
+      {/* Left side */}
+      <div className="flex items-center gap-3">
+        {/* Live/Paused indicator */}
+        {isRunning ? (
+          <div className="flex items-center gap-2 px-3 py-1 rounded-md border border-destructive/30"
+            style={{ background: 'hsl(0 80% 55% / 0.08)' }}
+          >
+            <div className="w-2 h-2 rounded-full bg-destructive"
+              style={{ boxShadow: '0 0 8px hsl(0 80% 55% / 0.6)' }}
+            />
+            <span className="text-[11px] font-bold tracking-[0.15em] text-destructive uppercase">
+              AO VIVO
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-3 py-1 rounded-md border border-warning/30"
+            style={{ background: 'hsl(42 100% 50% / 0.06)' }}
+          >
             <div className="w-2 h-2 rounded-full bg-warning animate-pulse" />
-              <span className="text-xs md:text-sm font-semibold text-warning uppercase tracking-wider">
-                PAUSADO
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="h-6 w-px bg-border hidden sm:block" />
-        <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
-          <Clock className="w-4 h-4" />
-          <span className="font-mono">
-            {format(new Date(), "EEEE, dd 'de' MMMM • HH:mm", { locale: ptBR })}
+            <span className="text-[11px] font-bold tracking-[0.15em] text-warning uppercase">
+              PAUSADO
+            </span>
+          </div>
+        )}
+
+        <div className="h-5 w-px bg-border hidden sm:block" />
+
+        {/* Clock */}
+        <div className="hidden sm:flex items-center gap-2">
+          <span className="font-mono text-xs text-primary/80 tabular-nums" style={{ letterSpacing: '0.05em' }}>
+            {format(currentTime, 'HH:mm:ss')}
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            {format(currentTime, "EEEE, dd MMM", { locale: ptBR })}
           </span>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 md:gap-3">
+      {/* Right side */}
+      <div className="flex items-center gap-2">
         {/* Theme Toggle */}
         {mounted && (
           <Button
             variant="ghost"
             size="icon"
-            onClick={toggleTheme}
-            className="h-9 w-9"
-            title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
           >
-            {theme === 'dark' ? (
-              <Sun className="w-4 h-4 text-yellow-500" />
-            ) : (
-              <Moon className="w-4 h-4 text-slate-700" />
-            )}
+            {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </Button>
         )}
 
-        {/* ARL Invalid Warning */}
+        {/* ARL Warning */}
         {!arlValid && (
-          <Badge variant="destructive" className="gap-1.5 text-xs">
-            <AlertTriangle className="w-3 h-3" />
-            ARL Inválida
-          </Badge>
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-destructive/30 bg-destructive/10">
+            <AlertTriangle className="w-3 h-3 text-destructive" />
+            <span className="text-[10px] font-semibold text-destructive">ARL</span>
+          </div>
         )}
 
-        {/* Download Activity Badge with real-time progress */}
+        {/* Download Activity */}
         {(autoDownloadQueue > 0 || capturedDlProcessing || activeDownload) && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge variant="secondary" className="gap-1.5 animate-pulse text-xs max-w-48 truncate">
-                  <Download className="w-3 h-3 shrink-0" />
-                  {activeDownload 
-                    ? `${activeDownload.artist} - ${activeDownload.title} (${elapsed}s)`
-                    : autoDownloadQueue + capturedDlQueue > 0
-                      ? `${autoDownloadQueue + capturedDlQueue} na fila`
-                      : 'Baixando...'}
-                </Badge>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-primary/20 bg-primary/5 max-w-48">
+                  <Download className="w-3 h-3 text-primary shrink-0 animate-pulse" />
+                  <span className="text-[10px] font-medium text-primary truncate">
+                    {activeDownload
+                      ? `${activeDownload.artist} - ${activeDownload.title} (${elapsed}s)`
+                      : `${autoDownloadQueue + capturedDlQueue} na fila`}
+                  </span>
+                </div>
               </TooltipTrigger>
               <TooltipContent>
                 {activeDownload && (
@@ -124,34 +130,34 @@ export function Header() {
           </TooltipProvider>
         )}
 
-        {/* Status Indicator */}
         <StatusIndicator />
-        
+
         {lastUpdate && (
-          <span className="hidden md:inline text-xs text-muted-foreground">
-            Última: {format(lastUpdate, 'HH:mm:ss')}
+          <span className="hidden md:inline text-[10px] text-muted-foreground/60 font-mono">
+            {format(lastUpdate, 'HH:mm:ss')}
           </span>
         )}
+
         <Button
-          variant="outline"
-          size="sm"
-          className="gap-2 hidden sm:flex"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-primary"
           onClick={() => setIsRunning(true)}
         >
-          <RefreshCw className="w-4 h-4" />
-          <span className="hidden md:inline">Atualizar</span>
+          <RefreshCw className="w-3.5 h-3.5" />
         </Button>
+
         <Button
-          onClick={handleToggle}
+          onClick={() => setIsRunning(!isRunning)}
           size="sm"
           className={
             isRunning
-              ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground'
-              : 'bg-success hover:bg-success/90 text-success-foreground'
+              ? 'h-8 px-3 text-xs bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25'
+              : 'h-8 px-3 text-xs bg-success/15 text-success border border-success/30 hover:bg-success/25'
           }
         >
-          <Power className="w-4 h-4 md:mr-2" />
-          <span className="hidden md:inline">{isRunning ? 'Parar' : 'Iniciar'}</span>
+          <Power className="w-3.5 h-3.5 mr-1.5" />
+          {isRunning ? 'Parar' : 'Iniciar'}
         </Button>
       </div>
     </header>
