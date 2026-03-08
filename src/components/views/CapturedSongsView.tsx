@@ -615,6 +615,38 @@ export function CapturedSongsView() {
               </SelectContent>
             </Select>
 
+            {/* Genre Filter */}
+            {genres.length > 0 && (
+              <Select value={selectedGenre} onValueChange={setSelectedGenre}>
+                <SelectTrigger className="w-[160px]">
+                  <Music className="w-4 h-4 mr-2" />
+                  <SelectValue placeholder="Gênero" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos Gêneros</SelectItem>
+                  {genres.map(genre => (
+                    <SelectItem key={genre} value={genre}>{genre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Energy Filter */}
+            {energies.length > 0 && (
+              <Select value={selectedEnergy} onValueChange={setSelectedEnergy}>
+                <SelectTrigger className="w-[140px]">
+                  <Zap className="w-4 h-4 mr-2" />
+                  <SelectValue placeholder="Energia" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas Energias</SelectItem>
+                  {energies.map(energy => (
+                    <SelectItem key={energy} value={energy}>{energy}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
             {/* Date Range Filter */}
             <Select value={dateRange} onValueChange={setDateRange}>
               <SelectTrigger className="w-[150px]">
