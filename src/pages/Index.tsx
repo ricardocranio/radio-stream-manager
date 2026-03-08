@@ -97,6 +97,7 @@ function PersistentTabPanel({ tabId, activeTab, children }: { tabId: string; act
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // Track which tabs have been visited so we only mount them once visited
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['dashboard']));
   const { setIsRunning, setLastUpdate } = useRadioStore();
@@ -139,7 +140,13 @@ const Index = () => {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onTabHover={handleTabHover} />
+      <Sidebar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onTabHover={handleTabHover}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(prev => !prev)}
+      />
       <div className="flex-1 flex flex-col min-w-0">
         <Header />
         <main className="flex-1 overflow-auto"
