@@ -131,7 +131,6 @@ export function useCompetitorAnalysis() {
           toCheck.map(async ([key, entry]) => {
             try {
               const exists = await window.electronAPI!.checkSongExists!({
-                folders: config.musicFolders,
                 artist: entry.artist,
                 title: entry.title,
               });
