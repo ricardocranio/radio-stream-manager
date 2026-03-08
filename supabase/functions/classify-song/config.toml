@@ -1,0 +1,2 @@
+[functions.classify-song]
+verify_jwt = false
