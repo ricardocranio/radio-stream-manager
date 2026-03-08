@@ -35,6 +35,40 @@ import { mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
 import { saveGradeToStorage, loadGradeFromStorage, clearGradeStorage } from '@/lib/gradeBuilder/gradePersistence';
 import { resolveVinhetasInLine, resolveVinhetasInGrade, resetVinhetaPool } from '@/lib/gradeBuilder/vinhetaResolver';
 
+// === MODULE-LEVEL VHT DURATION CACHE ===
+let _cachedAvgVhtDurationSec: number | null = null;
+let _vhtDurationCacheExpiry = 0;
+
+async function getAvgVhtDuration(vinhetasFolder: string): Promise<number> {
+  const VHT_FALLBACK = 7;
+  const now = Date.now();
+  // Cache for 10 minutes
+  if (_cachedAvgVhtDurationSec !== null && now < _vhtDurationCacheExpiry) {
+    return _cachedAvgVhtDurationSec;
+  }
+  if (!getIsElectronEnv() || !window.electronAPI?.listFolderFiles || !window.electronAPI?.getFileDurationsBatch) {
+    return VHT_FALLBACK;
+  }
+  try {
+    const listResult = await window.electronAPI.listFolderFiles({ folder: vinhetasFolder, extension: '.mp3' });
+    if (!listResult.success || listResult.files.length === 0) return VHT_FALLBACK;
+    const vhtFilenames = listResult.files.map((f: any) => f.name);
+    const durResult = await window.electronAPI.getFileDurationsBatch({ filenames: vhtFilenames, musicFolders: [vinhetasFolder] });
+    if (durResult.success && durResult.durations) {
+      const durations = Object.values(durResult.durations).filter((d: number) => d > 0);
+      if (durations.length > 0) {
+        _cachedAvgVhtDurationSec = durations.reduce((sum: number, d: number) => sum + d, 0) / durations.length;
+        _vhtDurationCacheExpiry = now + 10 * 60 * 1000;
+        console.log(`[AUTO-GRADE] 🎵 VHT duração real: média ${_cachedAvgVhtDurationSec.toFixed(1)}s de ${durations.length} arquivos`);
+        return _cachedAvgVhtDurationSec;
+      }
+    }
+  } catch (e) {
+    console.warn('[AUTO-GRADE] ⚠️ Falha ao ler duração das vinhetas, usando fallback 7s:', e);
+  }
+  return VHT_FALLBACK;
+}
+
 interface AutoGradeState {
   isBuilding: boolean;
   lastBuildTime: Date | null;
