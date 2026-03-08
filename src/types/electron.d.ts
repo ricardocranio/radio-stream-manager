@@ -297,6 +297,7 @@ interface ElectronAPI {
   scanFixLibrary: (params: { musicFolders: string[] }) => Promise<{ scanned: number; renamed: number; skipped: number; errors: number; details: Array<{ old: string; new: string; status: string; error?: string }> }>;
   onLibFixProgress: (callback: (progress: { scanned: number; renamed: number; current: string }) => void) => void;
   scanBpmTags: (params: BpmScanParams) => Promise<BpmScanResult>;
+  readId3Genre: (params: { filePath: string; musicFolders?: string[] }) => Promise<{ success: boolean; genre?: string | null; artist?: string | null; title?: string | null; error?: string }>;
   saveBpmCache: (params: BpmCacheSaveParams) => Promise<{ success: boolean; error?: string }>;
   loadBpmCache: (params: BpmCacheLoadParams) => Promise<BpmCacheResult>;
   
