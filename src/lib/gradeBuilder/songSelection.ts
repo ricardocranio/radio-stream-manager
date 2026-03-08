@@ -24,6 +24,7 @@ import type { SongEntry, BlockLogItem, BlockStats, GradeContext, CarryOverSong }
 import { STATION_ID_TO_DB_NAME } from './constants';
 import type { WeekDay, SequenceConfig } from '@/types/radio';
 import { getCachedVerification } from '@/lib/libraryVerificationCache';
+import { getGenreScore, getEnergyTransitionPenalty } from './smartGrade';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -88,6 +89,24 @@ interface SelectionContext {
   stationSongIndex: Record<string, number>;
   logs: BlockLogItem[];
   stats: BlockStats;
+  previousEnergy?: string | null; // Tracks last selected song's energy for smooth transitions
+}
+
+/**
+ * Apply smart scoring (genre + energy) as secondary sort within a candidate list.
+ * Primary sort (freshness/style) is preserved; this only reorders among similar candidates.
+ */
+function applySmartScoring(
+  candidates: SongEntry[],
+  timeStr: string,
+  previousEnergy: string | null | undefined
+): SongEntry[] {
+  return candidates.map(c => ({
+    song: c,
+    smartScore: getGenreScore((c as any).ai_genre, timeStr) - getEnergyTransitionPenalty(previousEnergy, (c as any).ai_energy),
+  }))
+  .sort((a, b) => b.smartScore - a.smartScore)
+  .map(x => x.song);
 }
 
 /**
@@ -232,18 +251,22 @@ export async function selectSongForSlot(
       return 0;
     });
 
-    for (const candidate of freshnessSorted) {
+    // Apply smart scoring (genre + energy) as tiebreaker within freshness groups
+    const smartSorted = applySmartScoring(freshnessSorted, timeStr, selCtx.previousEnergy);
+
+    for (const candidate of smartSorted) {
       if (!isValidCandidate(candidate.title, candidate.artist)) continue;
 
       const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
       if (libraryResult.exists) {
         const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
         selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+        selCtx.previousEnergy = (candidate as any).ai_energy || null;
         logs.push({
           blockTime: timeStr, type: 'used',
           title: candidate.title, artist: candidate.artist,
           station: candidate.station, style: candidate.style,
-          reason: `[P1] Pool da estação "${stationName}" (resolvedBy: ${resolvedBy})`,
+          reason: `[P1] Pool da estação "${stationName}" (resolvedBy: ${resolvedBy}) [smart]`,
         });
         break;
       } else if (jitAttemptsP1 < maxJitAttemptsP1) {
@@ -328,14 +351,15 @@ export async function selectSongForSlot(
 
     for (const [otherStation, songs] of sortedStations) {
       if (otherStation === stationName) continue;
-      // Sort by freshness within each station
+      // Sort by freshness within each station, then apply smart scoring
       const freshSorted = [...songs].sort((a, b) => {
         if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
         if (a.scrapedAt) return -1;
         if (b.scrapedAt) return 1;
         return 0;
       });
-      for (const candidate of freshSorted) {
+      const smartDnaSorted = applySmartScoring(freshSorted, timeStr, selCtx.previousEnergy);
+      for (const candidate of smartDnaSorted) {
         if (candidate.style !== stationStyle) continue;
         if (!isValidCandidate(candidate.title, candidate.artist)) continue;
 
@@ -427,20 +451,19 @@ export async function selectSongForSlot(
     let jitAttemptsP4 = 0;
     const maxJitAttemptsP4 = 3;
 
-    // Sort: same-style songs first, then by freshness within each group
+    // Sort: same-style songs first, then by freshness, then smart scoring
     const styleFilteredPool = [...allSongsPool].sort((a, b) => {
-      // Same style as target station gets priority
       const aStyleMatch = a.style === stationStyle ? 0 : 1;
       const bStyleMatch = b.style === stationStyle ? 0 : 1;
       if (aStyleMatch !== bStyleMatch) return aStyleMatch - bStyleMatch;
-      // Within same priority, sort by freshness
       if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
       if (a.scrapedAt) return -1;
       if (b.scrapedAt) return 1;
       return 0;
     });
+    const smartP4Pool = applySmartScoring(styleFilteredPool, timeStr, selCtx.previousEnergy);
 
-    for (const candidate of styleFilteredPool) {
+    for (const candidate of smartP4Pool) {
       if (!isValidCandidate(candidate.title, candidate.artist)) continue;
       const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
       if (libraryResult.exists) {
@@ -518,6 +541,8 @@ export async function selectSongForSlot(
     usedInBlock.add(`${selectedSong.title.toLowerCase()}-${selectedSong.artist.toLowerCase()}`);
     usedArtistsInBlock.add(selectedSong.artist.toLowerCase().trim());
     ctx.markSongAsUsed(selectedSong.title, selectedSong.artist, timeStr);
+    // Track energy for next transition
+    selCtx.previousEnergy = (selectedSong as any).ai_energy || selCtx.previousEnergy;
 
     // Add 'used' log if not already logged by a priority level
     const hasLog = logs.some(l => l.title === selectedSong!.title && l.artist === selectedSong!.artist && l.blockTime === timeStr);
