@@ -13,7 +13,7 @@ import { useRadioStore } from '@/store/radioStore';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 const CLASSIFY_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
-const PURGE_INTERVAL_MS = 180 * 60 * 1000; // 180 minutes (3 hours)
+const PURGE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours — safety sweep only, blocked content is already filtered at download/grade level
 const MAINTENANCE_CHECK_MS = 60 * 1000; // Check every minute
 
 export function useBackgroundMaintenance() {
