@@ -436,6 +436,28 @@ export function useAutoGradeBuilder() {
       }
 
       const deduplicated = Array.from(seen.values());
+
+      // Apply song aliases (corrections)
+      const { songAliases } = useRadioStore.getState();
+      if (songAliases && songAliases.length > 0) {
+        let aliasCount = 0;
+        for (const song of deduplicated) {
+          for (const alias of songAliases) {
+            if (
+              song.artist.toLowerCase().trim() === alias.fromArtist.toLowerCase().trim() &&
+              song.title.toLowerCase().trim() === alias.fromTitle.toLowerCase().trim()
+            ) {
+              console.log(`[AUTO-GRADE] 🔄 Alias: "${song.artist} - ${song.title}" → "${alias.toArtist} - ${alias.toTitle}"`);
+              song.artist = alias.toArtist;
+              song.title = alias.toTitle;
+              aliasCount++;
+              break;
+            }
+          }
+        }
+        if (aliasCount > 0) console.log(`[AUTO-GRADE] 🔄 ${aliasCount} aliases aplicados`);
+      }
+
       console.log(`[AUTO-GRADE] Pool ampliado: ${scrapedData.length} scraped + ${historicoData.length} histórico = ${deduplicated.length} únicas`);
 
       return buildSongsByStation(deduplicated, 300);

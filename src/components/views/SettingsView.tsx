@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music, Loader2, CheckCircle2, XCircle, BarChart3 } from 'lucide-react';
+import { Settings, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music, Loader2, CheckCircle2, XCircle, BarChart3, ArrowRightLeft, Plus } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +27,7 @@ interface ArlValidationResult {
 }
 
 export function SettingsView() {
-  const { config, setConfig, deezerConfig, setDeezerConfig } = useRadioStore();
+  const { config, setConfig, deezerConfig, setDeezerConfig, songAliases, addSongAlias, removeSongAlias, updateSongAlias } = useRadioStore();
   const similarityStats = useSimilarityLogStore((state) => state.stats);
   const resetSimilarityStats = useSimilarityLogStore((state) => state.resetStats);
   const { toast } = useToast();
@@ -1092,6 +1092,94 @@ export function SettingsView() {
                 <Switch defaultChecked />
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Song Aliases / Corrections */}
+        <Card className="glass-card border-orange-500/20 lg:col-span-2">
+          <CardHeader className="border-b border-border">
+            <CardTitle className="flex items-center gap-2">
+              <ArrowRightLeft className="w-5 h-5 text-orange-500" />
+              Correções de Músicas (Aliases)
+              <span className="ml-2 px-2 py-0.5 text-xs bg-orange-500/10 text-orange-500 rounded-full">
+                {songAliases.length} {songAliases.length === 1 ? 'correção' : 'correções'}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Quando o monitoramento captura uma música com nome incorreto, adicione uma correção aqui. O sistema substituirá automaticamente durante a montagem da grade.
+            </p>
+
+            {songAliases.map((alias) => (
+              <div key={alias.id} className="flex items-center gap-2 p-3 rounded-lg bg-secondary/30 border border-border">
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground uppercase">De (capturado errado)</Label>
+                    <div className="flex gap-1">
+                      <Input
+                        value={alias.fromArtist}
+                        onChange={(e) => updateSongAlias(alias.id, { fromArtist: e.target.value })}
+                        placeholder="Artista errado"
+                        className="font-mono text-xs h-8"
+                      />
+                      <Input
+                        value={alias.fromTitle}
+                        onChange={(e) => updateSongAlias(alias.id, { fromTitle: e.target.value })}
+                        placeholder="Título errado"
+                        className="font-mono text-xs h-8"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-green-500 uppercase">Para (correto)</Label>
+                    <div className="flex gap-1">
+                      <Input
+                        value={alias.toArtist}
+                        onChange={(e) => updateSongAlias(alias.id, { toArtist: e.target.value })}
+                        placeholder="Artista correto"
+                        className="font-mono text-xs h-8"
+                      />
+                      <Input
+                        value={alias.toTitle}
+                        onChange={(e) => updateSongAlias(alias.id, { toTitle: e.target.value })}
+                        placeholder="Título correto"
+                        className="font-mono text-xs h-8"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive shrink-0"
+                  onClick={() => removeSongAlias(alias.id)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+
+            <Button
+              variant="outline"
+              className="w-full border-dashed"
+              onClick={() => {
+                addSongAlias({
+                  id: `alias-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                  fromArtist: '',
+                  fromTitle: '',
+                  toArtist: '',
+                  toTitle: '',
+                });
+              }}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Adicionar Correção
+            </Button>
+
+            <p className="text-xs text-muted-foreground">
+              Exemplo: Se o monitoramento captura "Naldo Lima - Retrovisor" mas o correto é "Gusttavo Lima - Retrovisor", adicione a correção acima.
+            </p>
           </CardContent>
         </Card>
       </div>
