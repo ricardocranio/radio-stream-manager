@@ -25,6 +25,7 @@ const RankingView = lazy(() => import('@/components/views/RankingView').then(m =
 const LogsView = lazy(() => import('@/components/views/LogsView').then(m => ({ default: m.LogsView })));
 const ExportView = lazy(() => import('@/components/views/ExportView').then(m => ({ default: m.ExportView })));
 const GradeBuilderView = lazy(() => import('@/components/views/GradeBuilderView').then(m => ({ default: m.GradeBuilderView })));
+const TrendsView = lazy(() => import('@/components/views/TrendsView').then(m => ({ default: m.TrendsView })));
 
 // Prefetch map: preload chunk on hover for instant navigation
 const PREFETCH_MAP: Record<string, () => void> = {
@@ -36,6 +37,7 @@ const PREFETCH_MAP: Record<string, () => void> = {
   blockeditor: () => import('@/components/views/BlockEditorView'),
   fixedcontent: () => import('@/components/views/FixedContentView'),
   ranking: () => import('@/components/views/RankingView'),
+  trends: () => import('@/components/views/TrendsView'),
   vozbrasil: () => import('@/components/views/VozBrasilView'),
   specialmonitoring: () => import('@/components/views/SpecialMonitoringView'),
   logs: () => import('@/components/views/LogsView'),
@@ -66,6 +68,7 @@ const TAB_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentTy
   blockeditor: BlockEditorView,
   fixedcontent: FixedContentView,
   ranking: RankingView,
+  trends: TrendsView,
   vozbrasil: VozBrasilView,
   logs: LogsView,
   export: ExportView,
