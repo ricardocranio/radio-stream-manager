@@ -56,6 +56,8 @@ interface AutoGradeState {
   lastSaveProgress: number;
   /** The actual grade lines built by the engine, keyed by block time (e.g. "18:00") */
   pendingGradeLines: Map<string, string>;
+  /** Duration in minutes for each built block, keyed by block time */
+  pendingBlockDurations: Map<string, number>;
 }
 
 export function useAutoGradeBuilder() {
@@ -84,6 +86,7 @@ export function useAutoGradeBuilder() {
       skippedSongs: 0, substitutedSongs: 0, missingSongs: 0,
       currentProcessingSong: null, currentProcessingBlock: null, lastSaveProgress: 0,
       pendingGradeLines: persisted?.lineMap || new Map(),
+      pendingBlockDurations: new Map(),
     };
   });
 
@@ -963,7 +966,9 @@ export function useAutoGradeBuilder() {
 
     // === PRIORITY STATIONS FOR FILLING ===
     // When we need extra songs to fill duration, prefer these stations
-    const FILL_PRIORITY_STATIONS = ['BH FM', 'Metropolitana FM', 'Metropolitana'];
+    const FILL_PRIORITY_STATIONS = config.fillPriorityStations?.length 
+      ? config.fillPriorityStations 
+      : ['BH FM', 'Metropolitana FM', 'Metropolitana'];
 
     // Helper to get songs from priority stations for filling
     const getFillerSong = async (): Promise<string | null> => {
@@ -1060,6 +1065,7 @@ export function useAutoGradeBuilder() {
     return {
       line: sanitizeGradeLine(`${timeStr} (ID=${programName}) ${lineContent}`, filterChars),
       logs: blockLogs,
+      durationMinutes: parseFloat((accumulatedDurationSec / 60).toFixed(1)),
     };
   }, [
     getProgramForHour, getFixedContentForTime, isWeekday,
