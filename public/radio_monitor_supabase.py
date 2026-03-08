@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════════════════════╗
-║                     MONITOR DE RÁDIOS - TEMPO REAL v2.0                      ║
+║                     MONITOR DE RÁDIOS - TEMPO REAL v3.0                      ║
 ║                          INTEGRADO COM SUPABASE                               ║
 ║                                                                               ║
-║  Monitora "Tocando Agora" e "Últimas Tocadas" de múltiplas rádios            ║
-║  com atualização automática e envio para banco de dados Supabase             ║
-║                                                                               ║
-║  MELHORIAS v2.0:                                                              ║
+║  MELHORIAS v3.0:                                                              ║
+║  - HTTP-first: OnlineRadioBox + Triton API antes de Playwright               ║
+║  - Triton Digital Now Playing API para emissoras StreamTheWorld               ║
+║  - ICY metadata com resolução de redirect                                     ║
+║  - Playwright apenas como último recurso (MyTuner)                            ║
 ║  - Respeita horários de monitoramento por emissora                           ║
 ║  - Reutiliza browser entre ciclos (menos CPU/RAM)                            ║
 ║  - Timeout por emissora (evita travamento total)                             ║
-║  - Não limpa tela (preserva logs quando roda via Electron)                   ║
 ║  - Suporta tabela special_monitoring                                          ║
 ║  - Scraping semi-paralelo (batches de 3)                                     ║
 ║  - Signal handling para shutdown limpo                                        ║
@@ -115,9 +115,11 @@ import asyncio
 import json
 import re
 import socket
+import struct
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
+from xml.etree import ElementTree
 
 try:
     from playwright.async_api import async_playwright, Page, Browser
@@ -126,6 +128,7 @@ except ImportError:
     PLAYWRIGHT_OK = False
 
 import requests as http_requests
+from bs4 import BeautifulSoup
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURAÇÃO DO SUPABASE (REST API DIRETO - sem SDK)
@@ -226,10 +229,12 @@ FORBIDDEN_WORDS = [
     'rede aleluia', '105 fm', 'cidade fm', 'tupi fm', 'capital fm', 'nova brasil fm',
     'rádio bandeirantes', 'hino do', 'mengão', 'timão', 'verdão', 'tricolor', 'peixe',
     'cruzmaltino', 'circus music', 'the hit crew kids', 'farroupilha',
+    'comercial', 'vinheta', 'institucional', 'propaganda', 'libretime',
 ]
 
 BLOCKED_ARTISTS = [
     'xuxa', 'padre marcelo rossi', 'circus music', 'the hit crew kids', 'eurides nunes',
+    'libretime',
 ]
 
 def is_forbidden(artist: str, title: str) -> bool:
@@ -258,12 +263,10 @@ def is_within_schedule(station: dict) -> bool:
     current_day = WEEKDAY_MAP[now.weekday()]
     current_minutes = now.hour * 60 + now.minute
     
-    # Check weekdays
     week_days = station.get('monitoring_week_days') or station.get('week_days')
     if week_days and current_day not in week_days:
         return False
     
-    # Check time window
     start_hour = station.get('monitoring_start_hour') or station.get('start_hour')
     end_hour = station.get('monitoring_end_hour') or station.get('end_hour')
     
@@ -278,11 +281,56 @@ def is_within_schedule(station: dict) -> bool:
             if not (start_total <= current_minutes <= end_total):
                 return False
         else:
-            # Overnight schedule (e.g., 22:00 - 06:00)
             if end_total < current_minutes < start_total:
                 return False
     
     return True
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAPEAMENTO OnlineRadioBox
+# ═══════════════════════════════════════════════════════════════════════════════
+
+ORB_SLUG_MAP = {
+    'band-fm': 'bandfm',
+    'radio-bh-fm': 'bh',
+    'radio-clube-fm-brasilia': 'clubefm',
+    'radio-metropolitana-fm': 'metropolitana',
+    'radio-globo-rj': 'globo',
+    'mix-fm-sao-paulo': 'mixfm',
+    'jovem-pan-fm-florianopolis': 'jovempan',
+    'energia-97-fm': 'energia97',
+    'positividade-fm': 'positividade',
+    'positiva-fm': 'positiva',
+    'radio-liberdade-fm': 'liberdade',
+    'radio-blink-102-fm': 'blink102',
+}
+
+def get_orb_url(scrape_url: str, station_name: str) -> Optional[str]:
+    """Converte URL de scraping para OnlineRadioBox playlist URL"""
+    if 'onlineradiobox.com' in scrape_url:
+        if '/playlist' in scrape_url:
+            return scrape_url
+        return scrape_url.rstrip('/') + '/playlist/'
+    
+    for pattern, slug in ORB_SLUG_MAP.items():
+        if pattern in scrape_url:
+            return f"https://onlineradiobox.com/br/{slug}/playlist/"
+    
+    normalized = re.sub(r'\s*(fm|am)\s*', '', station_name, flags=re.IGNORECASE)
+    normalized = re.sub(r'rádio\s*', '', normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r'[^a-z0-9]', '', normalized.lower()).strip()
+    if normalized:
+        return f"https://onlineradiobox.com/br/{normalized}/playlist/"
+    return None
+
+def get_mount_name(stream_url: str) -> Optional[str]:
+    """Extrai mount name de URL StreamTheWorld"""
+    if not stream_url:
+        return None
+    match = re.search(r'livestream-redirect/([A-Z0-9_]+)', stream_url, re.IGNORECASE)
+    if match:
+        return re.sub(r'\.(mp3|aac|ogg)$', '', match.group(1), flags=re.IGNORECASE)
+    return None
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CORES DO TERMINAL
@@ -377,6 +425,190 @@ def carregar_configuracao():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# FONTES DE DADOS HTTP (sem Playwright)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def scrape_onlineradiobox(url: str, station_name: str) -> Optional[Dict]:
+    """Scrape OnlineRadioBox via HTTP puro (sem browser)"""
+    try:
+        resp = http_requests.get(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.7',
+        }, timeout=12)
+        
+        if resp.status_code != 200:
+            return None
+        
+        html = resp.text
+        
+        if 'did not provide a playlist' in html:
+            print(cor(Cores.YELLOW, f"     ⚠️  ORB: {station_name} sem playlist disponível"))
+            return None
+        
+        if 'track_history_item' not in html:
+            return None
+        
+        soup = BeautifulSoup(html, 'html.parser')
+        tracks = soup.find_all('td', class_='track_history_item')
+        
+        now_playing = None
+        recent = []
+        
+        for td in tracks:
+            # Get text from <a> tag or directly
+            a_tag = td.find('a')
+            raw_text = (a_tag.get_text(strip=True) if a_tag else td.get_text(strip=True))
+            
+            if not raw_text or len(raw_text) < 5 or ' - ' not in raw_text:
+                continue
+            
+            # Skip station name entries
+            if re.match(r'^(METROPOLITANA|BH FM|BAND FM|CLUBE FM|GLOBO|MIX FM)\s*-\s*', raw_text, re.IGNORECASE):
+                continue
+            
+            parts = raw_text.split(' - ', 1)
+            artist = parts[0].strip()
+            title = parts[1].strip()
+            
+            if len(artist) < 2 or len(title) < 2:
+                continue
+            
+            if not now_playing:
+                now_playing = f"{artist} - {title}"
+                print(cor(Cores.GREEN, f"     🌐 ORB: {artist} - {title}"))
+            elif len(recent) < 5 and f"{artist} - {title}" not in recent:
+                recent.append(f"{artist} - {title}")
+        
+        if now_playing:
+            return {
+                "tocando_agora": now_playing,
+                "ultimas_tocadas": recent,
+                "source": "onlineradiobox"
+            }
+        return None
+    except Exception as e:
+        print(cor(Cores.YELLOW, f"     ⚠️  ORB erro: {str(e)[:50]}"))
+        return None
+
+
+def scrape_triton_api(mount_name: str, station_name: str) -> Optional[Dict]:
+    """Busca Now Playing via Triton Digital API (para emissoras StreamTheWorld)"""
+    try:
+        url = f"https://np.tritondigital.com/public/nowplaying?mountName={mount_name}&numberToFetch=10&eventType=track"
+        resp = http_requests.get(url, headers={
+            'User-Agent': 'Mozilla/5.0',
+            'Accept': 'application/xml, text/xml',
+        }, timeout=8)
+        
+        if resp.status_code != 200:
+            return None
+        
+        root = ElementTree.fromstring(resp.text)
+        
+        now_playing = None
+        recent = []
+        
+        for item in root.findall('.//nowplaying-info'):
+            artist = None
+            title = None
+            
+            for prop in item.findall('property'):
+                name = prop.get('name', '')
+                value = prop.text or ''
+                if name == 'track_artist_name':
+                    artist = value.strip()
+                elif name == 'cue_title':
+                    title = value.strip()
+            
+            if not artist or not title or len(artist) < 2 or len(title) < 2:
+                continue
+            
+            # Skip non-song entries
+            if is_forbidden(artist, title):
+                continue
+            
+            song_str = f"{artist} - {title}"
+            
+            if not now_playing:
+                now_playing = song_str
+                print(cor(Cores.GREEN, f"     📡 Triton: {artist} - {title}"))
+            elif len(recent) < 5 and song_str not in recent:
+                recent.append(song_str)
+        
+        if now_playing:
+            return {
+                "tocando_agora": now_playing,
+                "ultimas_tocadas": recent,
+                "source": "triton-api"
+            }
+        return None
+    except Exception as e:
+        print(cor(Cores.YELLOW, f"     ⚠️  Triton erro: {str(e)[:50]}"))
+        return None
+
+
+def scrape_icy_metadata(stream_url: str, station_name: str) -> Optional[Dict]:
+    """Extrai metadados ICY do stream de áudio"""
+    try:
+        # Resolver redirects primeiro
+        head_resp = http_requests.head(stream_url, allow_redirects=True, timeout=5)
+        resolved_url = head_resp.url
+        
+        resp = http_requests.get(resolved_url, headers={
+            'Icy-MetaData': '1',
+            'User-Agent': 'WinampMPEG/5.0',
+        }, stream=True, timeout=10)
+        
+        meta_int = int(resp.headers.get('icy-metaint', 0))
+        if not meta_int:
+            resp.close()
+            return None
+        
+        # Read audio data + metadata
+        data = resp.raw.read(meta_int + 4096)
+        resp.close()
+        
+        if len(data) <= meta_int:
+            return None
+        
+        meta_length = data[meta_int] * 16
+        if meta_length == 0:
+            return None
+        
+        meta_start = meta_int + 1
+        meta_end = min(meta_start + meta_length, len(data))
+        meta_string = data[meta_start:meta_end].decode('utf-8', errors='ignore')
+        
+        match = re.search(r"StreamTitle='([^']+)'", meta_string)
+        if not match:
+            return None
+        
+        stream_title = match.group(1).strip()
+        if ' - ' not in stream_title:
+            return None
+        
+        parts = stream_title.split(' - ', 1)
+        artist = parts[0].strip()
+        title = parts[1].strip()
+        
+        if len(artist) < 2 or len(title) < 2:
+            return None
+        
+        if is_forbidden(artist, title):
+            return None
+        
+        print(cor(Cores.GREEN, f"     🎵 ICY: {artist} - {title}"))
+        return {
+            "tocando_agora": f"{artist} - {title}",
+            "ultimas_tocadas": [],
+            "source": "icy-stream"
+        }
+    except Exception as e:
+        print(cor(Cores.YELLOW, f"     ⚠️  ICY erro: {str(e)[:50]}"))
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # CLASSE PRINCIPAL
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -390,19 +622,19 @@ class RadioMonitor:
         self.historico: Dict = {}
         self.online = True
         self.supabase_stations: Dict[str, str] = {}
-        self.browser: Optional[Any] = None  # Persistent browser instance
-        self.running = True  # For graceful shutdown
+        self.browser: Optional[Any] = None
+        self.running = True
         self.cycle_count = 0
         self.total_captures = 0
         self.total_blocked = 0
         self.total_errors = 0
+        self.source_stats: Dict[str, int] = {}
         
         self.arquivo_historico = os.path.join(_DATA_DIR, "radio_historico.json")
         self.arquivo_relatorio = os.path.join(_DATA_DIR, "radio_relatorio.txt")
         
         self.historico = self._carregar_historico()
         
-        # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGTERM, self._handle_signal)
         signal.signal(signal.SIGINT, self._handle_signal)
         if os.name == 'nt':
@@ -412,7 +644,6 @@ class RadioMonitor:
                 pass
     
     def _handle_signal(self, signum, frame):
-        """Handle shutdown signals gracefully"""
         sig_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
         print(cor(Cores.YELLOW, f"\n  🛑 Sinal recebido ({sig_name}), encerrando graciosamente..."))
         self.running = False
@@ -428,7 +659,6 @@ class RadioMonitor:
     
     def _salvar_historico(self):
         try:
-            # Limit historico_completo per station to 200 entries
             for radio_id, dados in self.historico.get('radios', {}).items():
                 if 'historico_completo' in dados and len(dados['historico_completo']) > 200:
                     dados['historico_completo'] = dados['historico_completo'][-200:]
@@ -442,11 +672,12 @@ class RadioMonitor:
         try:
             with open(self.arquivo_relatorio, 'w', encoding='utf-8') as f:
                 f.write("═" * 80 + "\n")
-                f.write("           RELATÓRIO DE MONITORAMENTO DE RÁDIOS\n")
+                f.write("           RELATÓRIO DE MONITORAMENTO DE RÁDIOS v3.0\n")
                 f.write("═" * 80 + "\n\n")
                 f.write(f"📅 Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
                 f.write(f"📊 Rádios normais: {len(self.radios)} | Especiais: {len(self.special_radios)}\n")
-                f.write(f"📈 Capturas: {self.total_captures} | Bloqueadas: {self.total_blocked} | Erros: {self.total_errors}\n\n")
+                f.write(f"📈 Capturas: {self.total_captures} | Bloqueadas: {self.total_blocked} | Erros: {self.total_errors}\n")
+                f.write(f"📡 Fontes: {json.dumps(self.source_stats)}\n\n")
                 
                 for radio_id, dados in self.historico.get('radios', {}).items():
                     f.write("─" * 80 + "\n")
@@ -476,10 +707,9 @@ class RadioMonitor:
             return False
     
     def _exibir_cabecalho(self):
-        """Exibe cabeçalho SEM limpar a tela (preserva logs para Electron)"""
         print()
         print(cor(Cores.CYAN, "╔" + "═" * 70 + "╗"))
-        print(cor(Cores.CYAN, "║") + cor(Cores.BOLD + Cores.WHITE, "     🎵 MONITOR DE RÁDIOS v2.0 - SUPABASE EDITION 🎵".center(70)) + cor(Cores.CYAN, "║"))
+        print(cor(Cores.CYAN, "║") + cor(Cores.BOLD + Cores.WHITE, "     🎵 MONITOR DE RÁDIOS v3.0 - MULTI-SOURCE EDITION 🎵".center(70)) + cor(Cores.CYAN, "║"))
         print(cor(Cores.CYAN, "╚" + "═" * 70 + "╝"))
         print()
         
@@ -488,6 +718,7 @@ class RadioMonitor:
         print(f"  Internet: {status}")
         print(f"  Supabase: {supabase_status}")
         print(f"  Ciclo: #{self.cycle_count} | Capturas: {self.total_captures} | Bloqueadas: {self.total_blocked}")
+        print(f"  Fontes: {json.dumps(self.source_stats)}")
         print(f"  Última atualização: {self.historico.get('ultima_atualizacao', 'Nunca')}")
         print(f"  Intervalo: {self.config.get('intervalo_minutos', 5)} minutos")
         print(f"  Rádios: {len(self.radios)} normais + {len(self.special_radios)} especiais")
@@ -509,18 +740,17 @@ class RadioMonitor:
             radios = []
             skipped = 0
             for station in stations:
-                # Check if within monitoring schedule
                 if not is_within_schedule(station):
                     skipped += 1
                     continue
                 
                 url = station.get('scrape_url', '')
-                tipo = 'clubefm' if 'clubefm' in url.lower() else 'mytuner'
                 
                 radios.append({
                     'nome': station.get('name'),
                     'url': url,
-                    'tipo': tipo,
+                    'stream_url': station.get('stream_url', ''),
+                    'tipo': 'mytuner',
                     'id': station.get('id')
                 })
                 
@@ -553,12 +783,12 @@ class RadioMonitor:
                     continue
                 
                 url = sp.get('scrape_url', '')
-                tipo = 'clubefm' if 'clubefm' in url.lower() else 'mytuner'
                 
                 radios.append({
                     'nome': sp.get('station_name'),
                     'url': url,
-                    'tipo': tipo,
+                    'stream_url': '',
+                    'tipo': 'mytuner',
                     'id': sp.get('id'),
                     'label': sp.get('label', ''),
                     'is_special': True,
@@ -592,46 +822,44 @@ class RadioMonitor:
             
             print(cor(Cores.BLUE, f"     🔍 Parsed: artist='{artist}' title='{title}'"))
             
-            # Ignorar timestamps/lixo
             if re.match(r'^\d{2}:\d{2}$', title) or len(title) < 2:
                 return
             if artist == 'Desconhecido' and len(title) < 4:
                 return
             
-            # Verificar palavras proibidas e artistas bloqueados
             if is_forbidden(artist, title):
                 print(cor(Cores.RED, f"     🚫 BLOQUEADO: {artist} - {title}"))
                 self.total_blocked += 1
                 return
             
-            # Inserir em scraped_songs
+            source = dados.get('source', 'python_monitor')
+            
             song_data = {
                 'station_name': station_name,
                 'title': title,
                 'artist': artist,
                 'is_now_playing': True,
-                'source': 'python_monitor'
+                'source': source
             }
             if station_id and not radio.get('is_special'):
                 song_data['station_id'] = station_id
             
             ok = supabase_insert('scraped_songs', song_data)
             if ok:
-                print(cor(Cores.GREEN, f"     ☁️  scraped_songs: {artist} - {title}"))
+                print(cor(Cores.GREEN, f"     ☁️  scraped_songs: {artist} - {title} ({source})"))
                 self.total_captures += 1
+                self.source_stats[source] = self.source_stats.get(source, 0) + 1
             
-            # Inserir em radio_historico
             hist_data = {
                 'station_name': station_name,
                 'artist': artist,
                 'title': title,
-                'source': 'python_monitor'
+                'source': source
             }
             ok2 = supabase_insert('radio_historico', hist_data)
             if ok2:
                 print(cor(Cores.CYAN, f"     📜  radio_historico: {artist} - {title}"))
             
-            # Enviar últimas tocadas
             for song_text in (dados.get('ultimas_tocadas') or [])[:5]:
                 s = parse_song_text(song_text)
                 t = s['title']
@@ -644,7 +872,7 @@ class RadioMonitor:
                         'station_name': station_name,
                         'artist': a,
                         'title': t,
-                        'source': 'python_monitor'
+                        'source': source
                     })
             
         except Exception as e:
@@ -656,7 +884,8 @@ class RadioMonitor:
     async def _extrair_mytuner(self, page: Page, url: str, nome: str) -> Dict:
         dados = {
             "url": url, "nome": nome, "tocando_agora": None,
-            "ultimas_tocadas": [], "timestamp": datetime.now().isoformat(), "erro": None
+            "ultimas_tocadas": [], "timestamp": datetime.now().isoformat(), "erro": None,
+            "source": "mytuner"
         }
         
         try:
@@ -702,48 +931,11 @@ class RadioMonitor:
         
         return dados
     
-    async def _extrair_clubefm(self, page: Page, url: str, nome: str) -> Dict:
-        dados = {
-            "url": url, "nome": nome, "tocando_agora": None,
-            "ultimas_tocadas": [], "timestamp": datetime.now().isoformat(), "erro": None
-        }
-        
-        try:
-            await page.goto(url, wait_until='networkidle', timeout=25000)
-            await asyncio.sleep(3)
-            
-            resultado = await page.evaluate('''() => {
-                const songs = [];
-                const containers = document.querySelectorAll('.song-item, .track-item, article');
-                containers.forEach(c => {
-                    const artista = c.querySelector('h3, .artist');
-                    const musica = c.querySelector('h4, .song');
-                    if (artista && musica) {
-                        songs.push(`${musica.innerText.trim()} - ${artista.innerText.trim()}`);
-                    }
-                });
-                if (songs.length === 0) {
-                    document.body.innerText.split('\\n').forEach(l => {
-                        if (l.match(/\\d{2}:\\d{2}/) && l.length < 100) songs.push(l.trim());
-                    });
-                }
-                return songs.slice(0, 15);
-            }''')
-            
-            if resultado and len(resultado) > 0:
-                dados["tocando_agora"] = resultado[0]
-                dados["ultimas_tocadas"] = resultado
-                
-        except Exception as e:
-            dados["erro"] = str(e)[:100]
-            self.total_errors += 1
-        
-        return dados
-    
     def _exibir_radio(self, dados: Dict, is_special: bool = False):
         prefix = "🔮" if is_special else "📻"
+        source = dados.get('source', '?')
         print()
-        print(cor(Cores.BOLD + Cores.MAGENTA, f"  {prefix} {dados['nome']}"))
+        print(cor(Cores.BOLD + Cores.MAGENTA, f"  {prefix} {dados['nome']} [{source}]"))
         print(cor(Cores.BLUE, f"     {dados['url'][:60]}"))
         
         if dados["tocando_agora"]:
@@ -760,39 +952,62 @@ class RadioMonitor:
         
         print(cor(Cores.YELLOW, "  " + "─" * 68))
     
-    async def _scrape_single(self, page: Page, radio: Dict) -> Dict:
-        """Scrape a single station with timeout protection"""
+    async def _scrape_station_multisource(self, radio: Dict, page: Optional[Page] = None) -> Dict:
+        """Tenta múltiplas fontes em cascata: ORB → Triton → ICY → Playwright"""
         nome = radio['nome']
         url = radio['url']
-        tipo = radio['tipo']
+        stream_url = radio.get('stream_url', '')
         
-        try:
-            if tipo == 'clubefm':
-                return await asyncio.wait_for(
-                    self._extrair_clubefm(page, url, nome),
-                    timeout=40  # 40s max per station
-                )
-            else:
-                return await asyncio.wait_for(
+        dados_base = {
+            "url": url, "nome": nome, "tocando_agora": None,
+            "ultimas_tocadas": [], "timestamp": datetime.now().isoformat(),
+            "erro": None, "source": "none"
+        }
+        
+        # === Fonte 1: OnlineRadioBox (HTTP puro) ===
+        orb_url = get_orb_url(url, nome)
+        if orb_url:
+            print(cor(Cores.BLUE, f"     📋 Tentando ORB..."))
+            result = scrape_onlineradiobox(orb_url, nome)
+            if result and result.get('tocando_agora'):
+                return {**dados_base, **result}
+        
+        # === Fonte 2: Triton Digital API ===
+        if stream_url:
+            mount_name = get_mount_name(stream_url)
+            if mount_name:
+                print(cor(Cores.BLUE, f"     📡 Tentando Triton (mount: {mount_name})..."))
+                result = scrape_triton_api(mount_name, nome)
+                if result and result.get('tocando_agora'):
+                    return {**dados_base, **result}
+        
+        # === Fonte 3: ICY Metadata ===
+        if stream_url:
+            print(cor(Cores.BLUE, f"     🎵 Tentando ICY metadata..."))
+            result = scrape_icy_metadata(stream_url, nome)
+            if result and result.get('tocando_agora'):
+                return {**dados_base, **result}
+        
+        # === Fonte 4: Playwright (MyTuner) - último recurso ===
+        if page and PLAYWRIGHT_OK:
+            print(cor(Cores.BLUE, f"     🌐 Fallback: Playwright/MyTuner..."))
+            try:
+                result = await asyncio.wait_for(
                     self._extrair_mytuner(page, url, nome),
                     timeout=40
                 )
-        except asyncio.TimeoutError:
-            print(cor(Cores.RED, f"     ⏰ TIMEOUT: {nome} (>40s)"))
-            self.total_errors += 1
-            return {
-                "url": url, "nome": nome, "tocando_agora": None,
-                "ultimas_tocadas": [], "timestamp": datetime.now().isoformat(),
-                "erro": "Timeout (>40s)"
-            }
+                if result and result.get('tocando_agora'):
+                    return result
+            except asyncio.TimeoutError:
+                print(cor(Cores.RED, f"     ⏰ TIMEOUT Playwright: {nome} (>40s)"))
+                self.total_errors += 1
+        
+        dados_base["erro"] = "Nenhuma fonte retornou dados"
+        return dados_base
     
     async def _atualizar_todas(self):
-        """Ciclo principal de scraping com browser persistente"""
+        """Ciclo principal de scraping com multi-source"""
         global SUPABASE_OK
-        
-        if not PLAYWRIGHT_OK:
-            print(cor(Cores.RED, "❌ Playwright não disponível"))
-            return
         
         # Re-verificar conexão Supabase
         if not SUPABASE_OK:
@@ -803,7 +1018,6 @@ class RadioMonitor:
             else:
                 print(cor(Cores.RED, "  ❌ Supabase indisponível"))
         
-        # Carregar rádios (com filtro de horário)
         self.radios = self._carregar_radios_supabase()
         self.special_radios = self._carregar_special_monitoring()
         
@@ -813,71 +1027,67 @@ class RadioMonitor:
             print(cor(Cores.YELLOW, "  ⚠️  Nenhuma rádio ativa para este horário!"))
             return
         
-        # Reuse or create browser
+        # Start browser only if needed (for MyTuner fallback)
         pw = None
+        page = None
         try:
-            if not self.browser:
-                pw = await async_playwright().start()
-                self.browser = await pw.chromium.launch(headless=not self.mostrar_navegador)
-                print(cor(Cores.GREEN, "  🌐 Browser Chromium iniciado (persistente)"))
+            if PLAYWRIGHT_OK:
+                if not self.browser:
+                    pw = await async_playwright().start()
+                    self.browser = await pw.chromium.launch(headless=not self.mostrar_navegador)
+                    print(cor(Cores.GREEN, "  🌐 Browser Chromium iniciado (fallback)"))
+                
+                page = await self.browser.new_page()
+                await page.set_extra_http_headers({
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                })
+        except Exception as e:
+            print(cor(Cores.YELLOW, f"  ⚠️  Browser indisponível: {str(e)[:50]} (usando apenas HTTP)"))
+            page = None
+        
+        self._exibir_cabecalho()
+        
+        # Process in batches of 3
+        BATCH_SIZE = 3
+        for batch_start in range(0, len(all_radios), BATCH_SIZE):
+            if not self.running:
+                break
+                
+            batch = all_radios[batch_start:batch_start + BATCH_SIZE]
             
-            page = await self.browser.new_page()
-            await page.set_extra_http_headers({
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            })
-            
-            self._exibir_cabecalho()
-            
-            # Process in batches of 3 for semi-parallel scraping
-            BATCH_SIZE = 3
-            for batch_start in range(0, len(all_radios), BATCH_SIZE):
+            for radio in batch:
                 if not self.running:
                     break
-                    
-                batch = all_radios[batch_start:batch_start + BATCH_SIZE]
                 
-                for radio in batch:
-                    if not self.running:
-                        break
-                    
-                    is_special = radio.get('is_special', False)
-                    label = f" [{radio.get('label', '')}]" if radio.get('label') else ""
-                    idx = all_radios.index(radio) + 1
-                    print(cor(Cores.YELLOW, f"  🔄 [{idx}/{len(all_radios)}] {radio['nome']}{label}..."))
-                    
-                    dados = await self._scrape_single(page, radio)
-                    
-                    # Enviar para Supabase
-                    await self._enviar_para_supabase(dados, radio)
-                    
-                    # Atualizar histórico local
-                    radio_id = radio['nome'].lower().replace(' ', '_')
-                    if radio_id not in self.historico["radios"]:
-                        self.historico["radios"][radio_id] = {
-                            "nome": radio['nome'], "url": radio['url'], "historico_completo": []
-                        }
-                    
-                    if dados["tocando_agora"]:
-                        hist = self.historico["radios"][radio_id].get("historico_completo", [])
-                        if not hist or hist[-1].get("musica") != dados["tocando_agora"]:
-                            hist.append({"musica": dados["tocando_agora"], "timestamp": dados["timestamp"]})
-                            self.historico["radios"][radio_id]["historico_completo"] = hist[-200:]
-                    
-                    self.historico["radios"][radio_id]["ultimo_dado"] = dados
-                    self._exibir_radio(dados, is_special)
-            
-            await page.close()
-            
-        except Exception as e:
-            print(cor(Cores.RED, f"  ❌ Erro no browser: {e}"))
-            self.total_errors += 1
-            # Reset browser on error
+                is_special = radio.get('is_special', False)
+                label = f" [{radio.get('label', '')}]" if radio.get('label') else ""
+                idx = all_radios.index(radio) + 1
+                print(cor(Cores.YELLOW, f"  🔄 [{idx}/{len(all_radios)}] {radio['nome']}{label}..."))
+                
+                dados = await self._scrape_station_multisource(radio, page)
+                
+                await self._enviar_para_supabase(dados, radio)
+                
+                radio_id = radio['nome'].lower().replace(' ', '_')
+                if radio_id not in self.historico["radios"]:
+                    self.historico["radios"][radio_id] = {
+                        "nome": radio['nome'], "url": radio['url'], "historico_completo": []
+                    }
+                
+                if dados["tocando_agora"]:
+                    hist = self.historico["radios"][radio_id].get("historico_completo", [])
+                    if not hist or hist[-1].get("musica") != dados["tocando_agora"]:
+                        hist.append({"musica": dados["tocando_agora"], "timestamp": dados["timestamp"]})
+                        self.historico["radios"][radio_id]["historico_completo"] = hist[-200:]
+                
+                self.historico["radios"][radio_id]["ultimo_dado"] = dados
+                self._exibir_radio(dados, is_special)
+        
+        if page:
             try:
-                if self.browser:
-                    await self.browser.close()
+                await page.close()
             except:
                 pass
-            self.browser = None
         
         self.historico["ultima_atualizacao"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         self._salvar_historico()
@@ -885,6 +1095,7 @@ class RadioMonitor:
         
         print()
         print(cor(Cores.GREEN, f"  💾 Ciclo #{self.cycle_count} completo — {self.total_captures} capturas totais"))
+        print(cor(Cores.CYAN, f"  📡 Fontes: {json.dumps(self.source_stats)}"))
         if SUPABASE_OK:
             print(cor(Cores.CYAN, f"  ☁️  Dados sincronizados com Supabase!"))
     
@@ -902,7 +1113,6 @@ class RadioMonitor:
             await asyncio.sleep(2)
     
     async def _cleanup(self):
-        """Cleanup resources on shutdown"""
         print(cor(Cores.YELLOW, "  🧹 Limpando recursos..."))
         try:
             if self.browser:
@@ -916,12 +1126,13 @@ class RadioMonitor:
         print(cor(Cores.GREEN, "  ✅ Histórico e relatório salvos"))
     
     async def iniciar(self):
-        print(cor(Cores.CYAN, "\n🚀 Iniciando Monitor de Rádios v2.0...\n"))
+        print(cor(Cores.CYAN, "\n🚀 Iniciando Monitor de Rádios v3.0 (Multi-Source)...\n"))
         
         self.radios = self._carregar_radios_supabase()
         self.special_radios = self._carregar_special_monitoring()
         
         print(f"  📻 Rádios: {len(self.radios)} normais + {len(self.special_radios)} especiais")
+        print(f"  📡 Fontes disponíveis: ORB, Triton API, ICY, Playwright")
         print()
         
         while self.running:
@@ -937,7 +1148,6 @@ class RadioMonitor:
                 self.online = True
                 await self._atualizar_todas()
                 
-                # Countdown with frequent running check
                 for seg in range(self.intervalo, 0, -1):
                     if not self.running:
                         break
@@ -950,7 +1160,7 @@ class RadioMonitor:
                         self.online = False
                         break
                 
-                print()  # New line after countdown
+                print()
                 
             except KeyboardInterrupt:
                 break
@@ -963,10 +1173,10 @@ class RadioMonitor:
                         break
                     await asyncio.sleep(1)
         
-        # Graceful cleanup
         await self._cleanup()
         print(cor(Cores.YELLOW, "\n👋 Monitor encerrado graciosamente."))
         print(f"   Ciclos: {self.cycle_count} | Capturas: {self.total_captures} | Bloqueadas: {self.total_blocked} | Erros: {self.total_errors}")
+        print(f"   Fontes: {json.dumps(self.source_stats)}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -976,7 +1186,7 @@ class RadioMonitor:
 if __name__ == "__main__":
     print()
     print(cor(Cores.CYAN, "╔" + "═" * 60 + "╗"))
-    print(cor(Cores.CYAN, "║") + cor(Cores.BOLD, " 🎵 MONITOR DE RÁDIOS v2.0 - SUPABASE EDITION ".center(60)) + cor(Cores.CYAN, "║"))
+    print(cor(Cores.CYAN, "║") + cor(Cores.BOLD, " 🎵 MONITOR DE RÁDIOS v3.0 - MULTI-SOURCE EDITION ".center(60)) + cor(Cores.CYAN, "║"))
     print(cor(Cores.CYAN, "╚" + "═" * 60 + "╝"))
     print()
     
@@ -985,6 +1195,7 @@ if __name__ == "__main__":
     if SUPABASE_OK:
         print(cor(Cores.GREEN, "  ✅ Modo Supabase ativo (REST API)!"))
         print(cor(Cores.CYAN, "  📻 Emissoras carregadas do banco (radio_stations + special_monitoring)"))
+        print(cor(Cores.CYAN, "  📡 Fontes: OnlineRadioBox → Triton API → ICY → Playwright"))
     else:
         print(cor(Cores.YELLOW, "  ⚠️  Supabase não conectado - usando modo local"))
     print()

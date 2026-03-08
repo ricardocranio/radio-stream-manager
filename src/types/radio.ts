@@ -19,6 +19,7 @@ export interface RadioStation {
   name: string;
   urls: string[];
   scrapeUrl?: string; // URL for real-time scraping (mytuner-radio, etc.)
+  streamUrl?: string; // Direct stream URL for ICY/Triton metadata fallback
   styles: string[];
   enabled: boolean;
   prioritizeDownloads?: boolean; // Force download priority for building local folder cache

@@ -46,7 +46,6 @@ function sanitizeStationName(name: string): string {
   return name.slice(0, 100).replace(/[<>'"&\\]/g, '').trim() || 'Unknown';
 }
 
-// Map MyTuner URL to OnlineRadioBox playlist URL
 function getOnlineRadioBoxUrl(scrapeUrl: string, stationName: string): string | null {
   if (scrapeUrl.includes('onlineradiobox.com')) {
     if (scrapeUrl.includes('/playlist')) return scrapeUrl;
@@ -62,6 +61,10 @@ function getOnlineRadioBoxUrl(scrapeUrl: string, stationName: string): string | 
     'mix-fm-sao-paulo': 'mixfm',
     'jovem-pan-fm-florianopolis': 'jovempan',
     'energia-97-fm': 'energia97',
+    'positividade-fm': 'positividade',
+    'positiva-fm': 'positiva',
+    'radio-liberdade-fm': 'liberdade',
+    'radio-blink-102-fm': 'blink102',
   };
 
   for (const [pattern, slug] of Object.entries(slugMap)) {
@@ -70,14 +73,15 @@ function getOnlineRadioBoxUrl(scrapeUrl: string, stationName: string): string | 
     }
   }
 
-  const normalized = stationName.toLowerCase()
+  const normalized = stationName
+    .toLowerCase()
     .replace(/\s*(fm|am)\s*/gi, '').replace(/rádio\s*/gi, '')
     .replace(/[^a-z0-9]/gi, '').trim();
   return normalized ? `https://onlineradiobox.com/br/${normalized}/playlist/` : null;
 }
 
 function isValidSongText(text: string): boolean {
-  if (!text || text.length < 3 || text.length > 120) return false;
+  if (!text || text.length < 3 || text.length > 150) return false;
   if (!text.includes(' - ')) return false;
   const rejectPatterns = [
     /^(METROPOLITANA|BH FM|BAND FM|CLUBE FM|GLOBO|MIX FM|ENERGIA|JOVEM PAN)/i,
@@ -91,7 +95,11 @@ function parseOnlineRadioBoxHtml(html: string, stationName: string): RadioScrape
   const songs: ScrapedSong[] = [];
   let nowPlaying: ScrapedSong | undefined;
 
-  const trackMatches = html.matchAll(/class="track_history_item"[^>]*>(?:<a[^>]*>)?([^<]+)(?:<\/a>)?/gi);
+  if (html.includes('did not provide a playlist')) {
+    return { success: false, stationName, error: 'Station has no playlist on ORB', scrapedAt: new Date().toISOString() };
+  }
+
+  const trackMatches = html.matchAll(/class="track_history_item"[^>]*>(?:\s*<a[^>]*>)?([^<]+)(?:<\/a>)?/gi);
 
   for (const match of trackMatches) {
     const rawText = match[1].trim();
@@ -103,6 +111,7 @@ function parseOnlineRadioBoxHtml(html: string, stationName: string): RadioScrape
     const artist = rawText.substring(0, dashIndex).trim();
     const title = rawText.substring(dashIndex + 3).trim();
     if (artist.length < 2 || title.length < 2) continue;
+    if (/^(METROPOLITANA|BH FM|BAND FM|CLUBE FM|GLOBO|MIX FM) - /i.test(rawText)) continue;
 
     const song: ScrapedSong = { artist, title, timestamp: new Date().toISOString() };
 
@@ -125,15 +134,104 @@ function parseOnlineRadioBoxHtml(html: string, stationName: string): RadioScrape
   };
 }
 
-// ===== ICY Metadata Fallback =====
+// ===== Triton Digital Now Playing API =====
 
-async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise<RadioScrapeResult> {
+function getMountName(streamUrl: string): string | null {
+  const match = streamUrl.match(/livestream-redirect\/([A-Z0-9_]+)/i);
+  if (match) return match[1].replace(/\.(mp3|aac|ogg)$/i, '');
+  return null;
+}
+
+async function fetchTritonNowPlaying(streamUrl: string, stationName: string): Promise<RadioScrapeResult> {
+  const mountName = getMountName(streamUrl);
+  if (!mountName) {
+    return { success: false, stationName, error: 'Not a StreamTheWorld station', scrapedAt: new Date().toISOString() };
+  }
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
+    
+    const url = `https://np.tritondigital.com/public/nowplaying?mountName=${mountName}&numberToFetch=10&eventType=track`;
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/xml, text/xml' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      return { success: false, stationName, error: `Triton HTTP ${response.status}`, scrapedAt: new Date().toISOString() };
+    }
+    
+    const xml = await response.text();
+    const blocks = xml.split('</nowplaying-info>');
+    const songs: ScrapedSong[] = [];
+    let nowPlaying: ScrapedSong | undefined;
+    
+    for (const block of blocks) {
+      const artistMatch = block.match(/<property\s+name="track_artist_name"[^>]*>([^<]+)<\/property>/i);
+      const titleMatch = block.match(/<property\s+name="cue_title"[^>]*>([^<]+)<\/property>/i);
+      
+      if (artistMatch?.[1] && titleMatch?.[1]) {
+        const artist = artistMatch[1].trim();
+        const title = titleMatch[1].trim();
+        if (artist.length < 2 || title.length < 2) continue;
+        
+        const rejectPatterns = [
+          /COMERCIAL|VINHETA|INSTITUCIONAL|PROPAGANDA|SPOT|BREAK/i,
+          /^(RÁDIO|RADIO)\s/i,
+          /^(BH FM|BAND FM|CLUBE FM|MIX FM|GLOBO|METROPOLITANA)/i,
+        ];
+        if (rejectPatterns.some(p => p.test(artist) || p.test(title))) continue;
+        
+        const song: ScrapedSong = { artist, title, timestamp: new Date().toISOString() };
+        
+        if (!nowPlaying) {
+          nowPlaying = song;
+          console.log(`[${stationName}] Triton now playing: ${artist} - ${title}`);
+        } else if (!songs.some(s => s.artist === artist && s.title === title)) {
+          songs.push(song);
+        }
+        if (songs.length >= 5) break;
+      }
+    }
+    
+    return {
+      success: !!nowPlaying,
+      stationName,
+      nowPlaying,
+      recentSongs: songs,
+      source: 'triton-api',
+      scrapedAt: new Date().toISOString(),
+    };
+  } catch {
+    return { success: false, stationName, error: 'Triton API error', scrapedAt: new Date().toISOString() };
+  }
+}
 
-    const response = await fetch(streamUrl, {
-      headers: { 'Icy-MetaData': '1', 'User-Agent': 'Mozilla/5.0' },
+// ===== ICY Metadata Fallback (improved) =====
+
+async function resolveStreamUrl(streamUrl: string): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const resp = await fetch(streamUrl, { method: 'HEAD', redirect: 'follow', signal: controller.signal });
+    clearTimeout(timeoutId);
+    return resp.url || streamUrl;
+  } catch {
+    return streamUrl;
+  }
+}
+
+async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise<RadioScrapeResult> {
+  try {
+    const resolvedUrl = await resolveStreamUrl(streamUrl);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    const response = await fetch(resolvedUrl, {
+      headers: { 'Icy-MetaData': '1', 'User-Agent': 'WinampMPEG/5.0', 'Accept': '*/*' },
       signal: controller.signal,
     });
 
@@ -148,7 +246,7 @@ async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise
     let bytesRead = 0;
     const chunks: Uint8Array[] = [];
 
-    while (bytesRead < metaInt + 4096) {
+    while (bytesRead < metaInt + 8192) {
       const { done, value } = await reader.read();
       if (done || !value) break;
       chunks.push(value);
@@ -190,6 +288,8 @@ async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise
   }
 }
 
+// ===== Main Handler =====
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -220,59 +320,62 @@ Deno.serve(async (req) => {
     }
 
     const safeName = sanitizeStationName(stationName);
-    
-    // Convert to OnlineRadioBox URL
     const orbUrl = getOnlineRadioBoxUrl(formattedUrl, safeName);
     const targetUrl = orbUrl || formattedUrl;
 
     console.log(`Scraping: ${targetUrl} (for ${safeName})`);
 
+    // === Source 1: OnlineRadioBox ===
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    const response = await fetch(targetUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.7',
-      },
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      // Try ICY fallback
-      if (streamUrl) {
-        console.log(`[${safeName}] ORB HTTP ${response.status}, trying ICY fallback`);
-        const icyResult = await fetchIcyMetadata(streamUrl, safeName);
-        return new Response(JSON.stringify(icyResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    let orbResult: RadioScrapeResult | null = null;
+    
+    try {
+      const response = await fetch(targetUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.7',
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        const html = await response.text();
+        if (html.includes('track_history_item') && !html.includes('did not provide a playlist')) {
+          orbResult = parseOnlineRadioBoxHtml(html, safeName);
+        }
       }
-      return new Response(
-        JSON.stringify({ success: false, stationName: safeName, error: `HTTP ${response.status}`, scrapedAt: new Date().toISOString() }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    } catch {
+      clearTimeout(timeoutId);
+    }
+    
+    if (orbResult?.success) {
+      return new Response(JSON.stringify(orbResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const html = await response.text();
-
-    if (!html.includes('track_history_item') && !html.includes('tablelist-schedule')) {
-      // Try ICY fallback
-      if (streamUrl) {
-        console.log(`[${safeName}] No playlist data, trying ICY fallback`);
-        const icyResult = await fetchIcyMetadata(streamUrl, safeName);
-        return new Response(JSON.stringify(icyResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // === Source 2: Triton Digital API ===
+    if (streamUrl) {
+      console.log(`[${safeName}] ORB failed, trying Triton API`);
+      const tritonResult = await fetchTritonNowPlaying(streamUrl, safeName);
+      if (tritonResult.success) {
+        return new Response(JSON.stringify(tritonResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-      return new Response(
-        JSON.stringify({ success: false, stationName: safeName, error: 'No playlist data found', scrapedAt: new Date().toISOString() }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
     }
 
-    const result = parseOnlineRadioBoxHtml(html, safeName);
-    console.log(`Result: ${result.nowPlaying ? `${result.nowPlaying.artist} - ${result.nowPlaying.title}` : 'no song'}`);
+    // === Source 3: ICY Metadata ===
+    if (streamUrl) {
+      console.log(`[${safeName}] Triton failed, trying ICY metadata`);
+      const icyResult = await fetchIcyMetadata(streamUrl, safeName);
+      if (icyResult.success) {
+        return new Response(JSON.stringify(icyResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
 
     return new Response(
-      JSON.stringify(result),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ success: false, stationName: safeName, error: 'No data from any source', scrapedAt: new Date().toISOString() }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error scraping radio:', error);

@@ -51,6 +51,7 @@ export function useSyncStationsFromDb() {
             name: dbStation.name.trim(),
             urls: localStation?.urls || [],
             scrapeUrl: dbStation.scrape_url,
+            streamUrl: dbStation.stream_url || undefined,
             styles: dbStation.styles || localStation?.styles || [],
             enabled: dbStation.enabled ?? true,
             monitoringSchedules: localStation?.monitoringSchedules,

@@ -22,6 +22,7 @@ interface RadioStation {
   monitoring_end_hour: number | null;
   monitoring_end_minute: number;
   monitoring_week_days: string[];
+  stream_url: string | null;
 }
 
 interface SpecialMonitoring {
@@ -37,42 +38,204 @@ interface SpecialMonitoring {
   enabled: boolean;
 }
 
+// ===== Schedule Helpers =====
+
+function getBrazilTime(now: Date): { hour: number; minute: number; dayIndex: number } {
+  const brStr = now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' });
+  const br = new Date(brStr);
+  return { hour: br.getHours(), minute: br.getMinutes(), dayIndex: br.getDay() };
+}
+
+const dayMap: Record<number, string> = { 0: 'dom', 1: 'seg', 2: 'ter', 3: 'qua', 4: 'qui', 5: 'sex', 6: 'sab' };
+
 function isWithinSchedule(schedule: SpecialMonitoring, now: Date): boolean {
-  const currentHour = now.getUTCHours() - 3;
-  const adjustedHour = currentHour < 0 ? currentHour + 24 : currentHour;
-  const currentMinute = now.getMinutes();
-  const currentDay = now.getDay();
-  const dayMap: Record<number, string> = { 0: 'dom', 1: 'seg', 2: 'ter', 3: 'qua', 4: 'qui', 5: 'sex', 6: 'sab' };
-  if (schedule.week_days?.length > 0 && !schedule.week_days.includes(dayMap[currentDay])) return false;
-  const currentMins = adjustedHour * 60 + currentMinute;
-  return currentMins >= schedule.start_hour * 60 + schedule.start_minute && currentMins <= schedule.end_hour * 60 + schedule.end_minute;
+  const { hour, minute, dayIndex } = getBrazilTime(now);
+  if (schedule.week_days?.length > 0 && !schedule.week_days.includes(dayMap[dayIndex])) return false;
+  const currentMins = hour * 60 + minute;
+  const startMins = schedule.start_hour * 60 + schedule.start_minute;
+  const endMins = schedule.end_hour * 60 + schedule.end_minute;
+  if (startMins <= endMins) return currentMins >= startMins && currentMins <= endMins;
+  return currentMins >= startMins || currentMins <= endMins;
 }
 
 function isStationActiveNow(station: RadioStation, now: Date): boolean {
   if (station.monitoring_start_hour === null || station.monitoring_end_hour === null) return true;
-  const currentHour = now.getUTCHours() - 3;
-  const adjustedHour = currentHour < 0 ? currentHour + 24 : currentHour;
-  const currentMinute = now.getMinutes();
-  const currentDay = now.getDay();
-  const dayMap: Record<number, string> = { 0: 'dom', 1: 'seg', 2: 'ter', 3: 'qua', 4: 'qui', 5: 'sex', 6: 'sab' };
-  if (station.monitoring_week_days?.length > 0 && !station.monitoring_week_days.includes(dayMap[currentDay])) return false;
-  const currentMins = adjustedHour * 60 + currentMinute;
-  return currentMins >= station.monitoring_start_hour * 60 + station.monitoring_start_minute && currentMins <= station.monitoring_end_hour * 60 + station.monitoring_end_minute;
+  const { hour, minute, dayIndex } = getBrazilTime(now);
+  if (station.monitoring_week_days?.length > 0 && !station.monitoring_week_days.includes(dayMap[dayIndex])) return false;
+  const currentMins = hour * 60 + minute;
+  const startMins = station.monitoring_start_hour * 60 + station.monitoring_start_minute;
+  const endMins = station.monitoring_end_hour * 60 + station.monitoring_end_minute;
+  if (startMins <= endMins) return currentMins >= startMins && currentMins <= endMins;
+  return currentMins >= startMins || currentMins <= endMins;
 }
 
 const BATCH_SIZE = 4;
 
-// ===== ICY Metadata Fallback =====
+// ===== Triton Digital Now Playing API =====
+// This works for ALL StreamTheWorld stations (BH FM, Band FM, Clube FM, Mix FM, Globo RJ, etc.)
 
-async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise<{ artist: string; title: string } | null> {
+const STREAM_TO_MOUNT: Record<string, string> = {
+  'BHFMAAC': 'BHFMAAC',
+  'BANDFM_SP': 'BANDFM_SP',
+  'CLUBEFM_BRASILIA': 'CLUBEFM_BRASILIA',
+  'METROFM': 'METROFM',
+  'MIXFM_SAOPAULOAAC': 'MIXFM_SAOPAULOAAC',
+  'RADIOGLOBO_RJ': 'RADIOGLOBO_RJ',
+  'ENERGIA97FM': 'ENERGIA97FM',
+};
+
+function getMountName(streamUrl: string | null): string | null {
+  if (!streamUrl) return null;
+  // Extract mount name from StreamTheWorld URL
+  const match = streamUrl.match(/livestream-redirect\/([A-Z0-9_]+)/i);
+  if (match) {
+    // Remove file extension
+    return match[1].replace(/\.(mp3|aac|ogg)$/i, '');
+  }
+  return null;
+}
+
+async function fetchTritonNowPlaying(mountName: string, stationName: string): Promise<{ artist: string; title: string } | null> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
+    
+    const url = `https://np.tritondigital.com/public/nowplaying?mountName=${mountName}&numberToFetch=5&eventType=track`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/xml, text/xml',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      console.warn(`[${stationName}] Triton API HTTP ${response.status}`);
+      return null;
+    }
+    
+    const xml = await response.text();
+    
+    // Parse XML for nowplaying-info
+    // Format: <nowplaying-info><property name="track_artist_name">ARTIST</property><property name="cue_title">TITLE</property></nowplaying-info>
+    const artistMatch = xml.match(/<property\s+name="track_artist_name"[^>]*>([^<]+)<\/property>/i);
+    const titleMatch = xml.match(/<property\s+name="cue_title"[^>]*>([^<]+)<\/property>/i);
+    
+    if (!artistMatch?.[1] || !titleMatch?.[1]) {
+      // Try alternate XML format
+      const altArtist = xml.match(/<property\s+name="cue_title"[^>]*>([^<]+)<\/property>/i);
+      const fullTitle = altArtist?.[1] || '';
+      if (fullTitle.includes(' - ')) {
+        const [a, t] = fullTitle.split(' - ', 2);
+        if (a.trim().length >= 2 && t.trim().length >= 2) {
+          console.log(`[${stationName}] Triton (alt): ${a.trim()} - ${t.trim()}`);
+          return { artist: a.trim(), title: t.trim() };
+        }
+      }
+      console.warn(`[${stationName}] Triton: no track data in XML`);
+      return null;
+    }
+    
+    const artist = artistMatch[1].trim();
+    const title = titleMatch[1].trim();
+    
+    if (artist.length < 2 || title.length < 2) return null;
+    
+    // Reject non-song entries
+    const rejectPatterns = [
+      /COMERCIAL|VINHETA|INSTITUCIONAL|PROPAGANDA|SPOT|BREAK/i,
+      /^(RÁDIO|RADIO)\s/i,
+      /^(BH FM|BAND FM|CLUBE FM|MIX FM|GLOBO|METROPOLITANA)/i,
+    ];
+    if (rejectPatterns.some(p => p.test(artist) || p.test(title))) return null;
+    
+    console.log(`[${stationName}] Triton: ${artist} - ${title}`);
+    return { artist, title };
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      console.warn(`[${stationName}] Triton timeout`);
+    } else {
+      console.warn(`[${stationName}] Triton error:`, e instanceof Error ? e.message : 'Unknown');
+    }
+    return null;
+  }
+}
 
-    const response = await fetch(streamUrl, {
+// ===== Triton: fetch recent tracks =====
+
+async function fetchTritonRecent(mountName: string, stationName: string): Promise<ScrapedSong[]> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    
+    const url = `https://np.tritondigital.com/public/nowplaying?mountName=${mountName}&numberToFetch=10&eventType=track`;
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/xml, text/xml' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) return [];
+    const xml = await response.text();
+    
+    const songs: ScrapedSong[] = [];
+    const blocks = xml.split('</nowplaying-info>');
+    
+    for (const block of blocks) {
+      const artistMatch = block.match(/<property\s+name="track_artist_name"[^>]*>([^<]+)<\/property>/i);
+      const titleMatch = block.match(/<property\s+name="cue_title"[^>]*>([^<]+)<\/property>/i);
+      if (artistMatch?.[1] && titleMatch?.[1]) {
+        const artist = artistMatch[1].trim();
+        const title = titleMatch[1].trim();
+        if (artist.length >= 2 && title.length >= 2) {
+          if (!songs.some(s => s.artist === artist && s.title === title)) {
+            songs.push({ artist, title, timestamp: new Date().toISOString() });
+          }
+        }
+      }
+    }
+    
+    return songs.slice(1); // Skip first (now playing), return rest as recent
+  } catch {
+    return [];
+  }
+}
+
+// ===== ICY Metadata Fallback (improved with redirect following) =====
+
+async function resolveStreamUrl(streamUrl: string): Promise<string> {
+  try {
+    // Follow redirects to get final stream URL
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const resp = await fetch(streamUrl, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return resp.url || streamUrl;
+  } catch {
+    return streamUrl;
+  }
+}
+
+async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise<{ artist: string; title: string } | null> {
+  try {
+    // First resolve the actual stream URL (follow redirects)
+    const resolvedUrl = await resolveStreamUrl(streamUrl);
+    console.log(`[${stationName}] ICY resolved: ${resolvedUrl.substring(0, 80)}`);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    const response = await fetch(resolvedUrl, {
       headers: {
         'Icy-MetaData': '1',
-        'User-Agent': 'Mozilla/5.0',
+        'User-Agent': 'WinampMPEG/5.0',
+        'Accept': '*/*',
+        'Connection': 'close',
       },
       signal: controller.signal,
     });
@@ -89,8 +252,7 @@ async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise
     let bytesRead = 0;
     const chunks: Uint8Array[] = [];
 
-    // Read until we pass the first metaInt boundary + metadata block
-    while (bytesRead < metaInt + 4096) {
+    while (bytesRead < metaInt + 8192) {
       const { done, value } = await reader.read();
       if (done || !value) break;
       chunks.push(value);
@@ -100,15 +262,10 @@ async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise
     clearTimeout(timeoutId);
     await reader.cancel();
 
-    // Combine all chunks
     const combined = new Uint8Array(bytesRead);
     let offset = 0;
-    for (const chunk of chunks) {
-      combined.set(chunk, offset);
-      offset += chunk.length;
-    }
+    for (const chunk of chunks) { combined.set(chunk, offset); offset += chunk.length; }
 
-    // The metadata block starts at position metaInt
     if (combined.length <= metaInt) return null;
 
     const metaLength = combined[metaInt] * 16;
@@ -119,14 +276,12 @@ async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise
     const metaBytes = combined.slice(metaStart, metaEnd);
     const metaString = new TextDecoder('utf-8', { fatal: false }).decode(metaBytes);
 
-    // Parse StreamTitle='Artist - Title';
     const titleMatch = metaString.match(/StreamTitle='([^']+)'/);
     if (!titleMatch || !titleMatch[1]) return null;
 
     const streamTitle = titleMatch[1].trim();
     if (!streamTitle || streamTitle.length < 3) return null;
 
-    // Split "Artist - Title"
     const dashIdx = streamTitle.indexOf(' - ');
     if (dashIdx === -1) {
       console.log(`[${stationName}] ICY title without dash: "${streamTitle}"`);
@@ -138,7 +293,6 @@ async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise
 
     if (artist.length < 2 || title.length < 2) return null;
 
-    // Reject non-song entries
     const rejectPatterns = [
       /COMERCIAL|VINHETA|INSTITUCIONAL|PROPAGANDA|SPOT|BREAK/i,
       /^(RÁDIO|RADIO)\s/i,
@@ -159,15 +313,12 @@ async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise
 
 // ===== OnlineRadioBox Parsing =====
 
-// Convert a scrape_url (mytuner or onlineradiobox) to an OnlineRadioBox playlist URL
 function getOnlineRadioBoxUrl(scrapeUrl: string, stationName: string): string | null {
-  // If already an onlineradiobox URL, use it
   if (scrapeUrl.includes('onlineradiobox.com')) {
     if (scrapeUrl.includes('/playlist')) return scrapeUrl;
     return scrapeUrl.replace(/\/?$/, '/playlist/');
   }
 
-  // Map known stations from mytuner URLs to OnlineRadioBox slugs
   const slugMap: Record<string, string> = {
     'band-fm': 'bandfm',
     'radio-bh-fm': 'bh',
@@ -177,6 +328,10 @@ function getOnlineRadioBoxUrl(scrapeUrl: string, stationName: string): string | 
     'mix-fm-sao-paulo': 'mixfm',
     'jovem-pan-fm-florianopolis': 'jovempan',
     'energia-97-fm': 'energia97',
+    'positividade-fm': 'positividade',
+    'positiva-fm': 'positiva',
+    'radio-liberdade-fm': 'liberdade',
+    'radio-blink-102-fm': 'blink102',
   };
 
   for (const [pattern, slug] of Object.entries(slugMap)) {
@@ -185,24 +340,20 @@ function getOnlineRadioBoxUrl(scrapeUrl: string, stationName: string): string | 
     }
   }
 
-  // Fallback: try to derive slug from station name
   const normalized = stationName
     .toLowerCase()
     .replace(/\s*(fm|am)\s*/gi, '')
     .replace(/rádio\s*/gi, '')
     .replace(/[^a-z0-9]/gi, '')
     .trim();
-  if (normalized) {
-    return `https://onlineradiobox.com/br/${normalized}/playlist/`;
-  }
-
+  if (normalized) return `https://onlineradiobox.com/br/${normalized}/playlist/`;
   return null;
 }
 
 async function fetchPageHtml(url: string, stationName: string): Promise<string | null> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -212,26 +363,22 @@ async function fetchPageHtml(url: string, stationName: string): Promise<string |
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
-    if (!response.ok) { console.warn(`[${stationName}] HTTP ${response.status}`); return null; }
-    const html = await response.text();
-    if (html.length > 500) return html;
-    console.warn(`[${stationName}] Page too short`);
-    return null;
+    if (!response.ok) { console.warn(`[${stationName}] ORB HTTP ${response.status}`); return null; }
+    return await response.text();
   } catch (e) {
-    console.error(`[${stationName}] Fetch error:`, e instanceof Error ? e.message : 'Unknown');
+    console.error(`[${stationName}] ORB fetch error:`, e instanceof Error ? e.message : 'Unknown');
     return null;
   }
 }
 
 function isValidSongText(text: string): boolean {
-  if (!text || text.length < 3 || text.length > 120) return false;
-  // Reject station name/promo entries (no dash = not a song)
+  if (!text || text.length < 3 || text.length > 150) return false;
   if (!text.includes(' - ')) return false;
-  // Reject known non-song patterns
   const rejectPatterns = [
     /^(METROPOLITANA|BH FM|BAND FM|CLUBE FM|GLOBO|MIX FM|ENERGIA|JOVEM PAN)/i,
     /^(RÁDIO|RADIO)\s/i,
     /COMERCIAL|VINHETA|INSTITUCIONAL|PROPAGANDA/i,
+    /unfortunately.*did not provide/i,
   ];
   return !rejectPatterns.some(p => p.test(text));
 }
@@ -240,10 +387,14 @@ function parseOnlineRadioBoxHtml(html: string, stationName: string): { nowPlayin
   const songs: ScrapedSong[] = [];
   let nowPlaying: ScrapedSong | undefined;
 
-  // Parse track_history_item entries from OnlineRadioBox
-  // Format: <td class="track_history_item">ARTIST - TITLE</td>
-  // or: <td class="track_history_item"><a href="...">ARTIST - TITLE</a></td>
-  const trackMatches = html.matchAll(/class="track_history_item"[^>]*>(?:<a[^>]*>)?([^<]+)(?:<\/a>)?/gi);
+  // Check if page has "did not provide a playlist" message
+  if (html.includes('did not provide a playlist')) {
+    console.warn(`[${stationName}] ORB: station did not provide playlist`);
+    return { recentSongs: [] };
+  }
+
+  // Pattern 1: track_history_item with or without <a> tag
+  const trackMatches = html.matchAll(/class="track_history_item"[^>]*>(?:\s*<a[^>]*>)?([^<]+)(?:<\/a>)?/gi);
 
   for (const match of trackMatches) {
     const rawText = match[1].trim();
@@ -254,19 +405,19 @@ function parseOnlineRadioBoxHtml(html: string, stationName: string): { nowPlayin
 
     const artist = rawText.substring(0, dashIndex).trim();
     const title = rawText.substring(dashIndex + 3).trim();
-
     if (artist.length < 2 || title.length < 2) continue;
 
-    // Remove " feat. XXX" from title for cleaner matching but keep for display
+    // Skip station name entries (e.g. "METROPOLITANA - SP")
+    if (/^(METROPOLITANA|BH FM|BAND FM|CLUBE FM|GLOBO|MIX FM) - /i.test(rawText)) continue;
+
     const song: ScrapedSong = { artist, title, timestamp: new Date().toISOString() };
 
     if (!nowPlaying) {
       nowPlaying = song;
-      console.log(`[${stationName}] Now playing: ${artist} - ${title}`);
+      console.log(`[${stationName}] ORB now playing: ${artist} - ${title}`);
     } else if (!songs.some(s => s.title === title && s.artist === artist)) {
       songs.push(song);
     }
-
     if (songs.length >= 5) break;
   }
 
@@ -276,7 +427,7 @@ function parseOnlineRadioBoxHtml(html: string, stationName: string): { nowPlayin
 // ===== Station Processing =====
 
 async function processStation(
-  station: RadioStation & { stream_url?: string },
+  station: RadioStation,
   supabase: any,
   now: Date
 ): Promise<{ station: string; success: boolean; songs: number; error?: string; skipped?: boolean; source?: string }> {
@@ -284,24 +435,44 @@ async function processStation(
     return { station: station.name, success: true, songs: 0, skipped: true };
   }
 
-  // Try OnlineRadioBox first
-  const orbUrl = getOnlineRadioBoxUrl(station.scrape_url, station.name);
   let parsed: { nowPlaying?: ScrapedSong; recentSongs: ScrapedSong[] } = { recentSongs: [] };
-  let sourceUsed = 'onlineradiobox';
+  let sourceUsed = '';
 
+  // === Source 1: OnlineRadioBox ===
+  const orbUrl = getOnlineRadioBoxUrl(station.scrape_url, station.name);
   if (orbUrl) {
-    console.log(`[${station.name}] Fetching: ${orbUrl}`);
+    console.log(`[${station.name}] Fetching ORB: ${orbUrl}`);
     const html = await fetchPageHtml(orbUrl, station.name);
-    if (html && (html.includes('track_history_item') || html.includes('tablelist-schedule'))) {
+    if (html && html.includes('track_history_item') && !html.includes('did not provide a playlist')) {
       parsed = parseOnlineRadioBoxHtml(html, station.name);
+      if (parsed.nowPlaying) sourceUsed = 'onlineradiobox';
     } else {
-      console.warn(`[${station.name}] No playlist data found in page`);
+      console.warn(`[${station.name}] ORB: no playlist data available`);
     }
   }
 
-  // Fallback to ICY metadata if OnlineRadioBox had no data
+  // === Source 2: Triton Digital Now Playing API (for StreamTheWorld stations) ===
   if (!parsed.nowPlaying && station.stream_url) {
-    console.log(`[${station.name}] Falling back to ICY metadata from stream`);
+    const mountName = getMountName(station.stream_url);
+    if (mountName) {
+      console.log(`[${station.name}] Trying Triton API (mount: ${mountName})`);
+      const tritonResult = await fetchTritonNowPlaying(mountName, station.name);
+      if (tritonResult) {
+        parsed.nowPlaying = { ...tritonResult, timestamp: new Date().toISOString() };
+        sourceUsed = 'triton-api';
+        
+        // Also try to get recent songs from Triton
+        const recentSongs = await fetchTritonRecent(mountName, station.name);
+        if (recentSongs.length > 0) {
+          parsed.recentSongs = recentSongs;
+        }
+      }
+    }
+  }
+
+  // === Source 3: ICY Metadata (with redirect resolution) ===
+  if (!parsed.nowPlaying && station.stream_url) {
+    console.log(`[${station.name}] Trying ICY metadata from stream`);
     const icyResult = await fetchIcyMetadata(station.stream_url, station.name);
     if (icyResult) {
       parsed.nowPlaying = { ...icyResult, timestamp: new Date().toISOString() };
@@ -310,7 +481,7 @@ async function processStation(
   }
 
   if (!parsed.nowPlaying && parsed.recentSongs.length === 0) {
-    return { station: station.name, success: false, songs: 0, error: 'No song data from any source' };
+    return { station: station.name, success: false, songs: 0, error: 'No song data from any source (ORB/Triton/ICY)' };
   }
 
   let songsInserted = 0;
@@ -331,7 +502,7 @@ async function processStation(
         title: parsed.nowPlaying.title,
         artist: parsed.nowPlaying.artist,
         is_now_playing: true,
-        source: sourceUsed === 'icy-stream' ? station.stream_url : orbUrl,
+        source: sourceUsed,
       });
       if (!insertError) {
         songsInserted++;
@@ -351,7 +522,7 @@ async function processStation(
       const { error: insertError } = await supabase.from('scraped_songs').insert({
         station_id: station.id, station_name: station.name,
         title: song.title, artist: song.artist,
-        is_now_playing: false, source: orbUrl,
+        is_now_playing: false, source: sourceUsed,
       });
       if (!insertError) songsInserted++;
     }
@@ -372,8 +543,8 @@ async function processSpecialMonitoring(
   console.log(`[ESPECIAL ${schedule.station_name}] Fetching: ${orbUrl}`);
   const html = await fetchPageHtml(orbUrl, schedule.station_name);
 
-  if (!html || (!html.includes('track_history_item') && !html.includes('tablelist-schedule'))) {
-    return { station: `[ESPECIAL] ${schedule.station_name}`, success: false, songs: 0, error: 'Failed to fetch' };
+  if (!html || html.includes('did not provide a playlist') || (!html.includes('track_history_item') && !html.includes('tablelist-schedule'))) {
+    return { station: `[ESPECIAL] ${schedule.station_name}`, success: false, songs: 0, error: 'No playlist data' };
   }
 
   const parsed = parseOnlineRadioBoxHtml(html, schedule.station_name);
@@ -390,7 +561,7 @@ async function processSpecialMonitoring(
       const { error: insertError } = await supabase.from('scraped_songs').insert({
         station_name: schedule.station_name,
         title: parsed.nowPlaying.title, artist: parsed.nowPlaying.artist,
-        is_now_playing: true, source: orbUrl,
+        is_now_playing: true, source: 'onlineradiobox',
       });
       if (!insertError) {
         songsInserted++;
@@ -410,7 +581,7 @@ Deno.serve(async (req) => {
   }
 
   const startTime = Date.now();
-  console.log('=== AUTO-SCRAPE STATIONS STARTED (OnlineRadioBox) ===');
+  console.log('=== AUTO-SCRAPE v3.0 (ORB + Triton + ICY) ===');
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -468,15 +639,23 @@ Deno.serve(async (req) => {
 
     console.log(`\n=== COMPLETED in ${elapsed}ms ===`);
     console.log(`Success: ${successCount}, Failed: ${failedCount}, Songs: ${totalSongs}`);
+    
+    // Log sources used
+    const sources = results.filter(r => r.source).map(r => `${r.station}:${r.source}`);
+    if (sources.length > 0) console.log(`Sources: ${sources.join(', ')}`);
 
     return new Response(
-      JSON.stringify({ success: true, results, totalSongs, elapsed }),
+      JSON.stringify({
+        success: true,
+        results,
+        summary: { success: successCount, failed: failedCount, songs: totalSongs, elapsed },
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Auto-scrape error:', error);
+    console.error('Fatal error:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ success: false, error: 'Internal error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

@@ -45,11 +45,11 @@ export function useGlobalScrapingService(
     pausedStations: [],
   });
 
-  const scrapeStation = useCallback(async (stationName: string, scrapeUrl: string) => {
+  const scrapeStation = useCallback(async (stationName: string, scrapeUrl: string, streamUrl?: string) => {
     setScrapeStats(prev => ({ ...prev, currentStation: stationName }));
     
     try {
-      const result = await radioScraperApi.scrapeStation(stationName, scrapeUrl);
+      const result = await radioScraperApi.scrapeStation(stationName, scrapeUrl, { streamUrl });
       
       if (result.success && result.nowPlaying) {
         return {
@@ -209,7 +209,7 @@ export function useGlobalScrapingService(
       const batch = enabledStations.slice(i, i + batchSize);
       
       const batchResults = await Promise.allSettled(
-        batch.map(station => scrapeStation(station.name, station.scrapeUrl!))
+        batch.map(station => scrapeStation(station.name, station.scrapeUrl!, station.streamUrl || undefined))
       );
 
       for (let j = 0; j < batchResults.length; j++) {
