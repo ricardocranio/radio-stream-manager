@@ -90,6 +90,11 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log(`║ 📥 Capturadas DL: ✅ AUTOMÁTICO (2 min polling)`.padEnd(65) + '║');
     console.log(`║ 🎯 IA Classify:   ✅ ATIVO (30 min batches)`.padEnd(65) + '║');
     console.log(`║ 🗜️ Compressão:    ✅ ATIVO (diário 4:00)`.padEnd(65) + '║');
+    console.log(`║ 🐕 Watchdog:      ✅ ATIVO (2 min check)`.padEnd(65) + '║');
+    console.log(`║ 📊 Relatório:     ✅ ATIVO (23:55 diário)`.padEnd(65) + '║');
+    console.log(`║ 💾 Cache Offline:  ✅ ATIVO (fallback 24h)`.padEnd(65) + '║');
+    console.log(`║ 🔄 Cross-Day:     ✅ ATIVO (buffer 4h)`.padEnd(65) + '║');
+    console.log(`║ 📉 Ranking Decay: ✅ ATIVO (5%/dia)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
     // Start all services
