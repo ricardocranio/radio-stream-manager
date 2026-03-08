@@ -833,6 +833,107 @@ export function useAutoGradeBuilder() {
     const fixedItems = getFixedContentForTime(hour, minute, targetDay);
     const ctx = buildGradeContext();
 
+    // === DURATION FILL HELPER (applies to ALL block types including specials) ===
+    const MIN_DUR_SEC = 29 * 60;
+    const MAX_DUR_SEC = 32 * 60;
+    const DEFAULT_SONG_DUR = 210;
+    const vinhetasF = config.vinhetasFolder || 'C:\\Playlist\\Vinhetas';
+    const VHT_DUR = await getAvgVhtDuration(vinhetasF);
+    const FILL_STATIONS = config.fillPriorityStations?.length
+      ? config.fillPriorityStations
+      : ['BH FM', 'Metropolitana FM', 'Metropolitana'];
+
+    const fillBlockIfShort = async (result: BlockResult): Promise<BlockResult> => {
+      // Skip filling for Voz do Brasil (legally fixed duration)
+      if (result.line.includes('ID=VOZ DO BRASIL')) return result;
+
+      // Parse existing tokens from the line
+      const headerMatch = result.line.match(/^(\d{2}:\d{2}\s+\([^)]+\)\s*)(.*)/);
+      if (!headerMatch) return result;
+      const header = headerMatch[1];
+      const tokens = headerMatch[2].split(',').map(t => t.trim()).filter(Boolean);
+
+      // Estimate current duration
+      let estimatedSec = 0;
+      for (const token of tokens) {
+        const lower = token.toLowerCase();
+        if (lower === 'vht' || lower === 'vhtn') {
+          estimatedSec += VHT_DUR;
+        } else if (token.startsWith('"')) {
+          // Try real duration via Electron
+          if (getIsElectronEnv() && window.electronAPI?.getFileDuration) {
+            const cleanName = token.replace(/^"|"$/g, '');
+            try {
+              const dr = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: [...config.musicFolders, config.contentFolder, config.gradeFolder].filter(Boolean) });
+              estimatedSec += (dr.success && dr.duration > 0) ? dr.duration : DEFAULT_SONG_DUR;
+            } catch { estimatedSec += DEFAULT_SONG_DUR; }
+          } else {
+            estimatedSec += DEFAULT_SONG_DUR;
+          }
+        } else {
+          // fallback codes (mus, rom, clas, fun)
+          estimatedSec += DEFAULT_SONG_DUR;
+        }
+      }
+
+      if (estimatedSec >= MIN_DUR_SEC) return result;
+
+      console.log(`[FILL] ⏱️ Bloco ${timeStr} com ${(estimatedSec/60).toFixed(1)} min < 29 min — preenchendo`);
+      const usedArtists = new Set<string>();
+      const usedKeys = new Set<string>();
+      const addedTokens: string[] = [];
+      const addedLogs: typeof result.logs = [];
+
+      // Try priority stations first
+      for (const stName of FILL_STATIONS) {
+        if (estimatedSec >= MIN_DUR_SEC) break;
+        const pool = songsByStation[stName] || [];
+        for (const candidate of pool) {
+          if (estimatedSec >= MAX_DUR_SEC) break;
+          const key = `${candidate.title.toLowerCase().trim()}-${candidate.artist.toLowerCase().trim()}`;
+          if (usedKeys.has(key) || usedArtists.has(candidate.artist.toLowerCase().trim())) continue;
+          if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
+          const libResult = await findSongInLibrary(candidate.artist, candidate.title);
+          if (libResult.exists) {
+            const fname = libResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+            addedTokens.push(`vht,"${fname}"`);
+            usedKeys.add(key);
+            usedArtists.add(candidate.artist.toLowerCase().trim());
+            markSongAsUsed(candidate.title, candidate.artist, timeStr);
+            estimatedSec += DEFAULT_SONG_DUR + VHT_DUR;
+            addedLogs.push({
+              blockTime: timeStr, type: 'used',
+              title: candidate.title, artist: candidate.artist,
+              station: stName, reason: `Preenchimento de duração (${stName})`,
+            });
+          }
+        }
+      }
+
+      // Coringa as last resort
+      const coringaCode = config.coringaCode || 'mus';
+      while (estimatedSec < MIN_DUR_SEC) {
+        addedTokens.push(`vht,${coringaCode}`);
+        estimatedSec += DEFAULT_SONG_DUR + VHT_DUR;
+        addedLogs.push({
+          blockTime: timeStr, type: 'substituted',
+          title: coringaCode, artist: 'CORINGA',
+          station: 'FILL', reason: 'Preenchimento mínimo 29 min',
+        });
+      }
+
+      if (addedTokens.length > 0) {
+        const filledLine = `${result.line},${addedTokens.join(',')}`;
+        console.log(`[FILL] ✅ Bloco ${timeStr}: +${addedTokens.length} itens → ${(estimatedSec/60).toFixed(1)} min`);
+        return {
+          line: filledLine,
+          logs: [...result.logs, ...addedLogs],
+          durationMinutes: parseFloat((estimatedSec / 60).toFixed(1)),
+        };
+      }
+      return result;
+    };
+
     // === Check if a scheduled sequence overrides special programs ===
     const hasScheduledSequence = scheduledSequences
       .filter(s => s.enabled)
