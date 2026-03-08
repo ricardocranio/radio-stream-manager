@@ -1454,7 +1454,7 @@ ipcMain.handle('purge-blocked-files', async (event, { musicFolders, blockedSongs
 });
 
 // Deezer Download Handler using deemix CLI
-// Flow: Download to _temp folder → Verify integrity → Rename to input name → Move to final folder
+// Flow: Download to _temp folder → Verify integrity → Move to final folder (keeping original Deezer filename)
 ipcMain.handle('download-from-deezer', async (event, params) => {
   const { artist, title, arl, outputFolder, quality, stationName } = params;
   
