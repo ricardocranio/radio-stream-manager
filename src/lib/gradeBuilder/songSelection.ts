@@ -20,6 +20,7 @@
  */
 
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
+import { shiftArtistTracker } from './smartGrade';
 import type { SongEntry, BlockLogItem, BlockStats, GradeContext, CarryOverSong } from './types';
 import { STATION_ID_TO_DB_NAME } from './constants';
 import type { WeekDay, SequenceConfig } from '@/types/radio';
@@ -197,6 +198,8 @@ export async function selectSongForSlot(
     const normalizedArtist = artist.toLowerCase().trim();
     if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) return false;
     if (ctx.isRecentlyUsed(title, artist, timeStr, isFullDay)) return false;
+    // Phase 3: Shift-level artist anti-repetition (graceful — only in full-day builds)
+    if (isFullDay && shiftArtistTracker.isArtistUsedInShift(artist, timeStr)) return false;
     // Artist blackout by time range
     if (ctx.artistBlackouts?.length) {
       for (const bo of ctx.artistBlackouts) {
@@ -518,6 +521,8 @@ export async function selectSongForSlot(
     usedInBlock.add(`${selectedSong.title.toLowerCase()}-${selectedSong.artist.toLowerCase()}`);
     usedArtistsInBlock.add(selectedSong.artist.toLowerCase().trim());
     ctx.markSongAsUsed(selectedSong.title, selectedSong.artist, timeStr);
+    // Phase 3: Track artist at shift level for cross-block anti-repetition
+    shiftArtistTracker.markArtistUsed(selectedSong.artist, timeStr);
 
     // Add 'used' log if not already logged by a priority level
     const hasLog = logs.some(l => l.title === selectedSong!.title && l.artist === selectedSong!.artist && l.blockTime === timeStr);
