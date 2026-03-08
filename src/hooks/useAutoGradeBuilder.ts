@@ -1473,6 +1473,7 @@ export function useAutoGradeBuilder() {
 
       // Always use the FULL song pool from monitoring (scraped_songs + radio_historico)
       // A narrow 1h window misses songs captured earlier, causing unnecessary Coringas
+      reportServiceHeartbeat('grade-builder');
       const fullPool = await fetchAllRecentSongs();
 
       const durationMap = new Map(state.pendingBlockDurations);

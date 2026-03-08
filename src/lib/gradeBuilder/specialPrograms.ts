@@ -12,6 +12,7 @@
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import type { SongEntry, BlockResult, BlockLogItem, BlockStats, GradeContext } from './types';
 import type { WeekDay } from '@/types/radio';
+import { applyTemporalDecay } from '@/lib/rankingDecay';
 
 /**
  * Generate the Voz do Brasil block (21:00 weekdays).
