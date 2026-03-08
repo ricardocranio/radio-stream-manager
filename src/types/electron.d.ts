@@ -314,6 +314,15 @@ interface ElectronAPI {
   onDeemixStatus: (callback: (status: { installed: boolean; command: string | null }) => void) => void;
   getDeemixCommand: () => Promise<string | null>;
   
+  // Python Radio Monitor
+  startPythonMonitor: () => Promise<{ success: boolean; error?: string }>;
+  stopPythonMonitor: () => Promise<{ success: boolean; error?: string }>;
+  restartPythonMonitor: () => Promise<{ success: boolean; error?: string }>;
+  getMonitorStatus: () => Promise<{ isRunning: boolean; uptime: number; captureCount: number; logCount: number; autoRestartAttempts: number }>;
+  getMonitorLogs: () => Promise<string[]>;
+  onMonitorLog: (callback: (log: string) => void) => void;
+  onMonitorStatus: (callback: (status: { isRunning: boolean; uptime: number; captureCount: number }) => void) => void;
+  
   // Platform detection
   platform: string;
   isElectron: boolean;
