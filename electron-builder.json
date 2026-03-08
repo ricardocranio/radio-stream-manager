@@ -4,7 +4,8 @@
   "productName": "Programador de Radio",
   "copyright": "Copyright © 2024 PGM-FM",
   "extraMetadata": {
-    "main": "electron/main.cjs"
+    "main": "electron/main.cjs",
+    "type": "commonjs"
   },
   "directories": {
     "output": "release",
