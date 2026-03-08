@@ -156,7 +156,7 @@ export function SettingsView() {
         clearTimeout(filtersSaveTimeoutRef.current);
       }
     };
-  }, [forbiddenWords, funkWords, filterCharacters, blockedSongs, autoSaveFilters]);
+  }, [forbiddenWords, funkWords, filterCharacters, blockedSongs, fillStations, autoSaveFilters]);
 
   const handleReset = () => {
     setLocalConfig(config);
