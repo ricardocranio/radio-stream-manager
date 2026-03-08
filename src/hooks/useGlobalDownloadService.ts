@@ -229,6 +229,8 @@ export function useGlobalDownloadService() {
     if (isProcessingRef.current || downloadQueueRef.current.length === 0) {
       return;
     }
+    // Heartbeat for watchdog
+    import('@/hooks/useServiceWatchdog').then(m => m.reportServiceHeartbeat('downloads')).catch(() => {});
 
     const storeState = useRadioStore.getState();
     if (!storeState.isRunning || !storeState.deezerConfig.autoDownload || !storeState.deezerConfig.enabled) {
