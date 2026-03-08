@@ -960,7 +960,7 @@ export function useAutoGradeBuilder() {
       // Saturday template blocks
       if (targetDay === 'sab') {
         const weekendResult = await generateWeekendTemplateBlock(hour, minute, timeStr, songsByStation, ctx);
-        if (weekendResult) return weekendResult;
+        if (weekendResult) return fillBlockIfShort(weekendResult);
       }
 
       // Voz do Brasil (21:00-21:30 weekdays) - obrigatório por lei
