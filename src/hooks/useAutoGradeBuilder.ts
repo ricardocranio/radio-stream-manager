@@ -1165,14 +1165,23 @@ export function useAutoGradeBuilder() {
       const currentExistingLine = lineMap.get(currentTimeKey);
       const nextExistingLine = lineMap.get(nextTimeKey);
 
+      // Detect legacy weekday lines that should never persist on Saturday
+      const hasSaturdayMismatch = (line?: string | null) => {
+        if (targetDay !== 'sab' || !line) return false;
+        return /(VOZ[_\s]?BRASIL|\(ID=TOP10\)|\(ID=TOP50\)|\(ID=MISTURADAO\)|\(ID=ROMANCE\)|\bROMANCE\b|HAPPY\s*HOUR)/i.test(line);
+      };
+
+      const currentSaturdayMismatch = hasSaturdayMismatch(currentExistingLine);
+      const nextSaturdayMismatch = hasSaturdayMismatch(nextExistingLine);
+
       // Manual refresh should force regeneration of current/next blocks
-      // (important for day-template changes, e.g. sábado/domingo)
+      // Also force regeneration when a Saturday block still has weekday content
       const shouldBuildCurrent = forceRegenerate
         ? true
-        : !currentLocked;
+        : !currentLocked || currentSaturdayMismatch;
       const shouldBuildNext = forceRegenerate
         ? true
-        : !nextLocked;
+        : !nextLocked || nextSaturdayMismatch;
 
       if (!shouldBuildCurrent && !shouldBuildNext) {
         console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já resolvidos, pulando`);
