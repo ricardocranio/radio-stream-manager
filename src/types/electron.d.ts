@@ -299,6 +299,7 @@ interface ElectronAPI {
   // Station folder management
   ensureStationFolders: (params: EnsureStationFoldersParams) => Promise<EnsureStationFoldersResult>;
   checkFileInSubfolders: (params: CheckFileInSubfoldersParams) => Promise<CheckFileInSubfoldersResult>;
+  purgeBlockedFiles: (params: { musicFolders: string[]; blockedSongs: string[]; forbiddenWords: string[] }) => Promise<{ success: boolean; deleted: string[]; errors: { file: string; error: string }[]; deletedCount: number }>;
   
   // Window management
   showWindow: () => Promise<{ success: boolean }>;
