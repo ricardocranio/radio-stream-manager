@@ -951,8 +951,34 @@ export function useAutoGradeBuilder() {
     const MIN_BLOCK_DURATION_SEC = 29 * 60; // 1740s
     const MAX_BLOCK_DURATION_SEC = 32 * 60; // 1920s
     const DEFAULT_SONG_DURATION_SEC = 210;   // 3:30 fallback
-    const VHT_DURATION_SEC = 7;              // ~7s per vinheta separator
+    const VHT_FALLBACK_DURATION_SEC = 7;    // fallback if can't read real duration
     const DEFAULT_FIXED_DURATION_SEC = 180;  // 3:00 for fixed content fallback
+
+    // === DYNAMIC VHT DURATION: read real durations from vinhetas folder ===
+    let avgVhtDurationSec = VHT_FALLBACK_DURATION_SEC;
+    if (getIsElectronEnv() && window.electronAPI?.listFolderFiles && window.electronAPI?.getFileDurationsBatch) {
+      try {
+        const vinhetasFolder = config.vinhetasFolder || 'C:\\Playlist\\Vinhetas';
+        const listResult = await window.electronAPI.listFolderFiles({ folder: vinhetasFolder, extension: '.mp3' });
+        if (listResult.success && listResult.files.length > 0) {
+          const vhtFilenames = listResult.files.map((f: any) => f.name);
+          const durResult = await window.electronAPI.getFileDurationsBatch({ 
+            filenames: vhtFilenames, 
+            musicFolders: [vinhetasFolder] 
+          });
+          if (durResult.success && durResult.durations) {
+            const durations = Object.values(durResult.durations).filter((d: number) => d > 0);
+            if (durations.length > 0) {
+              avgVhtDurationSec = durations.reduce((sum: number, d: number) => sum + d, 0) / durations.length;
+              console.log(`[AUTO-GRADE] 🎵 VHT duração real: média ${avgVhtDurationSec.toFixed(1)}s de ${durations.length} arquivos`);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[AUTO-GRADE] ⚠️ Falha ao ler duração das vinhetas, usando fallback 7s:', e);
+      }
+    }
+    const VHT_DURATION_SEC = avgVhtDurationSec;
 
     let accumulatedDurationSec = 0;
     let sequenceCycleIndex = 0;
