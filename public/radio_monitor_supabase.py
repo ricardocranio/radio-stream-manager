@@ -510,6 +510,11 @@ class RadioMonitor:
                 print(cor(Cores.YELLOW, f"     ⚠️  Ignorado (dados insuficientes): '{title}'"))
                 return
             
+            # Verificar palavras proibidas e artistas bloqueados
+            if is_forbidden(artist, title):
+                print(cor(Cores.RED, f"     🚫 BLOQUEADO: {artist} - {title}"))
+                return
+            
             # Inserir em scraped_songs (sem station_id se None para evitar FK error)
             song_data = {
                 'station_name': station_name,
