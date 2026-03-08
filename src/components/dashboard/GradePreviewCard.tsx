@@ -261,6 +261,29 @@ export function GradePreviewCard() {
         </div>
       </CardHeader>
       <CardContent className="pt-3">
+        {/* Duration alert banner */}
+        {isBlockShort && (
+          <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center gap-2 animate-pulse">
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-red-400">
+                ⚠️ Bloco abaixo de 29 min ({blockDuration} min) — rebuild automático em andamento
+              </p>
+              <p className="text-[10px] text-red-400/70">
+                O sistema está tentando adicionar músicas extras para atingir o mínimo
+              </p>
+            </div>
+            {isLoading && <Loader2 className="w-4 h-4 animate-spin text-red-400 shrink-0" />}
+          </div>
+        )}
+        {isBlockLong && (
+          <div className="mb-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <p className="text-xs text-amber-400">
+              Bloco acima de 32 min ({blockDuration} min) — pode ultrapassar a janela
+            </p>
+          </div>
+        )}
         <ScrollArea className="h-[320px]">
           {displaySongs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-muted-foreground gap-2">
