@@ -212,7 +212,8 @@ export function useAutoGradeBuilder() {
   // ==================== Song Tracking ====================
 
   const isRecentlyUsed = useCallback((title: string, artist: string, currentBlockTime: string, isFullDay: boolean = false): boolean => {
-    const artistRepMinutes = isFullDay ? 30 : (config.artistRepetitionMinutes || ARTIST_REPETITION_MINUTES);
+    // Always respect user-configured repetition minutes; use configured value for both full-day and incremental
+    const artistRepMinutes = config.artistRepetitionMinutes || ARTIST_REPETITION_MINUTES;
     const normalizedTitle = title.toLowerCase().trim();
     const normalizedArtist = artist.toLowerCase().trim();
     const [currentHour, currentMinute] = currentBlockTime.split(':').map(Number);
