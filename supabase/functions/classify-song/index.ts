@@ -115,7 +115,48 @@ serve(async (req) => {
       });
     }
 
-    if (action === "compress-history") {
+    if (action === "recalculate-styles") {
+      // Analyze ai_genre distribution per station and update radio_stations.styles
+      const { data: songs, error: fetchErr } = await supabase
+        .from("scraped_songs")
+        .select("station_name, ai_genre")
+        .not("ai_genre", "is", null)
+        .not("ai_genre", "eq", "OUTRO");
+
+      if (fetchErr) throw fetchErr;
+
+      // Count genres per station
+      const stationGenres: Record<string, Record<string, number>> = {};
+      (songs || []).forEach(s => {
+        if (!stationGenres[s.station_name]) stationGenres[s.station_name] = {};
+        stationGenres[s.station_name][s.ai_genre!] = (stationGenres[s.station_name][s.ai_genre!] || 0) + 1;
+      });
+
+      // For each station, pick top 3 genres as styles
+      let updated = 0;
+      for (const [stationName, genres] of Object.entries(stationGenres)) {
+        const topGenres = Object.entries(genres)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 3)
+          .map(([genre]) => genre);
+
+        if (topGenres.length === 0) continue;
+
+        const { error: upErr } = await supabase
+          .from("radio_stations")
+          .update({ styles: topGenres })
+          .eq("name", stationName);
+
+        if (!upErr) {
+          updated++;
+          console.log(`[STYLES] ${stationName}: ${topGenres.join(", ")}`);
+        }
+      }
+
+      return new Response(JSON.stringify({ updated, stations: Object.keys(stationGenres).length, method: "id3-based" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
       const { data, error } = await supabase.rpc("compress_radio_historico");
       if (error) throw error;
 
