@@ -41,6 +41,8 @@ interface ScrapedSong {
   scraped_at: string;
   is_now_playing: boolean;
   source: string | null;
+  ai_genre: string | null;
+  ai_energy: string | null;
 }
 
 
@@ -66,8 +68,12 @@ export function CapturedSongsView() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStation, setSelectedStation] = useState<string>('all');
+  const [selectedGenre, setSelectedGenre] = useState<string>('all');
+  const [selectedEnergy, setSelectedEnergy] = useState<string>('all');
   const [dateRange, setDateRange] = useState<string>('24h');
   const [stations, setStations] = useState<string[]>([]);
+  const [genres, setGenres] = useState<string[]>([]);
+  const [energies, setEnergies] = useState<string[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
@@ -131,6 +137,12 @@ export function CapturedSongsView() {
 
       setSongs(data || []);
       console.log('[CAPTURED-SONGS] Songs set:', data?.length || 0);
+
+      // Extract unique genres and energies
+      const uniqueGenres = [...new Set((data || []).map(s => s.ai_genre).filter(Boolean))] as string[];
+      const uniqueEnergies = [...new Set((data || []).map(s => s.ai_energy).filter(Boolean))] as string[];
+      setGenres(uniqueGenres.sort());
+      setEnergies(uniqueEnergies.sort());
       
       // Get total count
       const { count: totalCount, error: countError } = await supabase
@@ -266,20 +278,33 @@ export function CapturedSongsView() {
 
   // Filter songs by search term
   const filteredSongs = useMemo(() => {
-    if (!searchTerm) return songs;
-    const term = searchTerm.toLowerCase();
-    return songs.filter(
-      song =>
-        song.title.toLowerCase().includes(term) ||
-        song.artist.toLowerCase().includes(term) ||
-        song.station_name.toLowerCase().includes(term)
-    );
-  }, [songs, searchTerm]);
+    let filtered = songs;
+    
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        song =>
+          song.title.toLowerCase().includes(term) ||
+          song.artist.toLowerCase().includes(term) ||
+          song.station_name.toLowerCase().includes(term)
+      );
+    }
+    
+    if (selectedGenre !== 'all') {
+      filtered = filtered.filter(song => song.ai_genre === selectedGenre);
+    }
+    
+    if (selectedEnergy !== 'all') {
+      filtered = filtered.filter(song => song.ai_energy === selectedEnergy);
+    }
+    
+    return filtered;
+  }, [songs, searchTerm, selectedGenre, selectedEnergy]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedStation, dateRange]);
+  }, [searchTerm, selectedStation, selectedGenre, selectedEnergy, dateRange]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredSongs.length / PAGE_SIZE));
@@ -590,6 +615,38 @@ export function CapturedSongsView() {
               </SelectContent>
             </Select>
 
+            {/* Genre Filter */}
+            {genres.length > 0 && (
+              <Select value={selectedGenre} onValueChange={setSelectedGenre}>
+                <SelectTrigger className="w-[160px]">
+                  <Music className="w-4 h-4 mr-2" />
+                  <SelectValue placeholder="Gênero" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos Gêneros</SelectItem>
+                  {genres.map(genre => (
+                    <SelectItem key={genre} value={genre}>{genre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Energy Filter */}
+            {energies.length > 0 && (
+              <Select value={selectedEnergy} onValueChange={setSelectedEnergy}>
+                <SelectTrigger className="w-[140px]">
+                  <Zap className="w-4 h-4 mr-2" />
+                  <SelectValue placeholder="Energia" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas Energias</SelectItem>
+                  {energies.map(energy => (
+                    <SelectItem key={energy} value={energy}>{energy}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
             {/* Date Range Filter */}
             <Select value={dateRange} onValueChange={setDateRange}>
               <SelectTrigger className="w-[150px]">
@@ -606,13 +663,15 @@ export function CapturedSongsView() {
             </Select>
 
             {/* Clear Filters */}
-            {(searchTerm || selectedStation !== 'all' || dateRange !== '24h') && (
+            {(searchTerm || selectedStation !== 'all' || selectedGenre !== 'all' || selectedEnergy !== 'all' || dateRange !== '24h') && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedStation('all');
+                  setSelectedGenre('all');
+                  setSelectedEnergy('all');
                   setDateRange('24h');
                 }}
               >
@@ -696,11 +755,21 @@ export function CapturedSongsView() {
                           <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap justify-end">
                         <Badge variant="outline" className="hidden sm:flex">
                           <Radio className="w-3 h-3 mr-1" />
                           {song.station_name}
                         </Badge>
+                        {song.ai_genre && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            🎵 {song.ai_genre}
+                          </Badge>
+                        )}
+                        {song.ai_energy && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            ⚡ {song.ai_energy}
+                          </Badge>
+                        )}
                         {song.is_now_playing && (
                           <Badge className="bg-success/20 text-success border-success/30">
                             AO VIVO

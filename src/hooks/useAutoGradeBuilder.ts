@@ -464,11 +464,18 @@ export function useAutoGradeBuilder() {
       .filter(s => s.endsWith(' - *'))
       .map(s => s.replace(/ - \*$/, ''));
     
+    // Also include forbiddenWords for artist/title filtering
+    const forbiddenLower = (config.forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
+    
     const isBlocked = (artist: string, title: string): boolean => {
       const key = `${artist.trim()} - ${title.trim()}`.toLowerCase();
       if (blockedExact.has(key)) return true;
       const artistLower = artist.trim().toLowerCase();
-      return blockedWildcardArtists.some(blocked => artistLower === blocked || artistLower.includes(blocked));
+      const titleLower = title.trim().toLowerCase();
+      if (blockedWildcardArtists.some(blocked => artistLower === blocked || artistLower.includes(blocked))) return true;
+      // Check forbiddenWords against artist AND title
+      if (forbiddenLower.some(word => artistLower.includes(word) || titleLower.includes(word))) return true;
+      return false;
     };
 
     stations.forEach(s => {
@@ -496,7 +503,7 @@ export function useAutoGradeBuilder() {
     const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
     console.log(`[AUTO-GRADE] Pool: ${stationList}`);
     return songsByStation;
-  }, [stations, config.blockedSongs]);
+  }, [stations, config.blockedSongs, config.forbiddenWords]);
 
   // ==================== Weekend Template Generator ====================
 
@@ -811,8 +818,8 @@ export function useAutoGradeBuilder() {
         return generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay);
       }
 
-      // TOP50 blocks
-      const top50Item = fixedItems.find(fc => fc.type === 'top50');
+      // TOP50 blocks (skip on Sunday — 100% monitoring)
+      const top50Item = targetDay !== 'dom' ? fixedItems.find(fc => fc.type === 'top50') : undefined;
       if (top50Item) {
         return await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx);
       }
@@ -832,8 +839,9 @@ export function useAutoGradeBuilder() {
 
     const blockLogs: BlockLogItem[] = [];
 
-    // Fixed content handling — SKIPPED when a scheduled sequence is active
-    const fixedItem = hasScheduledSequence ? undefined : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil');
+    // Fixed content handling — SKIPPED on Sunday (DOM.txt = 100% monitoring) and when a scheduled sequence is active
+    const isSunday = targetDay === 'dom';
+    const fixedItem = (hasScheduledSequence || isSunday) ? undefined : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil');
     let fixedContentFile: string | null = null;
     let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
 
@@ -849,6 +857,8 @@ export function useAutoGradeBuilder() {
         title: fixedItem.name, artist: finalFileName,
         station: 'FIXO', reason: `Conteúdo fixo com dia: ${getDayCode(targetDay)}`,
       });
+    } else if (isSunday) {
+      console.log(`[GRADE] 🌞 Domingo: conteúdo fixo ignorado às ${timeStr} — 100% monitoramento`);
     } else if (hasScheduledSequence && fixedItems.some(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil')) {
       console.log(`[GRADE] ⏭️ Conteúdo fixo ignorado às ${timeStr} — sequência agendada ativa`);
     }
