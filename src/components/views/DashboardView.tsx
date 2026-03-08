@@ -23,6 +23,8 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { GradePreviewCard } from '@/components/dashboard/GradePreviewCard';
 import { GradeScheduleCard } from '@/components/dashboard/GradeScheduleCard';
+import { SmartNotificationsCard } from '@/components/dashboard/SmartNotificationsCard';
+import { ServiceHealthCard } from '@/components/dashboard/ServiceHealthCard';
 
 export function DashboardView() {
   const { 
