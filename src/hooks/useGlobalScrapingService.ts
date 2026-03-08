@@ -209,7 +209,7 @@ export function useGlobalScrapingService(
       const batch = enabledStations.slice(i, i + batchSize);
       
       const batchResults = await Promise.allSettled(
-        batch.map(station => scrapeStation(station.name, station.scrapeUrl!))
+        batch.map(station => scrapeStation(station.name, station.scrapeUrl!, station.streamUrl || undefined))
       );
 
       for (let j = 0; j < batchResults.length; j++) {
