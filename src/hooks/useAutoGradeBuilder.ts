@@ -129,7 +129,7 @@ export function useAutoGradeBuilder() {
 
   const lastBuildRef = useRef<string | null>(null);
   const buildIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const usedSongsRef = useRef<UsedSong[]>([]);
+  const usedSongsRef = useRef<UsedSong[]>(loadCrossDayBuffer());
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
   /** Tracks which block time keys (e.g. "18:00") have already been assembled and locked */
   const builtBlocksRef = useRef<Set<string>>(
@@ -238,6 +238,8 @@ export function useAutoGradeBuilder() {
   const markSongAsUsed = useCallback((title: string, artist: string, blockTime: string) => {
     usedSongsRef.current.push({ title, artist, usedAt: new Date(), blockTime });
     if (usedSongsRef.current.length > 100) usedSongsRef.current = usedSongsRef.current.slice(-100);
+    // Persist for cross-day repetition prevention
+    saveCrossDayBuffer(usedSongsRef.current);
   }, []);
 
   const clearUsedSongs = useCallback(() => {
