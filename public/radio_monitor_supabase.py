@@ -202,7 +202,7 @@ except Exception as e:
 
 # Determinar pasta de dados do usuário
 if os.name == 'nt':
-    _DATA_DIR = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'AudioSolutions', 'RadioMonitor')
+    _DATA_DIR = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'Programador de Radio', 'RadioMonitor')
 else:
     _DATA_DIR = os.path.join(os.path.expanduser('~'), '.radio-monitor')
 
