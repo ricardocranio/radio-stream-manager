@@ -21,6 +21,7 @@ import { useGlobalDownloadService, DownloadServiceState } from '@/hooks/useGloba
 import { useGlobalScrapingService, ScrapeStats } from '@/hooks/useGlobalScrapingService';
 import { useCapturedDownloadService } from '@/hooks/useCapturedDownloadService';
 import { useVozBrasilService } from '@/hooks/useVozBrasilService';
+import { useBackgroundMaintenance } from '@/hooks/useBackgroundMaintenance';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
