@@ -1210,7 +1210,8 @@ export function useAutoGradeBuilder() {
       if (shouldBuildCurrent) {
         const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats, false, targetDay);
         const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line);
-        const mergedCurrentLine = currentExistingLine
+        const forceReplaceCurrent = forceRegenerate || currentSaturdayMismatch;
+        const mergedCurrentLine = currentExistingLine && !forceReplaceCurrent
           ? mergeGradeLinePreservingResolved(currentExistingLine, resolvedCurrentLine, coringaCode)
           : resolvedCurrentLine;
         lineMap.set(currentTimeKey, mergedCurrentLine);
@@ -1222,7 +1223,8 @@ export function useAutoGradeBuilder() {
       if (shouldBuildNext) {
         const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats, false, targetDay);
         const resolvedNextLine = await resolveVinhetasInLine(nextResult.line);
-        const mergedNextLine = nextExistingLine
+        const forceReplaceNext = forceRegenerate || nextSaturdayMismatch;
+        const mergedNextLine = nextExistingLine && !forceReplaceNext
           ? mergeGradeLinePreservingResolved(nextExistingLine, resolvedNextLine, coringaCode)
           : resolvedNextLine;
         lineMap.set(nextTimeKey, mergedNextLine);
