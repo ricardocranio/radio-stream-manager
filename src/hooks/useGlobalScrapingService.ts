@@ -45,11 +45,11 @@ export function useGlobalScrapingService(
     pausedStations: [],
   });
 
-  const scrapeStation = useCallback(async (stationName: string, scrapeUrl: string) => {
+  const scrapeStation = useCallback(async (stationName: string, scrapeUrl: string, streamUrl?: string) => {
     setScrapeStats(prev => ({ ...prev, currentStation: stationName }));
     
     try {
-      const result = await radioScraperApi.scrapeStation(stationName, scrapeUrl);
+      const result = await radioScraperApi.scrapeStation(stationName, scrapeUrl, { streamUrl });
       
       if (result.success && result.nowPlaying) {
         return {

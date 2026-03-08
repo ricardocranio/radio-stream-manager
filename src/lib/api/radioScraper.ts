@@ -202,7 +202,7 @@ export const radioScraperApi = {
   async scrapeStation(
     stationName: string, 
     customUrl?: string, 
-    options: ScrapeOptions = {}
+    options: ScrapeOptions & { streamUrl?: string } = {}
   ): Promise<RadioScrapeResult> {
     const station = knownStations[stationName];
     const scrapeUrl = customUrl || station?.scrapeUrl;
@@ -222,6 +222,7 @@ export const radioScraperApi = {
         body: { 
           stationUrl: scrapeUrl,
           stationName,
+          streamUrl: options.streamUrl || undefined,
           forceRefresh: options.forceRefresh || false,
         },
       });
