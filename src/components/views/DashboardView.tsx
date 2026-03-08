@@ -260,7 +260,7 @@ export function DashboardView() {
           );
         })}
       </div>
-            {useAutoDownloadStore.getState().tempRetryCount > 0 && (
+
       {/* Voz do Brasil Alert */}
       {useAutoDownloadStore.getState().vozBrasilFailed && (
         <Card className="glass-card border-destructive/30 bg-destructive/5">
