@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Folder, FolderPlus, Trash2, Save, HardDrive, Music } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Folder, FolderPlus, Trash2, Save, HardDrive, Music, Wrench, Loader2 } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,8 @@ export function FoldersView() {
   const { config, setConfig } = useRadioStore();
   const { toast } = useToast();
   const [localConfig, setLocalConfig] = useState(config);
+  const [isFixing, setIsFixing] = useState(false);
+  const [fixProgress, setFixProgress] = useState<{ scanned: number; renamed: number; current: string } | null>(null);
 
   const handleSave = () => {
     setConfig(localConfig);
