@@ -211,6 +211,37 @@ print(f"  📁 Pasta de dados: {_DATA_DIR}")
 
 ARQUIVO_CONFIG = "radios_config.json"
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# PALAVRAS PROIBIDAS E ARTISTAS BLOQUEADOS (filtro local antes de enviar ao banco)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+FORBIDDEN_WORDS = [
+    '1.fm', 'love classics', 'solitaire', 'mahjong', 'dayspedia', 'games', 'online',
+    'metropolitana - sp', 'band fm', 'globo fm', 'mix fm', 'jovem pan', 'transamérica',
+    'nativa fm', 'antena 1', 'alpha fm', '89 fm', 'kiss fm', 'energia 97', 'rádio disney',
+    'rede aleluia', '105 fm', 'cidade fm', 'tupi fm', 'capital fm', 'nova brasil fm',
+    'rádio bandeirantes', 'hino do', 'mengão', 'timão', 'verdão', 'tricolor', 'peixe',
+    'cruzmaltino', 'circus music', 'the hit crew kids', 'farroupilha',
+]
+
+BLOCKED_ARTISTS = [
+    'xuxa', 'padre marcelo rossi', 'circus music', 'the hit crew kids', 'eurides nunes',
+]
+
+def is_forbidden(artist: str, title: str) -> bool:
+    """Verifica se a música deve ser bloqueada antes de enviar ao banco"""
+    combined = f"{artist} - {title}".lower()
+    # Check forbidden words in combined text
+    for word in FORBIDDEN_WORDS:
+        if word in combined:
+            return True
+    # Check blocked artists
+    artist_lower = artist.lower().strip()
+    for blocked in BLOCKED_ARTISTS:
+        if blocked in artist_lower:
+            return True
+    return False
+
 CONFIG_PADRAO = {
     "configuracao": {
         "intervalo_minutos": 5,
