@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music, Loader2, CheckCircle2, XCircle, BarChart3 } from 'lucide-react';
+import { Settings, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music, Loader2, CheckCircle2, XCircle, BarChart3, ArrowRightLeft, Plus } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +27,7 @@ interface ArlValidationResult {
 }
 
 export function SettingsView() {
-  const { config, setConfig, deezerConfig, setDeezerConfig } = useRadioStore();
+  const { config, setConfig, deezerConfig, setDeezerConfig, songAliases, addSongAlias, removeSongAlias, updateSongAlias } = useRadioStore();
   const similarityStats = useSimilarityLogStore((state) => state.stats);
   const resetSimilarityStats = useSimilarityLogStore((state) => state.resetStats);
   const { toast } = useToast();
