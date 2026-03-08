@@ -1473,7 +1473,7 @@ function parseID3TagsFromFile(filePath) {
         if (frameSize <= 0 || frameSize > headerSize) break;
         const frameData = buf.slice(offset + 10, offset + 10 + frameSize);
         
-        if (frameId === 'TPE1' || frameId === 'TIT2') {
+        if (frameId === 'TPE1' || frameId === 'TIT2' || frameId === 'TCON') {
           const encoding = frameData[0];
           let text = '';
           if (encoding === 0) {
@@ -1485,6 +1485,7 @@ function parseID3TagsFromFile(filePath) {
           }
           if (frameId === 'TPE1') result.artist = text.trim();
           if (frameId === 'TIT2') result.title = text.trim();
+          if (frameId === 'TCON') result.genre = text.trim();
         }
         offset += 10 + frameSize;
       }
