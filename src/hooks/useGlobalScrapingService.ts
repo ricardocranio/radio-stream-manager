@@ -71,11 +71,31 @@ export function useGlobalScrapingService(
 
   const scrapeAllStations = useCallback(async (_forceRefresh = false) => {
     const { stations, addCapturedSong, addMissingSong, missingSongs, config } = useRadioStore.getState();
-    const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl);
+    const now = Date.now();
+    
+    // Auto-recovery: filter out paused stations and unpause expired ones
+    const pausedStationNames: string[] = [];
+    for (const [name, info] of stationFailureMap.entries()) {
+      if (info.pausedUntil > now) {
+        pausedStationNames.push(name);
+      } else if (info.pausedUntil > 0 && info.pausedUntil <= now) {
+        // Unpause: reset failure count, give another chance
+        console.log(`[SCRAPE-SVC] 🔄 Auto-recovery: ${name} retomando após pausa`);
+        stationFailureMap.set(name, { count: 0, pausedUntil: 0 });
+      }
+    }
+
+    const enabledStations = stations.filter(s => 
+      s.enabled && s.scrapeUrl && !pausedStationNames.includes(s.name)
+    );
     
     if (enabledStations.length === 0) {
-      console.log('[SCRAPE-SVC] No enabled stations');
+      console.log('[SCRAPE-SVC] No enabled stations (or all paused)');
       return { successCount: 0, errorCount: 0, newSongsCount: 0, missingCount: 0 };
+    }
+
+    if (pausedStationNames.length > 0) {
+      console.log(`[SCRAPE-SVC] ⏸️ ${pausedStationNames.length} emissoras pausadas por falhas: ${pausedStationNames.join(', ')}`);
     }
 
     console.log(`[SCRAPE-SVC] 📡 Scraping ${enabledStations.length} stations...`);
@@ -85,6 +105,7 @@ export function useGlobalScrapingService(
       isRunning: true,
       lastScrape: new Date(),
       failedStations: [],
+      pausedStations: pausedStationNames,
     }));
 
     let successCount = 0;
