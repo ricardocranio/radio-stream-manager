@@ -1772,12 +1772,12 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
               // Remove existing file in final folder if present
               if (fs.existsSync(finalFilePath)) {
                 fs.unlinkSync(finalFilePath);
-                console.log(`[DEEMIX] Removed existing: ${deezerFilename}`);
+                console.log(`[DEEMIX] Removed existing: ${finalFilename}`);
               }
               
-              // Move from temp to final with Deezer API metadata name
+              // Move from temp to final with ID3/Deezer metadata name
               fs.renameSync(tempFilePath, finalFilePath);
-              console.log(`[DEEMIX] ✅ Moved & renamed: ${deezerFilename}`);
+              console.log(`[DEEMIX] ✅ Moved & renamed: ${finalFilename}`);
               
               // Cleanup: remove any other new files in temp
               for (const f of newFiles) {
@@ -1799,7 +1799,7 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
             if (!stationName) {
               showNotification(
                 '✅ Download Concluído',
-                `${cleanArtist} - ${cleanTitle}`,
+                `${finalArtist} - ${finalTitle}`,
                 () => { shell.openPath(finalOutputFolder); }
               );
             }
@@ -1816,8 +1816,8 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
               output: stdout,
               outputFolder: finalOutputFolder,
               stationFolder: sanitizedStation,
-              verifiedFile: deezerFilename,
-              message: `Download concluído: ${cleanArtist} - ${cleanTitle}`
+              verifiedFile: finalFilename,
+              message: `Download concluído: ${finalArtist} - ${finalTitle}`
             });
           } catch (verifyError) {
             console.error('[DEEMIX] Verification error:', verifyError.message);
