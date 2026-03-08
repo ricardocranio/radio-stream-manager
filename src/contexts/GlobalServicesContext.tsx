@@ -22,6 +22,8 @@ import { useGlobalScrapingService, ScrapeStats } from '@/hooks/useGlobalScraping
 import { useCapturedDownloadService } from '@/hooks/useCapturedDownloadService';
 import { useVozBrasilService } from '@/hooks/useVozBrasilService';
 import { useBackgroundMaintenance } from '@/hooks/useBackgroundMaintenance';
+import { useServiceWatchdog } from '@/hooks/useServiceWatchdog';
+import { useDailyReport } from '@/hooks/useDailyReport';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -57,6 +59,8 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   const capturedDownloadService = useCapturedDownloadService();
   const vozBrasilService = useVozBrasilService();
   const maintenanceService = useBackgroundMaintenance();
+  const watchdogService = useServiceWatchdog();
+  const dailyReportService = useDailyReport();
 
   // ============= INITIALIZATION (runs once) =============
   useEffect(() => {
@@ -86,6 +90,11 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log(`║ 📥 Capturadas DL: ✅ AUTOMÁTICO (2 min polling)`.padEnd(65) + '║');
     console.log(`║ 🎯 IA Classify:   ✅ ATIVO (30 min batches)`.padEnd(65) + '║');
     console.log(`║ 🗜️ Compressão:    ✅ ATIVO (diário 4:00)`.padEnd(65) + '║');
+    console.log(`║ 🐕 Watchdog:      ✅ ATIVO (2 min check)`.padEnd(65) + '║');
+    console.log(`║ 📊 Relatório:     ✅ ATIVO (23:55 diário)`.padEnd(65) + '║');
+    console.log(`║ 💾 Cache Offline:  ✅ ATIVO (fallback 24h)`.padEnd(65) + '║');
+    console.log(`║ 🔄 Cross-Day:     ✅ ATIVO (buffer 4h)`.padEnd(65) + '║');
+    console.log(`║ 📉 Ranking Decay: ✅ ATIVO (5%/dia)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
     // Start all services

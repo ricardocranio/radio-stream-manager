@@ -34,6 +34,9 @@ import type {
 import { mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
 import { saveGradeToStorage, loadGradeFromStorage, clearGradeStorage } from '@/lib/gradeBuilder/gradePersistence';
 import { resolveVinhetasInLine, resolveVinhetasInGrade, resetVinhetaPool } from '@/lib/gradeBuilder/vinhetaResolver';
+import { saveOfflineSongCache, loadOfflineSongCache } from '@/lib/offlineSongCache';
+import { saveCrossDayBuffer, loadCrossDayBuffer } from '@/lib/crossDayRepetition';
+import { reportServiceHeartbeat } from '@/hooks/useServiceWatchdog';
 
 // === MODULE-LEVEL VHT DURATION CACHE ===
 let _cachedAvgVhtDurationSec: number | null = null;
@@ -126,7 +129,7 @@ export function useAutoGradeBuilder() {
 
   const lastBuildRef = useRef<string | null>(null);
   const buildIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const usedSongsRef = useRef<UsedSong[]>([]);
+  const usedSongsRef = useRef<UsedSong[]>(loadCrossDayBuffer());
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
   /** Tracks which block time keys (e.g. "18:00") have already been assembled and locked */
   const builtBlocksRef = useRef<Set<string>>(
@@ -235,6 +238,8 @@ export function useAutoGradeBuilder() {
   const markSongAsUsed = useCallback((title: string, artist: string, blockTime: string) => {
     usedSongsRef.current.push({ title, artist, usedAt: new Date(), blockTime });
     if (usedSongsRef.current.length > 100) usedSongsRef.current = usedSongsRef.current.slice(-100);
+    // Persist for cross-day repetition prevention
+    saveCrossDayBuffer(usedSongsRef.current);
   }, []);
 
   const clearUsedSongs = useCallback(() => {
@@ -349,6 +354,7 @@ export function useAutoGradeBuilder() {
       fixedContent: fixedContent as GradeContext['fixedContent'],
       stations: stations.map(s => ({ id: s.id, name: s.name, styles: s.styles })),
       musicFolders: config.musicFolders,
+      artistBlackouts: config.artistBlackouts,
     };
   }, [
     isRecentlyUsed, findSongInLibrary, batchFind, markSongAsUsed,
@@ -438,8 +444,14 @@ export function useAutoGradeBuilder() {
         console.warn('[AUTO-GRADE] ⚠️ radio_historico exception:', e instanceof Error ? e.message : e);
       }
 
-      // If both failed, retry or report
+      // If both failed, try offline cache before retrying
       if (scrapedData.length === 0 && historicoData.length === 0) {
+        const cached = loadOfflineSongCache();
+        if (cached && cached.length > 0) {
+          console.log(`[AUTO-GRADE] 📂 Usando cache offline: ${cached.length} músicas`);
+          return buildSongsByStation(cached, 300);
+        }
+
         if (retryCount < 2) {
           console.log(`[AUTO-GRADE] 🔄 Nenhum dado obtido. Retry ${retryCount + 1}/2 em 3s...`);
           await new Promise(r => setTimeout(r, 3000));
@@ -495,11 +507,21 @@ export function useAutoGradeBuilder() {
 
       console.log(`[AUTO-GRADE] Pool ampliado: ${scrapedData.length} scraped + ${historicoData.length} histórico = ${deduplicated.length} únicas`);
 
+      // Save to offline cache for fallback
+      saveOfflineSongCache(deduplicated);
+
       return buildSongsByStation(deduplicated, 300);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
       console.error('[AUTO-GRADE] Error fetching all songs:', errorMsg);
       
+      // Try offline cache before retrying
+      const cached = loadOfflineSongCache();
+      if (cached && cached.length > 0) {
+        console.log(`[AUTO-GRADE] 📂 Fallback: cache offline com ${cached.length} músicas`);
+        return buildSongsByStation(cached, 300);
+      }
+
       if (retryCount < 2) {
         console.log(`[AUTO-GRADE] 🔄 Retry ${retryCount + 1}/2 em 3s...`);
         await new Promise(r => setTimeout(r, 3000));
@@ -1229,6 +1251,7 @@ export function useAutoGradeBuilder() {
 
     try {
       console.log('[AUTO-GRADE] 🚀 Building full day grade with progressive saving...');
+      reportServiceHeartbeat('grade-builder');
       logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
       clearUsedSongs();
 
@@ -1451,6 +1474,7 @@ export function useAutoGradeBuilder() {
 
       // Always use the FULL song pool from monitoring (scraped_songs + radio_historico)
       // A narrow 1h window misses songs captured earlier, causing unnecessary Coringas
+      reportServiceHeartbeat('grade-builder');
       const fullPool = await fetchAllRecentSongs();
 
       const durationMap = new Map(state.pendingBlockDurations);

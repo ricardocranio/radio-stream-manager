@@ -12,6 +12,7 @@
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import type { SongEntry, BlockResult, BlockLogItem, BlockStats, GradeContext } from './types';
 import type { WeekDay } from '@/types/radio';
+import { applyTemporalDecay } from '@/lib/rankingDecay';
 
 /**
  * Generate the Voz do Brasil block (21:00 weekdays).
@@ -43,7 +44,7 @@ export async function generateMisturadao(
 ): Promise<BlockResult> {
   const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
   const dayName = ctx.getFullDayName(targetDay);
-  const sortedRanking = [...ctx.rankingSongs].sort((a, b) => b.plays - a.plays);
+  const sortedRanking = applyTemporalDecay([...ctx.rankingSongs]);
   const logs: BlockLogItem[] = [];
   const usedPositions = new Set<number>();
 
@@ -157,7 +158,7 @@ export async function generateTop50Block(
   const SONGS_PER_BLOCK = 10;
   
   // Sort ranking by plays descending → index 0 = position 1 (most played)
-  const sorted = [...ctx.rankingSongs].sort((a, b) => b.plays - a.plays);
+  const sorted = applyTemporalDecay([...ctx.rankingSongs]);
   
   // 19:00 block: positions 20→11 (indices 19→10)
   // 19:30 block: positions 10→01 (indices 9→0)
@@ -342,7 +343,7 @@ export async function generateTop10Block(
   const top10_02 = `TOP_10_MIX_BLOCO02_${dayName}.MP3`;
 
   // Get real ranking songs for the 2 music slots (positions 1 and 2)
-  const sortedRanking = [...ctx.rankingSongs].sort((a, b) => b.plays - a.plays);
+  const sortedRanking = applyTemporalDecay([...ctx.rankingSongs]);
   const usedPositions = new Set<number>();
 
   const getRankingSong = async (preferredPos: number): Promise<string> => {

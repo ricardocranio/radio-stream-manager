@@ -70,6 +70,8 @@ export function useGlobalScrapingService(
   }, []);
 
   const scrapeAllStations = useCallback(async (_forceRefresh = false) => {
+    const { reportServiceHeartbeat: rsh } = await import('@/hooks/useServiceWatchdog');
+    rsh('scraping');
     const { stations, addCapturedSong, addMissingSong, missingSongs, config } = useRadioStore.getState();
     const now = Date.now();
     

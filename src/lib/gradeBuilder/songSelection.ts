@@ -190,11 +190,26 @@ export async function selectSongForSlot(
 
   let selectedSong: SongEntry | null = null;
 
-  // Helper: check candidate validity
+  // Helper: check candidate validity (includes blackout check)
+  const [blockHour] = timeStr.split(':').map(Number);
   const isValidCandidate = (title: string, artist: string) => {
     const key = `${title.toLowerCase()}-${artist.toLowerCase()}`;
     const normalizedArtist = artist.toLowerCase().trim();
-    return !usedInBlock.has(key) && !usedArtistsInBlock.has(normalizedArtist) && !ctx.isRecentlyUsed(title, artist, timeStr, isFullDay);
+    if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) return false;
+    if (ctx.isRecentlyUsed(title, artist, timeStr, isFullDay)) return false;
+    // Artist blackout by time range
+    if (ctx.artistBlackouts?.length) {
+      for (const bo of ctx.artistBlackouts) {
+        if (normalizedArtist.includes(bo.artist.toLowerCase().trim())) {
+          if (bo.startHour <= bo.endHour) {
+            if (blockHour >= bo.startHour && blockHour < bo.endHour) return false;
+          } else {
+            if (blockHour >= bo.startHour || blockHour < bo.endHour) return false;
+          }
+        }
+      }
+    }
+    return true;
   };
 
   const downloadTimeoutMs = isFullDay ? 30000 : 720000;
