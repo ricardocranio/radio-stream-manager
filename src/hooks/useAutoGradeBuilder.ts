@@ -921,20 +921,75 @@ export function useAutoGradeBuilder() {
       logs: blockLogs, stats,
     };
 
-    for (const seq of activeSequence) {
-      if (songs.length >= activeSequence.length) break;
+    // === DURATION-AWARE BLOCK GENERATION ===
+    // Target: 29-32 minutes per block (1740-1920 seconds)
+    const MIN_BLOCK_DURATION_SEC = 29 * 60; // 1740s
+    const MAX_BLOCK_DURATION_SEC = 32 * 60; // 1920s
+    const DEFAULT_SONG_DURATION_SEC = 210;   // 3:30 fallback
+    const VHT_DURATION_SEC = 7;              // ~7s per vinheta separator
+    const DEFAULT_FIXED_DURATION_SEC = 180;  // 3:00 for fixed content fallback
+
+    let accumulatedDurationSec = 0;
+    let sequenceCycleIndex = 0;
+
+    // Pre-calculate fixed content duration if present
+    if (fixedContentFile) {
+      let fixedDuration = DEFAULT_FIXED_DURATION_SEC;
+      if (isElectron && window.electronAPI?.getFileDuration) {
+        try {
+          const cleanName = fixedContentFile.replace(/^"|"$/g, '');
+          const allFolders = [...config.musicFolders, config.contentFolder, config.gradeFolder].filter(Boolean);
+          const durResult = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: allFolders });
+          if (durResult.success && durResult.duration > 0) {
+            fixedDuration = durResult.duration;
+          }
+        } catch (e) { /* use default */ }
+      }
+      accumulatedDurationSec += fixedDuration;
+    }
+
+    // Helper to get duration of a song file
+    const getSongDuration = async (songStr: string): Promise<number> => {
+      if (!isElectron || !window.electronAPI?.getFileDuration) return DEFAULT_SONG_DURATION_SEC;
+      // Only query for quoted filenames (real files), not codes like 'mus', 'rom', etc.
+      if (!songStr.startsWith('"')) return DEFAULT_SONG_DURATION_SEC;
+      const cleanName = songStr.replace(/^"|"$/g, '');
+      try {
+        const durResult = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: config.musicFolders });
+        if (durResult.success && durResult.duration > 0) return durResult.duration;
+      } catch (e) { /* fallback */ }
+      return DEFAULT_SONG_DURATION_SEC;
+    };
+
+    // Keep adding songs until we reach the target duration (29-32 min)
+    const maxSongsGuard = 20; // Safety: never more than 20 songs per block
+    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard) {
+      const seq = activeSequence[sequenceCycleIndex % activeSequence.length];
+      sequenceCycleIndex++;
 
       // Try special sequence types first
       const specialResult = await handleSpecialSequenceType(seq, hour, minute, selCtx, ctx, targetDay);
       if (specialResult !== null) {
+        const dur = await getSongDuration(specialResult);
+        // Check if adding this song would exceed max
+        const projectedTotal = accumulatedDurationSec + dur + (songs.length > 0 ? VHT_DURATION_SEC : 0);
+        if (projectedTotal > MAX_BLOCK_DURATION_SEC && accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
         songs.push(specialResult);
+        accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
         continue;
       }
 
       // Normal station selection (P0-P6)
       const songStr = await selectSongForSlot(seq, selCtx, ctx);
+      const dur = await getSongDuration(songStr);
+      const projectedTotal = accumulatedDurationSec + dur + (songs.length > 0 ? VHT_DURATION_SEC : 0);
+      if (projectedTotal > MAX_BLOCK_DURATION_SEC && accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
       songs.push(songStr);
+      accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
     }
+
+    const blockMinutes = (accumulatedDurationSec / 60).toFixed(1);
+    console.log(`[AUTO-GRADE] ⏱️ Bloco ${timeStr}: ${songs.length} músicas, ${blockMinutes} min (alvo: 29-32 min)`);
 
     // Insert fixed content at configured position
     let allContent: string[] = [...songs];
