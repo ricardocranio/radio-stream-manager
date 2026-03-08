@@ -1210,7 +1210,7 @@ export function useAutoGradeBuilder() {
       }
 
       if (shouldBuildNext) {
-        const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats);
+        const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats, false, targetDay);
         const resolvedNextLine = await resolveVinhetasInLine(nextResult.line);
         const mergedNextLine = nextExistingLine
           ? mergeGradeLinePreservingResolved(nextExistingLine, resolvedNextLine, coringaCode)
