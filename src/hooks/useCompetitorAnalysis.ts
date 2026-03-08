@@ -130,11 +130,11 @@ export function useCompetitorAnalysis() {
         const results = await Promise.all(
           toCheck.map(async ([key, entry]) => {
             try {
-              const exists = await window.electronAPI!.checkSongExists!(
-                config.musicFolders,
-                entry.artist,
-                entry.title
-              );
+              const exists = await window.electronAPI!.checkSongExists!({
+                folders: config.musicFolders,
+                artist: entry.artist,
+                title: entry.title,
+              });
               return { key, exists: !!exists };
             } catch {
               return { key, exists: false };
