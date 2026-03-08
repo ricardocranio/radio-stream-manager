@@ -1497,7 +1497,55 @@ function parseID3TagsFromFile(filePath) {
   }
 }
 
-ipcMain.handle('scan-fix-library', async (event, { musicFolders }) => {
+// =============== READ ID3 GENRE FROM FILE ===============
+ipcMain.handle('read-id3-genre', async (event, { filePath, musicFolders }) => {
+  try {
+    let targetPath = filePath;
+    
+    // If filePath is just a filename, search in musicFolders
+    if (!path.isAbsolute(filePath) && musicFolders && musicFolders.length > 0) {
+      for (const folder of musicFolders) {
+        // Search recursively in subfolders
+        const searchInFolder = (dir) => {
+          try {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const entry of entries) {
+              const fullPath = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                const found = searchInFolder(fullPath);
+                if (found) return found;
+              } else if (entry.name.toLowerCase() === filePath.toLowerCase()) {
+                return fullPath;
+              }
+            }
+          } catch (e) {}
+          return null;
+        };
+        const found = searchInFolder(folder);
+        if (found) {
+          targetPath = found;
+          break;
+        }
+      }
+    }
+
+    if (!fs.existsSync(targetPath)) {
+      return { success: false, error: 'File not found' };
+    }
+
+    const tags = parseID3TagsFromFile(targetPath);
+    return { 
+      success: true, 
+      genre: tags.genre || null,
+      artist: tags.artist || null,
+      title: tags.title || null,
+    };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+
   console.log('[LIB-FIX] Starting library scan & fix...');
   const results = { scanned: 0, renamed: 0, skipped: 0, errors: 0, details: [] };
   
