@@ -858,6 +858,9 @@ export function DashboardView() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Phase 5: Service Health Dashboard */}
+      <ServiceHealthCard />
     </div>
   );
 }
