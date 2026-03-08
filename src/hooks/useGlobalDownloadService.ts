@@ -26,9 +26,7 @@ const PRIORITY_GRADE_BOOST = 500;
 const PRIORITY_SEQUENCE_BOOST = 200;
 const PRIORITY_STATION_BOOST = 100;
 
-const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
-const MAX_RETRIES_BEFORE_COOLDOWN = 3;
-const ARL_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const MAX_RETRIES = 3; // After 3 failures, remove from queue permanently
 
 export interface DownloadServiceState {
   queueLength: number;
