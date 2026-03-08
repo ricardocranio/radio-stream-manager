@@ -755,11 +755,21 @@ export function CapturedSongsView() {
                           <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap justify-end">
                         <Badge variant="outline" className="hidden sm:flex">
                           <Radio className="w-3 h-3 mr-1" />
                           {song.station_name}
                         </Badge>
+                        {song.ai_genre && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            🎵 {song.ai_genre}
+                          </Badge>
+                        )}
+                        {song.ai_energy && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            ⚡ {song.ai_energy}
+                          </Badge>
+                        )}
                         {song.is_now_playing && (
                           <Badge className="bg-success/20 text-success border-success/30">
                             AO VIVO
