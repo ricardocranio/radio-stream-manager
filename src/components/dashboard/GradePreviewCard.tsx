@@ -172,6 +172,26 @@ export function GradePreviewCard() {
   const foundCount = Object.values(libraryStatus).filter(s => s === 'found').length;
   const missingCount = Object.values(libraryStatus).filter(s => s === 'missing').length;
   const isLoading = gradeBuilder.isBuilding;
+  const isBlockShort = blockDuration !== undefined && blockDuration < 29;
+  const isBlockLong = blockDuration !== undefined && blockDuration > 32;
+  const isBlockOk = blockDuration !== undefined && blockDuration >= 29 && blockDuration <= 32;
+
+  // Auto-rebuild when block is too short (with debounce to avoid loops)
+  const autoFixAttemptedRef = useRef<string>('');
+  useEffect(() => {
+    if (isBlockShort && !isLoading && nextBlockTime !== '--:--') {
+      const key = `${nextBlockTime}-${blockDuration}`;
+      if (autoFixAttemptedRef.current !== key) {
+        autoFixAttemptedRef.current = key;
+        console.log(`[PREVIEW] ⚠️ Bloco ${nextBlockTime} com ${blockDuration} min (<29). Tentando rebuild automático...`);
+        // Delay to avoid rapid loops
+        const timer = setTimeout(() => {
+          gradeBuilder.buildGrade(false, true);
+        }, 5000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isBlockShort, isLoading, nextBlockTime, blockDuration, gradeBuilder]);
 
   return (
     <Card className="glass-card border-amber-500/20">
