@@ -2998,8 +2998,16 @@ ipcMain.handle('download-voz-brasil', async (event, params) => {
         console.log(`[VOZ] Removed existing: ${filename}`);
       }
       
-      fs.renameSync(tempFilePath, finalFilePath);
-      console.log(`[VOZ] ✅ Moved: ${tempFilename} → ${filename}`);
+      // Move from temp to final — try rename first, fallback to copy+delete
+      try {
+        fs.renameSync(tempFilePath, finalFilePath);
+        console.log(`[VOZ] ✅ Moved (rename): ${tempFilename} → ${filename}`);
+      } catch (renameErr) {
+        console.log(`[VOZ] ⚠️ Rename failed (${renameErr.code || renameErr.message}), using copy+delete...`);
+        fs.copyFileSync(tempFilePath, finalFilePath);
+        fs.unlinkSync(tempFilePath);
+        console.log(`[VOZ] ✅ Moved (copy+delete): ${tempFilename} → ${filename}`);
+      }
       
       // Cleanup temp dir if empty
       try {
