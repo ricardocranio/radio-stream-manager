@@ -20,6 +20,7 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 
 const POLL_INTERVAL = 120_000; // 2 minutes
 const DOWNLOAD_DELAY = 15_000; // 15s between downloads
+const MAX_RETRIES = 3; // After 3 failures, skip permanently
 
 // Map ID3 genre text to normalized genre
 const ID3_GENRE_MAP: Record<string, string> = {
@@ -64,6 +65,7 @@ interface CapturedQueueItem {
   artist: string;
   title: string;
   station_name: string;
+  retryCount?: number;
 }
 
 export function useCapturedDownloadService() {
@@ -176,12 +178,15 @@ export function useCapturedDownloadService() {
     store.setIsProcessing(true);
     store.setQueueLength(queue.length);
 
-    for (let i = 0; i < queue.length; i++) {
+    // Use a mutable queue so failed items go to the end
+    const mutableQueue = [...queue.map(s => ({ ...s, retryCount: s.retryCount ?? 0 }))];
+    
+    while (mutableQueue.length > 0) {
       const { isRunning, deezerConfig } = useRadioStore.getState();
       if (!isRunning || !deezerConfig.enabled || !deezerConfig.autoDownload) break;
 
-      const song = queue[i];
-      useCapturedDownloadStore.getState().setQueueLength(queue.length - i);
+      const song = mutableQueue.shift()!;
+      useCapturedDownloadStore.getState().setQueueLength(mutableQueue.length + 1);
 
       // Acquire global mutex — wait for any grade download to finish first
       await acquireDownloadLock(0); // priority 0 = lowest (grade gets 500+)
@@ -191,21 +196,30 @@ export function useCapturedDownloadService() {
       } finally {
         releaseDownloadLock();
       }
+      
       if (result === 'success') {
         useCapturedDownloadStore.getState().incrementProcessed();
       } else if (result === 'exists') {
         useCapturedDownloadStore.getState().incrementExists();
       } else {
-        useCapturedDownloadStore.getState().incrementError();
+        // Error — retry up to MAX_RETRIES, send to end of queue
+        const newRetry = (song.retryCount ?? 0) + 1;
+        if (newRetry < MAX_RETRIES) {
+          console.log(`[CAP-DL] 🔄 ${song.artist} - ${song.title} falhou (tentativa ${newRetry}/${MAX_RETRIES}). Vai para o fim da fila.`);
+          mutableQueue.push({ ...song, retryCount: newRetry });
+        } else {
+          console.warn(`[CAP-DL] 🗑️ ${song.artist} - ${song.title} falhou ${newRetry}x. Removida definitivamente.`);
+          useCapturedDownloadStore.getState().incrementError();
+        }
       }
 
       // Yield to event loop every 3 iterations
-      if (i % 3 === 2) {
+      if (mutableQueue.length % 3 === 0) {
         await new Promise(r => setTimeout(r, 0));
       }
 
       // Delay between downloads
-      if (i < queue.length - 1) {
+      if (mutableQueue.length > 0) {
         await new Promise(r => setTimeout(r, DOWNLOAD_DELAY));
       }
     }
