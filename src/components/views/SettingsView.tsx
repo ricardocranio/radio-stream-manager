@@ -864,7 +864,33 @@ export function SettingsView() {
           </CardContent>
         </Card>
 
-        {/* Filter Settings */}
+        {/* Fill Priority Stations */}
+        <Card className="glass-card border-amber-500/20">
+          <CardHeader className="border-b border-border">
+            <CardTitle className="flex items-center gap-2">
+              <Music className="w-5 h-5 text-amber-500" />
+              Estações de Preenchimento
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Quando um bloco não atinge 29 minutos, o sistema busca músicas extras destas estações (em ordem de prioridade).
+            </p>
+            <div>
+              <Label className="text-sm">Estações Prioritárias</Label>
+              <Textarea
+                value={fillStations}
+                onChange={(e) => setFillStations(e.target.value)}
+                className="mt-2 font-mono text-xs h-20"
+                placeholder="BH FM, Metropolitana FM, Metropolitana"
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                Nomes das estações separados por vírgula, na ordem de prioridade desejada. O sistema tentará preencher o bloco com músicas dessas estações primeiro.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="glass-card">
           <CardHeader className="border-b border-border">
             <CardTitle className="flex items-center gap-2">
