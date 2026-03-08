@@ -77,6 +77,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onDeemixStatus: (callback) => ipcRenderer.on('deemix-status', (_, status) => callback(status)),
   getDeemixCommand: () => ipcRenderer.invoke('get-deemix-command'),
   
+  // Python Radio Monitor
+  startPythonMonitor: () => ipcRenderer.invoke('start-python-monitor'),
+  stopPythonMonitor: () => ipcRenderer.invoke('stop-python-monitor'),
+  restartPythonMonitor: () => ipcRenderer.invoke('restart-python-monitor'),
+  getMonitorStatus: () => ipcRenderer.invoke('get-monitor-status'),
+  getMonitorLogs: () => ipcRenderer.invoke('get-monitor-logs'),
+  onMonitorLog: (callback) => ipcRenderer.on('monitor-log', (_, log) => callback(log)),
+  onMonitorStatus: (callback) => ipcRenderer.on('monitor-status', (_, status) => callback(status)),
+
   // Platform detection
   platform: process.platform,
   isElectron: true,
