@@ -31,7 +31,7 @@ import { isRomanceBlock, generateRomanceBlock } from '@/lib/gradeBuilder/folderP
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
-import { hasUnresolvedSongTokens, mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
+import { mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
 import { saveGradeToStorage, loadGradeFromStorage, clearGradeStorage } from '@/lib/gradeBuilder/gradePersistence';
 import { resolveVinhetasInLine, resolveVinhetasInGrade, resetVinhetaPool } from '@/lib/gradeBuilder/vinhetaResolver';
 
