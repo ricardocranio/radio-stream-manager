@@ -34,6 +34,9 @@ import type {
 import { mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
 import { saveGradeToStorage, loadGradeFromStorage, clearGradeStorage } from '@/lib/gradeBuilder/gradePersistence';
 import { resolveVinhetasInLine, resolveVinhetasInGrade, resetVinhetaPool } from '@/lib/gradeBuilder/vinhetaResolver';
+import { saveOfflineSongCache, loadOfflineSongCache } from '@/lib/offlineSongCache';
+import { saveCrossDayBuffer, loadCrossDayBuffer } from '@/lib/crossDayRepetition';
+import { reportServiceHeartbeat } from '@/hooks/useServiceWatchdog';
 
 // === MODULE-LEVEL VHT DURATION CACHE ===
 let _cachedAvgVhtDurationSec: number | null = null;
@@ -438,8 +441,14 @@ export function useAutoGradeBuilder() {
         console.warn('[AUTO-GRADE] ⚠️ radio_historico exception:', e instanceof Error ? e.message : e);
       }
 
-      // If both failed, retry or report
+      // If both failed, try offline cache before retrying
       if (scrapedData.length === 0 && historicoData.length === 0) {
+        const cached = loadOfflineSongCache();
+        if (cached && cached.length > 0) {
+          console.log(`[AUTO-GRADE] 📂 Usando cache offline: ${cached.length} músicas`);
+          return buildSongsByStation(cached, 300);
+        }
+
         if (retryCount < 2) {
           console.log(`[AUTO-GRADE] 🔄 Nenhum dado obtido. Retry ${retryCount + 1}/2 em 3s...`);
           await new Promise(r => setTimeout(r, 3000));
@@ -495,11 +504,21 @@ export function useAutoGradeBuilder() {
 
       console.log(`[AUTO-GRADE] Pool ampliado: ${scrapedData.length} scraped + ${historicoData.length} histórico = ${deduplicated.length} únicas`);
 
+      // Save to offline cache for fallback
+      saveOfflineSongCache(deduplicated);
+
       return buildSongsByStation(deduplicated, 300);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
       console.error('[AUTO-GRADE] Error fetching all songs:', errorMsg);
       
+      // Try offline cache before retrying
+      const cached = loadOfflineSongCache();
+      if (cached && cached.length > 0) {
+        console.log(`[AUTO-GRADE] 📂 Fallback: cache offline com ${cached.length} músicas`);
+        return buildSongsByStation(cached, 300);
+      }
+
       if (retryCount < 2) {
         console.log(`[AUTO-GRADE] 🔄 Retry ${retryCount + 1}/2 em 3s...`);
         await new Promise(r => setTimeout(r, 3000));
