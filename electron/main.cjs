@@ -1454,7 +1454,7 @@ ipcMain.handle('purge-blocked-files', async (event, { musicFolders, blockedSongs
 });
 
 // Deezer Download Handler using deemix CLI
-// Flow: Download to _temp folder → Verify integrity → Move to final folder (keeping original Deezer filename)
+// Flow: Download to _temp folder → Verify integrity → Rename using Deezer API metadata → Move to final folder
 ipcMain.handle('download-from-deezer', async (event, params) => {
   const { artist, title, arl, outputFolder, quality, stationName } = params;
   
@@ -1704,20 +1704,27 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
               return;
             }
             
-            // === MOVE: temp → final folder keeping ORIGINAL filename from Deezer ===
+            // === RENAME & MOVE: temp → final folder using DEEZER API METADATA (most reliable) ===
+            // Use track.artist.name and track.title from Deezer's official API response
+            const cleanArtist = (track.artist.name || artist).replace(/[<>:"/\\|?*]/g, '').trim();
+            const cleanTitle = (track.title || title).replace(/[<>:"/\\|?*]/g, '').trim();
+            const deezerFilename = `${cleanArtist} - ${cleanTitle}.mp3`;
+            
             const tempFilePath = path.join(tempDownloadFolder, validFile);
-            const finalFilePath = path.join(finalOutputFolder, validFile);
+            const finalFilePath = path.join(finalOutputFolder, deezerFilename);
+            
+            console.log(`[DEEMIX] 📛 Rename: "${validFile}" → "${deezerFilename}" (via Deezer API metadata)`);
             
             try {
               // Remove existing file in final folder if present
               if (fs.existsSync(finalFilePath)) {
                 fs.unlinkSync(finalFilePath);
-                console.log(`[DEEMIX] Removed existing: ${validFile}`);
+                console.log(`[DEEMIX] Removed existing: ${deezerFilename}`);
               }
               
-              // Move from temp to final keeping original name (NO rename)
+              // Move from temp to final with Deezer API metadata name
               fs.renameSync(tempFilePath, finalFilePath);
-              console.log(`[DEEMIX] ✅ Moved (sem rename): ${validFile}`);
+              console.log(`[DEEMIX] ✅ Moved & renamed: ${deezerFilename}`);
               
               // Cleanup: remove any other new files in temp
               for (const f of newFiles) {
@@ -1739,7 +1746,7 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
             if (!stationName) {
               showNotification(
                 '✅ Download Concluído',
-                `${artist} - ${title}`,
+                `${cleanArtist} - ${cleanTitle}`,
                 () => { shell.openPath(finalOutputFolder); }
               );
             }
@@ -1756,8 +1763,8 @@ ipcMain.handle('download-from-deezer', async (event, params) => {
               output: stdout,
               outputFolder: finalOutputFolder,
               stationFolder: sanitizedStation,
-              verifiedFile: validFile,
-              message: `Download concluído: ${artist} - ${title}`
+              verifiedFile: deezerFilename,
+              message: `Download concluído: ${cleanArtist} - ${cleanTitle}`
             });
           } catch (verifyError) {
             console.error('[DEEMIX] Verification error:', verifyError.message);
