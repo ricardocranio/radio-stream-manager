@@ -69,6 +69,9 @@ export interface SystemConfig {
   blockedSongs?: string[];
   // Priority stations for block duration filling (e.g. ['BH FM', 'Metropolitana FM'])
   fillPriorityStations?: string[];
+  // Blackout: block specific artists during time ranges
+  // Format: { artist: "Artist Name", startHour: 5, endHour: 8 }
+  artistBlackouts?: Array<{ artist: string; startHour: number; endHour: number }>;
 }
 
 export interface SequenceConfig {
