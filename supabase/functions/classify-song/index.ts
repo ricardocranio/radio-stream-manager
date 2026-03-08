@@ -6,13 +6,61 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Map station styles to normalized genres
+const STYLE_TO_GENRE: Record<string, string> = {
+  SERTANEJO: "SERTANEJO",
+  PAGODE: "PAGODE",
+  AGRONEJO: "SERTANEJO",
+  POP: "POP",
+  DANCE: "ELETRONICA",
+  HITS: "POP",
+  "POP/VARIADO": "POP",
+  VARIADO: "POP",
+  MPB: "MPB",
+  ROCK: "ROCK",
+  FUNK: "FUNK",
+  GOSPEL: "GOSPEL",
+  FORRO: "FORRO",
+  "RAP/HIP-HOP": "RAP/HIP-HOP",
+  REGGAETON: "REGGAETON",
+  "R&B": "R&B",
+  COUNTRY: "COUNTRY",
+  JAZZ: "JAZZ",
+  CLASSICA: "CLASSICA",
+  INDIE: "INDIE",
+  METAL: "METAL",
+  REGGAE: "REGGAE",
+  LATINA: "LATINA",
+};
+
+// Map genres to typical energy levels
+const GENRE_TO_ENERGY: Record<string, string> = {
+  SERTANEJO: "MEDIUM",
+  PAGODE: "MEDIUM",
+  POP: "HIGH",
+  ELETRONICA: "VERY_HIGH",
+  MPB: "LOW",
+  ROCK: "HIGH",
+  FUNK: "VERY_HIGH",
+  GOSPEL: "MEDIUM",
+  FORRO: "HIGH",
+  "RAP/HIP-HOP": "HIGH",
+  REGGAETON: "HIGH",
+  "R&B": "MEDIUM",
+  COUNTRY: "MEDIUM",
+  JAZZ: "LOW",
+  CLASSICA: "LOW",
+  INDIE: "MEDIUM",
+  METAL: "VERY_HIGH",
+  REGGAE: "LOW",
+  LATINA: "HIGH",
+  OUTRO: "MEDIUM",
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
-
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -20,13 +68,24 @@ serve(async (req) => {
     const { action } = await req.json();
 
     if (action === "classify-batch") {
-      // Buscar músicas sem classificação (últimas 50)
+      // 1. Load station styles mapping
+      const { data: stations, error: stError } = await supabase
+        .from("radio_stations")
+        .select("name, styles");
+      if (stError) throw stError;
+
+      const stationStyleMap: Record<string, string[]> = {};
+      (stations || []).forEach(s => {
+        stationStyleMap[s.name] = s.styles || [];
+      });
+
+      // 2. Fetch unclassified songs
       const { data: songs, error } = await supabase
         .from("scraped_songs")
         .select("id, artist, title, station_name")
         .is("ai_genre", null)
         .order("scraped_at", { ascending: false })
-        .limit(50);
+        .limit(200);
 
       if (error) throw error;
       if (!songs || songs.length === 0) {
@@ -35,88 +94,28 @@ serve(async (req) => {
         });
       }
 
-      // Preparar prompt com lista de músicas
-      const songList = songs.map((s, i) => `${i + 1}. "${s.title}" by ${s.artist} (station: ${s.station_name})`).join("\n");
-
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-lite",
-          messages: [
-            {
-              role: "system",
-              content: `You are a music genre classifier. For each song, determine:
-- genre: one of [POP, ROCK, SERTANEJO, PAGODE, MPB, RAP/HIP-HOP, ELETRONICA, FUNK, GOSPEL, FORRO, REGGAETON, R&B, COUNTRY, JAZZ, CLASSICA, INDIE, METAL, REGGAE, LATINA, OUTRO]
-- energy: one of [LOW, MEDIUM, HIGH, VERY_HIGH]
-
-Base your classification on the artist name, song title, and station context.
-Respond ONLY with a valid JSON array, no markdown, no explanation.
-Format: [{"index":1,"genre":"POP","energy":"HIGH"},...]`
-            },
-            {
-              role: "user",
-              content: `Classify these songs:\n${songList}`
-            }
-          ],
-        }),
-      });
-
-      if (!response.ok) {
-        if (response.status === 429) {
-          return new Response(JSON.stringify({ error: "Rate limit exceeded, try again later" }), {
-            status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        if (response.status === 402) {
-          return new Response(JSON.stringify({ error: "Payment required for AI credits" }), {
-            status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        const t = await response.text();
-        console.error("AI gateway error:", response.status, t);
-        throw new Error(`AI gateway error: ${response.status}`);
-      }
-
-      const aiResult = await response.json();
-      const content = aiResult.choices?.[0]?.message?.content || "";
-
-      // Parse JSON from AI response
-      let classifications: Array<{ index: number; genre: string; energy: string }> = [];
-      try {
-        const jsonMatch = content.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          classifications = JSON.parse(jsonMatch[0]);
-        }
-      } catch (e) {
-        console.error("Failed to parse AI classification:", e, content);
-        throw new Error("Failed to parse AI classification response");
-      }
-
-      // Update songs with classifications
+      // 3. Classify based on station styles
       let classified = 0;
-      for (const cls of classifications) {
-        const song = songs[cls.index - 1];
-        if (!song) continue;
+      for (const song of songs) {
+        const styles = stationStyleMap[song.station_name] || [];
+        const primaryStyle = styles[0] || null;
+        const genre = primaryStyle ? (STYLE_TO_GENRE[primaryStyle] || "OUTRO") : "OUTRO";
+        const energy = GENRE_TO_ENERGY[genre] || "MEDIUM";
 
         const { error: updateError } = await supabase
           .from("scraped_songs")
-          .update({ ai_genre: cls.genre, ai_energy: cls.energy })
+          .update({ ai_genre: genre, ai_energy: energy })
           .eq("id", song.id);
 
         if (!updateError) classified++;
       }
 
-      return new Response(JSON.stringify({ classified, total: songs.length }), {
+      return new Response(JSON.stringify({ classified, total: songs.length, method: "station-based" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (action === "compress-history") {
-      // Chamar a função de compressão
       const { data, error } = await supabase.rpc("compress_radio_historico");
       if (error) throw error;
 
