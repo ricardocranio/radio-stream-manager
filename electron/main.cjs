@@ -1544,8 +1544,8 @@ ipcMain.handle('read-id3-genre', async (event, { filePath, musicFolders }) => {
     return { success: false, error: e.message };
   }
 });
-
-
+// IPC: Scan library and rename files based on ID3 tags
+ipcMain.handle('scan-fix-library', async (event, { musicFolders }) => {
   console.log('[LIB-FIX] Starting library scan & fix...');
   const results = { scanned: 0, renamed: 0, skipped: 0, errors: 0, details: [] };
   
