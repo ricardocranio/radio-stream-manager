@@ -78,6 +78,14 @@ export interface RankingSong {
   lastPlayed: Date;
 }
 
+export interface SongAlias {
+  id: string;
+  fromArtist: string;
+  fromTitle: string;
+  toArtist: string;
+  toTitle: string;
+}
+
 interface RadioState {
   // Radio Stations
   stations: RadioStation[];
@@ -172,6 +180,13 @@ interface RadioState {
   // Auto Scrape Setting (persisted)
   autoScrapeEnabled: boolean;
   setAutoScrapeEnabled: (enabled: boolean) => void;
+
+  // Song Aliases (corrections)
+  songAliases: SongAlias[];
+  setSongAliases: (aliases: SongAlias[]) => void;
+  addSongAlias: (alias: SongAlias) => void;
+  removeSongAlias: (id: string) => void;
+  updateSongAlias: (id: string, updates: Partial<SongAlias>) => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
