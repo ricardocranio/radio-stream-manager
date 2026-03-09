@@ -15,7 +15,7 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 const CLASSIFY_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const PURGE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours — safety sweep only, blocked content is already filtered at download/grade level
 const ARL_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-const MAINTENANCE_CHECK_MS = 60 * 1000; // Check every minute
+const MAINTENANCE_CHECK_MS = 5 * 60 * 1000; // Check every 5 minutes (was 1 min)
 
 export function useBackgroundMaintenance() {
   const lastClassifyRef = useRef<number>(0);
