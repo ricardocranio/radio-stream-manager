@@ -144,8 +144,9 @@ export function useCountdown() {
     // Update immediately
     updateCountdowns();
 
-    // Update every second
-    const interval = setInterval(updateCountdowns, 1000);
+    // Update every 10 seconds instead of 1 second to reduce CPU usage
+    // The countdown is informational, not critical
+    const interval = setInterval(updateCountdowns, 10000);
 
     return () => clearInterval(interval);
   }, [calculateNextGrade, calculateAutoClean]);
