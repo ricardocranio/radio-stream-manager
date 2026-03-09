@@ -188,17 +188,20 @@ export function SettingsView() {
         body: { arl: deezerConfig.arl },
       });
 
+      console.log('[SettingsView] ARL validation response:', { data, error });
+
       if (error) {
+        console.error('[SettingsView] Error from supabase.functions.invoke:', error);
         setArlValidation({ status: 'invalid', message: 'Erro ao conectar com o servidor' });
         toast({
           title: 'Erro na validação',
-          description: 'Não foi possível verificar a ARL.',
+          description: `Não foi possível verificar a ARL: ${error.message || 'erro desconhecido'}`,
           variant: 'destructive',
         });
         return;
       }
 
-      if (data.valid) {
+      if (data?.valid) {
         setArlValidation({ 
           status: 'valid', 
           message: data.message,
@@ -210,19 +213,20 @@ export function SettingsView() {
           description: data.message,
         });
       } else {
-        setArlValidation({ status: 'invalid', message: data.error });
+        setArlValidation({ status: 'invalid', message: data?.error || 'ARL inválida' });
         toast({
           title: '❌ ARL Inválida',
-          description: data.error || 'A ARL não é válida ou está expirada.',
+          description: data?.error || 'A ARL não é válida ou está expirada.',
           variant: 'destructive',
         });
       }
     } catch (err) {
-      console.error('Error validating ARL:', err);
-      setArlValidation({ status: 'invalid', message: 'Erro de conexão' });
+      console.error('[SettingsView] Exception caught during ARL validation:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      setArlValidation({ status: 'invalid', message: errorMessage });
       toast({
         title: 'Erro de conexão',
-        description: 'Não foi possível conectar ao servidor de validação.',
+        description: `Não foi possível conectar ao servidor de validação: ${errorMessage}`,
         variant: 'destructive',
       });
     }
