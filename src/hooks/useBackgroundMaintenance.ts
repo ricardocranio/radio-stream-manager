@@ -14,11 +14,13 @@ import { useRadioStore } from '@/store/radioStore';
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 const CLASSIFY_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const PURGE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours — safety sweep only, blocked content is already filtered at download/grade level
+const ARL_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const MAINTENANCE_CHECK_MS = 60 * 1000; // Check every minute
 
 export function useBackgroundMaintenance() {
   const lastClassifyRef = useRef<number>(0);
   const lastPurgeRef = useRef<number>(0);
+  const lastArlCheckRef = useRef<number>(0);
   const lastCompressRef = useRef<string>(''); // Date string of last compression
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -78,6 +80,42 @@ export function useBackgroundMaintenance() {
     }
   }, []);
 
+  const validateArl = useCallback(async () => {
+    try {
+      const { deezerConfig } = useRadioStore.getState();
+      
+      if (!deezerConfig.enabled || !deezerConfig.arlToken) {
+        return; // Skip if Deezer is disabled or no ARL configured
+      }
+
+      console.log('[MAINTENANCE] 🔑 Validando ARL do Deezer...');
+      const { data, error } = await supabase.functions.invoke('validate-deezer-arl', {
+        body: { arl: deezerConfig.arlToken },
+      });
+
+      if (error) {
+        console.error('[MAINTENANCE] Erro ao validar ARL:', error);
+        return;
+      }
+
+      if (!data?.valid) {
+        console.warn('[MAINTENANCE] ⚠️ ARL INVÁLIDA ou EXPIRADA!');
+        
+        // Show notification if Electron is available
+        if (isElectron && window.electronAPI?.showNotification) {
+          await window.electronAPI.showNotification(
+            'ARL do Deezer Expirada',
+            'Seu token ARL está inválido ou expirou. Configure um novo token nas Configurações para continuar baixando músicas automaticamente.'
+          );
+        }
+      } else {
+        console.log(`[MAINTENANCE] ✅ ARL válida - Usuário: ${data.user}${data.premium ? ' (Premium)' : ''}`);
+      }
+    } catch (error) {
+      console.error('[MAINTENANCE] Erro na validação da ARL:', error);
+    }
+  }, []);
+
   const compressHistory = useCallback(async () => {
     try {
       console.log('[MAINTENANCE] 🗜️ Comprimindo histórico...');
@@ -105,6 +143,9 @@ export function useBackgroundMaintenance() {
       setTimeout(() => purgeBlockedFiles(), 3 * 60 * 1000);
     }
 
+    // Initial ARL validation after 5 minutes
+    setTimeout(() => validateArl(), 5 * 60 * 1000);
+
     intervalRef.current = setInterval(() => {
       const now = Date.now();
 
@@ -114,10 +155,16 @@ export function useBackgroundMaintenance() {
         classifySongs();
       }
 
-      // Purge blocked files every 30 minutes (Electron only)
+      // Purge blocked files every 12 hours (Electron only)
       if (isElectron && now - lastPurgeRef.current >= PURGE_INTERVAL_MS) {
         lastPurgeRef.current = now;
         purgeBlockedFiles();
+      }
+
+      // Validate ARL every 1 hour
+      if (now - lastArlCheckRef.current >= ARL_CHECK_INTERVAL_MS) {
+        lastArlCheckRef.current = now;
+        validateArl();
       }
 
       // Compress history once per day at ~4:00 AM
@@ -129,12 +176,12 @@ export function useBackgroundMaintenance() {
       }
     }, MAINTENANCE_CHECK_MS);
 
-    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (classificação 30min, purge 12h, compressão 4h)');
+    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (classificação 30min, purge 12h, ARL 1h, compressão 4h)');
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [classifySongs, compressHistory, purgeBlockedFiles]);
+  }, [classifySongs, compressHistory, purgeBlockedFiles, validateArl]);
 
-  return { start, classifySongs, compressHistory, purgeBlockedFiles };
+  return { start, classifySongs, compressHistory, purgeBlockedFiles, validateArl };
 }
