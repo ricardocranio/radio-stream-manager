@@ -406,7 +406,7 @@ app.whenReady().then(async () => {
   if (!pythonStatus.available) {
     console.log('[INIT] Python/pip not found');
     setTimeout(() => {
-      if (mainWindow) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('python-status', { 
           available: false, message: 'Python não encontrado.', downloadUrl: 'https://www.python.org/downloads/'
         });
@@ -420,7 +420,7 @@ app.whenReady().then(async () => {
     if (!deemixInstalled) {
       console.log('[INIT] 🔄 Auto-installing deemix silently...');
       setTimeout(() => {
-        if (mainWindow) mainWindow.webContents.send('deemix-install-progress', { status: 'auto-installing', message: 'Instalando deemix automaticamente...' });
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('deemix-install-progress', { status: 'auto-installing', message: 'Instalando deemix automaticamente...' });
       }, 2000);
       
       const installResult = await deemixModule.installDeemix();
@@ -428,17 +428,17 @@ app.whenReady().then(async () => {
         console.log('[INIT] ✓ deemix auto-installed!');
         showNotification('deemix Instalado!', 'Downloads do Deezer estão prontos!');
         setTimeout(() => {
-          if (mainWindow) mainWindow.webContents.send('deemix-status', { installed: true, command: deemixModule.getDeemixCommand(), autoInstalled: true });
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('deemix-status', { installed: true, command: deemixModule.getDeemixCommand(), autoInstalled: true });
         }, 1000);
       } else {
         console.error('[INIT] ✗ deemix auto-install failed:', installResult.error);
         setTimeout(() => {
-          if (mainWindow) mainWindow.webContents.send('deemix-status', { installed: false, error: installResult.error, autoInstallFailed: true });
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('deemix-status', { installed: false, error: installResult.error, autoInstallFailed: true });
         }, 1000);
       }
     } else {
       setTimeout(() => {
-        if (mainWindow) mainWindow.webContents.send('deemix-status', { installed: true, command: deemixModule.getDeemixCommand() });
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('deemix-status', { installed: true, command: deemixModule.getDeemixCommand() });
       }, 3000);
     }
   }
