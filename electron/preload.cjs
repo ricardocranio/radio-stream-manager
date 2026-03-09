@@ -22,7 +22,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installDeemix: () => ipcRenderer.invoke('install-deemix'),
   testDeemix: () => ipcRenderer.invoke('test-deemix'),
   testDeemixSearch: (params) => ipcRenderer.invoke('test-deemix-search', params),
-  onDeemixInstallProgress: (callback) => ipcRenderer.on('deemix-install-progress', (_, progress) => callback(progress)),
+  onDeemixInstallProgress: (callback) => {
+    ipcRenderer.removeAllListeners('deemix-install-progress');
+    ipcRenderer.on('deemix-install-progress', (_, progress) => callback(progress));
+  },
   
   // Station folder management
   ensureStationFolders: (params) => ipcRenderer.invoke('ensure-station-folders', params),
@@ -49,7 +52,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cleanupVozBrasil: (params) => ipcRenderer.invoke('cleanup-voz-brasil', params),
   scrapeVozDownloadUrl: () => ipcRenderer.invoke('scrape-voz-download-url'),
   recoverTempFiles: (params) => ipcRenderer.invoke('recover-temp-files', params),
-  onVozDownloadProgress: (callback) => ipcRenderer.on('voz-download-progress', (_, progress) => callback(progress)),
+  onVozDownloadProgress: (callback) => {
+    ipcRenderer.removeAllListeners('voz-download-progress');
+    ipcRenderer.on('voz-download-progress', (_, progress) => callback(progress));
+  },
   
   // Grade file operations
   saveGradeFile: (params) => ipcRenderer.invoke('save-grade-file', params),
@@ -57,7 +63,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listFolderFiles: (params) => ipcRenderer.invoke('list-folder-files', params),
   renameMusicFile: (params) => ipcRenderer.invoke('rename-music-file', params),
   scanFixLibrary: (params) => ipcRenderer.invoke('scan-fix-library', params),
-  onLibFixProgress: (callback) => ipcRenderer.on('lib-fix-progress', (_, progress) => callback(progress)),
+  onLibFixProgress: (callback) => {
+    ipcRenderer.removeAllListeners('lib-fix-progress');
+    ipcRenderer.on('lib-fix-progress', (_, progress) => callback(progress));
+  },
   scanBpmTags: (params) => ipcRenderer.invoke('scan-bpm-tags', params),
   readId3Genre: (params) => ipcRenderer.invoke('read-id3-genre', params),
   saveBpmCache: (params) => ipcRenderer.invoke('save-bpm-cache', params),
@@ -68,13 +77,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Auto-update
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
-  onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (_, info) => callback(info)),
-  onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (_, info) => callback(info)),
-  onDownloadProgress: (callback) => ipcRenderer.on('download-progress', (_, progress) => callback(progress)),
+  onUpdateAvailable: (callback) => {
+    ipcRenderer.removeAllListeners('update-available');
+    ipcRenderer.on('update-available', (_, info) => callback(info));
+  },
+  onUpdateDownloaded: (callback) => {
+    ipcRenderer.removeAllListeners('update-downloaded');
+    ipcRenderer.on('update-downloaded', (_, info) => callback(info));
+  },
+  onDownloadProgress: (callback) => {
+    ipcRenderer.removeAllListeners('download-progress');
+    ipcRenderer.on('download-progress', (_, progress) => callback(progress));
+  },
   
   // Python/Deemix status notifications
-  onPythonStatus: (callback) => ipcRenderer.on('python-status', (_, status) => callback(status)),
-  onDeemixStatus: (callback) => ipcRenderer.on('deemix-status', (_, status) => callback(status)),
+  onPythonStatus: (callback) => {
+    ipcRenderer.removeAllListeners('python-status');
+    ipcRenderer.on('python-status', (_, status) => callback(status));
+  },
+  onDeemixStatus: (callback) => {
+    ipcRenderer.removeAllListeners('deemix-status');
+    ipcRenderer.on('deemix-status', (_, status) => callback(status));
+  },
   getDeemixCommand: () => ipcRenderer.invoke('get-deemix-command'),
   
   // Python Radio Monitor
@@ -83,8 +107,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   restartPythonMonitor: () => ipcRenderer.invoke('restart-python-monitor'),
   getMonitorStatus: () => ipcRenderer.invoke('get-monitor-status'),
   getMonitorLogs: () => ipcRenderer.invoke('get-monitor-logs'),
-  onMonitorLog: (callback) => ipcRenderer.on('monitor-log', (_, log) => callback(log)),
-  onMonitorStatus: (callback) => ipcRenderer.on('monitor-status', (_, status) => callback(status)),
+  onMonitorLog: (callback) => {
+    ipcRenderer.removeAllListeners('monitor-log');
+    ipcRenderer.on('monitor-log', (_, log) => callback(log));
+  },
+  onMonitorStatus: (callback) => {
+    ipcRenderer.removeAllListeners('monitor-status');
+    ipcRenderer.on('monitor-status', (_, status) => callback(status));
+  },
 
   // Platform detection
   platform: process.platform,
