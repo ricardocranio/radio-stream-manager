@@ -510,17 +510,10 @@ export function useGlobalDownloadService() {
       }
     }, 100000);
     
-    // ARL health check every 15 minutes
+    // ARL health check every 15 minutes (single interval, no duplicate watchdog)
     arlCheckIntervalRef.current = setInterval(() => {
-      checkArlHealth();
-    }, ARL_CHECK_INTERVAL_MS);
-
-    // Watchdog: re-validate ARL every 15min if currently invalid
-    const arlWatchdog = setInterval(() => {
-      const { arlValid, arlLastCheck } = useAutoDownloadStore.getState();
       const { deezerConfig } = useRadioStore.getState();
-      if (!arlValid && deezerConfig.enabled && deezerConfig.arl) {
-        console.log('[DL-SVC] 🐕 Watchdog: ARL inválida detectada, re-validando...');
+      if (deezerConfig.enabled && deezerConfig.arl) {
         checkArlHealth();
       }
     }, ARL_CHECK_INTERVAL_MS);
@@ -535,7 +528,6 @@ export function useGlobalDownloadService() {
     return () => {
       if (downloadIntervalRef.current) clearInterval(downloadIntervalRef.current);
       if (arlCheckIntervalRef.current) clearInterval(arlCheckIntervalRef.current);
-      clearInterval(arlWatchdog);
     };
   }, [checkNewMissingSongs, checkArlHealth]);
 

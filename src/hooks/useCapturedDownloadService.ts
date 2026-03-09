@@ -229,15 +229,23 @@ export function useCapturedDownloadService() {
     useCapturedDownloadStore.getState().setQueueLength(0);
   }, [downloadOne]);
 
-  // === ARL HEALTH CHECK (forced before each batch) ===
+  // === ARL HEALTH CHECK (cached — avoid redundant calls) ===
+  const arlCacheRef = useRef<{ valid: boolean; checkedAt: number }>({ valid: true, checkedAt: 0 });
+  const ARL_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
   const checkArlBeforeBatch = useCallback(async (): Promise<boolean> => {
+    // Return cached result if recent
+    if (Date.now() - arlCacheRef.current.checkedAt < ARL_CACHE_TTL) {
+      return arlCacheRef.current.valid;
+    }
+
     const { deezerConfig } = useRadioStore.getState();
     if (!deezerConfig.enabled || !deezerConfig.arl) return false;
 
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      if (!supabaseUrl || !supabaseKey) return true; // skip check if no env
+      if (!supabaseUrl || !supabaseKey) return true;
 
       const resp = await fetch(`${supabaseUrl}/functions/v1/validate-deezer-arl`, {
         method: 'POST',
@@ -250,15 +258,17 @@ export function useCapturedDownloadService() {
       });
 
       const data = await resp.json();
-      if (data?.valid !== true) {
+      const valid = data?.valid !== false;
+      arlCacheRef.current = { valid, checkedAt: Date.now() };
+      
+      if (!valid) {
         console.warn('[CAP-DL] ⚠️ ARL INVÁLIDA! Downloads pausados.');
-        return false;
       }
-      console.log('[CAP-DL] ✅ ARL válida, prosseguindo com downloads.');
-      return true;
+      return valid;
     } catch (err) {
-      console.warn('[CAP-DL] ⚠️ Falha ao validar ARL, prosseguindo mesmo assim:', err);
-      return true; // allow on network error to avoid blocking
+      console.warn('[CAP-DL] ⚠️ Falha ao validar ARL, prosseguindo:', err);
+      arlCacheRef.current = { valid: true, checkedAt: Date.now() };
+      return true;
     }
   }, []);
 
