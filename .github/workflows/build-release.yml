@@ -1,0 +1,70 @@
+name: Build & Release Windows
+
+# Dispara quando você criar uma tag v*.*.* no GitHub
+# Ex: git tag v5.2.0 && git push origin v5.2.0
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  # Permite rodar manualmente pelo GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Tag da versão (ex: v5.2.0)'
+        required: true
+        default: 'v5.2.0'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      # 1. Baixa o código do repositório
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      # 2. Configura Node.js 20 LTS (necessário para compatibilidade com Electron)
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # 3. Cria o arquivo .env com as chaves do Supabase
+      #    (configuradas em: GitHub repo → Settings → Secrets and variables → Actions)
+      - name: Criar arquivo .env
+        shell: cmd
+        run: |
+          echo VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}>.env
+          echo VITE_SUPABASE_PUBLISHABLE_KEY=${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}>>.env
+
+      # 4. Instala dependências do projeto
+      - name: Instalar dependências npm
+        run: npm install
+
+      # 5. Instala Electron e electron-builder como devDependencies
+      - name: Instalar Electron + Builder
+        run: npm install --save-dev electron electron-builder
+
+      # 6. Gera o build do Vite (bundle React → dist/)
+      - name: Build Vite (produção)
+        run: npm run build
+
+      # 7. Empacota com electron-builder e publica automaticamente no GitHub Releases
+      #    GITHUB_TOKEN é gerado automaticamente pelo GitHub Actions (sem configuração extra)
+      - name: Build Electron + Publicar Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --x64 --publish always
+
+      # 8. Faz upload dos artefatos também como artifact do workflow (backup)
+      - name: Upload artefatos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-${{ github.ref_name }}
+          path: |
+            release/*.exe
+            release/latest.yml
+          retention-days: 30
