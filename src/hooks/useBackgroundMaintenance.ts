@@ -84,13 +84,13 @@ export function useBackgroundMaintenance() {
     try {
       const { deezerConfig } = useRadioStore.getState();
       
-      if (!deezerConfig.enabled || !deezerConfig.arlToken) {
+      if (!deezerConfig.enabled || !deezerConfig.arl) {
         return; // Skip if Deezer is disabled or no ARL configured
       }
 
       console.log('[MAINTENANCE] 🔑 Validando ARL do Deezer...');
       const { data, error } = await supabase.functions.invoke('validate-deezer-arl', {
-        body: { arl: deezerConfig.arlToken },
+        body: { arl: deezerConfig.arl },
       });
 
       if (error) {
