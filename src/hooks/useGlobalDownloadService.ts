@@ -438,6 +438,13 @@ export function useGlobalDownloadService() {
         downloadQueueRef.current.push({ song, retryCount: 0, priority });
       }
       
+      // Cap processedSongs to prevent memory leak
+      if (processedSongsRef.current.size > 2000) {
+        const entries = [...processedSongsRef.current];
+        processedSongsRef.current = new Set(entries.slice(entries.length - 1000));
+        console.log('[DL-SVC] 🧹 processedSongs trimmed to 1000');
+      }
+
       console.log(`[DL-SVC] 📥 +${newToQueue.length} na fila (total: ${downloadQueueRef.current.length})`);
       setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
       useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
