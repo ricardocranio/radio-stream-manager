@@ -17,6 +17,14 @@ if (app.isPackaged) {
 let mainWindow;
 let tray = null;
 
+// =============== SINGLE INSTANCE LOCK (MUST BE FIRST) ===============
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  console.log('[INIT] Another instance is already running. Exiting...');
+  app.quit();
+  process.exit(0);
+}
+
 // =============== SHARED NOTIFICATION HELPER ===============
 function showNotification(title, body, onClick) {
   if (Notification.isSupported()) {
@@ -54,12 +62,6 @@ libraryModule.register();
 deezerDownloadModule.register(ctx);
 vozBrasilModule.register(ctx);
 fileOpsModule.register(ctx);
-
-// =============== SINGLE INSTANCE LOCK ===============
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  app.quit();
-}
 
 // =============== DEFAULT FOLDERS ===============
 const DEFAULT_FOLDERS = [
@@ -105,7 +107,9 @@ function createWindow() {
   if (app.isPackaged) {
     const appPath = app.getAppPath();
     const indexPath = path.join(appPath, 'dist', 'index.html');
-    mainWindow.loadURL(`file://${indexPath}#/`);
+    // Use proper URL formatting for Windows paths
+    const { pathToFileURL } = require('url');
+    mainWindow.loadURL(pathToFileURL(indexPath).toString() + '#/');
   } else {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
@@ -315,14 +319,18 @@ function setupAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = true;
   
   autoUpdater.on('update-available', (info) => {
-    if (mainWindow) mainWindow.webContents.send('update-available', { version: info.version, releaseNotes: info.releaseNotes });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-available', { version: info.version, releaseNotes: info.releaseNotes });
+    }
     showNotification('🔄 Atualização Disponível', `Nova versão ${info.version} disponível.`, () => autoUpdater.downloadUpdate());
-    dialog.showMessageBox(mainWindow, {
-      type: 'info', title: 'Atualização Disponível',
-      message: `Nova versão ${info.version} disponível!`,
-      detail: `Deseja baixar e instalar?`,
-      buttons: ['Baixar Agora', 'Mais Tarde'], defaultId: 0,
-    }).then(({ response }) => { if (response === 0) autoUpdater.downloadUpdate(); });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info', title: 'Atualização Disponível',
+        message: `Nova versão ${info.version} disponível!`,
+        detail: `Deseja baixar e instalar?`,
+        buttons: ['Baixar Agora', 'Mais Tarde'], defaultId: 0,
+      }).then(({ response }) => { if (response === 0) autoUpdater.downloadUpdate(); });
+    }
   });
   
   autoUpdater.on('download-progress', (progress) => {
@@ -333,17 +341,19 @@ function setupAutoUpdater() {
   });
   
   autoUpdater.on('update-downloaded', (info) => {
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('update-downloaded', { version: info.version });
       mainWindow.setProgressBar(-1);
     }
     showNotification('✅ Atualização Pronta', `Versão ${info.version} pronta para instalar.`, () => autoUpdater.quitAndInstall(false, true));
-    dialog.showMessageBox(mainWindow, {
-      type: 'info', title: 'Atualização Pronta',
-      message: `Versão ${info.version} baixada!`,
-      detail: 'Deseja reiniciar agora?',
-      buttons: ['Reiniciar Agora', 'Mais Tarde'], defaultId: 0,
-    }).then(({ response }) => { if (response === 0) autoUpdater.quitAndInstall(false, true); });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info', title: 'Atualização Pronta',
+        message: `Versão ${info.version} baixada!`,
+        detail: 'Deseja reiniciar agora?',
+        buttons: ['Reiniciar Agora', 'Mais Tarde'], defaultId: 0,
+      }).then(({ response }) => { if (response === 0) autoUpdater.quitAndInstall(false, true); });
+    }
   });
   
   autoUpdater.on('error', (error) => console.error('Erro no auto-updater:', error));
@@ -362,7 +372,12 @@ ipcMain.handle('select-folder', async () => {
 });
 
 ipcMain.handle('show-notification', (event, { title, body }) => {
-  showNotification(title, body, () => { mainWindow.show(); mainWindow.focus(); });
+  showNotification(title, body, () => { 
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show(); 
+      mainWindow.focus();
+    }
+  });
 });
 
 ipcMain.handle('show-window', () => {
@@ -456,7 +471,9 @@ app.whenReady().then(async () => {
 app.on('second-instance', () => showMainWindow());
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // Don't quit on window close - we use close-to-tray behavior
+  // Only quit when user explicitly chooses "Sair" from menu/tray
+  if (process.platform === 'darwin') app.quit();
 });
 
 app.on('before-quit', () => {
