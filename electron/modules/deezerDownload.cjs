@@ -219,8 +219,15 @@ function register({ getMainWindow, showNotification }) {
                 console.warn(`[DEEMIX] ⚠️ Could not read ID3 tags: ${tagErr.message}`);
               }
               
-              const finalArtist = (id3Artist || track.artist.name || artist).replace(/[<>:"/\\|?*]/g, '').trim();
-              const finalTitle = (id3Title || track.title || title).replace(/[<>:"/\\|?*]/g, '').trim();
+              // Sanitize: remove filesystem chars, accents, & → e
+              const sanitizeForDisk = (str) => str
+                .replace(/&/g, 'e')
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .replace(/[<>:"/\\|?*]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+              const finalArtist = sanitizeForDisk(id3Artist || track.artist.name || artist);
+              const finalTitle = sanitizeForDisk(id3Title || track.title || title);
               const finalFilename = `${finalArtist} - ${finalTitle}.mp3`;
               const finalFilePath = path.join(finalOutputFolder, finalFilename);
               
