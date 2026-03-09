@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { useGradeLogStore, logSystemError } from '@/store/gradeLogStore';
 import { sanitizeFilename, processFixedContentTemplate } from '@/lib/sanitizeFilename';
+import { getCachedVerification, setCachedVerification } from '@/lib/libraryVerificationCache';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import type { WeekDay, ScheduledSequence, SequenceConfig } from '@/types/radio';
@@ -272,18 +273,53 @@ export function useAutoGradeBuilder() {
 
   const similarityThreshold = config.similarityThreshold || 0.75;
 
+  const toLibKey = (artist: string, title: string) => `${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`;
+
   const findSongInLibrary = useCallback(async (artist: string, title: string) => {
-    console.log(`[AUTO-GRADE] 🔍 Library check: "${artist} - ${title}" (folders: ${config.musicFolders.length}, threshold: ${Math.round(similarityThreshold * 100)}%, isElectron: ${!!window.electronAPI?.isElectron})`);
-    const result = await findSongInLibraryFn(artist, title, config.musicFolders, similarityThreshold);
-    if (!result.exists) {
-      console.warn(`[AUTO-GRADE] ❌ NÃO encontrado na biblioteca: "${artist} - ${title}" → folders: [${config.musicFolders.join(', ')}]`);
+    const cached = getCachedVerification(artist, title);
+    if (cached) {
+      return { exists: cached.exists, filename: cached.matchedFile };
     }
+
+    const result = await findSongInLibraryFn(artist, title, config.musicFolders, similarityThreshold);
+
+    setCachedVerification(artist, title, {
+      exists: result.exists,
+      matchedFile: result.filename,
+    });
+
+    if (!result.exists) {
+      console.warn(`[AUTO-GRADE] ❌ NÃO encontrado na biblioteca: "${artist} - ${title}"`);
+    }
+
     return result;
   }, [config.musicFolders, similarityThreshold]);
 
   const batchFind = useCallback(async (songs: Array<{ artist: string; title: string }>) => {
-    console.log(`[AUTO-GRADE] 📦 Batch library check: ${songs.length} músicas (folders: ${config.musicFolders.length}, threshold: ${Math.round(similarityThreshold * 100)}%)`);
-    return batchFindSongsInLibrary(songs, config.musicFolders, similarityThreshold);
+    const results = new Map<string, { exists: boolean; filename?: string }>();
+    const toCheck: Array<{ artist: string; title: string }> = [];
+
+    for (const s of songs) {
+      const cached = getCachedVerification(s.artist, s.title);
+      const key = toLibKey(s.artist, s.title);
+      if (cached) {
+        results.set(key, { exists: cached.exists, filename: cached.matchedFile });
+      } else {
+        toCheck.push(s);
+      }
+    }
+
+    if (toCheck.length > 0) {
+      const checked = await batchFindSongsInLibrary(toCheck, config.musicFolders, similarityThreshold);
+      for (const [key, r] of checked.entries()) {
+        results.set(key, r);
+        const [artist, title] = key.split('|');
+        // We only have normalized key components here; cache is best-effort
+        setCachedVerification(artist, title, { exists: r.exists, matchedFile: r.filename });
+      }
+    }
+
+    return results as any;
   }, [config.musicFolders, similarityThreshold]);
 
   const isSongAlreadyMissing = useCallback((artist: string, title: string): boolean => {
