@@ -147,8 +147,14 @@ function register({ getMainWindow }) {
             try {
               const tags = parseID3TagsFromFile(fullPath);
               if (!tags.artist || !tags.title) { results.skipped++; continue; }
-              const sanitizedArtist = tags.artist.replace(/[<>:"/\\|?*]/g, '').trim();
-              const sanitizedTitle = tags.title.replace(/[<>:"/\\|?*]/g, '').trim();
+              const sanitizeForDisk = (str) => str
+                .replace(/&/g, 'e')
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .replace(/[<>:"/\\|?*]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+              const sanitizedArtist = sanitizeForDisk(tags.artist);
+              const sanitizedTitle = sanitizeForDisk(tags.title);
               const correctName = `${sanitizedArtist} - ${sanitizedTitle}.mp3`;
               if (item.name === correctName) { results.skipped++; continue; }
               const newPath = path.join(folder, correctName);
