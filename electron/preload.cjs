@@ -28,12 +28,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ensureStationFolders: (params) => ipcRenderer.invoke('ensure-station-folders', params),
   checkFileInSubfolders: (params) => ipcRenderer.invoke('check-file-in-subfolders', params),
   purgeBlockedFiles: (params) => ipcRenderer.invoke('purge-blocked-files', params),
-  checkDeemix: () => ipcRenderer.invoke('check-deemix'),
-  checkPython: () => ipcRenderer.invoke('check-python'),
-  installDeemix: () => ipcRenderer.invoke('install-deemix'),
-  testDeemix: () => ipcRenderer.invoke('test-deemix'),
-  testDeemixSearch: (params) => ipcRenderer.invoke('test-deemix-search', params),
-  onDeemixInstallProgress: (callback) => ipcRenderer.on('deemix-install-progress', (_, progress) => callback(progress)),
   
   // Notifications
   showNotification: (title, body) => ipcRenderer.invoke('show-notification', { title, body }),
