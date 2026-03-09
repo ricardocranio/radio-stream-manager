@@ -125,10 +125,12 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
           );
         }
 
-        // Use cached station map for O(1) lookup instead of O(n) find()
+        // Queue ranking update (batched, not immediate)
+        // Use station styles from the store (synced from DB) instead of hardcoded mapping
         const { stations } = useRadioStore.getState();
-        const stationKey = newSong.station_name.toLowerCase().trim();
-        const matchedStation = stations.find(s => s.name.toLowerCase().trim() === stationKey);
+        const matchedStation = stations.find(
+          s => s.name.toLowerCase().trim() === newSong.station_name.toLowerCase().trim()
+        );
         const style = matchedStation?.styles?.[0] || 'POP/VARIADO';
 
         // Use batcher instead of direct update
