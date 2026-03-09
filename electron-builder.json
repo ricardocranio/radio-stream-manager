@@ -66,8 +66,8 @@
   },
   "publish": {
     "provider": "github",
-    "owner": "SEU_USUARIO_GITHUB",
-    "repo": "programador-radio",
+    "owner": "ricardocranio",
+    "repo": "radio-stream-manager",
     "releaseType": "release"
   }
 }
