@@ -27,13 +27,14 @@ export function Header() {
     if (!activeDownload) { setElapsed(0); return; }
     const timer = setInterval(() => {
       setElapsed(Math.round((Date.now() - activeDownload.startedAt) / 1000));
-    }, 1000);
+    }, 5000); // Update every 5s instead of 1s
     return () => clearInterval(timer);
   }, [activeDownload]);
 
   useEffect(() => {
     setMounted(true);
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    // Update clock every 30 seconds — HH:mm:ss precision is not critical
+    const timer = setInterval(() => setCurrentTime(new Date()), 30000);
     return () => clearInterval(timer);
   }, []);
 
@@ -73,7 +74,7 @@ export function Header() {
         {/* Clock */}
         <div className="hidden sm:flex items-center gap-2">
           <span className="font-mono text-xs text-primary/80 tabular-nums" style={{ letterSpacing: '0.05em' }}>
-            {format(currentTime, 'HH:mm:ss')}
+            {format(currentTime, 'HH:mm')}
           </span>
           <span className="text-[11px] text-muted-foreground">
             {format(currentTime, "EEEE, dd MMM", { locale: ptBR })}

@@ -438,6 +438,13 @@ export function useGlobalDownloadService() {
         downloadQueueRef.current.push({ song, retryCount: 0, priority });
       }
       
+      // Cap processedSongs to prevent memory leak
+      if (processedSongsRef.current.size > 2000) {
+        const entries = [...processedSongsRef.current];
+        processedSongsRef.current = new Set(entries.slice(entries.length - 1000));
+        console.log('[DL-SVC] 🧹 processedSongs trimmed to 1000');
+      }
+
       console.log(`[DL-SVC] 📥 +${newToQueue.length} na fila (total: ${downloadQueueRef.current.length})`);
       setState(prev => ({ ...prev, queueLength: downloadQueueRef.current.length }));
       useAutoDownloadStore.getState().setQueueLength(downloadQueueRef.current.length);
@@ -510,17 +517,10 @@ export function useGlobalDownloadService() {
       }
     }, 100000);
     
-    // ARL health check every 15 minutes
+    // ARL health check every 15 minutes (single interval, no duplicate watchdog)
     arlCheckIntervalRef.current = setInterval(() => {
-      checkArlHealth();
-    }, ARL_CHECK_INTERVAL_MS);
-
-    // Watchdog: re-validate ARL every 15min if currently invalid
-    const arlWatchdog = setInterval(() => {
-      const { arlValid, arlLastCheck } = useAutoDownloadStore.getState();
       const { deezerConfig } = useRadioStore.getState();
-      if (!arlValid && deezerConfig.enabled && deezerConfig.arl) {
-        console.log('[DL-SVC] 🐕 Watchdog: ARL inválida detectada, re-validando...');
+      if (deezerConfig.enabled && deezerConfig.arl) {
         checkArlHealth();
       }
     }, ARL_CHECK_INTERVAL_MS);
@@ -535,7 +535,6 @@ export function useGlobalDownloadService() {
     return () => {
       if (downloadIntervalRef.current) clearInterval(downloadIntervalRef.current);
       if (arlCheckIntervalRef.current) clearInterval(arlCheckIntervalRef.current);
-      clearInterval(arlWatchdog);
     };
   }, [checkNewMissingSongs, checkArlHealth]);
 
