@@ -129,6 +129,7 @@ async function startPythonMonitor(isAutoStart = false) {
         mainWindow.webContents.send('monitor-status', getMonitorStatus());
       }
 
+      // Only auto-restart on non-zero, non-null exit codes (null = killed intentionally by before-quit)
       if (code !== 0 && code !== null && monitorAutoRestartAttempts < MAX_AUTO_RESTART_ATTEMPTS) {
         const delay = AUTO_RESTART_DELAYS[monitorAutoRestartAttempts] || 45000;
         monitorAutoRestartAttempts++;

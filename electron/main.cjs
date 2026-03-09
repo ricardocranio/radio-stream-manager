@@ -131,6 +131,7 @@ function createWindow() {
   });
 
   mainWindow.webContents.on('unresponsive', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
     dialog.showMessageBox(mainWindow, {
       type: 'warning',
       title: 'Aplicação Não Responde',
@@ -140,7 +141,7 @@ function createWindow() {
       defaultId: 0,
     }).then(({ response }) => {
       if (response === 0 && mainWindow && !mainWindow.isDestroyed()) mainWindow.reload();
-    });
+    }).catch(() => {}); // ignore if window closed before user responds
   });
 
   mainWindow.webContents.on('responsive', () => {
@@ -334,7 +335,7 @@ function setupAutoUpdater() {
   });
   
   autoUpdater.on('download-progress', (progress) => {
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('download-progress', { percent: progress.percent });
       mainWindow.setProgressBar(progress.percent / 100);
     }
