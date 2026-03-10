@@ -23,7 +23,7 @@ import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import type { SongEntry, BlockLogItem, BlockStats, GradeContext, CarryOverSong } from './types';
 import { STATION_ID_TO_DB_NAME } from './constants';
 import type { WeekDay, SequenceConfig } from '@/types/radio';
-import { getGenreScore, getEnergyTransitionPenalty } from './smartGrade';
+import { getGenreScore, getEnergyTransitionPenalty, getBpmTransitionPenalty, isGenreCompatible } from './smartGrade';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -88,7 +88,8 @@ interface SelectionContext {
   stationSongIndex: Record<string, number>;
   logs: BlockLogItem[];
   stats: BlockStats;
-  previousEnergy?: string | null; // Tracks last selected song's energy for smooth transitions
+  previousEnergy?: string | null;
+  previousBpm?: number | null; // BPM tracking for smooth rhythm transitions
 }
 
 /**
@@ -98,11 +99,14 @@ interface SelectionContext {
 function applySmartScoring(
   candidates: SongEntry[],
   timeStr: string,
-  previousEnergy: string | null | undefined
+  previousEnergy: string | null | undefined,
+  previousBpm?: number | null
 ): SongEntry[] {
   return candidates.map(c => ({
     song: c,
-    smartScore: getGenreScore((c as any).ai_genre, timeStr) - getEnergyTransitionPenalty(previousEnergy, (c as any).ai_energy),
+    smartScore: getGenreScore((c as any).ai_genre, timeStr) 
+      - getEnergyTransitionPenalty(previousEnergy, (c as any).ai_energy)
+      - getBpmTransitionPenalty(previousBpm, (c as any).bpm),
   }))
   .sort((a, b) => b.smartScore - a.smartScore)
   .map(x => x.song);
@@ -252,7 +256,7 @@ export async function selectSongForSlot(
       return 0;
     });
 
-    const smartSorted = applySmartScoring(freshnessSorted, timeStr, selCtx.previousEnergy);
+    const smartSorted = applySmartScoring(freshnessSorted, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
     const p1Candidates = smartSorted.filter(c => isValidCandidate(c.title, c.artist));
 
     const p1Map = p1Candidates.length
@@ -267,6 +271,7 @@ export async function selectSongForSlot(
         const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
         selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
         selCtx.previousEnergy = (candidate as any).ai_energy || null;
+        selCtx.previousBpm = (candidate as any).bpm || null;
         logs.push({
           blockTime: timeStr,
           type: 'used',
@@ -385,9 +390,17 @@ export async function selectSongForSlot(
         return 0;
       });
 
-      const smartDnaSorted = applySmartScoring(freshSorted, timeStr, selCtx.previousEnergy);
+      const smartDnaSorted = applySmartScoring(freshSorted, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
+      // Use ID3 genre (ai_genre) for compatibility matching instead of just station style
       const dnaCandidates = smartDnaSorted
-        .filter(c => c.style === stationStyle)
+        .filter(c => {
+          // Primary: exact style match (legacy behavior)
+          if (c.style === stationStyle) return true;
+          // Enhanced: ID3 genre compatibility check
+          const songGenre = (c as any).ai_genre;
+          if (songGenre && isGenreCompatible(songGenre, stationStyle)) return true;
+          return false;
+        })
         .filter(c => isValidCandidate(c.title, c.artist));
 
       if (dnaCandidates.length === 0) continue;
@@ -400,6 +413,7 @@ export async function selectSongForSlot(
           const correctFilename = r.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
           selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
           stats.substituted++;
+          const matchType = candidate.style === stationStyle ? 'estilo' : `ID3:${(candidate as any).ai_genre || '?'}`;
           logs.push({
             blockTime: timeStr,
             type: 'substituted',
@@ -407,7 +421,7 @@ export async function selectSongForSlot(
             artist: candidate.artist,
             station: candidate.station,
             style: candidate.style,
-            reason: `[P1.5] DNA similar: ${stationStyle} (de ${otherStation}) [batch]`,
+            reason: `[P1.5] DNA match (${matchType} → ${stationStyle}, de ${otherStation}) [batch]`,
             substituteFor: stationName || 'UNKNOWN',
           });
           break;
@@ -514,7 +528,7 @@ export async function selectSongForSlot(
       return 0;
     });
 
-    const smartP4Pool = applySmartScoring(styleFilteredPool, timeStr, selCtx.previousEnergy);
+    const smartP4Pool = applySmartScoring(styleFilteredPool, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
 
     const BATCH_SIZE = 60;
     const MAX_SCAN = 300; // avoid scanning the entire universe
@@ -632,6 +646,7 @@ export async function selectSongForSlot(
     ctx.markSongAsUsed(selectedSong.title, selectedSong.artist, timeStr);
     // Track energy for next transition
     selCtx.previousEnergy = (selectedSong as any).ai_energy || selCtx.previousEnergy;
+    selCtx.previousBpm = (selectedSong as any).bpm || selCtx.previousBpm;
 
     // Add 'used' log if not already logged by a priority level
     const hasLog = logs.some(l => l.title === selectedSong!.title && l.artist === selectedSong!.artist && l.blockTime === timeStr);
