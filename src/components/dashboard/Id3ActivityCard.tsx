@@ -42,7 +42,7 @@ export function Id3ActivityCard() {
 
     try {
       const result = await window.electronAPI.scanFixLibrary({ musicFolders: config.musicFolders });
-      setFixResult({ scanned: result.scanned, renamed: result.renamed, errors: result.errors });
+      setFixResult({ scanned: result.scanned, renamed: result.renamed, errors: result.errors, purged: result.purged || 0 });
       setFixProgress(null);
       toast({
         title: '✅ ID3 Scan Completo',

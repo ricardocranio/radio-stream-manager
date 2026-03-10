@@ -129,11 +129,29 @@ function register({ getMainWindow, safeHandle }) {
     }
   });
 
-  // IPC: Scan library and rename files based on ID3 tags
+  // IPC: Scan library and rename files based on ID3 tags + purge files without ID3
   handle('scan-fix-library', async (event, { musicFolders }) => {
-    console.log('[LIB-FIX] Starting library scan & fix...');
-    const results = { scanned: 0, renamed: 0, skipped: 0, errors: 0, details: [] };
+    console.log('[LIB-FIX] Starting library scan & fix (with ID3 purge)...');
+    const results = { scanned: 0, renamed: 0, skipped: 0, errors: 0, purged: 0, details: [] };
     const mainWindow = _getMainWindow();
+
+    // Prefixes that indicate vinhetas/spots/jingles — never purge these
+    const PROTECTED_PREFIXES = ['vh', 'vhcpi', 'vh-', 'noticia', 'intercom', 'spot', 'jingle', 'prog_'];
+
+    const isProtectedByName = (filename) => {
+      const lower = filename.toLowerCase();
+      return PROTECTED_PREFIXES.some(p => lower.startsWith(p));
+    };
+
+    // Helper: get MP3 duration in seconds (lightweight check)
+    const getQuickDuration = (filePath) => {
+      try {
+        const stat = fs.statSync(filePath);
+        const fileSize = stat.size;
+        // Rough estimate: 192kbps average bitrate
+        return (fileSize * 8) / (192 * 1000);
+      } catch { return 999; }
+    };
     
     const scanFolder = (folder) => {
       try {
@@ -147,7 +165,42 @@ function register({ getMainWindow, safeHandle }) {
             results.scanned++;
             try {
               const tags = parseID3TagsFromFile(fullPath);
-              if (!tags.artist || !tags.title) { results.skipped++; continue; }
+
+              // No Artist AND no Title → candidate for purge
+              if (!tags.artist && !tags.title) {
+                // Protection 1: prefixes (vinhetas, spots, etc.)
+                if (isProtectedByName(item.name)) {
+                  results.skipped++;
+                  results.details.push({ old: item.name, new: '', status: 'skip-protected-prefix' });
+                  if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('lib-fix-progress', { scanned: results.scanned, renamed: results.renamed, purged: results.purged, current: `⏭ ${item.name} (protegido)` });
+                  }
+                  continue;
+                }
+
+                // Protection 2: short files < 30s (likely vinhetas/spots)
+                const durationSec = getQuickDuration(fullPath);
+                if (durationSec < 30) {
+                  results.skipped++;
+                  results.details.push({ old: item.name, new: '', status: 'skip-protected-short' });
+                  if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('lib-fix-progress', { scanned: results.scanned, renamed: results.renamed, purged: results.purged, current: `⏭ ${item.name} (curto ${Math.round(durationSec)}s)` });
+                  }
+                  continue;
+                }
+
+                // Not protected → purge
+                fs.unlinkSync(fullPath);
+                results.purged++;
+                results.details.push({ old: item.name, new: '', status: 'purged-no-id3' });
+                console.log(`[LIB-FIX] 🗑 Purged (no ID3): ${item.name}`);
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                  mainWindow.webContents.send('lib-fix-progress', { scanned: results.scanned, renamed: results.renamed, purged: results.purged, current: `🗑 ${item.name}` });
+                }
+                continue;
+              }
+
+              // Has tags → attempt rename if needed
               const sanitizeForDisk = (str) => str
                 .replace(/&/g, 'e')
                 .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -168,7 +221,7 @@ function register({ getMainWindow, safeHandle }) {
               results.renamed++;
               results.details.push({ old: item.name, new: correctName, status: 'renamed' });
               if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('lib-fix-progress', { scanned: results.scanned, renamed: results.renamed, current: item.name });
+                mainWindow.webContents.send('lib-fix-progress', { scanned: results.scanned, renamed: results.renamed, purged: results.purged, current: item.name });
               }
             } catch (fileErr) {
               results.errors++;
@@ -182,7 +235,7 @@ function register({ getMainWindow, safeHandle }) {
     };
     
     for (const folder of (musicFolders || [])) { scanFolder(folder); }
-    console.log(`[LIB-FIX] Done: ${results.scanned} scanned, ${results.renamed} renamed, ${results.skipped} skipped, ${results.errors} errors`);
+    console.log(`[LIB-FIX] Done: ${results.scanned} scanned, ${results.renamed} renamed, ${results.purged} purged, ${results.skipped} skipped, ${results.errors} errors`);
     return results;
   });
 
