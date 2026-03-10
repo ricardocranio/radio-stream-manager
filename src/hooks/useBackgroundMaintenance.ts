@@ -183,6 +183,11 @@ export function useBackgroundMaintenance() {
     // Initial ARL validation after 5 minutes
     setTimeout(() => validateArl(), 5 * 60 * 1000);
 
+    // Initial dedup after 10 minutes
+    if (isElectron) {
+      setTimeout(() => autoDeduplicateLibrary(), 10 * 60 * 1000);
+    }
+
     intervalRef.current = setInterval(() => {
       const now = Date.now();
 
@@ -204,6 +209,12 @@ export function useBackgroundMaintenance() {
         validateArl();
       }
 
+      // Auto-deduplicate every 24 hours (Electron only)
+      if (isElectron && now - lastDedupRef.current >= DEDUP_INTERVAL_MS) {
+        lastDedupRef.current = now;
+        autoDeduplicateLibrary();
+      }
+
       // Compress history once per day at ~4:00 AM
       const currentHour = new Date().getHours();
       const today = new Date().toDateString();
@@ -213,12 +224,12 @@ export function useBackgroundMaintenance() {
       }
     }, MAINTENANCE_CHECK_MS);
 
-    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (classificação 30min, purge 12h, ARL 1h, compressão 4h)');
+    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (classificação 30min, purge 12h, ARL 1h, dedup 24h, compressão 4h)');
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [classifySongs, compressHistory, purgeBlockedFiles, validateArl]);
+  }, [classifySongs, compressHistory, purgeBlockedFiles, validateArl, autoDeduplicateLibrary]);
 
-  return { start, classifySongs, compressHistory, purgeBlockedFiles, validateArl };
+  return { start, classifySongs, compressHistory, purgeBlockedFiles, validateArl, autoDeduplicateLibrary };
 }
