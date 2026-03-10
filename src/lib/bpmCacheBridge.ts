@@ -39,14 +39,26 @@ export async function loadBpmCacheFromDisk(): Promise<void> {
   if (cacheLoaded || !isElectron || !window.electronAPI?.loadBpmCache) return;
 
   try {
-    const result = await window.electronAPI.loadBpmCache({});
-    if (result?.success && result.cache && typeof result.cache === 'object') {
+    const { useRadioStore } = await import('@/store/radioStore');
+    const folder = useRadioStore.getState().deezerConfig.downloadFolder || '';
+    if (!folder) return;
+
+    const result = await window.electronAPI.loadBpmCache({ folder });
+    if (result?.success && result.data && typeof result.data === 'object') {
       let count = 0;
-      for (const [key, value] of Object.entries(result.cache)) {
-        const bpm = typeof value === 'number' ? value : parseInt(String(value), 10);
-        if (bpm > 0 && bpm < 300) {
-          // The cache keys from Electron are "artist - title" format
-          bpmMemoryCache.set(key.toLowerCase().trim(), bpm);
+      for (const [filename, entry] of Object.entries(result.data)) {
+        const bpm = entry?.bpm;
+        if (bpm && bpm > 0 && bpm < 300) {
+          // Store by filename key (lowercase)
+          bpmMemoryCache.set(filename.toLowerCase().trim(), bpm);
+          // Also try to extract artist|title from filename pattern "Artist - Title.mp3"
+          const baseName = filename.replace(/\.[^/.]+$/, '');
+          const parts = baseName.split(' - ');
+          if (parts.length >= 2) {
+            const artist = parts[0].trim().toLowerCase();
+            const title = parts.slice(1).join(' - ').trim().toLowerCase();
+            bpmMemoryCache.set(`${artist}|${title}`, bpm);
+          }
           count++;
         }
       }
