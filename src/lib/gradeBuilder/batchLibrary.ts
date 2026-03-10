@@ -73,9 +73,14 @@ async function findSongMatchWithFallback(
       }
     }
 
-    if (result.exists && result.baseName) {
-      console.log(`[BATCH-LIBRARY] ✅ Encontrado: "${artist} - ${title}" → ${result.baseName}.mp3`);
-      return { exists: true, filename: `${result.baseName}.mp3` };
+    if (result.exists) {
+      // IMPORTANT: Use the REAL filename from disk (result.filename), not reconstructed baseName
+      // This preserves suffixes like (Feat. ...) (Ao Vivo) that exist in the actual file
+      const realFilename = result.filename || (result.baseName ? `${result.baseName}.mp3` : null);
+      if (realFilename) {
+        console.log(`[BATCH-LIBRARY] ✅ Encontrado: "${artist} - ${title}" → ${realFilename}`);
+        return { exists: true, filename: realFilename };
+      }
     }
     console.log(`[BATCH-LIBRARY] ❌ Não encontrado: "${artist} - ${title}"`);
     return { exists: result.exists };
