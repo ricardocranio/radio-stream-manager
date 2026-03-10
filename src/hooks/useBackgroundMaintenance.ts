@@ -5,8 +5,9 @@
  * - AI song classification every 30 minutes
  * - Auto-purge blocked files from disk every 12 hours (Electron only)
  * - Auto-deduplicate music library every 24 hours (Electron only)
- * - ARL validation every 1 hour
  * - History compression daily at 4:00 AM
+ * 
+ * NOTE: ARL validation is handled by useGlobalDownloadService (every 15 min)
  */
 
 import { useCallback, useRef } from 'react';
@@ -16,14 +17,12 @@ import { useRadioStore } from '@/store/radioStore';
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 const CLASSIFY_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const PURGE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
-const ARL_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const DEDUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const MAINTENANCE_CHECK_MS = 60 * 1000; // Check every minute
 
 export function useBackgroundMaintenance() {
   const lastClassifyRef = useRef<number>(0);
   const lastPurgeRef = useRef<number>(0);
-  const lastArlCheckRef = useRef<number>(0);
   const lastDedupRef = useRef<number>(0);
   const lastCompressRef = useRef<string>(''); // Date string of last compression
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -81,42 +80,6 @@ export function useBackgroundMaintenance() {
       }
     } catch (error) {
       console.error('[MAINTENANCE] Erro no purge automático:', error);
-    }
-  }, []);
-
-  const validateArl = useCallback(async () => {
-    try {
-      const { deezerConfig } = useRadioStore.getState();
-      
-      if (!deezerConfig.enabled || !deezerConfig.arl) {
-        return; // Skip if Deezer is disabled or no ARL configured
-      }
-
-      console.log('[MAINTENANCE] 🔑 Validando ARL do Deezer...');
-      const { data, error } = await supabase.functions.invoke('validate-deezer-arl', {
-        body: { arl: deezerConfig.arl },
-      });
-
-      if (error) {
-        console.error('[MAINTENANCE] Erro ao validar ARL:', error);
-        return;
-      }
-
-      if (!data?.valid) {
-        console.warn('[MAINTENANCE] ⚠️ ARL INVÁLIDA ou EXPIRADA!');
-        
-        // Show notification if Electron is available
-        if (isElectron && window.electronAPI?.showNotification) {
-          await window.electronAPI.showNotification(
-            'ARL do Deezer Expirada',
-            'Seu token ARL está inválido ou expirou. Configure um novo token nas Configurações para continuar baixando músicas automaticamente.'
-          );
-        }
-      } else {
-        console.log(`[MAINTENANCE] ✅ ARL válida - Usuário: ${data.user}${data.premium ? ' (Premium)' : ''}`);
-      }
-    } catch (error) {
-      console.error('[MAINTENANCE] Erro na validação da ARL:', error);
     }
   }, []);
 
@@ -180,9 +143,6 @@ export function useBackgroundMaintenance() {
       setTimeout(() => purgeBlockedFiles(), 3 * 60 * 1000);
     }
 
-    // Initial ARL validation after 5 minutes
-    setTimeout(() => validateArl(), 5 * 60 * 1000);
-
     // Initial dedup after 10 minutes
     if (isElectron) {
       setTimeout(() => autoDeduplicateLibrary(), 10 * 60 * 1000);
@@ -203,12 +163,6 @@ export function useBackgroundMaintenance() {
         purgeBlockedFiles();
       }
 
-      // Validate ARL every 1 hour
-      if (now - lastArlCheckRef.current >= ARL_CHECK_INTERVAL_MS) {
-        lastArlCheckRef.current = now;
-        validateArl();
-      }
-
       // Auto-deduplicate every 24 hours (Electron only)
       if (isElectron && now - lastDedupRef.current >= DEDUP_INTERVAL_MS) {
         lastDedupRef.current = now;
@@ -224,12 +178,12 @@ export function useBackgroundMaintenance() {
       }
     }, MAINTENANCE_CHECK_MS);
 
-    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (classificação 30min, purge 12h, ARL 1h, dedup 24h, compressão 4h)');
+    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (classificação 30min, purge 12h, dedup 24h, compressão 4h)');
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [classifySongs, compressHistory, purgeBlockedFiles, validateArl, autoDeduplicateLibrary]);
+  }, [classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary]);
 
-  return { start, classifySongs, compressHistory, purgeBlockedFiles, validateArl, autoDeduplicateLibrary };
+  return { start, classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary };
 }
