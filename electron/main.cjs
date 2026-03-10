@@ -214,7 +214,7 @@ function createWindow() {
     {
       label: 'Arquivo',
       submenu: [
-        { label: 'Recarregar', accelerator: 'CmdOrCtrl+R', click: () => mainWindow.reload() },
+        { label: 'Recarregar', accelerator: 'CmdOrCtrl+R', click: () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.reload(); } },
         { type: 'separator' },
         { label: 'Sair', accelerator: 'CmdOrCtrl+Q', click: () => { app.isQuitting = true; app.quit(); } },
       ],
