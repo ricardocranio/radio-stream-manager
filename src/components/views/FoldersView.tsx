@@ -13,6 +13,12 @@ export function FoldersView() {
   const [localConfig, setLocalConfig] = useState(config);
   const [isFixing, setIsFixing] = useState(false);
   const [fixProgress, setFixProgress] = useState<{ scanned: number; renamed: number; current: string } | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [duplicates, setDuplicates] = useState<Array<{
+    keep: { name: string; path: string; size: number };
+    remove: Array<{ name: string; path: string; size: number }>;
+  }>>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleSave = () => {
     setConfig(localConfig);
