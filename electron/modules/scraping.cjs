@@ -4,6 +4,7 @@ const https = require('https');
 const http = require('http');
 
 let scrapedSongsCache = new Map();
+const MAX_CACHE_SIZE = 5000; // Prevent unbounded growth in 24/7 operation
 
 function fetchHtml(url) {
   return new Promise((resolve, reject) => {
