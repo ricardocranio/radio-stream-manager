@@ -579,7 +579,7 @@ function register({ safeHandle }) {
     return { success: true, duplicates, totalFiles: files.length };
   });
 
-  ipcMain.handle('delete-duplicates', async (event, { filePaths }) => {
+  handle('delete-duplicates', async (event, { filePaths }) => {
     console.log(`[DUPLICATES] Deleting ${filePaths.length} duplicate files...`);
     let deleted = 0;
     const errors = [];
