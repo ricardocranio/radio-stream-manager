@@ -133,7 +133,7 @@ export function useBackgroundMaintenance() {
       if (allFolders.length === 0) return;
 
       console.log('[MAINTENANCE] 🔍 Escaneando duplicatas na biblioteca...');
-      const scanResult = await window.electronAPI.scanDuplicates({ folders: allFolders });
+      const scanResult = await window.electronAPI.scanDuplicates({ musicFolders: allFolders });
 
       if (!scanResult?.duplicates || scanResult.duplicates.length === 0) {
         console.log('[MAINTENANCE] ✅ Nenhuma duplicata encontrada na biblioteca');
@@ -146,8 +146,8 @@ export function useBackgroundMaintenance() {
         group.remove.map((f: any) => f.path)
       );
 
-      const deleteResult = await window.electronAPI.deleteDuplicates({ files: filesToDelete });
-      console.log(`[MAINTENANCE] ✅ ${deleteResult.deletedCount} arquivo(s) duplicado(s) removido(s) automaticamente`);
+      const deleteResult = await window.electronAPI.deleteDuplicates({ filePaths: filesToDelete });
+      console.log(`[MAINTENANCE] ✅ ${deleteResult.deleted} arquivo(s) duplicado(s) removido(s) automaticamente`);
     } catch (error) {
       console.error('[MAINTENANCE] Erro na deduplicação automática:', error);
     }
