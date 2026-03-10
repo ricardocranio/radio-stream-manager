@@ -179,7 +179,7 @@ function register({ app, getMainWindow, showNotification, safeHandle }) {
     return await checkDeemixInstalled();
   });
 
-  ipcMain.handle('get-deemix-command', async () => {
+  handle('get-deemix-command', async () => {
     const installed = await checkDeemixInstalled();
     return installed ? deemixCommand : null;
   });
