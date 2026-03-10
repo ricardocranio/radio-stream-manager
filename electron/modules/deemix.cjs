@@ -184,7 +184,7 @@ function register({ app, getMainWindow, showNotification, safeHandle }) {
     return installed ? deemixCommand : null;
   });
 
-  ipcMain.handle('check-python', async () => {
+  handle('check-python', async () => {
     return await checkPythonAvailable();
   });
 
