@@ -169,12 +169,13 @@ function saveArlToDeemixConfig(arl) {
   }
 }
 
-function register({ app, getMainWindow, showNotification }) {
+function register({ app, getMainWindow, showNotification, safeHandle }) {
   _app = app;
   _getMainWindow = getMainWindow;
   _showNotification = showNotification;
+  const handle = safeHandle || ipcMain.handle.bind(ipcMain);
 
-  ipcMain.handle('check-deemix', async () => {
+  handle('check-deemix', async () => {
     return await checkDeemixInstalled();
   });
 
