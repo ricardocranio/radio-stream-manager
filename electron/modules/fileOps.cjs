@@ -38,7 +38,7 @@ function register({ getMainWindow, safeHandle }) {
   });
 
   // IPC: Purge blocked songs from disk
-  ipcMain.handle('purge-blocked-files', async (event, { musicFolders, blockedSongs, forbiddenWords }) => {
+  handle('purge-blocked-files', async (event, { musicFolders, blockedSongs, forbiddenWords }) => {
     console.log('[PURGE] Starting purge of blocked files...');
     const deleted = [];
     const errors = [];
