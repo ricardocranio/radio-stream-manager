@@ -615,7 +615,9 @@ export function useAutoGradeBuilder() {
           title: song.title, artist: song.artist, station: song.station_name,
           style, filename: sanitizeFilename(`${song.artist} - ${song.title}.mp3`),
           scrapedAt: song.scraped_at, // Preserve for freshness sorting
-        });
+          ...(song.ai_genre ? { ai_genre: song.ai_genre } : {}),
+          ...(song.ai_energy ? { ai_energy: song.ai_energy } : {}),
+        } as SongEntry);
       }
     });
     const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
