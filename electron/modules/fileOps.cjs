@@ -31,7 +31,7 @@ function register({ getMainWindow, safeHandle }) {
   });
 
   // IPC: Check if file exists in any station subfolder
-  ipcMain.handle('check-file-in-subfolders', async (event, { baseFolder, artist, title }) => {
+  handle('check-file-in-subfolders', async (event, { baseFolder, artist, title }) => {
     const { checkFileExistsInSubfolders } = require('./utils.cjs');
     const searchPattern = `${artist} - ${title}`;
     return checkFileExistsInSubfolders(baseFolder, searchPattern);
