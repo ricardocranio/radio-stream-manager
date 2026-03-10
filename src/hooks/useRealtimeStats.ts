@@ -206,15 +206,16 @@ export function useRealtimeStats() {
 
   // Initial load - only if data is stale or missing
   useEffect(() => {
-    const shouldLoad = !persistedStore.lastUpdated || 
-      (new Date().getTime() - new Date(persistedStore.lastUpdated).getTime()) > 5 * 60 * 1000; // 5 min stale
+    const shouldLoad = !lastUpdated || 
+      (new Date().getTime() - new Date(lastUpdated).getTime()) > 5 * 60 * 1000; // 5 min stale
     
     if (shouldLoad) {
       loadStats();
     } else {
       setIsLoading(false);
     }
-  }, [loadStats, persistedStore.lastUpdated]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadStats]);
 
   // Auto-refresh with power saving support
   useEffect(() => {
