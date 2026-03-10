@@ -8,8 +8,8 @@ const { normalizeText, cleanNormalize, calculateSimilarity, parseID3TagsFromFile
 let musicLibraryCache = { files: [], timestamp: 0 };
 const CACHE_DURATION = 5 * 60 * 1000;
 
-// In-memory duration cache
 const durationCache = new Map();
+const MAX_DURATION_CACHE = 10000; // Prevent unbounded growth
 
 function scanMusicLibrary(musicFolders) {
   const now = Date.now();
