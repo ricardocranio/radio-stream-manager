@@ -317,9 +317,11 @@ export function GradeScheduleCard() {
             console.log('[GRADE-CARD] No existing file, will create new');
           }
 
-          // Generate line for this block using sanitizeGradeFilename for TXT parity
+          // Use the REAL filename from the library (s.file) when available,
+          // only falling back to reconstructed name if no real filename exists
           const songFiles = editedSongs.map(s => {
-            const songFilename = sanitizeGradeFilename(sanitizeFilename(`${s.artist} - ${s.title}.mp3`));
+            const realFile = s.file && s.file.toLowerCase().endsWith('.mp3') ? s.file : null;
+            const songFilename = sanitizeGradeFilename(realFile || sanitizeFilename(`${s.artist} - ${s.title}.mp3`));
             return `"${songFilename}"`;
           }).join(',vht,');
           const blockLine = `${selectedBlock.time} (ID=${selectedBlock.programName}) ${songFiles}`;
