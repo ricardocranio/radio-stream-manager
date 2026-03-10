@@ -315,8 +315,9 @@ function getFileDuration(filename, musicFolders) {
   return 0;
 }
 
-function register() {
-  ipcMain.handle('check-song-exists', async (event, params) => {
+function register({ safeHandle }) {
+  const handle = safeHandle || ipcMain.handle.bind(ipcMain);
+  handle('check-song-exists', async (event, params) => {
     const { artist, title, musicFolders } = params;
     try {
       console.log(`[LIBRARY] Checking: ${artist} - ${title}`);
