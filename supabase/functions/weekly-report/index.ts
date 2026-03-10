@@ -59,6 +59,7 @@ serve(async (req) => {
     // 2. Genre distribution from classified songs
     const genreCounts: Record<string, number> = {};
     const energyCounts: Record<string, number> = {};
+    const yearCounts: Record<string, number> = {};
     const genreByStation: Record<string, Record<string, number>> = {};
 
     (classified || []).forEach(s => {
@@ -70,6 +71,9 @@ serve(async (req) => {
       }
       if (s.ai_energy) {
         energyCounts[s.ai_energy] = (energyCounts[s.ai_energy] || 0) + 1;
+      }
+      if (s.year) {
+        yearCounts[s.year] = (yearCounts[s.year] || 0) + 1;
       }
     });
 
