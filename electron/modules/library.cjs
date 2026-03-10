@@ -330,7 +330,7 @@ function register({ safeHandle }) {
     }
   });
 
-  ipcMain.handle('find-song-match', async (event, params) => {
+  handle('find-song-match', async (event, params) => {
     const { artist, title, musicFolders, threshold } = params;
     try {
       console.log(`[LIBRARY] Finding best match for: ${artist} - ${title} (threshold: ${Math.round((threshold || 0.75) * 100)}%)`);
