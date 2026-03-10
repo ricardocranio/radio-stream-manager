@@ -22,7 +22,7 @@ export function Id3ActivityCard() {
 
   const [isFixing, setIsFixing] = useState(false);
   const [fixProgress, setFixProgress] = useState<FixProgress | null>(null);
-  const [fixResult, setFixResult] = useState<{ scanned: number; renamed: number; errors: number } | null>(null);
+  const [fixResult, setFixResult] = useState<{ scanned: number; renamed: number; errors: number; purged: number } | null>(null);
 
   // Track cumulative ID3 processed files (downloads trigger ID3 reads)
   const id3ProcessedToday = dailyStats.downloaded + dailyStats.skipped;
@@ -41,12 +41,13 @@ export function Id3ActivityCard() {
     });
 
     try {
-      const result = await window.electronAPI.scanFixLibrary({ musicFolders: config.musicFolders });
-      setFixResult({ scanned: result.scanned, renamed: result.renamed, errors: result.errors });
+      const result = await window.electronAPI.scanFixLibrary({ musicFolders: config.musicFolders }) as any;
+      setFixResult({ scanned: result.scanned, renamed: result.renamed, errors: result.errors, purged: result.purged || 0 });
       setFixProgress(null);
+      const purgeMsg = result.purged > 0 ? ` · ${result.purged} apagados (sem ID3)` : '';
       toast({
         title: '✅ ID3 Scan Completo',
-        description: `${result.scanned} escaneados · ${result.renamed} renomeados · ${result.errors} erros`,
+        description: `${result.scanned} escaneados · ${result.renamed} renomeados · ${result.errors} erros${purgeMsg}`,
       });
     } catch (err) {
       toast({ title: '❌ Erro no scan ID3', description: String(err), variant: 'destructive' });
@@ -108,10 +109,18 @@ export function Id3ActivityCard() {
                 <p className="text-[9px] text-muted-foreground uppercase tracking-wide">ID3 Hoje</p>
               </div>
               {fixResult && (
-                <div>
-                  <p className="text-lg font-bold font-mono text-emerald-400 tabular-nums">{fixResult.renamed}</p>
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Renomeados</p>
-                </div>
+                <>
+                  <div>
+                    <p className="text-lg font-bold font-mono text-emerald-400 tabular-nums">{fixResult.renamed}</p>
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Renomeados</p>
+                  </div>
+                  {fixResult.purged > 0 && (
+                    <div>
+                      <p className="text-lg font-bold font-mono text-red-400 tabular-nums">{fixResult.purged}</p>
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Apagados</p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -138,7 +147,7 @@ export function Id3ActivityCard() {
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">Escaneando biblioteca...</span>
               <span className="font-mono text-indigo-400 font-bold">
-                {fixProgress.scanned} escaneados · {fixProgress.renamed} renomeados
+                {fixProgress.scanned} escaneados · {fixProgress.renamed} renomeados{(fixProgress as any).purged > 0 ? ` · ${(fixProgress as any).purged} apagados` : ''}
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs">
