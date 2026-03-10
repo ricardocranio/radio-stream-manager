@@ -11,6 +11,43 @@ import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 
+// ID3 genre normalization (shared with captured download service)
+const ID3_GENRE_MAP_DL: Record<string, string> = {
+  pop: 'POP', rock: 'ROCK', sertanejo: 'SERTANEJO', 'sertanejo universitário': 'SERTANEJO',
+  pagode: 'PAGODE', mpb: 'MPB', 'hip-hop': 'RAP/HIP-HOP', 'hip hop': 'RAP/HIP-HOP',
+  rap: 'RAP/HIP-HOP', electronic: 'ELETRONICA', dance: 'ELETRONICA', edm: 'ELETRONICA',
+  funk: 'FUNK', 'funk carioca': 'FUNK', gospel: 'GOSPEL', forró: 'FORRO', forro: 'FORRO',
+  reggaeton: 'REGGAETON', 'r&b': 'R&B', rnb: 'R&B', country: 'COUNTRY', jazz: 'JAZZ',
+  classical: 'CLASSICA', indie: 'INDIE', metal: 'METAL', reggae: 'REGGAE',
+  latin: 'LATINA', latina: 'LATINA', soul: 'R&B', blues: 'MPB',
+  'bossa nova': 'MPB', samba: 'PAGODE', axé: 'FORRO', axe: 'FORRO',
+};
+
+function normalizeId3GenreForDl(raw: string): string {
+  const lower = raw.toLowerCase().replace(/[()]/g, '').trim();
+  const num = parseInt(lower);
+  if (!isNaN(num)) {
+    const map: Record<number, string> = {
+      0: 'MPB', 1: 'ROCK', 2: 'POP', 3: 'ELETRONICA', 13: 'POP', 14: 'R&B',
+      15: 'RAP/HIP-HOP', 17: 'ROCK', 18: 'ELETRONICA', 32: 'CLASSICA',
+      52: 'ELETRONICA', 59: 'REGGAE', 62: 'POP', 80: 'COUNTRY', 85: 'RAP/HIP-HOP',
+    };
+    return map[num] || 'OUTRO';
+  }
+  return ID3_GENRE_MAP_DL[lower] || 'OUTRO';
+}
+
+function genreToEnergyForDl(genre: string): string {
+  const map: Record<string, string> = {
+    SERTANEJO: 'MEDIUM', PAGODE: 'MEDIUM', POP: 'HIGH', ELETRONICA: 'VERY_HIGH',
+    MPB: 'LOW', ROCK: 'HIGH', FUNK: 'VERY_HIGH', GOSPEL: 'MEDIUM', FORRO: 'HIGH',
+    'RAP/HIP-HOP': 'HIGH', REGGAETON: 'HIGH', 'R&B': 'MEDIUM', COUNTRY: 'MEDIUM',
+    JAZZ: 'LOW', CLASSICA: 'LOW', INDIE: 'MEDIUM', METAL: 'VERY_HIGH',
+    REGGAE: 'LOW', LATINA: 'HIGH', OUTRO: 'MEDIUM',
+  };
+  return map[genre] || 'MEDIUM';
+}
+
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
 interface DownloadQueueItem {
@@ -161,6 +198,48 @@ export function useGlobalDownloadService() {
         
         useRadioStore.getState().updateMissingSong(song.id, { status: 'downloaded' });
         markSongAsDownloaded(song.artist, song.title, result.output);
+
+        // === Enrich ID3 metadata (BPM + Genre) after download ===
+        try {
+          const { config } = useRadioStore.getState();
+          const verifiedFile = (result as any).verifiedFile || `${song.artist} - ${song.title}.mp3`;
+          if (isElectron && window.electronAPI?.readId3Genre) {
+            const id3Result = await window.electronAPI.readId3Genre({
+              filePath: verifiedFile,
+              musicFolders: config.musicFolders,
+            });
+            if (id3Result?.success) {
+              const updates: Record<string, string> = {};
+              if (id3Result.genre) {
+                const normalizedGenre = normalizeId3GenreForDl(id3Result.genre);
+                updates.ai_genre = normalizedGenre;
+                updates.ai_energy = genreToEnergyForDl(normalizedGenre);
+                console.log(`[DL-SVC] 🏷️ ID3 genre: ${id3Result.genre} → ${normalizedGenre}`);
+              }
+              if ((id3Result as any).bpm) {
+                const bpmNum = parseInt(String((id3Result as any).bpm), 10);
+                if (bpmNum > 0 && bpmNum < 300) {
+                  console.log(`[DL-SVC] 🥁 ID3 BPM: ${bpmNum}`);
+                  // Store BPM in local cache for grade builder access
+                  try {
+                    const { updateBpmCacheEntry } = await import('@/lib/bpmCacheBridge');
+                    updateBpmCacheEntry(song.artist, song.title, bpmNum);
+                  } catch { /* non-critical */ }
+                }
+              }
+              if (Object.keys(updates).length > 0) {
+                const { supabase } = await import('@/integrations/supabase/client');
+                await supabase
+                  .from('scraped_songs')
+                  .update(updates)
+                  .eq('artist', song.artist)
+                  .eq('title', song.title);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[DL-SVC] ID3 enrichment failed (non-critical):', e);
+        }
         
         // Clear failure tracker on success
         const failKey = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;

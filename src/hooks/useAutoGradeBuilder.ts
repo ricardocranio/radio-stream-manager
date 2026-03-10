@@ -37,6 +37,7 @@ import { saveGradeToStorage, loadGradeFromStorage, clearGradeStorage } from '@/l
 import { resolveVinhetasInLine, resolveVinhetasInGrade, resetVinhetaPool } from '@/lib/gradeBuilder/vinhetaResolver';
 import { saveOfflineSongCache, loadOfflineSongCache } from '@/lib/offlineSongCache';
 import { saveCrossDayBuffer, loadCrossDayBuffer } from '@/lib/crossDayRepetition';
+import { loadBpmCacheFromDisk, enrichSongsWithBpmCache } from '@/lib/bpmCacheBridge';
 import { reportServiceHeartbeat } from '@/hooks/useServiceWatchdog';
 
 // === MODULE-LEVEL VHT DURATION CACHE ===
@@ -426,7 +427,7 @@ export function useAutoGradeBuilder() {
 
       const { data, error } = await supabase
         .from('scraped_songs')
-        .select('title, artist, station_name, scraped_at')
+        .select('title, artist, station_name, scraped_at, ai_genre, ai_energy')
         .gte('scraped_at', windowStart)
         .lte('scraped_at', windowEnd)
         .order('scraped_at', { ascending: false })
@@ -445,13 +446,13 @@ export function useAutoGradeBuilder() {
   const fetchAllRecentSongs = useCallback(async (retryCount = 0): Promise<Record<string, SongEntry[]>> => {
     try {
       // Fetch scraped_songs and radio_historico independently to handle partial failures
-      let scrapedData: Array<{ title: string; artist: string; station_name: string; scraped_at: string }> = [];
+      let scrapedData: Array<{ title: string; artist: string; station_name: string; scraped_at: string; ai_genre?: string | null; ai_energy?: string | null }> = [];
       let historicoData: Array<{ title: string; artist: string; station_name: string; captured_at: string }> = [];
 
       try {
         const scrapedResult = await supabase
           .from('scraped_songs')
-          .select('title, artist, station_name, scraped_at')
+          .select('title, artist, station_name, scraped_at, ai_genre, ai_energy')
           .order('scraped_at', { ascending: false })
           .limit(3000);
         
@@ -570,7 +571,7 @@ export function useAutoGradeBuilder() {
   }, [stations]);
 
   // Helper to build songsByStation from raw data
-  const buildSongsByStation = useCallback((data: Array<{ title: string; artist: string; station_name: string; scraped_at: string }>, maxPerStation = 50): Record<string, SongEntry[]> => {
+  const buildSongsByStation = useCallback((data: Array<{ title: string; artist: string; station_name: string; scraped_at: string; ai_genre?: string | null; ai_energy?: string | null }>, maxPerStation = 50): Record<string, SongEntry[]> => {
     const songsByStation: Record<string, SongEntry[]> = {};
     const stationNameToStyle: Record<string, string> = {};
     const seenSongs = new Set<string>();
@@ -615,7 +616,9 @@ export function useAutoGradeBuilder() {
           title: song.title, artist: song.artist, station: song.station_name,
           style, filename: sanitizeFilename(`${song.artist} - ${song.title}.mp3`),
           scrapedAt: song.scraped_at, // Preserve for freshness sorting
-        });
+          ...(song.ai_genre ? { ai_genre: song.ai_genre } : {}),
+          ...(song.ai_energy ? { ai_energy: song.ai_energy } : {}),
+        } as SongEntry);
       }
     });
     const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
@@ -1392,7 +1395,14 @@ export function useAutoGradeBuilder() {
       logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
       clearUsedSongs();
 
+      // Load BPM cache from disk before building
+      await loadBpmCacheFromDisk();
+
       const songsByStation = await fetchAllRecentSongs();
+      // Enrich all song pools with cached BPM data
+      for (const songs of Object.values(songsByStation)) {
+        enrichSongsWithBpmCache(songs as any[]);
+      }
       const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
       const lines: string[] = [];
       const allLogs: BlockLogItem[] = [];
@@ -1612,7 +1622,12 @@ export function useAutoGradeBuilder() {
       // Always use the FULL song pool from monitoring (scraped_songs + radio_historico)
       // A narrow 1h window misses songs captured earlier, causing unnecessary Coringas
       reportServiceHeartbeat('grade-builder');
+      await loadBpmCacheFromDisk();
       const fullPool = await fetchAllRecentSongs();
+      // Enrich all song pools with cached BPM data
+      for (const songs of Object.values(fullPool)) {
+        enrichSongsWithBpmCache(songs as any[]);
+      }
 
       const durationMap = new Map(state.pendingBlockDurations);
       if (shouldBuildCurrent) {
