@@ -1,14 +1,16 @@
 /**
  * Sanitization functions for grade filenames and lines.
  * 
- * PRESERVES parentheses and brackets (e.g., "(Ao Vivo)", "[Remix]") because
- * these are part of the actual filename on disk returned by library matching.
- * Only removes accents, &→e, special chars, forces UPPERCASE, ensures .MP3.
+ * PRESERVES the REAL filename from disk as much as possible.
+ * Only applies: accent removal, UPPERCASE, filter characters, and .MP3 normalization.
+ * Does NOT remove/replace characters that may exist in the actual file on disk,
+ * since files are already sanitized by the download service (sanitizeForDisk).
  */
 
 /**
  * Light sanitization for grade line filenames.
- * Also removes any user-configured filter characters.
+ * Only removes accents, applies UPPERCASE, and removes user-configured filter characters.
+ * Does NOT strip special chars or replace & — those are already handled by the download service.
  */
 export function sanitizeGradeFilename(filename: string, filterCharacters?: string[]): string {
   if (!filename) return '';
@@ -25,16 +27,10 @@ export function sanitizeGradeFilename(filename: string, filterCharacters?: strin
     }
   }
   
-  // Replace & with "e"
-  result = result.replace(/&/g, 'e');
-  
   // Remove accents via NFD normalization
   result = result
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
-  
-  // Remove special characters EXCEPT: letters, numbers, spaces, dash, dot, underscore, parens, brackets
-  result = result.replace(/[^a-zA-Z0-9\s\-._()[\]]/g, '');
   
   // Normalize multiple spaces to single space
   result = result.replace(/\s+/g, ' ').trim();

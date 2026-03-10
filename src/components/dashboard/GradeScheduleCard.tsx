@@ -390,9 +390,10 @@ export function GradeScheduleCard() {
     const songs = isEditing ? editedSongs : block.songs;
     if (songs.length === 0) return `${block.time} (ID=${block.programName}) [vazio]`;
     
-    // Format with sanitizeGradeFilename (UPPERCASE, no accents) for TXT parity
+    // Use the REAL filename (s.file) when available for TXT parity with actual disk files
     const songFiles = songs.map(s => {
-      const filename = sanitizeGradeFilename(sanitizeFilename(`${s.artist} - ${s.title}.mp3`));
+      const realFile = s.file && s.file.toLowerCase().endsWith('.mp3') ? s.file : null;
+      const filename = sanitizeGradeFilename(realFile || sanitizeFilename(`${s.artist} - ${s.title}.mp3`));
       return `"${filename}"`;
     }).join(',vht,');
     
