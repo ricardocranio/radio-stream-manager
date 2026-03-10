@@ -22,7 +22,7 @@ export function Id3ActivityCard() {
 
   const [isFixing, setIsFixing] = useState(false);
   const [fixProgress, setFixProgress] = useState<FixProgress | null>(null);
-  const [fixResult, setFixResult] = useState<{ scanned: number; renamed: number; errors: number } | null>(null);
+  const [fixResult, setFixResult] = useState<{ scanned: number; renamed: number; errors: number; purged: number } | null>(null);
 
   // Track cumulative ID3 processed files (downloads trigger ID3 reads)
   const id3ProcessedToday = dailyStats.downloaded + dailyStats.skipped;
