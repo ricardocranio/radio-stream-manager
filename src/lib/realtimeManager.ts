@@ -19,7 +19,7 @@ interface ManagedChannel {
   subscribers: ChannelSubscriber[];
   status: 'idle' | 'connecting' | 'connected' | 'error';
   retryCount: number;
-  retryTimeoutId: NodeJS.Timeout | null;
+  retryTimeoutId: ReturnType<typeof setTimeout> | null;
   table: string;
 }
 
@@ -28,7 +28,7 @@ class RealtimeManager {
   private readonly MAX_RETRIES = 5; // Reduced - rely on health check for recovery
   private readonly BASE_RETRY_DELAY = 5000; // Start at 5s (was 2s)
   private readonly MAX_RETRY_DELAY = 60000; // Cap at 60 seconds (was 30s)
-  private healthCheckIntervalId: NodeJS.Timeout | null = null;
+  private healthCheckIntervalId: ReturnType<typeof setTimeout> | null = null;
   private readonly HEALTH_CHECK_INTERVAL = 120000; // Check every 2 minutes (was 60s)
   private isPageVisible: boolean = true;
 

@@ -71,7 +71,7 @@ interface CapturedQueueItem {
 export function useCapturedDownloadService() {
   const processedRef = useRef<Set<string>>(new Set());
   const isProcessingRef = useRef(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const downloadOne = useCallback(async (song: CapturedQueueItem): Promise<'success' | 'exists' | 'error'> => {
     const { deezerConfig, config, addDownloadHistory } = useRadioStore.getState();

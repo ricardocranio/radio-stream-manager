@@ -75,8 +75,8 @@ export function useGlobalDownloadService() {
   const downloadQueueRef = useRef<DownloadQueueItem[]>([]);
   const isProcessingRef = useRef(false);
   const processedSongsRef = useRef<Set<string>>(new Set());
-  const downloadIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const arlCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const downloadIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const arlCheckIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLogTimeRef = useRef<number>(0);
   const failureTracker = useRef<Map<string, { count: number; lastFail: number }>>(new Map());
 

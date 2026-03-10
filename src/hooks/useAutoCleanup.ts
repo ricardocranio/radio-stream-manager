@@ -20,7 +20,7 @@ const MISSING_ERROR_MAX_AGE = 60 * 60 * 1000; // 1 hour for error entries
  * Runs every hour to keep memory usage low
  */
 export function useAutoCleanup() {
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { capturedSongs, downloadHistory } = useRadioStore();
 
   // Clean excess songs per station (keep only 50 most recent)

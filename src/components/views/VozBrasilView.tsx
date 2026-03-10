@@ -57,8 +57,8 @@ export function VozBrasilView() {
   }>>([]);
   const [nextDownload, setNextDownload] = useState<string>('');
   const [nextCleanup, setNextCleanup] = useState<string>('');
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const schedulerRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const schedulerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Save config to localStorage
   useEffect(() => {

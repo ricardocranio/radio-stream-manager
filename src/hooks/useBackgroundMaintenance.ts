@@ -25,7 +25,7 @@ export function useBackgroundMaintenance() {
   const lastPurgeRef = useRef<number>(0);
   const lastDedupRef = useRef<number>(0);
   const lastCompressRef = useRef<string>(''); // Date string of last compression
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const classifySongs = useCallback(async () => {
     try {

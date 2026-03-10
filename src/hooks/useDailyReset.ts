@@ -17,7 +17,7 @@ const RESET_STORAGE_KEY = 'pgm-last-daily-reset';
  * Clears: missing songs, ranking, captured songs, download history, grade history, logs
  */
 export function useDailyReset() {
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   const {
     clearMissingSongs,

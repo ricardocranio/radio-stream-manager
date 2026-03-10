@@ -130,7 +130,7 @@ export function useAutoGradeBuilder() {
   });
 
   const lastBuildRef = useRef<string | null>(null);
-  const buildIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const buildIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const usedSongsRef = useRef<UsedSong[]>(loadCrossDayBuffer());
   const carryOverSongsRef = useRef<CarryOverSong[]>([]);
   /** Tracks which block time keys (e.g. "18:00") have already been assembled and locked */
