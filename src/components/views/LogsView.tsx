@@ -513,6 +513,155 @@ export function LogsView() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Matching Stats Tab */}
+        <TabsContent value="matching" className="space-y-4">
+          {/* Strategy Distribution Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <Card className="glass-card">
+              <CardContent className="p-3 text-center">
+                <span className="text-2xl font-bold text-foreground font-mono">{simStats.totalChecked}</span>
+                <p className="text-xs text-muted-foreground mt-1">Total Buscas</p>
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-emerald-500/20">
+              <CardContent className="p-3 text-center">
+                <span className="text-2xl font-bold text-emerald-500 font-mono">{strategyStats.prefix}</span>
+                <p className="text-xs text-muted-foreground mt-1">🎯 Prefix</p>
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-blue-500/20">
+              <CardContent className="p-3 text-center">
+                <span className="text-2xl font-bold text-blue-500 font-mono">{strategyStats.includes}</span>
+                <p className="text-xs text-muted-foreground mt-1">📌 Includes</p>
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-violet-500/20">
+              <CardContent className="p-3 text-center">
+                <span className="text-2xl font-bold text-violet-500 font-mono">{strategyStats.word}</span>
+                <p className="text-xs text-muted-foreground mt-1">🔤 Word</p>
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-amber-500/20">
+              <CardContent className="p-3 text-center">
+                <span className="text-2xl font-bold text-amber-500 font-mono">{strategyStats.levenshtein}</span>
+                <p className="text-xs text-muted-foreground mt-1">📐 Levenshtein</p>
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-destructive/20">
+              <CardContent className="p-3 text-center">
+                <span className="text-2xl font-bold text-destructive font-mono">{strategyStats.miss}</span>
+                <p className="text-xs text-muted-foreground mt-1">❌ Miss</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Strategy Progress Bars */}
+          <Card className="glass-card">
+            <CardHeader className="py-3 border-b border-border">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-primary" />
+                Distribuição de Estratégias
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 space-y-4">
+              {(() => {
+                const total = Math.max(simStats.totalChecked, 1);
+                const strategies = [
+                  { label: 'Prefix Match', count: strategyStats.prefix, color: 'bg-emerald-500', emoji: '🎯' },
+                  { label: 'Includes Match', count: strategyStats.includes, color: 'bg-blue-500', emoji: '📌' },
+                  { label: 'Word Match', count: strategyStats.word, color: 'bg-violet-500', emoji: '🔤' },
+                  { label: 'Levenshtein', count: strategyStats.levenshtein, color: 'bg-amber-500', emoji: '📐' },
+                  { label: 'Não encontrada', count: strategyStats.miss, color: 'bg-destructive', emoji: '❌' },
+                ];
+                return strategies.map(s => (
+                  <div key={s.label} className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">{s.emoji} {s.label}</span>
+                      <span className="font-mono text-foreground">{s.count} ({Math.round((s.count / total) * 100)}%)</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-secondary overflow-hidden">
+                      <div className={`h-full rounded-full ${s.color} transition-all duration-500`} style={{ width: `${(s.count / total) * 100}%` }} />
+                    </div>
+                  </div>
+                ));
+              })()}
+              
+              <div className="pt-3 border-t border-border flex justify-between text-sm">
+                <span className="text-muted-foreground">Taxa de acerto</span>
+                <span className="font-mono font-bold text-success">
+                  {simStats.totalChecked > 0 ? Math.round((simStats.accepted / simStats.totalChecked) * 100) : 0}%
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Similaridade média</span>
+                <span className="font-mono text-foreground">{Math.round(simStats.averageSimilarity * 100)}%</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Recent Matching Log */}
+          <Card className="glass-card">
+            <CardHeader className="py-3 border-b border-border">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-primary" />
+                <span className="font-mono">matching.log</span>
+                <Badge variant="secondary" className="text-xs">{similarityLogs.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[400px]">
+                <div className="p-4 space-y-1">
+                  {similarityLogs.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-12">
+                      <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                      <p>Nenhuma busca registrada</p>
+                      <p className="text-xs mt-2">As buscas aparecerão quando o sistema verificar músicas na biblioteca</p>
+                    </div>
+                  ) : (
+                    similarityLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className={`flex items-start gap-3 p-2 rounded-lg hover:bg-secondary/30 transition-colors text-sm ${
+                          log.accepted ? '' : 'opacity-60'
+                        }`}
+                      >
+                        <span className="shrink-0 mt-0.5">
+                          {log.accepted ? '✅' : log.reason === 'below_threshold' ? '⚠️' : '❌'}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-foreground truncate">
+                              {log.artist} - {log.title}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            {log.strategy && (
+                              <Badge variant="outline" className="text-[10px]">
+                                {log.strategy}
+                              </Badge>
+                            )}
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              {Math.round(log.similarity * 100)}% (min: {Math.round(log.threshold * 100)}%)
+                            </span>
+                            {log.matchedFilename && (
+                              <span className="text-[10px] text-muted-foreground truncate max-w-[300px]">
+                                → {log.matchedFilename}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground shrink-0">
+                          {format(new Date(log.timestamp), 'HH:mm:ss', { locale: ptBR })}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );
