@@ -936,25 +936,6 @@ export function SequenceView() {
               </div>
             </div>
 
-            {/* Priority */}
-            <div className="space-y-2">
-              <Label>Prioridade (maior = mais importante)</Label>
-              <Select
-                value={formPriority.toString()}
-                onValueChange={(v) => setFormPriority(parseInt(v))}
-              >
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3, 4, 5].map((p) => (
-                    <SelectItem key={p} value={p.toString()}>
-                      Prioridade {p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
             {/* Sequence Config */}
             <div className="space-y-2">
