@@ -238,6 +238,48 @@ export function TrendsView() {
         </Card>
       </div>
 
+      {/* Year Distribution */}
+      {report.yearDistribution && report.yearDistribution.length > 0 && (
+        <Card className="glass-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-primary" />
+              Distribuição por Ano de Lançamento (ID3)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={report.yearDistribution}
+                  dataKey="count"
+                  nameKey="year"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={100}
+                  label={({ year, percent }) => `${year} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {report.yearDistribution.map((entry, i) => {
+                    const yearNum = parseInt(entry.year);
+                    let color = '#94a3b8';
+                    if (yearNum >= 2024) color = '#10b981';
+                    else if (yearNum >= 2020) color = '#3b82f6';
+                    else if (yearNum >= 2015) color = '#8b5cf6';
+                    else if (yearNum >= 2010) color = '#f59e0b';
+                    else if (yearNum >= 2000) color = '#f97316';
+                    else color = '#ef4444';
+                    return <Cell key={entry.year} fill={color} />;
+                  })}
+                </Pie>
+                <Tooltip formatter={(value: number) => [`${value} músicas`, 'Capturas']} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Top Artists & Station Ranking */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Top Artists */}
