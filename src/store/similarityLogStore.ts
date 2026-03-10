@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+export type MatchStrategy = 'prefix' | 'includes' | 'word' | 'levenshtein' | 'unknown';
+
 export interface SimilarityLogEntry {
   id: string;
   timestamp: Date;
@@ -10,6 +12,7 @@ export interface SimilarityLogEntry {
   threshold: number;
   accepted: boolean;
   reason: 'match_found' | 'below_threshold' | 'no_match' | 'error';
+  strategy?: MatchStrategy;
 }
 
 interface SimilarityLogState {
@@ -22,6 +25,14 @@ interface SimilarityLogState {
     noMatch: number;
     errors: number;
     averageSimilarity: number;
+  };
+  strategyStats: {
+    prefix: number;
+    includes: number;
+    word: number;
+    levenshtein: number;
+    unknown: number;
+    miss: number;
   };
   
   // Actions
@@ -40,9 +51,19 @@ const initialStats = {
   averageSimilarity: 0,
 };
 
+const initialStrategyStats = {
+  prefix: 0,
+  includes: 0,
+  word: 0,
+  levenshtein: 0,
+  unknown: 0,
+  miss: 0,
+};
+
 export const useSimilarityLogStore = create<SimilarityLogState>((set) => ({
   logs: [],
   stats: { ...initialStats },
+  strategyStats: { ...initialStrategyStats },
 
   addLog: (entry) =>
     set((state) => {
@@ -52,7 +73,6 @@ export const useSimilarityLogStore = create<SimilarityLogState>((set) => ({
         timestamp: new Date(),
       };
 
-      // OPTIMIZED: Reduced from 500 to 200 entries for lower memory usage
       const newLogs = [newEntry, ...state.logs].slice(0, 200);
 
       // Update stats
@@ -72,30 +92,38 @@ export const useSimilarityLogStore = create<SimilarityLogState>((set) => ({
         }
       }
 
+      // Update strategy stats
+      const newStrategyStats = { ...state.strategyStats };
+      if (entry.accepted && entry.strategy) {
+        newStrategyStats[entry.strategy] = (newStrategyStats[entry.strategy] || 0) + 1;
+      } else if (!entry.accepted) {
+        newStrategyStats.miss++;
+      } else if (entry.accepted && !entry.strategy) {
+        newStrategyStats.unknown++;
+      }
+
       // Calculate average similarity (only for matches found)
       const matchLogs = newLogs.filter(l => l.similarity > 0);
       if (matchLogs.length > 0) {
         newStats.averageSimilarity = matchLogs.reduce((sum, l) => sum + l.similarity, 0) / matchLogs.length;
       }
 
-      // OPTIMIZED: Reduced logging - only log summary every 25 checks (was 10)
-      // Individual logs removed to reduce console spam
       if (newStats.totalChecked % 25 === 0) {
         const acceptRate = newStats.totalChecked > 0 
           ? Math.round((newStats.accepted / newStats.totalChecked) * 100) 
           : 0;
         console.log(
           `[SIMILARITY] 📊 Resumo: ${newStats.accepted}/${newStats.totalChecked} aceitas (${acceptRate}%) | ` +
-          `Rejeitadas: ${newStats.rejected} | Média: ${Math.round(newStats.averageSimilarity * 100)}%`
+          `Prefix=${newStrategyStats.prefix} Includes=${newStrategyStats.includes} Word=${newStrategyStats.word} Lev=${newStrategyStats.levenshtein} Miss=${newStrategyStats.miss}`
         );
       }
 
-      return { logs: newLogs, stats: newStats };
+      return { logs: newLogs, stats: newStats, strategyStats: newStrategyStats };
     }),
 
   clearLogs: () => set({ logs: [] }),
   
-  resetStats: () => set({ stats: { ...initialStats } }),
+  resetStats: () => set({ stats: { ...initialStats }, strategyStats: { ...initialStrategyStats } }),
 }));
 
 // Helper to get formatted stats

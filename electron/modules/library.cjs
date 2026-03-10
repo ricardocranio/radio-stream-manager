@@ -100,7 +100,7 @@ function findBestMatch(artist, title, musicFolders, threshold) {
       matchStats.prefix++;
       reportMatchStats();
       console.log(`[LIBRARY] ✅ Prefix-match: "${artist} - ${title}" → ${file.name}`);
-      return { exists: true, path: file.path, filename: file.name, baseName: file.baseName, similarity: 1.0 };
+      return { exists: true, path: file.path, filename: file.name, baseName: file.baseName, similarity: 1.0, strategy: 'prefix' };
     }
     
     // Strategy 1: Direct includes (exact substring match)
@@ -110,7 +110,7 @@ function findBestMatch(artist, title, musicFolders, threshold) {
     ) {
       matchStats.includes++;
       reportMatchStats();
-      return { exists: true, path: file.path, filename: file.name, baseName: file.baseName, similarity: 1.0 };
+      return { exists: true, path: file.path, filename: file.name, baseName: file.baseName, similarity: 1.0, strategy: 'includes' };
     }
     
     // Strategy 1.5: Word-level matching
@@ -120,7 +120,7 @@ function findBestMatch(artist, title, musicFolders, threshold) {
         matchStats.word++;
         reportMatchStats();
         console.log(`[LIBRARY] ✅ Word-match: "${artist} - ${title}" → ${file.name}`);
-        return { exists: true, path: file.path, filename: file.name, baseName: file.baseName, similarity: 0.95 };
+        return { exists: true, path: file.path, filename: file.name, baseName: file.baseName, similarity: 0.95, strategy: 'word' };
       }
     }
     
@@ -144,7 +144,7 @@ function findBestMatch(artist, title, musicFolders, threshold) {
   if (bestMatch) {
     matchStats.levenshtein++;
     reportMatchStats();
-    return { exists: true, path: bestMatch.path, filename: bestMatch.name, baseName: bestMatch.baseName, similarity: bestScore };
+    return { exists: true, path: bestMatch.path, filename: bestMatch.name, baseName: bestMatch.baseName, similarity: bestScore, strategy: 'levenshtein' };
   }
   
   matchStats.miss++;

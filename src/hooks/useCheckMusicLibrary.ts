@@ -14,6 +14,7 @@ interface CheckResult {
   baseName?: string;
   similarity?: number;
   cached?: boolean;
+  strategy?: string;
 }
 
 /**
@@ -100,9 +101,9 @@ export function useCheckMusicLibrary() {
             threshold,
             accepted: true,
             reason: 'match_found',
+            strategy: result.strategy || 'unknown',
           });
         } else if (result.similarity !== undefined && result.similarity > 0) {
-          // Found a potential match but below threshold
           addSimilarityLog({
             artist,
             title,
@@ -111,9 +112,9 @@ export function useCheckMusicLibrary() {
             threshold,
             accepted: false,
             reason: 'below_threshold',
+            strategy: result.strategy,
           });
         } else {
-          // No match found at all
           addSimilarityLog({
             artist,
             title,
