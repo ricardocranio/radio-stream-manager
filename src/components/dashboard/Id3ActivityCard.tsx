@@ -41,12 +41,13 @@ export function Id3ActivityCard() {
     });
 
     try {
-      const result = await window.electronAPI.scanFixLibrary({ musicFolders: config.musicFolders });
+      const result = await window.electronAPI.scanFixLibrary({ musicFolders: config.musicFolders }) as any;
       setFixResult({ scanned: result.scanned, renamed: result.renamed, errors: result.errors, purged: result.purged || 0 });
       setFixProgress(null);
+      const purgeMsg = result.purged > 0 ? ` · ${result.purged} apagados (sem ID3)` : '';
       toast({
         title: '✅ ID3 Scan Completo',
-        description: `${result.scanned} escaneados · ${result.renamed} renomeados · ${result.errors} erros`,
+        description: `${result.scanned} escaneados · ${result.renamed} renomeados · ${result.errors} erros${purgeMsg}`,
       });
     } catch (err) {
       toast({ title: '❌ Erro no scan ID3', description: String(err), variant: 'destructive' });
