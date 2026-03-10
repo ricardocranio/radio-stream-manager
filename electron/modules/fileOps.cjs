@@ -97,7 +97,7 @@ function register({ getMainWindow, safeHandle }) {
   });
 
   // IPC: Read ID3 genre from file
-  ipcMain.handle('read-id3-genre', async (event, { filePath, musicFolders }) => {
+  handle('read-id3-genre', async (event, { filePath, musicFolders }) => {
     try {
       let targetPath = filePath;
       if (!path.isAbsolute(filePath) && musicFolders && musicFolders.length > 0) {
