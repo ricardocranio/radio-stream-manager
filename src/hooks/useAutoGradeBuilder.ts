@@ -426,7 +426,7 @@ export function useAutoGradeBuilder() {
 
       const { data, error } = await supabase
         .from('scraped_songs')
-        .select('title, artist, station_name, scraped_at')
+        .select('title, artist, station_name, scraped_at, ai_genre, ai_energy')
         .gte('scraped_at', windowStart)
         .lte('scraped_at', windowEnd)
         .order('scraped_at', { ascending: false })
