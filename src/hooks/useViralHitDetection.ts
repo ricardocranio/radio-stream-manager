@@ -60,7 +60,7 @@ export function useViralHitDetection() {
   const [viralHits, setViralHits] = useState<ViralHit[]>([]);
   const [isChecking, setIsChecking] = useState(false);
   const [lastCheck, setLastCheck] = useState<Date | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dismissedRef = useRef<Set<string>>(getDismissedIds());
 
   const detectViralHits = useCallback(async () => {

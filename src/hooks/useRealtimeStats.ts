@@ -219,8 +219,8 @@ export function useRealtimeStats() {
 
   // Auto-refresh with power saving support
   useEffect(() => {
-    let refreshTimeoutId: NodeJS.Timeout;
-    let countdownIntervalId: NodeJS.Timeout;
+    let refreshTimeoutId: ReturnType<typeof setTimeout>;
+    let countdownIntervalId: ReturnType<typeof setTimeout>;
 
     const scheduleNextRefresh = () => {
       const interval = getEffectiveInterval();

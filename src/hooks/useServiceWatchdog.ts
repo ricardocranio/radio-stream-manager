@@ -42,7 +42,7 @@ export function getServiceStatuses(): Record<string, { alive: boolean; lastHeart
 }
 
 export function useServiceWatchdog() {
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const check = () => {

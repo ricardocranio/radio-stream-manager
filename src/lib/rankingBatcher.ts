@@ -13,7 +13,7 @@ interface PendingUpdate {
 class RankingBatcher {
   private pendingUpdates: Map<string, PendingUpdate> = new Map();
   private lastFlush: number = Date.now();
-  private flushIntervalId: NodeJS.Timeout | null = null;
+  private flushIntervalId: ReturnType<typeof setTimeout> | null = null;
   
   // Flush interval in ms (6 hours = 21600000ms, but we'll use 30 min for practical testing)
   private readonly FLUSH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes

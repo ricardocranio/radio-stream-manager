@@ -32,7 +32,7 @@ export function useGlobalScrapingService(
   processedSongsRef: React.MutableRefObject<Set<string>>,
   downloadQueueRef: React.MutableRefObject<{ song: MissingSong; retryCount: number }[]>,
 ) {
-  const scrapeIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const scrapeIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [scrapeStats, setScrapeStats] = useState<ScrapeStats>({
     lastScrape: null,

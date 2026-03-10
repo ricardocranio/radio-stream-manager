@@ -13,7 +13,7 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 const MIN_FILE_SIZE_BYTES = 40 * 1024 * 1024; // 40MB minimum to avoid saving error pages
 
 export function useVozBrasilService() {
-  const schedulerRef = useRef<NodeJS.Timeout | null>(null);
+  const schedulerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastDownloadDateRef = useRef<string | null>(null);
   const lastCleanupDateRef = useRef<string | null>(null);
 
