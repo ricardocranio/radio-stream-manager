@@ -125,13 +125,24 @@ export function useCapturedDownloadService() {
             filePath: verifiedFile,
             musicFolders: config.musicFolders,
           });
-          if (id3Result?.success && id3Result.genre) {
-            const normalizedGenre = normalizeId3Genre(id3Result.genre);
-            await supabase
-              .from('scraped_songs')
-              .update({ ai_genre: normalizedGenre, ai_energy: genreToEnergy(normalizedGenre) })
-              .eq('id', song.id);
-            console.log(`[CAP-DL] 🏷️ ID3 genre: ${id3Result.genre} → ${normalizedGenre}`);
+          if (id3Result?.success) {
+            const updatePayload: Record<string, string> = {};
+            if (id3Result.genre) {
+              const normalizedGenre = normalizeId3Genre(id3Result.genre);
+              updatePayload.ai_genre = normalizedGenre;
+              updatePayload.ai_energy = genreToEnergy(normalizedGenre);
+              console.log(`[CAP-DL] 🏷️ ID3 genre: ${id3Result.genre} → ${normalizedGenre}`);
+            }
+            if (id3Result.year) {
+              updatePayload.year = id3Result.year;
+              console.log(`[CAP-DL] 📅 ID3 year: ${id3Result.year}`);
+            }
+            if (Object.keys(updatePayload).length > 0) {
+              await supabase
+                .from('scraped_songs')
+                .update(updatePayload)
+                .eq('id', song.id);
+            }
           }
         } catch (e) {
           // Non-critical — don't fail the download
