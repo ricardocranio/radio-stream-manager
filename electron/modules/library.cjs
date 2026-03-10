@@ -63,6 +63,10 @@ function findBestMatch(artist, title, musicFolders, threshold) {
   const cleanTitle = cleanNormalize(title);
   const cleanQuery = cleanNormalize(`${artist} ${title}`);
   
+  // Build prefix pattern: "artist - title" normalized for prefix matching
+  const prefixPattern = normalizeText(`${artist} - ${title}`);
+  const cleanPrefixPattern = cleanNormalize(`${artist} - ${title}`);
+  
   let bestMatch = null;
   let bestScore = 0;
   const THRESHOLD = threshold || 0.75;
@@ -74,6 +78,18 @@ function findBestMatch(artist, title, musicFolders, threshold) {
   const allSignificantWords = [...artistWords, ...titleWords];
   
   for (const file of files) {
+    // Strategy 0 (HIGHEST PRIORITY): Prefix match
+    // If the filename STARTS WITH "artist - title", it's a match regardless of suffixes
+    // e.g., "GUILHERME E BENUTO - HAJA COLIRIO (FEAT. HUGO E GUILHERME) (AO VIVO)" 
+    //   matches search for "GUILHERME E BENUTO - HAJA COLIRIO"
+    if (
+      file.normalized.startsWith(prefixPattern) ||
+      file.cleanNormalized.startsWith(cleanPrefixPattern)
+    ) {
+      console.log(`[LIBRARY] ✅ Prefix-match: "${artist} - ${title}" → ${file.name}`);
+      return { exists: true, path: file.path, filename: file.name, baseName: file.baseName, similarity: 1.0 };
+    }
+    
     // Strategy 1: Direct includes (exact substring match)
     if (
       (file.normalized.includes(normalizedArtist) && file.normalized.includes(normalizedTitle)) ||
@@ -83,12 +99,10 @@ function findBestMatch(artist, title, musicFolders, threshold) {
     }
     
     // Strategy 1.5: Word-level matching — all significant words present in filename
-    // Catches cases like "Guilherme e Benuto - Haja Colirio" where Levenshtein fails
-    // due to string length differences but all key words are present
     if (allSignificantWords.length >= 3) {
       const matchedWords = allSignificantWords.filter(w => file.normalized.includes(w));
       if (matchedWords.length === allSignificantWords.length) {
-        console.log(`[LIBRARY] ✅ Word-match: "${artist} - ${title}" → ${file.baseName}`);
+        console.log(`[LIBRARY] ✅ Word-match: "${artist} - ${title}" → ${file.name}`);
         return { exists: true, path: file.path, filename: file.name, baseName: file.baseName, similarity: 0.95 };
       }
     }
@@ -115,7 +129,7 @@ function findBestMatch(artist, title, musicFolders, threshold) {
   }
   
   // Diagnostic log for missed matches
-  console.log(`[LIBRARY] ❌ No match: "${artist} - ${title}" | norm: "${normalizedArtist}" + "${normalizedTitle}" | ${files.length} files | threshold: ${THRESHOLD}`);
+  console.log(`[LIBRARY] ❌ No match: "${artist} - ${title}" | prefix: "${prefixPattern}" | ${files.length} files | threshold: ${THRESHOLD}`);
   return { exists: false };
 }
 
