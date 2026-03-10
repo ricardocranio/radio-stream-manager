@@ -127,11 +127,12 @@ function scrapeVozDownloadUrl() {
   });
 }
 
-function register({ getMainWindow, showNotification }) {
+function register({ getMainWindow, showNotification, safeHandle }) {
   _getMainWindow = getMainWindow;
   _showNotification = showNotification;
+  const handle = safeHandle || ipcMain.handle.bind(ipcMain);
 
-  ipcMain.handle('scrape-voz-download-url', async () => {
+  handle('scrape-voz-download-url', async () => {
     try {
       const url = await scrapeVozDownloadUrl();
       return { success: true, url };
