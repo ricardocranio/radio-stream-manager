@@ -199,7 +199,7 @@ function register({ getMainWindow, safeHandle }) {
   });
 
   // IPC: Read grade file
-  ipcMain.handle('read-grade-file', async (event, { folder, filename }) => {
+  handle('read-grade-file', async (event, { folder, filename }) => {
     try {
       const filePath = path.join(folder, filename);
       if (!fs.existsSync(filePath)) return { success: false, error: 'Arquivo não encontrado' };
