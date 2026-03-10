@@ -124,7 +124,7 @@ export function useCapturedDownloadService() {
           const id3Result = await window.electronAPI?.readId3Genre?.({
             filePath: verifiedFile,
             musicFolders: config.musicFolders,
-          });
+          }) as { success: boolean; genre?: string | null; artist?: string | null; title?: string | null; year?: string | null; error?: string } | undefined;
           if (id3Result?.success) {
             const updatePayload: Record<string, string> = {};
             if (id3Result.genre) {
