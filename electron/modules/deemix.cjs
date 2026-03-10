@@ -209,7 +209,7 @@ function register({ app, getMainWindow, showNotification, safeHandle }) {
     return result;
   });
 
-  ipcMain.handle('test-deemix', async () => {
+  handle('test-deemix', async () => {
     try {
       const installed = await checkDeemixInstalled();
       if (!installed) return { success: false, error: 'deemix não está instalado' };
