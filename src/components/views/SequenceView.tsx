@@ -282,7 +282,7 @@ export function SequenceView() {
       weekDays: formWeekDays,
       sequence: formSequence,
       enabled: editingSchedule?.enabled ?? true,
-      priority: formPriority,
+      priority: 1, // Always takes priority during configured time
     };
 
     // Log for debugging
