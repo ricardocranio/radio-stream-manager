@@ -354,7 +354,7 @@ function register({ safeHandle }) {
     }
   });
 
-  ipcMain.handle('get-file-duration', async (event, { filename, musicFolders }) => {
+  handle('get-file-duration', async (event, { filename, musicFolders }) => {
     try {
       const duration = getFileDuration(filename, musicFolders);
       return { success: true, duration };
