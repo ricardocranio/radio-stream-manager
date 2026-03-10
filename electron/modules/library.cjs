@@ -303,6 +303,10 @@ function getFileDuration(filename, musicFolders) {
         } catch (e) {}
       }
       if (duration > 0) {
+        if (durationCache.size > MAX_DURATION_CACHE) {
+          const firstKey = durationCache.keys().next().value;
+          durationCache.delete(firstKey);
+        }
         durationCache.set(cacheKey, duration);
         return duration;
       }
