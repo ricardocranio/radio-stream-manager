@@ -290,6 +290,9 @@ export function DashboardView() {
       {/* Phase 1: Smart Notifications */}
       <SmartNotificationsCard />
 
+      {/* ID3 Tag Processing Activity */}
+      <Id3ActivityCard />
+
       {/* Station Distribution removed for cleaner UI */}
 
       {/* Auto Grade Builder Status */}
