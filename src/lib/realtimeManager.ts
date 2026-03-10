@@ -19,7 +19,7 @@ interface ManagedChannel {
   subscribers: ChannelSubscriber[];
   status: 'idle' | 'connecting' | 'connected' | 'error';
   retryCount: number;
-  retryTimeoutId: NodeJS.Timeout | null;
+  retryTimeoutId: ReturnType<typeof setTimeout> | null;
   table: string;
 }
 
