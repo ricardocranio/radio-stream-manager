@@ -65,7 +65,7 @@ async function tryDownloadAndWait(
       console.log(`[SONG-SELECT] ✅ Download concluído a tempo: ${artist} - ${title}`);
       // Update cache so findSongInLibrary picks it up
       const { markSongAsDownloaded } = await import('@/lib/libraryVerificationCache');
-      markSongAsDownloaded(artist, title, (result as any).output);
+      markSongAsDownloaded(artist, title, (result as any).verifiedFile || (result as any).output);
       return true;
     }
 
