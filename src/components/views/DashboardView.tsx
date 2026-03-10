@@ -25,6 +25,7 @@ import { GradePreviewCard } from '@/components/dashboard/GradePreviewCard';
 import { GradeScheduleCard } from '@/components/dashboard/GradeScheduleCard';
 import { SmartNotificationsCard } from '@/components/dashboard/SmartNotificationsCard';
 import { ServiceHealthCard } from '@/components/dashboard/ServiceHealthCard';
+import { Id3ActivityCard } from '@/components/dashboard/Id3ActivityCard';
 
 export function DashboardView() {
   const { 
@@ -288,6 +289,9 @@ export function DashboardView() {
 
       {/* Phase 1: Smart Notifications */}
       <SmartNotificationsCard />
+
+      {/* ID3 Tag Processing Activity */}
+      <Id3ActivityCard />
 
       {/* Station Distribution removed for cleaner UI */}
 
