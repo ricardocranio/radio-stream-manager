@@ -363,7 +363,7 @@ function register({ safeHandle }) {
     }
   });
 
-  ipcMain.handle('get-file-durations-batch', async (event, { filenames, musicFolders }) => {
+  handle('get-file-durations-batch', async (event, { filenames, musicFolders }) => {
     try {
       const results = {};
       for (const filename of filenames) {
