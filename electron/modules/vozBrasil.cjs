@@ -141,7 +141,7 @@ function register({ getMainWindow, showNotification, safeHandle }) {
     }
   });
 
-  ipcMain.handle('download-voz-brasil', async (event, params) => {
+  handle('download-voz-brasil', async (event, params) => {
     const { url, outputFolder, filename, tempFolder } = params;
     const tempDir = tempFolder || path.join(outputFolder, '_temp');
     const tempFilename = `voz_download_${Date.now()}.mp3`;
