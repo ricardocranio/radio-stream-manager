@@ -1596,6 +1596,20 @@ export function useAutoGradeBuilder() {
       const currentExistingLine = lineMap.get(currentTimeKey);
       const nextExistingLine = lineMap.get(nextTimeKey);
 
+      // Check if blocks are fully resolved (all song slots filled — no fallbacks)
+      const { isBlockFullyResolved } = await import('@/lib/gradeBuilder/lineMerge');
+      const currentFullyResolved = currentExistingLine ? isBlockFullyResolved(currentExistingLine, coringaCode) : false;
+      const nextFullyResolved = nextExistingLine ? isBlockFullyResolved(nextExistingLine, coringaCode) : false;
+
+      if (currentFullyResolved && !forceRegenerate) {
+        builtBlocksRef.current.add(currentTimeKey);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} COMPLETO (todas as músicas resolvidas) — travado`);
+      }
+      if (nextFullyResolved && !forceRegenerate) {
+        builtBlocksRef.current.add(nextTimeKey);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} COMPLETO (todas as músicas resolvidas) — travado`);
+      }
+
       // Detect legacy weekday lines that should never persist on Saturday
       const hasSaturdayMismatch = (line?: string | null) => {
         if (targetDay !== 'sab' || !line) return false;
@@ -1606,13 +1620,13 @@ export function useAutoGradeBuilder() {
       const nextSaturdayMismatch = hasSaturdayMismatch(nextExistingLine);
 
       // Manual refresh should force regeneration of current/next blocks
-      // Also force regeneration when a Saturday block still has weekday content
+      // Fully resolved blocks are LOCKED and skip rebuild (unless force refresh)
       const shouldBuildCurrent = forceRegenerate
         ? true
-        : !currentLocked || currentSaturdayMismatch;
+        : (!currentLocked && !currentFullyResolved) || currentSaturdayMismatch;
       const shouldBuildNext = forceRegenerate
         ? true
-        : !nextLocked || nextSaturdayMismatch;
+        : (!nextLocked && !nextFullyResolved) || nextSaturdayMismatch;
 
       if (!shouldBuildCurrent && !shouldBuildNext) {
         console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já resolvidos, pulando`);
