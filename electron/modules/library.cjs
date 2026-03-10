@@ -68,12 +68,29 @@ function findBestMatch(artist, title, musicFolders, threshold) {
   const THRESHOLD = threshold || 0.75;
   const ARTIST_MIN_SIMILARITY = Math.max(0.4, THRESHOLD - 0.2);
   
+  // Pre-compute significant words for word-level matching (words > 2 chars)
+  const titleWords = normalizedTitle.split(' ').filter(w => w.length > 2);
+  const artistWords = normalizedArtist.split(' ').filter(w => w.length > 2);
+  const allSignificantWords = [...artistWords, ...titleWords];
+  
   for (const file of files) {
+    // Strategy 1: Direct includes (exact substring match)
     if (
       (file.normalized.includes(normalizedArtist) && file.normalized.includes(normalizedTitle)) ||
       (file.cleanNormalized.includes(cleanArtist) && file.cleanNormalized.includes(cleanTitle))
     ) {
       return { exists: true, path: file.path, filename: file.name, baseName: file.baseName, similarity: 1.0 };
+    }
+    
+    // Strategy 1.5: Word-level matching — all significant words present in filename
+    // Catches cases like "Guilherme e Benuto - Haja Colirio" where Levenshtein fails
+    // due to string length differences but all key words are present
+    if (allSignificantWords.length >= 3) {
+      const matchedWords = allSignificantWords.filter(w => file.normalized.includes(w));
+      if (matchedWords.length === allSignificantWords.length) {
+        console.log(`[LIBRARY] ✅ Word-match: "${artist} - ${title}" → ${file.baseName}`);
+        return { exists: true, path: file.path, filename: file.name, baseName: file.baseName, similarity: 0.95 };
+      }
     }
     
     const artistScore = Math.max(
@@ -96,6 +113,9 @@ function findBestMatch(artist, title, musicFolders, threshold) {
   if (bestMatch) {
     return { exists: true, path: bestMatch.path, filename: bestMatch.name, baseName: bestMatch.baseName, similarity: bestScore };
   }
+  
+  // Diagnostic log for missed matches
+  console.log(`[LIBRARY] ❌ No match: "${artist} - ${title}" | norm: "${normalizedArtist}" + "${normalizedTitle}" | ${files.length} files | threshold: ${THRESHOLD}`);
   return { exists: false };
 }
 
