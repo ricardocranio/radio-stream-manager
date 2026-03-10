@@ -188,7 +188,7 @@ function register({ app, getMainWindow, showNotification, safeHandle }) {
     return await checkPythonAvailable();
   });
 
-  ipcMain.handle('install-deemix', async () => {
+  handle('install-deemix', async () => {
     const mainWindow = _getMainWindow();
     if (mainWindow) {
       mainWindow.webContents.send('deemix-install-progress', { status: 'starting', message: 'Iniciando instalação do deemix...' });
