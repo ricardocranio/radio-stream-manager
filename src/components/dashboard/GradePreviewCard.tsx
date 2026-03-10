@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Eye, Music, Clock, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive, AlertTriangle, FileText, Flame, SearchX } from 'lucide-react';
+import { Eye, Music, Clock, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive, AlertTriangle, FileText, Flame } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -176,25 +176,6 @@ export function GradePreviewCard() {
   const isBlockLong = blockDuration !== undefined && blockDuration > 32;
   const isBlockOk = blockDuration !== undefined && blockDuration >= 29 && blockDuration <= 32;
 
-  // Detect coringa-only blocks (jov,vht,rom patterns without quoted filenames)
-  const coringaDiagnostic = useMemo(() => {
-    if (!nextBlockLine) return null;
-    const coringaPatterns = /\bjov\b|\brom\b|\bmus\b/gi;
-    const quotedFiles = nextBlockLine.match(/"[^"]+"/g) || [];
-    const coringaMatches = nextBlockLine.match(coringaPatterns) || [];
-    const totalSlots = quotedFiles.length + coringaMatches.length;
-    if (totalSlots === 0) return null;
-    const coringaPercent = Math.round((coringaMatches.length / totalSlots) * 100);
-    if (coringaPercent < 50) return null;
-    return {
-      percent: coringaPercent,
-      coringaCount: coringaMatches.length,
-      resolvedCount: quotedFiles.length,
-      totalSlots,
-      isFullCoringa: coringaPercent === 100,
-    };
-  }, [nextBlockLine]);
-
   // Auto-rebuild when block is too short (with debounce to avoid loops)
   const autoFixAttemptedRef = useRef<string>('');
   useEffect(() => {
@@ -301,31 +282,6 @@ export function GradePreviewCard() {
             <p className="text-xs text-amber-400">
               Bloco acima de 32 min ({blockDuration} min) — pode ultrapassar a janela
             </p>
-          </div>
-        )}
-        {/* Coringa diagnostic alert */}
-        {coringaDiagnostic && (
-          <div className="mb-3 p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
-            <div className="flex items-center gap-2 mb-2">
-              <SearchX className="w-4 h-4 text-orange-400 shrink-0" />
-              <p className="text-xs font-medium text-orange-400">
-                {coringaDiagnostic.isFullCoringa
-                  ? `⚠️ Bloco 100% Coringa — nenhuma música real selecionada`
-                  : `⚠️ ${coringaDiagnostic.percent}% Coringa (${coringaDiagnostic.coringaCount}/${coringaDiagnostic.totalSlots} slots)`}
-              </p>
-            </div>
-            <div className="space-y-1 text-[10px] text-orange-400/80">
-              <p>Possíveis causas:</p>
-              <ul className="list-disc ml-4 space-y-0.5">
-                <li>Pool de músicas capturadas vazio — verifique se o scraping está ativo</li>
-                <li>Músicas existem no banco mas não na biblioteca local (pasta de download)</li>
-                <li>ARL do Deezer inválida — downloads JIT falharam</li>
-                <li>Estação da sequência não está sendo monitorada ou não tem capturas recentes</li>
-              </ul>
-              <p className="mt-1.5 opacity-70">
-                Confira os logs do console (F12) para diagnóstico detalhado [SONG-SELECT] e [RESOLVE]
-              </p>
-            </div>
           </div>
         )}
         <ScrollArea className="h-[320px]">
