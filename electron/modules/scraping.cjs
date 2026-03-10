@@ -134,19 +134,25 @@ async function scrapeStation(stationConfig) {
     }
   }
   
-  // Clean old entries from cache (older than 1 hour)
+  // Clean old entries from cache (older than 1 hour) + enforce max size
   const oneHourAgo = Date.now() - 3600000;
   for (const [key, timestamp] of scrapedSongsCache.entries()) {
     if (timestamp < oneHourAgo) {
       scrapedSongsCache.delete(key);
     }
   }
+  if (scrapedSongsCache.size > MAX_CACHE_SIZE) {
+    const entries = [...scrapedSongsCache.entries()].sort((a, b) => a[1] - b[1]);
+    const toRemove = entries.slice(0, entries.length - MAX_CACHE_SIZE);
+    for (const [key] of toRemove) scrapedSongsCache.delete(key);
+  }
   
   return allSongs;
 }
 
-function register() {
-  ipcMain.handle('scrape-stations', async (event, stations) => {
+function register({ safeHandle }) {
+  const handle = safeHandle || ipcMain.handle.bind(ipcMain);
+  handle('scrape-stations', async (event, stations) => {
     const results = { songs: [], errors: [], timestamp: new Date().toISOString() };
     
     for (const station of stations) {
