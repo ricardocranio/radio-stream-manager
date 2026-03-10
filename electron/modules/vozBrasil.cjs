@@ -214,7 +214,7 @@ function register({ getMainWindow, showNotification, safeHandle }) {
     }
   });
 
-  ipcMain.handle('recover-temp-files', async (event, params) => {
+  handle('recover-temp-files', async (event, params) => {
     const { baseFolder } = params;
     let recovered = 0;
     try {

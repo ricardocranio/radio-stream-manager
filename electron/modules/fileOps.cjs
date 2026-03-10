@@ -228,7 +228,7 @@ function register({ getMainWindow, safeHandle }) {
   });
 
   // IPC: Rename a music file
-  ipcMain.handle('rename-music-file', async (event, { musicFolders, currentFilename, newFilename }) => {
+  handle('rename-music-file', async (event, { musicFolders, currentFilename, newFilename }) => {
     const normalizeForComparison = (name) => {
       return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, 'e').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
     };
