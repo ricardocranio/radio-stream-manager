@@ -1351,7 +1351,7 @@ export function useAutoGradeBuilder() {
     getProgramForHour, getFixedContentForTime, isWeekday,
     getActiveSequenceForBlock, findSongInLibrary,
     processFixedContentFilename, getDayCode, getCarryOverSongs,
-    buildGradeContext, filterChars, stations,
+    buildGradeContext, filterChars, stations, scheduledSequences,
   ]);
 
   // ==================== Block Times ====================
