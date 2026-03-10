@@ -293,41 +293,6 @@ function register({ getMainWindow, showNotification }) {
     }
   });
 
-  ipcMain.handle('notify-batch-complete', (event, { completed, failed, total, outputFolder }) => {
-    const mainWindow = _getMainWindow();
-    _showNotification(
-      '📦 Download em Lote Concluído',
-      `✅ ${completed} baixadas | ❌ ${failed} falharam | Total: ${total}`,
-      () => {
-        if (outputFolder) { shell.openPath(outputFolder); }
-        else if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
-      }
-    );
-  });
-
-  ipcMain.handle('open-folder', (event, folderPath) => {
-    try {
-      if (!fs.existsSync(folderPath)) {
-        fs.mkdirSync(folderPath, { recursive: true });
-      }
-      shell.openPath(folderPath);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle('ensure-folder', (event, folderPath) => {
-    try {
-      if (!fs.existsSync(folderPath)) {
-        fs.mkdirSync(folderPath, { recursive: true });
-        return { success: true, created: true };
-      }
-      return { success: true, created: false };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
 }
 
 module.exports = { register };
