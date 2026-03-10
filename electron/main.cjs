@@ -362,7 +362,10 @@ function setupAutoUpdater() {
 
 // =============== SIMPLE IPC HANDLERS ===============
 ipcMain.handle('get-app-version', () => app.getVersion());
-ipcMain.handle('get-app-path', (event, name) => app.getPath(name));
+ipcMain.handle('get-app-path', (event, name) => {
+  try { return app.getPath(name); }
+  catch (e) { return null; }
+});
 ipcMain.handle('open-external', (event, url) => shell.openExternal(url));
 ipcMain.handle('open-path', (event, filePath) => shell.openPath(filePath));
 
@@ -512,4 +515,8 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   app.isQuitting = true;
   pythonMonitor.killMonitorProcess();
+  if (tray && !tray.isDestroyed()) {
+    tray.destroy();
+    tray = null;
+  }
 });
