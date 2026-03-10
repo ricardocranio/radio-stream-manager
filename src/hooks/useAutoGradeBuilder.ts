@@ -570,7 +570,7 @@ export function useAutoGradeBuilder() {
   }, [stations]);
 
   // Helper to build songsByStation from raw data
-  const buildSongsByStation = useCallback((data: Array<{ title: string; artist: string; station_name: string; scraped_at: string }>, maxPerStation = 50): Record<string, SongEntry[]> => {
+  const buildSongsByStation = useCallback((data: Array<{ title: string; artist: string; station_name: string; scraped_at: string; ai_genre?: string | null; ai_energy?: string | null }>, maxPerStation = 50): Record<string, SongEntry[]> => {
     const songsByStation: Record<string, SongEntry[]> = {};
     const stationNameToStyle: Record<string, string> = {};
     const seenSongs = new Set<string>();
