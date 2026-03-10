@@ -55,21 +55,32 @@ export function useRealtimeStats() {
   const [isLoading, setIsLoading] = useState(!persistedStore.isHydrated);
   const [nextRefreshIn, setNextRefreshIn] = useState(REFRESH_INTERVAL);
   
+  // Extract individual values to avoid object-reference churn in useMemo
+  const {
+    totalSongs, songsLast24h, songsLastHour, activeStations,
+    allStations, lastSong, lastSongsByStation, recentSongsByStation,
+    stationCounts, lastUpdated,
+  } = persistedStore;
+
   // Create stats object from persisted store + local state
   const stats = useMemo<RealtimeStats>(() => ({
-    totalSongs: persistedStore.totalSongs,
-    songsLast24h: persistedStore.songsLast24h,
-    songsLastHour: persistedStore.songsLastHour,
-    activeStations: persistedStore.activeStations,
-    allStations: persistedStore.allStations,
-    lastSong: persistedStore.lastSong,
-    lastSongsByStation: persistedStore.lastSongsByStation,
-    recentSongsByStation: persistedStore.recentSongsByStation,
-    stationCounts: persistedStore.stationCounts,
+    totalSongs,
+    songsLast24h,
+    songsLastHour,
+    activeStations,
+    allStations,
+    lastSong,
+    lastSongsByStation,
+    recentSongsByStation,
+    stationCounts,
     isLoading,
-    lastUpdated: persistedStore.lastUpdated ? new Date(persistedStore.lastUpdated) : null,
+    lastUpdated: lastUpdated ? new Date(lastUpdated) : null,
     nextRefreshIn,
-  }), [persistedStore, isLoading, nextRefreshIn]);
+  }), [
+    totalSongs, songsLast24h, songsLastHour, activeStations,
+    allStations, lastSong, lastSongsByStation, recentSongsByStation,
+    stationCounts, isLoading, lastUpdated, nextRefreshIn,
+  ]);
 
   // Track background state
   useEffect(() => {
@@ -195,15 +206,16 @@ export function useRealtimeStats() {
 
   // Initial load - only if data is stale or missing
   useEffect(() => {
-    const shouldLoad = !persistedStore.lastUpdated || 
-      (new Date().getTime() - new Date(persistedStore.lastUpdated).getTime()) > 5 * 60 * 1000; // 5 min stale
+    const shouldLoad = !lastUpdated || 
+      (new Date().getTime() - new Date(lastUpdated).getTime()) > 5 * 60 * 1000; // 5 min stale
     
     if (shouldLoad) {
       loadStats();
     } else {
       setIsLoading(false);
     }
-  }, [loadStats, persistedStore.lastUpdated]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadStats]);
 
   // Auto-refresh with power saving support
   useEffect(() => {
