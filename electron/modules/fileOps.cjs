@@ -211,7 +211,7 @@ function register({ getMainWindow, safeHandle }) {
   });
 
   // IPC: List files in folder
-  ipcMain.handle('list-folder-files', async (event, { folder, extension }) => {
+  handle('list-folder-files', async (event, { folder, extension }) => {
     try {
       if (!fs.existsSync(folder)) return { success: true, files: [] };
       let files = fs.readdirSync(folder);
