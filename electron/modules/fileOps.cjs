@@ -187,7 +187,7 @@ function register({ getMainWindow, safeHandle }) {
   });
 
   // IPC: Save grade file
-  ipcMain.handle('save-grade-file', async (event, { folder, filename, content }) => {
+  handle('save-grade-file', async (event, { folder, filename, content }) => {
     try {
       if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
       const filePath = path.join(folder, filename);
