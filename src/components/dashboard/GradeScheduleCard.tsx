@@ -317,11 +317,9 @@ export function GradeScheduleCard() {
             console.log('[GRADE-CARD] No existing file, will create new');
           }
 
-          // Use the REAL filename from the library (s.file) when available,
-          // only falling back to reconstructed name if no real filename exists
+          // Generate line for this block using sanitizeGradeFilename for TXT parity
           const songFiles = editedSongs.map(s => {
-            const realFile = s.file && s.file.toLowerCase().endsWith('.mp3') ? s.file : null;
-            const songFilename = sanitizeGradeFilename(realFile || sanitizeFilename(`${s.artist} - ${s.title}.mp3`));
+            const songFilename = sanitizeGradeFilename(sanitizeFilename(`${s.artist} - ${s.title}.mp3`));
             return `"${songFilename}"`;
           }).join(',vht,');
           const blockLine = `${selectedBlock.time} (ID=${selectedBlock.programName}) ${songFiles}`;
@@ -390,10 +388,9 @@ export function GradeScheduleCard() {
     const songs = isEditing ? editedSongs : block.songs;
     if (songs.length === 0) return `${block.time} (ID=${block.programName}) [vazio]`;
     
-    // Use the REAL filename (s.file) when available for TXT parity with actual disk files
+    // Format with sanitizeGradeFilename (UPPERCASE, no accents) for TXT parity
     const songFiles = songs.map(s => {
-      const realFile = s.file && s.file.toLowerCase().endsWith('.mp3') ? s.file : null;
-      const filename = sanitizeGradeFilename(realFile || sanitizeFilename(`${s.artist} - ${s.title}.mp3`));
+      const filename = sanitizeGradeFilename(sanitizeFilename(`${s.artist} - ${s.title}.mp3`));
       return `"${filename}"`;
     }).join(',vht,');
     
