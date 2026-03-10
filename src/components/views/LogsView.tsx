@@ -204,19 +204,26 @@ export function LogsView() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-lg grid-cols-3">
           <TabsTrigger value="blocks" className="gap-2">
             <Music className="w-4 h-4" />
-            Blocos Gerados
+            Blocos
             {blockStats.total > 0 && (
               <Badge variant="secondary" className="ml-1">{blockStats.total}</Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="errors" className="gap-2">
             <AlertCircle className="w-4 h-4" />
-            Erros do Sistema
+            Erros
             {errorStats.errors > 0 && (
               <Badge variant="destructive" className="ml-1">{errorStats.errors}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="matching" className="gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Matching
+            {simStats.totalChecked > 0 && (
+              <Badge variant="secondary" className="ml-1">{simStats.totalChecked}</Badge>
             )}
           </TabsTrigger>
         </TabsList>
