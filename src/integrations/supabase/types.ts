@@ -137,6 +137,7 @@ export type Database = {
           station_id: string | null
           station_name: string
           title: string
+          year: string | null
         }
         Insert: {
           ai_energy?: string | null
@@ -149,6 +150,7 @@ export type Database = {
           station_id?: string | null
           station_name: string
           title: string
+          year?: string | null
         }
         Update: {
           ai_energy?: string | null
@@ -161,6 +163,7 @@ export type Database = {
           station_id?: string | null
           station_name?: string
           title?: string
+          year?: string | null
         }
         Relationships: [
           {

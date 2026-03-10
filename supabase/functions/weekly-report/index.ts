@@ -26,7 +26,7 @@ serve(async (req) => {
     // Get recent songs with AI classification
     const { data: classified, error: classError } = await supabase
       .from("scraped_songs")
-      .select("artist, title, station_name, ai_genre, ai_energy, scraped_at")
+      .select("artist, title, station_name, ai_genre, ai_energy, year, scraped_at")
       .not("ai_genre", "is", null)
       .order("scraped_at", { ascending: false })
       .limit(500);
@@ -59,6 +59,7 @@ serve(async (req) => {
     // 2. Genre distribution from classified songs
     const genreCounts: Record<string, number> = {};
     const energyCounts: Record<string, number> = {};
+    const yearCounts: Record<string, number> = {};
     const genreByStation: Record<string, Record<string, number>> = {};
 
     (classified || []).forEach(s => {
@@ -70,6 +71,9 @@ serve(async (req) => {
       }
       if (s.ai_energy) {
         energyCounts[s.ai_energy] = (energyCounts[s.ai_energy] || 0) + 1;
+      }
+      if (s.year) {
+        yearCounts[s.year] = (yearCounts[s.year] || 0) + 1;
       }
     });
 
@@ -110,6 +114,11 @@ serve(async (req) => {
         .map(([genre, count]) => ({ genre, count })),
     }));
 
+    // 9. Year distribution (sorted by year)
+    const yearDistribution = Object.entries(yearCounts)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([year, count]) => ({ year, count }));
+
     const report = {
       generatedAt: new Date().toISOString(),
       period: { start: weekAgo, end: new Date().toISOString() },
@@ -125,6 +134,7 @@ serve(async (req) => {
       stationRanking,
       genreDistribution,
       energyDistribution,
+      yearDistribution,
       stationGenres,
     };
 

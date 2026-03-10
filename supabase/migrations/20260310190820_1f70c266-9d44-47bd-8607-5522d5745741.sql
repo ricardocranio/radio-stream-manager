@@ -1,0 +1,1 @@
+ALTER TABLE public.scraped_songs ADD COLUMN IF NOT EXISTS year text DEFAULT NULL;
