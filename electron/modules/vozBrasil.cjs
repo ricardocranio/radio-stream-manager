@@ -127,11 +127,12 @@ function scrapeVozDownloadUrl() {
   });
 }
 
-function register({ getMainWindow, showNotification }) {
+function register({ getMainWindow, showNotification, safeHandle }) {
   _getMainWindow = getMainWindow;
   _showNotification = showNotification;
+  const handle = safeHandle || ipcMain.handle.bind(ipcMain);
 
-  ipcMain.handle('scrape-voz-download-url', async () => {
+  handle('scrape-voz-download-url', async () => {
     try {
       const url = await scrapeVozDownloadUrl();
       return { success: true, url };
@@ -140,7 +141,7 @@ function register({ getMainWindow, showNotification }) {
     }
   });
 
-  ipcMain.handle('download-voz-brasil', async (event, params) => {
+  handle('download-voz-brasil', async (event, params) => {
     const { url, outputFolder, filename, tempFolder } = params;
     const tempDir = tempFolder || path.join(outputFolder, '_temp');
     const tempFilename = `voz_download_${Date.now()}.mp3`;
@@ -191,7 +192,7 @@ function register({ getMainWindow, showNotification }) {
     }
   });
 
-  ipcMain.handle('cleanup-voz-brasil', async (event, params) => {
+  handle('cleanup-voz-brasil', async (event, params) => {
     const { folder, maxAgeDays } = params;
     try {
       if (!fs.existsSync(folder)) return { success: true, deletedCount: 0 };
@@ -213,7 +214,7 @@ function register({ getMainWindow, showNotification }) {
     }
   });
 
-  ipcMain.handle('recover-temp-files', async (event, params) => {
+  handle('recover-temp-files', async (event, params) => {
     const { baseFolder } = params;
     let recovered = 0;
     try {

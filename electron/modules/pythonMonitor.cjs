@@ -208,30 +208,31 @@ function killMonitorProcess() {
   }
 }
 
-function register({ app, getMainWindow }) {
+function register({ app, getMainWindow, safeHandle }) {
   _app = app;
   _getMainWindow = getMainWindow;
+  const handle = safeHandle || ipcMain.handle.bind(ipcMain);
 
-  ipcMain.handle('start-python-monitor', async () => {
+  handle('start-python-monitor', async () => {
     return await startPythonMonitor(false);
   });
 
-  ipcMain.handle('stop-python-monitor', () => {
+  handle('stop-python-monitor', () => {
     return stopPythonMonitor();
   });
 
-  ipcMain.handle('restart-python-monitor', async () => {
+  handle('restart-python-monitor', async () => {
     stopPythonMonitor();
     await new Promise(resolve => setTimeout(resolve, 2000));
     monitorAutoRestartAttempts = 0;
     return await startPythonMonitor(false);
   });
 
-  ipcMain.handle('get-monitor-status', () => {
+  handle('get-monitor-status', () => {
     return getMonitorStatus();
   });
 
-  ipcMain.handle('get-monitor-logs', () => {
+  handle('get-monitor-logs', () => {
     return pythonMonitorLogs;
   });
 }

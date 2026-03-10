@@ -8,8 +8,8 @@ const { normalizeText, cleanNormalize, calculateSimilarity, parseID3TagsFromFile
 let musicLibraryCache = { files: [], timestamp: 0 };
 const CACHE_DURATION = 5 * 60 * 1000;
 
-// In-memory duration cache
 const durationCache = new Map();
+const MAX_DURATION_CACHE = 10000; // Prevent unbounded growth
 
 function scanMusicLibrary(musicFolders) {
   const now = Date.now();
@@ -303,6 +303,10 @@ function getFileDuration(filename, musicFolders) {
         } catch (e) {}
       }
       if (duration > 0) {
+        if (durationCache.size > MAX_DURATION_CACHE) {
+          const firstKey = durationCache.keys().next().value;
+          durationCache.delete(firstKey);
+        }
         durationCache.set(cacheKey, duration);
         return duration;
       }
@@ -311,8 +315,9 @@ function getFileDuration(filename, musicFolders) {
   return 0;
 }
 
-function register() {
-  ipcMain.handle('check-song-exists', async (event, params) => {
+function register({ safeHandle }) {
+  const handle = safeHandle || ipcMain.handle.bind(ipcMain);
+  handle('check-song-exists', async (event, params) => {
     const { artist, title, musicFolders } = params;
     try {
       console.log(`[LIBRARY] Checking: ${artist} - ${title}`);
@@ -325,7 +330,7 @@ function register() {
     }
   });
 
-  ipcMain.handle('find-song-match', async (event, params) => {
+  handle('find-song-match', async (event, params) => {
     const { artist, title, musicFolders, threshold } = params;
     try {
       console.log(`[LIBRARY] Finding best match for: ${artist} - ${title} (threshold: ${Math.round((threshold || 0.75) * 100)}%)`);
@@ -338,7 +343,7 @@ function register() {
     }
   });
 
-  ipcMain.handle('get-music-library-stats', async (event, params) => {
+  handle('get-music-library-stats', async (event, params) => {
     const { musicFolders } = params;
     try {
       const files = scanMusicLibrary(musicFolders);
@@ -349,7 +354,7 @@ function register() {
     }
   });
 
-  ipcMain.handle('get-file-duration', async (event, { filename, musicFolders }) => {
+  handle('get-file-duration', async (event, { filename, musicFolders }) => {
     try {
       const duration = getFileDuration(filename, musicFolders);
       return { success: true, duration };
@@ -358,7 +363,7 @@ function register() {
     }
   });
 
-  ipcMain.handle('get-file-durations-batch', async (event, { filenames, musicFolders }) => {
+  handle('get-file-durations-batch', async (event, { filenames, musicFolders }) => {
     try {
       const results = {};
       for (const filename of filenames) {
@@ -371,7 +376,7 @@ function register() {
   });
 
   // =============== BPM SCANNER ===============
-  ipcMain.handle('scan-bpm-tags', async (event, { musicFolders }) => {
+  handle('scan-bpm-tags', async (event, { musicFolders }) => {
     console.log('[BPM] Scanning BPM tags from music library...');
     const results = {};
     let scanned = 0;
@@ -409,7 +414,7 @@ function register() {
   });
 
   // =============== FULL METADATA SCANNER (Artist, Title, BPM, Genre) ===============
-  ipcMain.handle('scan-library-metadata', async (event, { musicFolders }) => {
+  handle('scan-library-metadata', async (event, { musicFolders }) => {
     console.log('[META] Scanning full metadata from music library...');
     const songs = [];
     let scanned = 0;
@@ -479,7 +484,7 @@ function register() {
     return { success: true, songs, scanned, genreSummary };
   });
 
-  ipcMain.handle('save-bpm-cache', async (event, { cachePath, data }) => {
+  handle('save-bpm-cache', async (event, { cachePath, data }) => {
     try {
       const dir = path.dirname(cachePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -492,7 +497,7 @@ function register() {
     }
   });
 
-  ipcMain.handle('load-bpm-cache', async (event, { cachePath }) => {
+  handle('load-bpm-cache', async (event, { cachePath }) => {
     try {
       if (!fs.existsSync(cachePath)) {
         return { success: true, data: null };
@@ -508,7 +513,7 @@ function register() {
   });
 
   // =============== DUPLICATE SCANNER ===============
-  ipcMain.handle('scan-duplicates', async (event, { musicFolders, threshold }) => {
+  handle('scan-duplicates', async (event, { musicFolders, threshold }) => {
     console.log('[DUPLICATES] Scanning for duplicate songs...');
     const files = scanMusicLibrary(musicFolders);
     const THRESH = threshold || 0.85;
@@ -574,7 +579,7 @@ function register() {
     return { success: true, duplicates, totalFiles: files.length };
   });
 
-  ipcMain.handle('delete-duplicates', async (event, { filePaths }) => {
+  handle('delete-duplicates', async (event, { filePaths }) => {
     console.log(`[DUPLICATES] Deleting ${filePaths.length} duplicate files...`);
     let deleted = 0;
     const errors = [];

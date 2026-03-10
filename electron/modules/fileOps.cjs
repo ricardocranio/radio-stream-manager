@@ -6,11 +6,12 @@ const { sanitizeFolderName, parseID3TagsFromFile } = require('./utils.cjs');
 
 let _getMainWindow = null;
 
-function register({ getMainWindow }) {
+function register({ getMainWindow, safeHandle }) {
   _getMainWindow = getMainWindow;
+  const handle = safeHandle || ipcMain.handle.bind(ipcMain);
 
   // IPC: Create station folders
-  ipcMain.handle('ensure-station-folders', async (event, { baseFolder, stations }) => {
+  handle('ensure-station-folders', async (event, { baseFolder, stations }) => {
     console.log(`[FOLDERS] Creating station folders in: ${baseFolder}`);
     const created = [];
     try {
@@ -30,14 +31,14 @@ function register({ getMainWindow }) {
   });
 
   // IPC: Check if file exists in any station subfolder
-  ipcMain.handle('check-file-in-subfolders', async (event, { baseFolder, artist, title }) => {
+  handle('check-file-in-subfolders', async (event, { baseFolder, artist, title }) => {
     const { checkFileExistsInSubfolders } = require('./utils.cjs');
     const searchPattern = `${artist} - ${title}`;
     return checkFileExistsInSubfolders(baseFolder, searchPattern);
   });
 
   // IPC: Purge blocked songs from disk
-  ipcMain.handle('purge-blocked-files', async (event, { musicFolders, blockedSongs, forbiddenWords }) => {
+  handle('purge-blocked-files', async (event, { musicFolders, blockedSongs, forbiddenWords }) => {
     console.log('[PURGE] Starting purge of blocked files...');
     const deleted = [];
     const errors = [];
@@ -96,7 +97,7 @@ function register({ getMainWindow }) {
   });
 
   // IPC: Read ID3 genre from file
-  ipcMain.handle('read-id3-genre', async (event, { filePath, musicFolders }) => {
+  handle('read-id3-genre', async (event, { filePath, musicFolders }) => {
     try {
       let targetPath = filePath;
       if (!path.isAbsolute(filePath) && musicFolders && musicFolders.length > 0) {
@@ -129,7 +130,7 @@ function register({ getMainWindow }) {
   });
 
   // IPC: Scan library and rename files based on ID3 tags
-  ipcMain.handle('scan-fix-library', async (event, { musicFolders }) => {
+  handle('scan-fix-library', async (event, { musicFolders }) => {
     console.log('[LIB-FIX] Starting library scan & fix...');
     const results = { scanned: 0, renamed: 0, skipped: 0, errors: 0, details: [] };
     const mainWindow = _getMainWindow();
@@ -186,7 +187,7 @@ function register({ getMainWindow }) {
   });
 
   // IPC: Save grade file
-  ipcMain.handle('save-grade-file', async (event, { folder, filename, content }) => {
+  handle('save-grade-file', async (event, { folder, filename, content }) => {
     try {
       if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
       const filePath = path.join(folder, filename);
@@ -198,7 +199,7 @@ function register({ getMainWindow }) {
   });
 
   // IPC: Read grade file
-  ipcMain.handle('read-grade-file', async (event, { folder, filename }) => {
+  handle('read-grade-file', async (event, { folder, filename }) => {
     try {
       const filePath = path.join(folder, filename);
       if (!fs.existsSync(filePath)) return { success: false, error: 'Arquivo não encontrado' };
@@ -210,7 +211,7 @@ function register({ getMainWindow }) {
   });
 
   // IPC: List files in folder
-  ipcMain.handle('list-folder-files', async (event, { folder, extension }) => {
+  handle('list-folder-files', async (event, { folder, extension }) => {
     try {
       if (!fs.existsSync(folder)) return { success: true, files: [] };
       let files = fs.readdirSync(folder);
@@ -227,7 +228,7 @@ function register({ getMainWindow }) {
   });
 
   // IPC: Rename a music file
-  ipcMain.handle('rename-music-file', async (event, { musicFolders, currentFilename, newFilename }) => {
+  handle('rename-music-file', async (event, { musicFolders, currentFilename, newFilename }) => {
     const normalizeForComparison = (name) => {
       return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, 'e').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
     };

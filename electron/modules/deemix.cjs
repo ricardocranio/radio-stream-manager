@@ -169,25 +169,26 @@ function saveArlToDeemixConfig(arl) {
   }
 }
 
-function register({ app, getMainWindow, showNotification }) {
+function register({ app, getMainWindow, showNotification, safeHandle }) {
   _app = app;
   _getMainWindow = getMainWindow;
   _showNotification = showNotification;
+  const handle = safeHandle || ipcMain.handle.bind(ipcMain);
 
-  ipcMain.handle('check-deemix', async () => {
+  handle('check-deemix', async () => {
     return await checkDeemixInstalled();
   });
 
-  ipcMain.handle('get-deemix-command', async () => {
+  handle('get-deemix-command', async () => {
     const installed = await checkDeemixInstalled();
     return installed ? deemixCommand : null;
   });
 
-  ipcMain.handle('check-python', async () => {
+  handle('check-python', async () => {
     return await checkPythonAvailable();
   });
 
-  ipcMain.handle('install-deemix', async () => {
+  handle('install-deemix', async () => {
     const mainWindow = _getMainWindow();
     if (mainWindow) {
       mainWindow.webContents.send('deemix-install-progress', { status: 'starting', message: 'Iniciando instalação do deemix...' });
@@ -208,7 +209,7 @@ function register({ app, getMainWindow, showNotification }) {
     return result;
   });
 
-  ipcMain.handle('test-deemix', async () => {
+  handle('test-deemix', async () => {
     try {
       const installed = await checkDeemixInstalled();
       if (!installed) return { success: false, error: 'deemix não está instalado' };
@@ -233,7 +234,7 @@ function register({ app, getMainWindow, showNotification }) {
     }
   });
 
-  ipcMain.handle('test-deemix-search', async (event, { artist, title }) => {
+  handle('test-deemix-search', async (event, { artist, title }) => {
     try {
       const track = await searchDeezerTrack(artist, title);
       return {

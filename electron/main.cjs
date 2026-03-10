@@ -56,6 +56,7 @@ const ctx = {
   app,
   getMainWindow: () => mainWindow,
   showNotification,
+  safeHandle,
 };
 
 const pythonMonitor = require('./modules/pythonMonitor.cjs');
@@ -68,8 +69,8 @@ const fileOpsModule = require('./modules/fileOps.cjs');
 
 pythonMonitor.register(ctx);
 deemixModule.register(ctx);
-scrapingModule.register();
-libraryModule.register();
+scrapingModule.register(ctx);
+libraryModule.register(ctx);
 deezerDownloadModule.register(ctx);
 vozBrasilModule.register(ctx);
 fileOpsModule.register(ctx);
