@@ -24,11 +24,13 @@ function normalizeTitle(title: string): string {
 }
 
 /**
- * Normalize artist name for comparison
+ * Normalize artist name for comparison.
+ * IMPORTANT: Do NOT strip & because it's part of duo names (e.g., "Diego & Victor Hugo").
+ * Only strip feat/ft suffixes which are truly secondary.
  */
 function normalizeArtist(artist: string): string {
   return artist
-    .replace(/\s*(?:feat\.?|ft\.?|featuring|part\.?|c\/|&|,)\s*.+$/gi, '')
+    .replace(/\s*(?:feat\.?|ft\.?|featuring|part\.?|c\/)\s*.+$/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
