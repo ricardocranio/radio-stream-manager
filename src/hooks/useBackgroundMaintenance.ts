@@ -24,6 +24,7 @@ export function useBackgroundMaintenance() {
   const lastClassifyRef = useRef<number>(0);
   const lastPurgeRef = useRef<number>(0);
   const lastArlCheckRef = useRef<number>(0);
+  const lastDedupRef = useRef<number>(0);
   const lastCompressRef = useRef<string>(''); // Date string of last compression
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
