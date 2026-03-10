@@ -4,6 +4,17 @@ const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification, dialog } =
 const path = require('path');
 const fs = require('fs');
 
+// Safe IPC handler registration - prevents "second handler" crashes
+const registeredHandlers = new Set();
+function safeHandle(channel, handler) {
+  if (registeredHandlers.has(channel)) {
+    console.warn(`[IPC] Handler already registered for '${channel}', skipping duplicate`);
+    return;
+  }
+  registeredHandlers.add(channel);
+  ipcMain.handle(channel, handler);
+}
+
 // Auto-updater (only in packaged app)
 let autoUpdater = null;
 if (app.isPackaged) {
