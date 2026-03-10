@@ -376,7 +376,7 @@ function register({ safeHandle }) {
   });
 
   // =============== BPM SCANNER ===============
-  ipcMain.handle('scan-bpm-tags', async (event, { musicFolders }) => {
+  handle('scan-bpm-tags', async (event, { musicFolders }) => {
     console.log('[BPM] Scanning BPM tags from music library...');
     const results = {};
     let scanned = 0;
