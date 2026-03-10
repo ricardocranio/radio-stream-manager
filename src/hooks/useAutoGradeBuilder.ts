@@ -37,6 +37,7 @@ import { saveGradeToStorage, loadGradeFromStorage, clearGradeStorage } from '@/l
 import { resolveVinhetasInLine, resolveVinhetasInGrade, resetVinhetaPool } from '@/lib/gradeBuilder/vinhetaResolver';
 import { saveOfflineSongCache, loadOfflineSongCache } from '@/lib/offlineSongCache';
 import { saveCrossDayBuffer, loadCrossDayBuffer } from '@/lib/crossDayRepetition';
+import { loadBpmCacheFromDisk, enrichSongsWithBpmCache } from '@/lib/bpmCacheBridge';
 import { reportServiceHeartbeat } from '@/hooks/useServiceWatchdog';
 
 // === MODULE-LEVEL VHT DURATION CACHE ===
