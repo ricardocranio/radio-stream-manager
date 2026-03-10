@@ -366,7 +366,31 @@ ipcMain.handle('get-app-path', (event, name) => app.getPath(name));
 ipcMain.handle('open-external', (event, url) => shell.openExternal(url));
 ipcMain.handle('open-path', (event, filePath) => shell.openPath(filePath));
 
+ipcMain.handle('open-folder', async (event, folderPath) => {
+  try {
+    if (!fs.existsSync(folderPath)) {
+      fs.mkdirSync(folderPath, { recursive: true });
+    }
+    await shell.openPath(folderPath);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('ensure-folder', async (event, folderPath) => {
+  try {
+    if (!fs.existsSync(folderPath)) {
+      fs.mkdirSync(folderPath, { recursive: true });
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('select-folder', async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
   const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'], title: 'Selecionar pasta de download' });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
@@ -379,6 +403,14 @@ ipcMain.handle('show-notification', (event, { title, body }) => {
       mainWindow.focus();
     }
   });
+});
+
+ipcMain.handle('notify-batch-complete', (event, stats) => {
+  const { completed, failed, total } = stats || {};
+  const title = failed > 0 ? '⚠️ Lote Finalizado' : '✅ Lote Completo';
+  const body = `${completed || 0}/${total || 0} baixadas${failed ? ` (${failed} erros)` : ''}`;
+  showNotification(title, body, () => showMainWindow());
+  return { success: true };
 });
 
 ipcMain.handle('show-window', () => {
