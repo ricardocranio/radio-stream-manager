@@ -25,6 +25,7 @@ import { GradePreviewCard } from '@/components/dashboard/GradePreviewCard';
 import { GradeScheduleCard } from '@/components/dashboard/GradeScheduleCard';
 import { SmartNotificationsCard } from '@/components/dashboard/SmartNotificationsCard';
 import { ServiceHealthCard } from '@/components/dashboard/ServiceHealthCard';
+import { Id3ActivityCard } from '@/components/dashboard/Id3ActivityCard';
 
 export function DashboardView() {
   const { 
