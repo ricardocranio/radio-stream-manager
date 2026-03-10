@@ -252,6 +252,21 @@ export function useAutoGradeBuilder() {
     resetVinhetaPool();
   }, []);
 
+  // ==================== Invalidate locks when scheduled sequences change ====================
+  const prevScheduledSeqRef = useRef(scheduledSequences);
+  useEffect(() => {
+    if (prevScheduledSeqRef.current === scheduledSequences) return;
+    prevScheduledSeqRef.current = scheduledSequences;
+
+    // When scheduled sequences are created/edited/toggled, clear ALL block locks
+    // so the builder regenerates blocks using the updated sequence configuration
+    const lockCount = builtBlocksRef.current.size;
+    if (lockCount > 0) {
+      builtBlocksRef.current.clear();
+      console.log(`[AUTO-GRADE] 🔓 Sequências agendadas alteradas — ${lockCount} locks de blocos removidos para regeneração`);
+    }
+  }, [scheduledSequences]);
+
   const addCarryOverSong = useCallback((song: Omit<CarryOverSong, 'addedAt'>) => {
     const exists = carryOverSongsRef.current.some(
       s => s.title.toLowerCase() === song.title.toLowerCase() && s.artist.toLowerCase() === song.artist.toLowerCase()
@@ -1351,7 +1366,7 @@ export function useAutoGradeBuilder() {
     getProgramForHour, getFixedContentForTime, isWeekday,
     getActiveSequenceForBlock, findSongInLibrary,
     processFixedContentFilename, getDayCode, getCarryOverSongs,
-    buildGradeContext, filterChars, stations,
+    buildGradeContext, filterChars, stations, scheduledSequences,
   ]);
 
   // ==================== Block Times ====================
