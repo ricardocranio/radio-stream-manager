@@ -807,9 +807,7 @@ export function SequenceView() {
               <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
                 <h4 className="font-medium text-sm text-primary mb-2">ℹ️ Informação</h4>
                 <p className="text-xs text-muted-foreground">
-                  Sequências programadas substituem a sequência padrão nos horários configurados.
-                  <br />
-                  <span className="text-yellow-400">Prioridade:</span> Se houver conflito de horários, a sequência com maior prioridade (P) será usada.
+                  Sequências programadas têm prioridade absoluta nos horários configurados, substituindo a sequência padrão e todos os programas especiais (exceto Voz do Brasil).
                   <br />
                   <span className="text-emerald-400">FIXO:</span> Insere conteúdo fixo configurado na posição selecionada.
                 </p>
