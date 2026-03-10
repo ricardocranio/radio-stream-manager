@@ -88,6 +88,7 @@ interface CheckSongResult {
   filename?: string;
   baseName?: string;
   similarity?: number;
+  strategy?: 'prefix' | 'includes' | 'word' | 'levenshtein';
 }
 
 interface MusicLibraryStatsParams {
