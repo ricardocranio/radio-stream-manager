@@ -484,7 +484,7 @@ function register({ safeHandle }) {
     return { success: true, songs, scanned, genreSummary };
   });
 
-  ipcMain.handle('save-bpm-cache', async (event, { cachePath, data }) => {
+  handle('save-bpm-cache', async (event, { cachePath, data }) => {
     try {
       const dir = path.dirname(cachePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
