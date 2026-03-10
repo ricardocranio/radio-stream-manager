@@ -389,9 +389,17 @@ export async function selectSongForSlot(
         return 0;
       });
 
-      const smartDnaSorted = applySmartScoring(freshSorted, timeStr, selCtx.previousEnergy);
+      const smartDnaSorted = applySmartScoring(freshSorted, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
+      // Use ID3 genre (ai_genre) for compatibility matching instead of just station style
       const dnaCandidates = smartDnaSorted
-        .filter(c => c.style === stationStyle)
+        .filter(c => {
+          // Primary: exact style match (legacy behavior)
+          if (c.style === stationStyle) return true;
+          // Enhanced: ID3 genre compatibility check
+          const songGenre = (c as any).ai_genre;
+          if (songGenre && isGenreCompatible(songGenre, stationStyle)) return true;
+          return false;
+        })
         .filter(c => isValidCandidate(c.title, c.artist));
 
       if (dnaCandidates.length === 0) continue;
