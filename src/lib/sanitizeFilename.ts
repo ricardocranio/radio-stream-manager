@@ -150,3 +150,42 @@ export function processFixedContentTemplate(
   
   return result.toUpperCase();
 }
+
+/**
+ * Format text for digital playlist systems (e.g., Playlist Digital).
+ * - Removes line breaks
+ * - Strips accents via NFD normalization
+ * - Truncates to a character limit (default 40)
+ * - Forces UPPERCASE
+ * @param texto - Original text (artist - title or filename)
+ * @param limite - Max character length (default 40)
+ * @returns Formatted string safe for playlist systems
+ */
+export function formatarParaPlaylistDigital(texto: string, limite: number = 40): string {
+  if (!texto) return '';
+
+  // Remove line breaks
+  let result = texto.replace(/\r?\n|\r/g, ' ');
+
+  // Replace & with "e"
+  result = result.replace(/&/g, 'e');
+
+  // Strip accents
+  result = removeAccents(result);
+
+  // Remove special characters except letters, numbers, spaces, dash, dot, underscore, parens
+  result = result.replace(/[^a-zA-Z0-9\s\-._()]/g, '');
+
+  // Normalize spaces
+  result = result.replace(/\s+/g, ' ').trim();
+
+  // Force UPPERCASE
+  result = result.toUpperCase();
+
+  // Truncate to limit
+  if (result.length > limite) {
+    result = result.slice(0, limite);
+  }
+
+  return result;
+}
