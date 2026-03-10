@@ -1395,7 +1395,14 @@ export function useAutoGradeBuilder() {
       logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
       clearUsedSongs();
 
+      // Load BPM cache from disk before building
+      await loadBpmCacheFromDisk();
+
       const songsByStation = await fetchAllRecentSongs();
+      // Enrich all song pools with cached BPM data
+      for (const songs of Object.values(songsByStation)) {
+        enrichSongsWithBpmCache(songs as any[]);
+      }
       const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
       const lines: string[] = [];
       const allLogs: BlockLogItem[] = [];
