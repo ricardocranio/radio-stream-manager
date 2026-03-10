@@ -6,11 +6,12 @@ const { sanitizeFolderName, parseID3TagsFromFile } = require('./utils.cjs');
 
 let _getMainWindow = null;
 
-function register({ getMainWindow }) {
+function register({ getMainWindow, safeHandle }) {
   _getMainWindow = getMainWindow;
+  const handle = safeHandle || ipcMain.handle.bind(ipcMain);
 
   // IPC: Create station folders
-  ipcMain.handle('ensure-station-folders', async (event, { baseFolder, stations }) => {
+  handle('ensure-station-folders', async (event, { baseFolder, stations }) => {
     console.log(`[FOLDERS] Creating station folders in: ${baseFolder}`);
     const created = [];
     try {
