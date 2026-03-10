@@ -169,7 +169,7 @@ function register({ safeHandle }) {
     return results;
   });
 
-  ipcMain.handle('scrape-station', async (event, station) => {
+  handle('scrape-station', async (event, station) => {
     try {
       const songs = await scrapeStation(station);
       return { success: true, songs };
