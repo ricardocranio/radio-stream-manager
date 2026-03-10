@@ -256,7 +256,7 @@ export async function selectSongForSlot(
       return 0;
     });
 
-    const smartSorted = applySmartScoring(freshnessSorted, timeStr, selCtx.previousEnergy);
+    const smartSorted = applySmartScoring(freshnessSorted, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
     const p1Candidates = smartSorted.filter(c => isValidCandidate(c.title, c.artist));
 
     const p1Map = p1Candidates.length
