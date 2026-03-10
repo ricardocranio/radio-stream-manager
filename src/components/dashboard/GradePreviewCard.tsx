@@ -303,6 +303,31 @@ export function GradePreviewCard() {
             </p>
           </div>
         )}
+        {/* Coringa diagnostic alert */}
+        {coringaDiagnostic && (
+          <div className="mb-3 p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
+            <div className="flex items-center gap-2 mb-2">
+              <SearchX className="w-4 h-4 text-orange-400 shrink-0" />
+              <p className="text-xs font-medium text-orange-400">
+                {coringaDiagnostic.isFullCoringa
+                  ? `⚠️ Bloco 100% Coringa — nenhuma música real selecionada`
+                  : `⚠️ ${coringaDiagnostic.percent}% Coringa (${coringaDiagnostic.coringaCount}/${coringaDiagnostic.totalSlots} slots)`}
+              </p>
+            </div>
+            <div className="space-y-1 text-[10px] text-orange-400/80">
+              <p>Possíveis causas:</p>
+              <ul className="list-disc ml-4 space-y-0.5">
+                <li>Pool de músicas capturadas vazio — verifique se o scraping está ativo</li>
+                <li>Músicas existem no banco mas não na biblioteca local (pasta de download)</li>
+                <li>ARL do Deezer inválida — downloads JIT falharam</li>
+                <li>Estação da sequência não está sendo monitorada ou não tem capturas recentes</li>
+              </ul>
+              <p className="mt-1.5 opacity-70">
+                Confira os logs do console (F12) para diagnóstico detalhado [SONG-SELECT] e [RESOLVE]
+              </p>
+            </div>
+          </div>
+        )}
         <ScrollArea className="h-[320px]">
           {displaySongs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-muted-foreground gap-2">
