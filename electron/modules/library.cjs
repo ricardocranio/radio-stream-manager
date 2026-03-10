@@ -414,7 +414,7 @@ function register({ safeHandle }) {
   });
 
   // =============== FULL METADATA SCANNER (Artist, Title, BPM, Genre) ===============
-  ipcMain.handle('scan-library-metadata', async (event, { musicFolders }) => {
+  handle('scan-library-metadata', async (event, { musicFolders }) => {
     console.log('[META] Scanning full metadata from music library...');
     const songs = [];
     let scanned = 0;
