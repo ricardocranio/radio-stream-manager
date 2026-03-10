@@ -9,11 +9,12 @@ const deemixModule = require('./deemix.cjs');
 let _getMainWindow = null;
 let _showNotification = null;
 
-function register({ getMainWindow, showNotification }) {
+function register({ getMainWindow, showNotification, safeHandle }) {
   _getMainWindow = getMainWindow;
   _showNotification = showNotification;
+  const handle = safeHandle || ipcMain.handle.bind(ipcMain);
 
-  ipcMain.handle('download-from-deezer', async (event, params) => {
+  handle('download-from-deezer', async (event, params) => {
     const { artist, title, arl, outputFolder, quality, stationName } = params;
     
     const sanitizedStation = stationName ? sanitizeFolderName(stationName) : null;

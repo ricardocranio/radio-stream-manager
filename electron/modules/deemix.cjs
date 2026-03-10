@@ -234,7 +234,7 @@ function register({ app, getMainWindow, showNotification, safeHandle }) {
     }
   });
 
-  ipcMain.handle('test-deemix-search', async (event, { artist, title }) => {
+  handle('test-deemix-search', async (event, { artist, title }) => {
     try {
       const track = await searchDeezerTrack(artist, title);
       return {
