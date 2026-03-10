@@ -62,16 +62,14 @@ async function scanVhtBpm(folder: string, files: string[]): Promise<void> {
 
   try {
     const result = await window.electronAPI.scanBpmTags({
-      folder,
-      files: files.slice(0, 200), // Cap for performance
+      folders: [folder],
     });
 
-    if (result?.success && result.bpmData) {
+    if (result?.success && result.samples) {
       let count = 0;
-      for (const [filename, bpm] of Object.entries(result.bpmData)) {
-        const bpmNum = typeof bpm === 'number' ? bpm : parseInt(String(bpm), 10);
-        if (bpmNum > 0 && bpmNum < 300) {
-          vhtBpmMap.set(filename, bpmNum);
+      for (const entry of result.samples) {
+        if (entry.bpm > 0 && entry.bpm < 300) {
+          vhtBpmMap.set(entry.filename, entry.bpm);
           count++;
         }
       }
