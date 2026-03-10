@@ -343,7 +343,7 @@ function register({ safeHandle }) {
     }
   });
 
-  ipcMain.handle('get-music-library-stats', async (event, params) => {
+  handle('get-music-library-stats', async (event, params) => {
     const { musicFolders } = params;
     try {
       const files = scanMusicLibrary(musicFolders);
