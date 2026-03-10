@@ -1,10 +1,6 @@
 /// <reference types="vite/client" />
 
-declare global {
-  namespace NodeJS {
-    interface Timeout {}
-    interface Timer {}
-  }
+declare namespace NodeJS {
+  // eslint-disable-next-line @typescript-eslint/no-empty-interface
+  interface Timeout {}
 }
-
-export {};
