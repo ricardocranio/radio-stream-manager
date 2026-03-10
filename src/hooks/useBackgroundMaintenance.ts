@@ -3,7 +3,9 @@
  * 
  * Runs periodic tasks:
  * - AI song classification every 30 minutes
- * - Auto-purge blocked files from disk every 30 minutes (Electron only)
+ * - Auto-purge blocked files from disk every 12 hours (Electron only)
+ * - Auto-deduplicate music library every 24 hours (Electron only)
+ * - ARL validation every 1 hour
  * - History compression daily at 4:00 AM
  */
 
@@ -13,14 +15,16 @@ import { useRadioStore } from '@/store/radioStore';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 const CLASSIFY_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
-const PURGE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours — safety sweep only, blocked content is already filtered at download/grade level
+const PURGE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 const ARL_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const DEDUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const MAINTENANCE_CHECK_MS = 60 * 1000; // Check every minute
 
 export function useBackgroundMaintenance() {
   const lastClassifyRef = useRef<number>(0);
   const lastPurgeRef = useRef<number>(0);
   const lastArlCheckRef = useRef<number>(0);
+  const lastDedupRef = useRef<number>(0);
   const lastCompressRef = useRef<string>(''); // Date string of last compression
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -116,6 +120,39 @@ export function useBackgroundMaintenance() {
     }
   }, []);
 
+  const autoDeduplicateLibrary = useCallback(async () => {
+    if (!isElectron || !window.electronAPI?.scanDuplicates || !window.electronAPI?.deleteDuplicates) return;
+
+    try {
+      const { config, deezerConfig } = useRadioStore.getState();
+      const allFolders = [
+        ...config.musicFolders,
+        deezerConfig.downloadFolder,
+      ].filter(Boolean);
+
+      if (allFolders.length === 0) return;
+
+      console.log('[MAINTENANCE] 🔍 Escaneando duplicatas na biblioteca...');
+      const scanResult = await window.electronAPI.scanDuplicates({ musicFolders: allFolders });
+
+      if (!scanResult?.duplicates || scanResult.duplicates.length === 0) {
+        console.log('[MAINTENANCE] ✅ Nenhuma duplicata encontrada na biblioteca');
+        return;
+      }
+
+      console.log(`[MAINTENANCE] 🗑️ ${scanResult.duplicates.length} grupo(s) de duplicatas encontrado(s), removendo cópias de menor qualidade...`);
+      
+      const filesToDelete = scanResult.duplicates.flatMap((group: any) => 
+        group.remove.map((f: any) => f.path)
+      );
+
+      const deleteResult = await window.electronAPI.deleteDuplicates({ filePaths: filesToDelete });
+      console.log(`[MAINTENANCE] ✅ ${deleteResult.deleted} arquivo(s) duplicado(s) removido(s) automaticamente`);
+    } catch (error) {
+      console.error('[MAINTENANCE] Erro na deduplicação automática:', error);
+    }
+  }, []);
+
   const compressHistory = useCallback(async () => {
     try {
       console.log('[MAINTENANCE] 🗜️ Comprimindo histórico...');
@@ -146,6 +183,11 @@ export function useBackgroundMaintenance() {
     // Initial ARL validation after 5 minutes
     setTimeout(() => validateArl(), 5 * 60 * 1000);
 
+    // Initial dedup after 10 minutes
+    if (isElectron) {
+      setTimeout(() => autoDeduplicateLibrary(), 10 * 60 * 1000);
+    }
+
     intervalRef.current = setInterval(() => {
       const now = Date.now();
 
@@ -167,6 +209,12 @@ export function useBackgroundMaintenance() {
         validateArl();
       }
 
+      // Auto-deduplicate every 24 hours (Electron only)
+      if (isElectron && now - lastDedupRef.current >= DEDUP_INTERVAL_MS) {
+        lastDedupRef.current = now;
+        autoDeduplicateLibrary();
+      }
+
       // Compress history once per day at ~4:00 AM
       const currentHour = new Date().getHours();
       const today = new Date().toDateString();
@@ -176,12 +224,12 @@ export function useBackgroundMaintenance() {
       }
     }, MAINTENANCE_CHECK_MS);
 
-    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (classificação 30min, purge 12h, ARL 1h, compressão 4h)');
+    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (classificação 30min, purge 12h, ARL 1h, dedup 24h, compressão 4h)');
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [classifySongs, compressHistory, purgeBlockedFiles, validateArl]);
+  }, [classifySongs, compressHistory, purgeBlockedFiles, validateArl, autoDeduplicateLibrary]);
 
-  return { start, classifySongs, compressHistory, purgeBlockedFiles, validateArl };
+  return { start, classifySongs, compressHistory, purgeBlockedFiles, validateArl, autoDeduplicateLibrary };
 }
