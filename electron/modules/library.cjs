@@ -354,6 +354,77 @@ function register() {
     return { success: true, bpmData: results, scanned, found: Object.keys(results).length };
   });
 
+  // =============== FULL METADATA SCANNER (Artist, Title, BPM, Genre) ===============
+  ipcMain.handle('scan-library-metadata', async (event, { musicFolders }) => {
+    console.log('[META] Scanning full metadata from music library...');
+    const songs = [];
+    let scanned = 0;
+    
+    const scanDir = (dir) => {
+      try {
+        if (!fs.existsSync(dir)) return;
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            scanDir(fullPath);
+          } else if (/\.mp3$/i.test(entry.name)) {
+            scanned++;
+            try {
+              const tags = parseID3TagsFromFile(fullPath);
+              const baseName = path.basename(entry.name, '.mp3');
+              let artist = tags.artist || '';
+              let title = tags.title || '';
+              if (!artist && !title && baseName.includes(' - ')) {
+                const parts = baseName.split(' - ');
+                artist = parts[0].trim();
+                title = parts.slice(1).join(' - ').trim();
+              } else if (!artist && !title) {
+                title = baseName;
+              }
+              songs.push({
+                filename: entry.name,
+                artist: artist || 'Desconhecido',
+                title: title || baseName,
+                bpm: tags.bpm ? parseInt(tags.bpm, 10) || null : null,
+                genre: tags.genre || null,
+                folder: dir,
+              });
+            } catch (e) {
+              songs.push({
+                filename: entry.name,
+                artist: 'Desconhecido',
+                title: path.basename(entry.name, '.mp3'),
+                bpm: null,
+                genre: null,
+                folder: dir,
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error(`[META] Error scanning ${dir}:`, e.message);
+      }
+    };
+    
+    for (const folder of (musicFolders || [])) {
+      scanDir(folder);
+    }
+    
+    // Build genre summary
+    const genreCounts = {};
+    for (const song of songs) {
+      const genre = song.genre || 'Sem gênero';
+      genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+    }
+    const genreSummary = Object.entries(genreCounts)
+      .map(([genre, count]) => ({ genre, count }))
+      .sort((a, b) => b.count - a.count);
+    
+    console.log(`[META] Done: ${scanned} scanned, ${songs.length} indexed, ${genreSummary.length} genres found`);
+    return { success: true, songs, scanned, genreSummary };
+  });
+
   ipcMain.handle('save-bpm-cache', async (event, { cachePath, data }) => {
     try {
       const dir = path.dirname(cachePath);

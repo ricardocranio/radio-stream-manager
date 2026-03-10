@@ -28,6 +28,7 @@ const GradeBuilderView = lazy(() => import('@/components/views/GradeBuilderView'
 const TrendsView = lazy(() => import('@/components/views/TrendsView').then(m => ({ default: m.TrendsView })));
 const AnalyticsView = lazy(() => import('@/components/views/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
 const CompetitorView = lazy(() => import('@/components/views/CompetitorView').then(m => ({ default: m.CompetitorView })));
+const LibraryBrowserView = lazy(() => import('@/components/views/LibraryBrowserView').then(m => ({ default: m.LibraryBrowserView })));
 
 // Prefetch map: preload chunk on hover for instant navigation
 const PREFETCH_MAP: Record<string, () => void> = {
@@ -48,6 +49,7 @@ const PREFETCH_MAP: Record<string, () => void> = {
   export: () => import('@/components/views/ExportView'),
   folders: () => import('@/components/views/FoldersView'),
   missing: () => import('@/components/views/MissingView'),
+  librarybrowser: () => import('@/components/views/LibraryBrowserView'),
   settings: () => import('@/components/views/SettingsView'),
 };
 
@@ -80,7 +82,7 @@ const TAB_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentTy
   export: ExportView,
   folders: FoldersView,
   missing: MissingView,
-  
+  librarybrowser: LibraryBrowserView,
   settings: SettingsView,
 };
 
