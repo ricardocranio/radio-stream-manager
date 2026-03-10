@@ -413,6 +413,7 @@ export async function selectSongForSlot(
           const correctFilename = r.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
           selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
           stats.substituted++;
+          const matchType = candidate.style === stationStyle ? 'estilo' : `ID3:${(candidate as any).ai_genre || '?'}`;
           logs.push({
             blockTime: timeStr,
             type: 'substituted',
@@ -420,7 +421,7 @@ export async function selectSongForSlot(
             artist: candidate.artist,
             station: candidate.station,
             style: candidate.style,
-            reason: `[P1.5] DNA similar: ${stationStyle} (de ${otherStation}) [batch]`,
+            reason: `[P1.5] DNA match (${matchType} → ${stationStyle}, de ${otherStation}) [batch]`,
             substituteFor: stationName || 'UNKNOWN',
           });
           break;
