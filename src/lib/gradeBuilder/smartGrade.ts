@@ -101,6 +101,66 @@ export function getEnergyTransitionPenalty(
 }
 
 /**
+ * BPM transition scoring for professional rhythm flow.
+ * Smooth BPM transitions create better listening experience.
+ * Returns a penalty score (lower = better fit).
+ * 
+ * Rules:
+ * - ≤15 BPM difference → no penalty (smooth transition)
+ * - 16-30 BPM difference → small penalty
+ * - 31-50 BPM difference → moderate penalty
+ * - >50 BPM difference → heavy penalty (jarring transition)
+ */
+export function getBpmTransitionPenalty(
+  previousBpm: number | null | undefined,
+  candidateBpm: number | null | undefined
+): number {
+  if (!previousBpm || !candidateBpm || previousBpm <= 0 || candidateBpm <= 0) return 0;
+  const diff = Math.abs(previousBpm - candidateBpm);
+  if (diff <= 15) return 0;        // Smooth
+  if (diff <= 30) return 1;        // Acceptable
+  if (diff <= 50) return 2;        // Noticeable jump
+  return 3;                         // Jarring
+}
+
+/**
+ * Genre compatibility scoring for DNA matching.
+ * Checks if a song's ID3 genre is compatible with a target style.
+ * Returns true if the genres are musically compatible.
+ */
+const GENRE_COMPATIBILITY: Record<string, string[]> = {
+  'Pop': ['pop', 'dance', 'synth', 'electro', 'r&b', 'soul'],
+  'Sertanejo': ['sertanejo', 'country', 'sertão', 'caipira', 'modão'],
+  'Rock': ['rock', 'alternative', 'indie', 'punk', 'metal', 'grunge'],
+  'Funk': ['funk', 'funk carioca', 'baile', 'pancadão'],
+  'MPB': ['mpb', 'bossa', 'brazilian', 'tropicália', 'chorinho'],
+  'Pagode': ['pagode', 'samba', 'partido alto'],
+  'Gospel': ['gospel', 'worship', 'cristã', 'religiosa'],
+  'Forró': ['forró', 'xote', 'baião', 'nordestino'],
+  'Eletrônica': ['electronic', 'edm', 'house', 'techno', 'trance', 'electro'],
+  'Hip-Hop': ['hip-hop', 'hip hop', 'rap', 'trap'],
+  'Romântico': ['romântico', 'romantic', 'love', 'balada', 'slow'],
+  'Reggae': ['reggae', 'reggaeton', 'dub'],
+  'Jazz': ['jazz', 'blues', 'swing'],
+  'POP/VARIADO': ['pop', 'dance', 'sertanejo', 'pagode', 'mpb', 'funk', 'rock'],
+};
+
+export function isGenreCompatible(
+  songGenre: string | null | undefined,
+  targetStyle: string
+): boolean {
+  if (!songGenre) return false;
+  const lowerGenre = songGenre.toLowerCase().trim();
+  
+  // Direct style match
+  if (lowerGenre.includes(targetStyle.toLowerCase())) return true;
+  
+  // Check compatibility map
+  const compatibleGenres = GENRE_COMPATIBILITY[targetStyle] || GENRE_COMPATIBILITY['POP/VARIADO'] || [];
+  return compatibleGenres.some(g => lowerGenre.includes(g));
+}
+
+/**
  * Combined smart scoring for a candidate song.
  * Higher score = better candidate.
  */
