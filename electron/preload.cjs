@@ -32,6 +32,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkFileInSubfolders: (params) => ipcRenderer.invoke('check-file-in-subfolders', params),
   purgeBlockedFiles: (params) => ipcRenderer.invoke('purge-blocked-files', params),
   
+  // Duplicate detection
+  scanDuplicates: (params) => ipcRenderer.invoke('scan-duplicates', params),
+  deleteDuplicates: (params) => ipcRenderer.invoke('delete-duplicates', params),
+  
   // Notifications
   showNotification: (title, body) => ipcRenderer.invoke('show-notification', { title, body }),
   notifyBatchComplete: (stats) => ipcRenderer.invoke('notify-batch-complete', stats),

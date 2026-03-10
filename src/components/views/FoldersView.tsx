@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Folder, FolderPlus, Trash2, Save, HardDrive, Music, Wrench, Loader2 } from 'lucide-react';
+import { Folder, FolderPlus, Trash2, Save, HardDrive, Music, Wrench, Loader2, Copy, CheckCircle2 } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,12 @@ export function FoldersView() {
   const [localConfig, setLocalConfig] = useState(config);
   const [isFixing, setIsFixing] = useState(false);
   const [fixProgress, setFixProgress] = useState<{ scanned: number; renamed: number; current: string } | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [duplicates, setDuplicates] = useState<Array<{
+    keep: { name: string; path: string; size: number };
+    remove: Array<{ name: string; path: string; size: number }>;
+  }>>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleSave = () => {
     setConfig(localConfig);
@@ -258,6 +264,119 @@ export function FoldersView() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Duplicate Scanner */}
+      <Card className="glass-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Copy className="w-4 h-4 text-primary" />
+            Detector de Duplicatas
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Encontra versões similares da mesma música (ex: com e sem "Ao Vivo", "Feat", "Remix"). Mantém o arquivo maior (melhor qualidade) e remove as cópias menores.
+          </p>
+          
+          <div className="flex items-center gap-3">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isScanning || !window.electronAPI?.scanDuplicates}
+              onClick={async () => {
+                setIsScanning(true);
+                setDuplicates([]);
+                try {
+                  const result = await window.electronAPI!.scanDuplicates({
+                    musicFolders: config.musicFolders,
+                    threshold: 0.85,
+                  });
+                  if (result.success) {
+                    setDuplicates(result.duplicates);
+                    toast({
+                      title: 'Scan completo',
+                      description: `${result.duplicates.length} grupos de duplicatas encontrados em ${result.totalFiles} arquivos.`,
+                    });
+                  }
+                } catch (error) {
+                  toast({ title: 'Erro no scan', description: String(error), variant: 'destructive' });
+                } finally {
+                  setIsScanning(false);
+                }
+              }}
+            >
+              {isScanning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Copy className="w-4 h-4 mr-2" />}
+              {isScanning ? 'Escaneando...' : 'Escanear Duplicatas'}
+            </Button>
+            
+            {duplicates.length > 0 && (
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={isDeleting}
+                onClick={async () => {
+                  const filePaths = duplicates.flatMap(d => d.remove.map(r => r.path));
+                  if (filePaths.length === 0) return;
+                  
+                  setIsDeleting(true);
+                  try {
+                    const result = await window.electronAPI!.deleteDuplicates({ filePaths });
+                    if (result.success) {
+                      toast({
+                        title: 'Duplicatas removidas',
+                        description: `${result.deleted} arquivos deletados com sucesso.`,
+                      });
+                      setDuplicates([]);
+                    }
+                  } catch (error) {
+                    toast({ title: 'Erro ao deletar', description: String(error), variant: 'destructive' });
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+              >
+                {isDeleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                Deletar {duplicates.reduce((sum, d) => sum + d.remove.length, 0)} duplicatas
+              </Button>
+            )}
+          </div>
+
+          {duplicates.length > 0 && (
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {duplicates.map((group, i) => (
+                <div key={i} className="p-3 rounded-lg bg-secondary/30 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                    <span className="text-sm font-medium text-foreground truncate">
+                      Manter: {group.keep.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground font-mono shrink-0">
+                      {(group.keep.size / 1024 / 1024).toFixed(1)} MB
+                    </span>
+                  </div>
+                  {group.remove.map((file, j) => (
+                    <div key={j} className="flex items-center gap-2 pl-6">
+                      <Trash2 className="w-3 h-3 text-destructive shrink-0" />
+                      <span className="text-sm text-destructive truncate">
+                        Remover: {file.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground font-mono shrink-0">
+                        {(file.size / 1024 / 1024).toFixed(1)} MB
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!window.electronAPI?.scanDuplicates && (
+            <p className="text-xs text-muted-foreground italic">
+              Disponível apenas no aplicativo desktop (Electron)
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
