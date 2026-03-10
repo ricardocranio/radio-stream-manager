@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Terminal, Play, Pause, Trash2, Download, Search, FileText, AlertCircle, CheckCircle2, SkipForward, Replace, Music, AlertTriangle } from 'lucide-react';
+import { Terminal, Play, Pause, Trash2, Download, Search, FileText, AlertCircle, CheckCircle2, SkipForward, Replace, Music, AlertTriangle, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,8 +8,10 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
 import { useRadioStore } from '@/store/radioStore';
 import { useGradeLogStore, BlockLogEntry, SystemError } from '@/store/gradeLogStore';
+import { useSimilarityLogStore, type MatchStrategy } from '@/store/similarityLogStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
