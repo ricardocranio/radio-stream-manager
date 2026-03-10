@@ -14,6 +14,7 @@ interface CheckResult {
   baseName?: string;
   similarity?: number;
   cached?: boolean;
+  strategy?: string;
 }
 
 /**
