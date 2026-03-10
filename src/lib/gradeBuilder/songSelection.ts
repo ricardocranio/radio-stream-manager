@@ -99,11 +99,14 @@ interface SelectionContext {
 function applySmartScoring(
   candidates: SongEntry[],
   timeStr: string,
-  previousEnergy: string | null | undefined
+  previousEnergy: string | null | undefined,
+  previousBpm?: number | null
 ): SongEntry[] {
   return candidates.map(c => ({
     song: c,
-    smartScore: getGenreScore((c as any).ai_genre, timeStr) - getEnergyTransitionPenalty(previousEnergy, (c as any).ai_energy),
+    smartScore: getGenreScore((c as any).ai_genre, timeStr) 
+      - getEnergyTransitionPenalty(previousEnergy, (c as any).ai_energy)
+      - getBpmTransitionPenalty(previousBpm, (c as any).bpm),
   }))
   .sort((a, b) => b.smartScore - a.smartScore)
   .map(x => x.song);
