@@ -176,6 +176,25 @@ export function GradePreviewCard() {
   const isBlockLong = blockDuration !== undefined && blockDuration > 32;
   const isBlockOk = blockDuration !== undefined && blockDuration >= 29 && blockDuration <= 32;
 
+  // Detect coringa-only blocks (jov,vht,rom patterns without quoted filenames)
+  const coringaDiagnostic = useMemo(() => {
+    if (!nextBlockLine) return null;
+    const coringaPatterns = /\bjov\b|\brom\b|\bmus\b/gi;
+    const quotedFiles = nextBlockLine.match(/"[^"]+"/g) || [];
+    const coringaMatches = nextBlockLine.match(coringaPatterns) || [];
+    const totalSlots = quotedFiles.length + coringaMatches.length;
+    if (totalSlots === 0) return null;
+    const coringaPercent = Math.round((coringaMatches.length / totalSlots) * 100);
+    if (coringaPercent < 50) return null;
+    return {
+      percent: coringaPercent,
+      coringaCount: coringaMatches.length,
+      resolvedCount: quotedFiles.length,
+      totalSlots,
+      isFullCoringa: coringaPercent === 100,
+    };
+  }, [nextBlockLine]);
+
   // Auto-rebuild when block is too short (with debounce to avoid loops)
   const autoFixAttemptedRef = useRef<string>('');
   useEffect(() => {
