@@ -1616,6 +1616,33 @@ export function useAutoGradeBuilder() {
 
       setState(prev => ({ ...prev, isBuilding: true, error: null }));
 
+      // ═══ PRE-POPULATE used songs from existing grade lines ═══
+      // This prevents the builder from selecting songs that are already
+      // in other blocks (manually placed or previously generated).
+      let prePopulatedCount = 0;
+      for (const [timeKey, line] of lineMap.entries()) {
+        // Skip the blocks we're about to regenerate
+        if ((shouldBuildCurrent && timeKey === currentTimeKey) || (shouldBuildNext && timeKey === nextTimeKey)) continue;
+        // Extract quoted filenames like "ARTIST - TITLE.MP3"
+        const quotedTokens = line.match(/"([^"]+)"/g);
+        if (!quotedTokens) continue;
+        for (const token of quotedTokens) {
+          const clean = token.replace(/^"|"$/g, '').replace(/\.mp3$/i, '');
+          const dashIdx = clean.indexOf(' - ');
+          if (dashIdx > 0) {
+            const artist = clean.substring(0, dashIdx).trim();
+            const title = clean.substring(dashIdx + 3).trim();
+            if (artist && title) {
+              markSongAsUsed(title, artist, timeKey);
+              prePopulatedCount++;
+            }
+          }
+        }
+      }
+      if (prePopulatedCount > 0) {
+        console.log(`[AUTO-GRADE] 🛡️ Pré-registradas ${prePopulatedCount} músicas existentes para anti-duplicação`);
+      }
+
       const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
       const allLogs: BlockLogItem[] = [];
 
