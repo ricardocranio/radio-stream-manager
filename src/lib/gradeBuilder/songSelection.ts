@@ -271,6 +271,7 @@ export async function selectSongForSlot(
         const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
         selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
         selCtx.previousEnergy = (candidate as any).ai_energy || null;
+        selCtx.previousBpm = (candidate as any).bpm || null;
         logs.push({
           blockTime: timeStr,
           type: 'used',
