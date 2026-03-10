@@ -497,7 +497,7 @@ function register({ safeHandle }) {
     }
   });
 
-  ipcMain.handle('load-bpm-cache', async (event, { cachePath }) => {
+  handle('load-bpm-cache', async (event, { cachePath }) => {
     try {
       if (!fs.existsSync(cachePath)) {
         return { success: true, data: null };
