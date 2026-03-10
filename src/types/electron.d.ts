@@ -313,6 +313,21 @@ interface ElectronAPI {
   checkFileInSubfolders: (params: CheckFileInSubfoldersParams) => Promise<CheckFileInSubfoldersResult>;
   purgeBlockedFiles: (params: { musicFolders: string[]; blockedSongs: string[]; forbiddenWords: string[] }) => Promise<{ success: boolean; deleted: string[]; errors: { file: string; error: string }[]; deletedCount: number }>;
   
+  // Duplicate detection
+  scanDuplicates: (params: { musicFolders: string[]; threshold?: number }) => Promise<{
+    success: boolean;
+    duplicates: Array<{
+      keep: { name: string; path: string; size: number };
+      remove: Array<{ name: string; path: string; size: number }>;
+    }>;
+    totalFiles: number;
+  }>;
+  deleteDuplicates: (params: { filePaths: string[] }) => Promise<{
+    success: boolean;
+    deleted: number;
+    errors: Array<{ path: string; error: string }>;
+  }>;
+  
   // Window management
   showWindow: () => Promise<{ success: boolean }>;
   

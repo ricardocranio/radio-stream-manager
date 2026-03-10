@@ -506,6 +506,96 @@ function register() {
       return { success: false, error: error.message };
     }
   });
+
+  // =============== DUPLICATE SCANNER ===============
+  ipcMain.handle('scan-duplicates', async (event, { musicFolders, threshold }) => {
+    console.log('[DUPLICATES] Scanning for duplicate songs...');
+    const files = scanMusicLibrary(musicFolders);
+    const THRESH = threshold || 0.85;
+    const duplicates = [];
+    const processed = new Set();
+
+    for (let i = 0; i < files.length; i++) {
+      if (processed.has(i)) continue;
+      
+      // Extract artist-title from filename pattern "Artist - Title (extras).mp3"
+      const parts = files[i].baseName.split(' - ');
+      if (parts.length < 2) continue;
+      
+      const baseArtist = normalizeText(parts[0]);
+      const baseTitle = cleanNormalize(parts.slice(1).join(' - '));
+      
+      const group = [files[i]];
+      
+      for (let j = i + 1; j < files.length; j++) {
+        if (processed.has(j)) continue;
+        
+        const partsJ = files[j].baseName.split(' - ');
+        if (partsJ.length < 2) continue;
+        
+        const artistJ = normalizeText(partsJ[0]);
+        const titleJ = cleanNormalize(partsJ.slice(1).join(' - '));
+        
+        // Artist must be very similar
+        const artistSim = calculateSimilarity(baseArtist, artistJ);
+        if (artistSim < 0.8) continue;
+        
+        // Title (without parentheticals) must match above threshold
+        const titleSim = calculateSimilarity(baseTitle, titleJ);
+        if (titleSim >= THRESH) {
+          group.push(files[j]);
+          processed.add(j);
+        }
+      }
+      
+      if (group.length > 1) {
+        // Get file sizes
+        const groupWithSize = group.map(f => {
+          try {
+            const stat = fs.statSync(f.path);
+            return { ...f, size: stat.size };
+          } catch {
+            return { ...f, size: 0 };
+          }
+        });
+        
+        // Sort by size descending - largest first (best quality)
+        groupWithSize.sort((a, b) => b.size - a.size);
+        
+        duplicates.push({
+          keep: { name: groupWithSize[0].name, path: groupWithSize[0].path, size: groupWithSize[0].size },
+          remove: groupWithSize.slice(1).map(f => ({ name: f.name, path: f.path, size: f.size })),
+        });
+      }
+      processed.add(i);
+    }
+    
+    console.log(`[DUPLICATES] Found ${duplicates.length} duplicate groups from ${files.length} files`);
+    return { success: true, duplicates, totalFiles: files.length };
+  });
+
+  ipcMain.handle('delete-duplicates', async (event, { filePaths }) => {
+    console.log(`[DUPLICATES] Deleting ${filePaths.length} duplicate files...`);
+    let deleted = 0;
+    const errors = [];
+    
+    for (const filePath of filePaths) {
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          deleted++;
+        }
+      } catch (error) {
+        errors.push({ path: filePath, error: error.message });
+      }
+    }
+    
+    // Invalidate library cache after deletion
+    musicLibraryCache = { files: [], timestamp: 0 };
+    
+    console.log(`[DUPLICATES] Deleted ${deleted}/${filePaths.length} files (${errors.length} errors)`);
+    return { success: true, deleted, errors };
+  });
 }
 
 module.exports = { register };
