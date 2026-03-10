@@ -163,16 +163,19 @@ export function isGenreCompatible(
 /**
  * Combined smart scoring for a candidate song.
  * Higher score = better candidate.
+ * Now includes BPM transition for professional rhythm flow.
  */
 export function getSmartCandidateScore(
   candidate: {
     artist: string;
     ai_genre?: string | null;
     ai_energy?: string | null;
+    bpm?: number | null;
   },
   blockTime: string,
   previousEnergy: string | null | undefined,
-  shiftTracker: ShiftArtistTracker
+  shiftTracker: ShiftArtistTracker,
+  previousBpm?: number | null,
 ): number {
   let score = 10; // Base
 
@@ -181,6 +184,9 @@ export function getSmartCandidateScore(
 
   // Energy transition
   score -= getEnergyTransitionPenalty(previousEnergy, candidate.ai_energy);
+
+  // BPM transition (professional rhythm flow)
+  score -= getBpmTransitionPenalty(previousBpm, candidate.bpm);
 
   // Shift artist penalty (prefer new artists in the shift)
   if (shiftTracker.isArtistUsedInShift(candidate.artist, blockTime)) {
