@@ -657,8 +657,8 @@ export const useRadioStore = create<RadioState>()(
         sequence: state.sequence,
         scheduledSequences: state.scheduledSequences,
         fixedContent: state.fixedContent,
-        blockSongs: state.blockSongs,
-        missingSongs: state.missingSongs,
+        // blockSongs excluded — regenerated each grade build (saves ~50KB per persist)
+        missingSongs: state.missingSongs.slice(-200), // Persist only last 200
         downloadHistory: state.downloadHistory,
         gradeHistory: state.gradeHistory,
         rankingSongs: state.rankingSongs,
