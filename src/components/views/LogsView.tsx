@@ -19,6 +19,7 @@ import { ptBR } from 'date-fns/locale';
 export function LogsView() {
   const { isRunning } = useRadioStore();
   const { blockLogs, systemErrors, clearBlockLogs, clearSystemErrors } = useGradeLogStore();
+  const { logs: similarityLogs, stats: simStats, strategyStats, clearLogs: clearSimilarityLogs, resetStats } = useSimilarityLogStore();
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds } = useCountdown();
   
   const [isPaused, setIsPaused] = useState(false);
