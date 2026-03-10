@@ -118,7 +118,34 @@ function register({ getMainWindow, showNotification }) {
             return;
           }
 
-          setTimeout(() => {
+          // Wait for file to be fully written to disk
+          const waitForStableFile = (filePath, maxWaitMs = 10000) => {
+            return new Promise((resolveWait) => {
+              let lastSize = -1;
+              let stableCount = 0;
+              const interval = setInterval(() => {
+                try {
+                  const stat = fs.statSync(filePath);
+                  if (stat.size === lastSize && stat.size > 0) {
+                    stableCount++;
+                    if (stableCount >= 3) { // stable for 1.5s
+                      clearInterval(interval);
+                      resolveWait(true);
+                    }
+                  } else {
+                    stableCount = 0;
+                    lastSize = stat.size;
+                  }
+                } catch (e) {
+                  clearInterval(interval);
+                  resolveWait(false);
+                }
+              }, 500);
+              setTimeout(() => { clearInterval(interval); resolveWait(true); }, maxWaitMs);
+            });
+          };
+
+          setTimeout(async () => {
             try {
               const filesAfter = fs.readdirSync(tempDownloadFolder);
               const newFiles = filesAfter.filter(f => !filesBefore.has(f) && /\.(mp3|flac|MP3|FLAC)$/i.test(f));
@@ -129,18 +156,24 @@ function register({ getMainWindow, showNotification }) {
               }
               
               let validFile = null;
-              const MAX_FILE_SIZE = 15 * 1024 * 1024;
+              const MIN_FILE_SIZE = 1.5 * 1024 * 1024; // 1.5MB min (a real song at 128kbps ~3min = ~2.8MB)
+              const MAX_FILE_SIZE = 25 * 1024 * 1024;   // 25MB max
               for (const newFile of newFiles) {
                 const filePath = path.join(tempDownloadFolder, newFile);
+                
+                // Wait for file to stabilize (stop growing)
+                await waitForStableFile(filePath);
+                
                 const stat = fs.statSync(filePath);
-                const fileSizeKB = Math.round(stat.size / 1024);
                 const fileSizeMB = (stat.size / (1024 * 1024)).toFixed(1);
                 
-                if (stat.size < 500 * 1024) {
+                if (stat.size < MIN_FILE_SIZE) {
+                  console.log(`[DEEMIX] ⚠️ File too small (${fileSizeMB} MB), skipping: ${newFile}`);
                   try { fs.unlinkSync(filePath); } catch (e) {}
                   continue;
                 }
                 if (stat.size > MAX_FILE_SIZE) {
+                  console.log(`[DEEMIX] ⚠️ File too large (${fileSizeMB} MB), skipping: ${newFile}`);
                   try { fs.unlinkSync(filePath); } catch (e) {}
                   continue;
                 }
@@ -156,6 +189,7 @@ function register({ getMainWindow, showNotification }) {
                   const hasFLAC = headerBuffer[0] === 0x66 && headerBuffer[1] === 0x4C && headerBuffer[2] === 0x61 && headerBuffer[3] === 0x43;
                   
                   if (!hasID3 && !hasMP3Sync && !hasFLAC) {
+                    console.log(`[DEEMIX] ⚠️ Invalid audio header, skipping: ${newFile}`);
                     try { fs.unlinkSync(filePath); } catch (e) {}
                     continue;
                   }
