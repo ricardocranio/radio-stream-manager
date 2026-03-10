@@ -88,7 +88,8 @@ interface SelectionContext {
   stationSongIndex: Record<string, number>;
   logs: BlockLogItem[];
   stats: BlockStats;
-  previousEnergy?: string | null; // Tracks last selected song's energy for smooth transitions
+  previousEnergy?: string | null;
+  previousBpm?: number | null; // BPM tracking for smooth rhythm transitions
 }
 
 /**
