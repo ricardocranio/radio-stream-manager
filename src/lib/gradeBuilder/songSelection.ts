@@ -23,7 +23,7 @@ import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import type { SongEntry, BlockLogItem, BlockStats, GradeContext, CarryOverSong } from './types';
 import { STATION_ID_TO_DB_NAME } from './constants';
 import type { WeekDay, SequenceConfig } from '@/types/radio';
-import { getGenreScore, getEnergyTransitionPenalty } from './smartGrade';
+import { getGenreScore, getEnergyTransitionPenalty, getBpmTransitionPenalty, isGenreCompatible } from './smartGrade';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
