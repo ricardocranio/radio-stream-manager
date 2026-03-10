@@ -147,7 +147,7 @@ export function Id3ActivityCard() {
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">Escaneando biblioteca...</span>
               <span className="font-mono text-indigo-400 font-bold">
-                {fixProgress.scanned} escaneados · {fixProgress.renamed} renomeados
+                {fixProgress.scanned} escaneados · {fixProgress.renamed} renomeados{(fixProgress as any).purged > 0 ? ` · ${(fixProgress as any).purged} apagados` : ''}
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs">
