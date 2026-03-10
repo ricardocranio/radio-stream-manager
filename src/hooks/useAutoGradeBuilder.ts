@@ -1622,7 +1622,12 @@ export function useAutoGradeBuilder() {
       // Always use the FULL song pool from monitoring (scraped_songs + radio_historico)
       // A narrow 1h window misses songs captured earlier, causing unnecessary Coringas
       reportServiceHeartbeat('grade-builder');
+      await loadBpmCacheFromDisk();
       const fullPool = await fetchAllRecentSongs();
+      // Enrich all song pools with cached BPM data
+      for (const songs of Object.values(fullPool)) {
+        enrichSongsWithBpmCache(songs as any[]);
+      }
 
       const durationMap = new Map(state.pendingBlockDurations);
       if (shouldBuildCurrent) {
