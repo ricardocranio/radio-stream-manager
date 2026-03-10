@@ -123,7 +123,7 @@ function register({ getMainWindow, safeHandle }) {
       }
       if (!fs.existsSync(targetPath)) return { success: false, error: 'File not found' };
       const tags = parseID3TagsFromFile(targetPath);
-      return { success: true, genre: tags.genre || null, artist: tags.artist || null, title: tags.title || null };
+      return { success: true, genre: tags.genre || null, artist: tags.artist || null, title: tags.title || null, year: tags.year || null };
     } catch (e) {
       return { success: false, error: e.message };
     }

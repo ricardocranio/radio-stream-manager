@@ -85,7 +85,7 @@ function parseID3TagsFromFile(filePath) {
         if (frameSize <= 0 || frameSize > headerSize) break;
         const frameData = buf.slice(offset + 10, offset + 10 + frameSize);
         
-        if (frameId === 'TPE1' || frameId === 'TIT2' || frameId === 'TCON' || frameId === 'TBPM') {
+        if (frameId === 'TPE1' || frameId === 'TIT2' || frameId === 'TCON' || frameId === 'TBPM' || frameId === 'TDRC' || frameId === 'TYER') {
           const encoding = frameData[0];
           let text = '';
           if (encoding === 0) {
@@ -99,6 +99,10 @@ function parseID3TagsFromFile(filePath) {
           if (frameId === 'TIT2') result.title = text.trim();
           if (frameId === 'TCON') result.genre = text.trim();
           if (frameId === 'TBPM') result.bpm = text.trim();
+          if (frameId === 'TDRC' || frameId === 'TYER') {
+            const yearMatch = text.trim().match(/^(\d{4})/);
+            if (yearMatch) result.year = yearMatch[1];
+          }
         }
         offset += 10 + frameSize;
       }
