@@ -372,15 +372,15 @@ function setupAutoUpdater() {
 }
 
 // =============== SIMPLE IPC HANDLERS ===============
-ipcMain.handle('get-app-version', () => app.getVersion());
-ipcMain.handle('get-app-path', (event, name) => {
+safeHandle('get-app-version', () => app.getVersion());
+safeHandle('get-app-path', (event, name) => {
   try { return app.getPath(name); }
   catch (e) { return null; }
 });
-ipcMain.handle('open-external', (event, url) => shell.openExternal(url));
-ipcMain.handle('open-path', (event, filePath) => shell.openPath(filePath));
+safeHandle('open-external', (event, url) => shell.openExternal(url));
+safeHandle('open-path', (event, filePath) => shell.openPath(filePath));
 
-ipcMain.handle('open-folder', async (event, folderPath) => {
+safeHandle('open-folder', async (event, folderPath) => {
   try {
     if (!fs.existsSync(folderPath)) {
       fs.mkdirSync(folderPath, { recursive: true });
@@ -392,7 +392,7 @@ ipcMain.handle('open-folder', async (event, folderPath) => {
   }
 });
 
-ipcMain.handle('ensure-folder', async (event, folderPath) => {
+safeHandle('ensure-folder', async (event, folderPath) => {
   try {
     if (!fs.existsSync(folderPath)) {
       fs.mkdirSync(folderPath, { recursive: true });
@@ -403,14 +403,14 @@ ipcMain.handle('ensure-folder', async (event, folderPath) => {
   }
 });
 
-ipcMain.handle('select-folder', async () => {
+safeHandle('select-folder', async () => {
   if (!mainWindow || mainWindow.isDestroyed()) return null;
   const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'], title: 'Selecionar pasta de download' });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
 });
 
-ipcMain.handle('show-notification', (event, { title, body }) => {
+safeHandle('show-notification', (event, { title, body }) => {
   showNotification(title, body, () => { 
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show(); 
@@ -419,7 +419,7 @@ ipcMain.handle('show-notification', (event, { title, body }) => {
   });
 });
 
-ipcMain.handle('notify-batch-complete', (event, stats) => {
+safeHandle('notify-batch-complete', (event, stats) => {
   const { completed, failed, total } = stats || {};
   const title = failed > 0 ? '⚠️ Lote Finalizado' : '✅ Lote Completo';
   const body = `${completed || 0}/${total || 0} baixadas${failed ? ` (${failed} erros)` : ''}`;
@@ -427,12 +427,12 @@ ipcMain.handle('notify-batch-complete', (event, stats) => {
   return { success: true };
 });
 
-ipcMain.handle('show-window', () => {
+safeHandle('show-window', () => {
   showMainWindow();
   return { success: true };
 });
 
-ipcMain.handle('check-for-updates', async () => {
+safeHandle('check-for-updates', async () => {
   if (autoUpdater) {
     try { await autoUpdater.checkForUpdates(); return { success: true }; }
     catch (error) { return { success: false, error: error.message }; }
