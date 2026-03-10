@@ -282,7 +282,7 @@ export function SequenceView() {
       weekDays: formWeekDays,
       sequence: formSequence,
       enabled: editingSchedule?.enabled ?? true,
-      priority: formPriority,
+      priority: 1, // Always takes priority during configured time
     };
 
     // Log for debugging
@@ -807,9 +807,7 @@ export function SequenceView() {
               <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
                 <h4 className="font-medium text-sm text-primary mb-2">ℹ️ Informação</h4>
                 <p className="text-xs text-muted-foreground">
-                  Sequências programadas substituem a sequência padrão nos horários configurados.
-                  <br />
-                  <span className="text-yellow-400">Prioridade:</span> Se houver conflito de horários, a sequência com maior prioridade (P) será usada.
+                  Sequências programadas têm prioridade absoluta nos horários configurados, substituindo a sequência padrão e todos os programas especiais (exceto Voz do Brasil).
                   <br />
                   <span className="text-emerald-400">FIXO:</span> Insere conteúdo fixo configurado na posição selecionada.
                 </p>
@@ -936,25 +934,6 @@ export function SequenceView() {
               </div>
             </div>
 
-            {/* Priority */}
-            <div className="space-y-2">
-              <Label>Prioridade (maior = mais importante)</Label>
-              <Select
-                value={formPriority.toString()}
-                onValueChange={(v) => setFormPriority(parseInt(v))}
-              >
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3, 4, 5].map((p) => (
-                    <SelectItem key={p} value={p.toString()}>
-                      Prioridade {p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
             {/* Sequence Config */}
             <div className="space-y-2">
