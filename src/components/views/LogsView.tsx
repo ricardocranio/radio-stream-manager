@@ -123,8 +123,11 @@ export function LogsView() {
   const handleClear = () => {
     if (activeTab === 'blocks') {
       clearBlockLogs();
-    } else {
+    } else if (activeTab === 'errors') {
       clearSystemErrors();
+    } else if (activeTab === 'matching') {
+      clearSimilarityLogs();
+      resetStats();
     }
   };
 
