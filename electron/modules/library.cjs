@@ -513,7 +513,7 @@ function register({ safeHandle }) {
   });
 
   // =============== DUPLICATE SCANNER ===============
-  ipcMain.handle('scan-duplicates', async (event, { musicFolders, threshold }) => {
+  handle('scan-duplicates', async (event, { musicFolders, threshold }) => {
     console.log('[DUPLICATES] Scanning for duplicate songs...');
     const files = scanMusicLibrary(musicFolders);
     const THRESH = threshold || 0.85;
