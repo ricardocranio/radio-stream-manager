@@ -130,7 +130,7 @@ function register({ getMainWindow, safeHandle }) {
   });
 
   // IPC: Scan library and rename files based on ID3 tags
-  ipcMain.handle('scan-fix-library', async (event, { musicFolders }) => {
+  handle('scan-fix-library', async (event, { musicFolders }) => {
     console.log('[LIB-FIX] Starting library scan & fix...');
     const results = { scanned: 0, renamed: 0, skipped: 0, errors: 0, details: [] };
     const mainWindow = _getMainWindow();
