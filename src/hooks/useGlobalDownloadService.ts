@@ -216,8 +216,8 @@ export function useGlobalDownloadService() {
                 updates.ai_energy = genreToEnergyForDl(normalizedGenre);
                 console.log(`[DL-SVC] 🏷️ ID3 genre: ${id3Result.genre} → ${normalizedGenre}`);
               }
-              if (id3Result.bpm) {
-                const bpmNum = parseInt(id3Result.bpm, 10);
+              if ((id3Result as any).bpm) {
+                const bpmNum = parseInt(String((id3Result as any).bpm), 10);
                 if (bpmNum > 0 && bpmNum < 300) {
                   console.log(`[DL-SVC] 🥁 ID3 BPM: ${bpmNum}`);
                   // Store BPM in local cache for grade builder access
