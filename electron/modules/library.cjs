@@ -144,7 +144,7 @@ function findBestMatch(artist, title, musicFolders, threshold) {
   if (bestMatch) {
     matchStats.levenshtein++;
     reportMatchStats();
-    return { exists: true, path: bestMatch.path, filename: bestMatch.name, baseName: bestMatch.baseName, similarity: bestScore };
+    return { exists: true, path: bestMatch.path, filename: bestMatch.name, baseName: bestMatch.baseName, similarity: bestScore, strategy: 'levenshtein' };
   }
   
   matchStats.miss++;
