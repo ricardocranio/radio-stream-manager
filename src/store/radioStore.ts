@@ -452,7 +452,11 @@ export const useRadioStore = create<RadioState>()(
       missingSongs: [],
       setMissingSongs: (missingSongs) => set({ missingSongs }),
       addMissingSong: (song) =>
-        set((state) => ({ missingSongs: [...state.missingSongs, song] })),
+        set((state) => {
+          // Cap at 500 entries, trim oldest
+          const updated = [...state.missingSongs, song];
+          return { missingSongs: updated.length > 500 ? updated.slice(-500) : updated };
+        }),
       updateMissingSong: (id, updates) =>
         set((state) => ({
           missingSongs: state.missingSongs.map((s) =>
@@ -653,8 +657,8 @@ export const useRadioStore = create<RadioState>()(
         sequence: state.sequence,
         scheduledSequences: state.scheduledSequences,
         fixedContent: state.fixedContent,
-        blockSongs: state.blockSongs,
-        missingSongs: state.missingSongs,
+        // blockSongs excluded — regenerated each grade build (saves ~50KB per persist)
+        missingSongs: state.missingSongs.slice(-200), // Persist only last 200
         downloadHistory: state.downloadHistory,
         gradeHistory: state.gradeHistory,
         rankingSongs: state.rankingSongs,
