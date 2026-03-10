@@ -49,6 +49,7 @@ const PREFETCH_MAP: Record<string, () => void> = {
   export: () => import('@/components/views/ExportView'),
   folders: () => import('@/components/views/FoldersView'),
   missing: () => import('@/components/views/MissingView'),
+  librarybrowser: () => import('@/components/views/LibraryBrowserView'),
   settings: () => import('@/components/views/SettingsView'),
 };
 
