@@ -161,6 +161,48 @@ export function useGlobalDownloadService() {
         
         useRadioStore.getState().updateMissingSong(song.id, { status: 'downloaded' });
         markSongAsDownloaded(song.artist, song.title, result.output);
+
+        // === Enrich ID3 metadata (BPM + Genre) after download ===
+        try {
+          const { config } = useRadioStore.getState();
+          const verifiedFile = (result as any).verifiedFile || `${song.artist} - ${song.title}.mp3`;
+          if (isElectron && window.electronAPI?.readId3Genre) {
+            const id3Result = await window.electronAPI.readId3Genre({
+              filePath: verifiedFile,
+              musicFolders: config.musicFolders,
+            });
+            if (id3Result?.success) {
+              const updates: Record<string, string> = {};
+              if (id3Result.genre) {
+                const normalizedGenre = normalizeId3GenreForDl(id3Result.genre);
+                updates.ai_genre = normalizedGenre;
+                updates.ai_energy = genreToEnergyForDl(normalizedGenre);
+                console.log(`[DL-SVC] 🏷️ ID3 genre: ${id3Result.genre} → ${normalizedGenre}`);
+              }
+              if (id3Result.bpm) {
+                const bpmNum = parseInt(id3Result.bpm, 10);
+                if (bpmNum > 0 && bpmNum < 300) {
+                  console.log(`[DL-SVC] 🥁 ID3 BPM: ${bpmNum}`);
+                  // Store BPM in local cache for grade builder access
+                  try {
+                    const { updateBpmCacheEntry } = await import('@/lib/bpmCacheBridge');
+                    updateBpmCacheEntry(song.artist, song.title, bpmNum);
+                  } catch { /* non-critical */ }
+                }
+              }
+              if (Object.keys(updates).length > 0) {
+                const { supabase } = await import('@/integrations/supabase/client');
+                await supabase
+                  .from('scraped_songs')
+                  .update(updates)
+                  .eq('artist', song.artist)
+                  .eq('title', song.title);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[DL-SVC] ID3 enrichment failed (non-critical):', e);
+        }
         
         // Clear failure tracker on success
         const failKey = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
