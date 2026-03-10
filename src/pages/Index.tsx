@@ -82,7 +82,7 @@ const TAB_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentTy
   export: ExportView,
   folders: FoldersView,
   missing: MissingView,
-  
+  librarybrowser: LibraryBrowserView,
   settings: SettingsView,
 };
 
