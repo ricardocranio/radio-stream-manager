@@ -192,7 +192,7 @@ function register({ getMainWindow, showNotification, safeHandle }) {
     }
   });
 
-  ipcMain.handle('cleanup-voz-brasil', async (event, params) => {
+  handle('cleanup-voz-brasil', async (event, params) => {
     const { folder, maxAgeDays } = params;
     try {
       if (!fs.existsSync(folder)) return { success: true, deletedCount: 0 };
