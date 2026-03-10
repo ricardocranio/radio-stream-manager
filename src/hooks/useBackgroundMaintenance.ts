@@ -3,7 +3,9 @@
  * 
  * Runs periodic tasks:
  * - AI song classification every 30 minutes
- * - Auto-purge blocked files from disk every 30 minutes (Electron only)
+ * - Auto-purge blocked files from disk every 12 hours (Electron only)
+ * - Auto-deduplicate music library every 24 hours (Electron only)
+ * - ARL validation every 1 hour
  * - History compression daily at 4:00 AM
  */
 
@@ -13,8 +15,9 @@ import { useRadioStore } from '@/store/radioStore';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 const CLASSIFY_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
-const PURGE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours — safety sweep only, blocked content is already filtered at download/grade level
+const PURGE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 const ARL_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const DEDUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const MAINTENANCE_CHECK_MS = 60 * 1000; // Check every minute
 
 export function useBackgroundMaintenance() {
