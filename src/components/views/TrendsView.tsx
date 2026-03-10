@@ -29,6 +29,7 @@ interface WeeklyReport {
   stationRanking: Array<{ station: string; count: number }>;
   genreDistribution: Array<{ genre: string; count: number }>;
   energyDistribution: Array<{ energy: string; count: number }>;
+  yearDistribution?: Array<{ year: string; count: number }>;
   stationGenres: Array<{ station: string; genres: Array<{ genre: string; count: number }> }>;
 }
 
