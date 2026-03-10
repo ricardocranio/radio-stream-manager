@@ -114,6 +114,11 @@ serve(async (req) => {
         .map(([genre, count]) => ({ genre, count })),
     }));
 
+    // 9. Year distribution (sorted by year)
+    const yearDistribution = Object.entries(yearCounts)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([year, count]) => ({ year, count }));
+
     const report = {
       generatedAt: new Date().toISOString(),
       period: { start: weekAgo, end: new Date().toISOString() },
@@ -129,6 +134,7 @@ serve(async (req) => {
       stationRanking,
       genreDistribution,
       energyDistribution,
+      yearDistribution,
       stationGenres,
     };
 
