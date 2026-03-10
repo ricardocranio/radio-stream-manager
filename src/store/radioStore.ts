@@ -452,7 +452,11 @@ export const useRadioStore = create<RadioState>()(
       missingSongs: [],
       setMissingSongs: (missingSongs) => set({ missingSongs }),
       addMissingSong: (song) =>
-        set((state) => ({ missingSongs: [...state.missingSongs, song] })),
+        set((state) => {
+          // Cap at 500 entries, trim oldest
+          const updated = [...state.missingSongs, song];
+          return { missingSongs: updated.length > 500 ? updated.slice(-500) : updated };
+        }),
       updateMissingSong: (id, updates) =>
         set((state) => ({
           missingSongs: state.missingSongs.map((s) =>
