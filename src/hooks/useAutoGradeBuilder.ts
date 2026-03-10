@@ -451,7 +451,7 @@ export function useAutoGradeBuilder() {
       try {
         const scrapedResult = await supabase
           .from('scraped_songs')
-          .select('title, artist, station_name, scraped_at')
+          .select('title, artist, station_name, scraped_at, ai_genre, ai_energy')
           .order('scraped_at', { ascending: false })
           .limit(3000);
         
