@@ -526,7 +526,7 @@ export async function selectSongForSlot(
       return 0;
     });
 
-    const smartP4Pool = applySmartScoring(styleFilteredPool, timeStr, selCtx.previousEnergy);
+    const smartP4Pool = applySmartScoring(styleFilteredPool, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
 
     const BATCH_SIZE = 60;
     const MAX_SCAN = 300; // avoid scanning the entire universe
