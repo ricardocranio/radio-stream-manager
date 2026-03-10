@@ -109,10 +109,18 @@ export function Id3ActivityCard() {
                 <p className="text-[9px] text-muted-foreground uppercase tracking-wide">ID3 Hoje</p>
               </div>
               {fixResult && (
-                <div>
-                  <p className="text-lg font-bold font-mono text-emerald-400 tabular-nums">{fixResult.renamed}</p>
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Renomeados</p>
-                </div>
+                <>
+                  <div>
+                    <p className="text-lg font-bold font-mono text-emerald-400 tabular-nums">{fixResult.renamed}</p>
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Renomeados</p>
+                  </div>
+                  {fixResult.purged > 0 && (
+                    <div>
+                      <p className="text-lg font-bold font-mono text-red-400 tabular-nums">{fixResult.purged}</p>
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Apagados</p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
