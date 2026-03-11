@@ -233,9 +233,37 @@ function register({ getMainWindow, showNotification, safeHandle }) {
                       if (frameId === 'TPE1' || frameId === 'TIT2') {
                         const encoding = frameData[0];
                         let text = '';
-                        if (encoding === 0) text = frameData.slice(1).toString('latin1').replace(/\0/g, '');
-                        else if (encoding === 1) text = frameData.slice(3).toString('utf16le').replace(/\0/g, '');
-                        else if (encoding === 3) text = frameData.slice(1).toString('utf8').replace(/\0/g, '');
+                        if (encoding === 0) {
+                          text = frameData.slice(1).toString('latin1').replace(/\0/g, '');
+                        } else if (encoding === 1) {
+                          // UTF-16 with BOM — detect byte order
+                          const bom1 = frameData[1], bom2 = frameData[2];
+                          if (bom1 === 0xFE && bom2 === 0xFF) {
+                            // Big-endian: swap bytes to read as utf16le
+                            const beData = frameData.slice(3);
+                            const swapped = Buffer.alloc(beData.length);
+                            for (let b = 0; b < beData.length - 1; b += 2) {
+                              swapped[b] = beData[b + 1];
+                              swapped[b + 1] = beData[b];
+                            }
+                            text = swapped.toString('utf16le').replace(/\0/g, '');
+                          } else {
+                            // Little-endian (FF FE) or missing BOM — default utf16le
+                            const startOffset = (bom1 === 0xFF && bom2 === 0xFE) ? 3 : 1;
+                            text = frameData.slice(startOffset).toString('utf16le').replace(/\0/g, '');
+                          }
+                        } else if (encoding === 2) {
+                          // UTF-16BE without BOM
+                          const beData = frameData.slice(1);
+                          const swapped = Buffer.alloc(beData.length);
+                          for (let b = 0; b < beData.length - 1; b += 2) {
+                            swapped[b] = beData[b + 1];
+                            swapped[b + 1] = beData[b];
+                          }
+                          text = swapped.toString('utf16le').replace(/\0/g, '');
+                        } else if (encoding === 3) {
+                          text = frameData.slice(1).toString('utf8').replace(/\0/g, '');
+                        }
                         if (frameId === 'TPE1') result.artist = text.trim();
                         if (frameId === 'TIT2') result.title = text.trim();
                       }
@@ -261,10 +289,29 @@ function register({ getMainWindow, showNotification, safeHandle }) {
                 .replace(/[<>:"/\\|?*]/g, '')
                 .replace(/\s+/g, ' ')
                 .trim();
-              const finalArtist = sanitizeForDisk(id3Artist || track.artist.name || artist);
-              const finalTitle = sanitizeForDisk(id3Title || track.title || title);
+
+              // Validation: reject ID3 text with unexpected characters (Ø, ø, ð, þ, etc.)
+              // These indicate encoding corruption and should NOT be used for filenames
+              const hasCorruptedChars = (str) => /[^\x20-\x7E\u00C0-\u024F\u1E00-\u1EFF]/.test(
+                str.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+              );
+
+              // Priority: Deezer API names > ID3 tags > original search params
+              // ID3 tags can have encoding corruption (e.g., Ø instead of o)
+              const safeId3Artist = id3Artist && !hasCorruptedChars(id3Artist) ? id3Artist : null;
+              const safeId3Title = id3Title && !hasCorruptedChars(id3Title) ? id3Title : null;
+              
+              // Prefer Deezer API (clean and reliable), fall back to validated ID3, then original params
+              const finalArtist = sanitizeForDisk(track.artist.name || safeId3Artist || artist);
+              const finalTitle = sanitizeForDisk(track.title || safeId3Title || title);
               const finalFilename = `${finalArtist} - ${finalTitle}.mp3`;
               const finalFilePath = path.join(finalOutputFolder, finalFilename);
+              
+              if (safeId3Artist !== id3Artist || safeId3Title !== id3Title) {
+                console.log(`[DEEMIX] ⚠️ ID3 tags had corrupted chars, using Deezer API names instead`);
+                console.log(`[DEEMIX]   ID3: "${id3Artist}" / "${id3Title}"`);
+                console.log(`[DEEMIX]   API: "${track.artist.name}" / "${track.title}"`);
+              }
               
               console.log(`[DEEMIX] 📛 Rename: "${validFile}" → "${finalFilename}"`);
               
