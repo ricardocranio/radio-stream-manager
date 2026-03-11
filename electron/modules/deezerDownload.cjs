@@ -289,10 +289,29 @@ function register({ getMainWindow, showNotification, safeHandle }) {
                 .replace(/[<>:"/\\|?*]/g, '')
                 .replace(/\s+/g, ' ')
                 .trim();
-              const finalArtist = sanitizeForDisk(id3Artist || track.artist.name || artist);
-              const finalTitle = sanitizeForDisk(id3Title || track.title || title);
+
+              // Validation: reject ID3 text with unexpected characters (Ø, ø, ð, þ, etc.)
+              // These indicate encoding corruption and should NOT be used for filenames
+              const hasCorruptedChars = (str) => /[^\x20-\x7E\u00C0-\u024F\u1E00-\u1EFF]/.test(
+                str.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+              );
+
+              // Priority: Deezer API names > ID3 tags > original search params
+              // ID3 tags can have encoding corruption (e.g., Ø instead of o)
+              const safeId3Artist = id3Artist && !hasCorruptedChars(id3Artist) ? id3Artist : null;
+              const safeId3Title = id3Title && !hasCorruptedChars(id3Title) ? id3Title : null;
+              
+              // Prefer Deezer API (clean and reliable), fall back to validated ID3, then original params
+              const finalArtist = sanitizeForDisk(track.artist.name || safeId3Artist || artist);
+              const finalTitle = sanitizeForDisk(track.title || safeId3Title || title);
               const finalFilename = `${finalArtist} - ${finalTitle}.mp3`;
               const finalFilePath = path.join(finalOutputFolder, finalFilename);
+              
+              if (safeId3Artist !== id3Artist || safeId3Title !== id3Title) {
+                console.log(`[DEEMIX] ⚠️ ID3 tags had corrupted chars, using Deezer API names instead`);
+                console.log(`[DEEMIX]   ID3: "${id3Artist}" / "${id3Title}"`);
+                console.log(`[DEEMIX]   API: "${track.artist.name}" / "${track.title}"`);
+              }
               
               console.log(`[DEEMIX] 📛 Rename: "${validFile}" → "${finalFilename}"`);
               
