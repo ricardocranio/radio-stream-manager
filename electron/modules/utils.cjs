@@ -7,6 +7,44 @@ function sanitizeFolderName(name) {
   return name.replace(/[<>:"/\\|?*]/g, '_').trim();
 }
 
+// Normalize raw metadata text from API/ID3 before sanitizing for disk
+function normalizeMetadataText(text, field = 'generic') {
+  if (!text) return '';
+
+  let result = String(text)
+    .replace(/\uFEFF/g, '')
+    .replace(/\0+/g, field === 'artist' ? ' feat ' : ' ')
+    .trim();
+
+  if (field === 'artist') {
+    // Turn multi-artist separators into something readable, but avoid breaking short names like AC/DC
+    result = result
+      .replace(
+        /([A-Za-zÀ-ÿ0-9&'.-]{3,}(?:\s+[A-Za-zÀ-ÿ0-9&'.-]{2,})*)\s*\/\s*([A-Za-zÀ-ÿ0-9&'.-]{3,}(?:\s+[A-Za-zÀ-ÿ0-9&'.-]{2,})*)/g,
+        '$1 feat $2'
+      )
+      .replace(/\s*(?:feat\.?|ft\.?)\s*/gi, ' feat ')
+      .replace(/\s*[;|]+\s*/g, ' feat ');
+  } else {
+    result = result.replace(/\s*[|]+\s*/g, ' ');
+  }
+
+  return result.replace(/\s+/g, ' ').trim();
+}
+
+function sanitizeForDisk(text, field = 'generic') {
+  const normalized = normalizeMetadataText(text, field);
+  if (!normalized) return '';
+
+  return normalized
+    .replace(/&/g, 'e')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[<>:"/\\|?*]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Normalize text for file matching (remove accents, special chars, etc.)
 function normalizeText(text) {
   return text
@@ -118,10 +156,12 @@ function parseID3TagsFromFile(filePath) {
           } else if (encoding === 3) {
             text = frameData.slice(1).toString('utf8').replace(/\0/g, ' ');
           }
+
           const normalizedText = normalizeMetadataText(
             text.trim(),
             frameId === 'TPE1' ? 'artist' : frameId === 'TIT2' ? 'title' : 'generic'
           );
+
           if (frameId === 'TPE1') result.artist = normalizedText;
           if (frameId === 'TIT2') result.title = normalizedText;
           if (frameId === 'TCON') result.genre = normalizedText;
@@ -202,6 +242,8 @@ function cleanupPartialFiles(folder, filesBefore) {
 
 module.exports = {
   sanitizeFolderName,
+  normalizeMetadataText,
+  sanitizeForDisk,
   normalizeText,
   stripParenthetical,
   cleanNormalize,

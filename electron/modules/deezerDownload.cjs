@@ -230,20 +230,14 @@ function register({ getMainWindow, showNotification, safeHandle }) {
                 .replace(/\s+/g, ' ')
                 .trim();
 
-              // Validation: reject ID3 text with unexpected characters (Ø, ø, ð, þ, etc.)
-              // These indicate encoding corruption and should NOT be used for filenames
-              const hasCorruptedChars = (str) => /[^\x20-\x7E\u00C0-\u024F\u1E00-\u1EFF]/.test(
-                str.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-              );
-
               // Priority: Deezer API names > ID3 tags > original search params
               // ID3 tags can have encoding corruption (e.g., Ø instead of o)
               const safeId3Artist = id3Artist && !hasCorruptedChars(id3Artist) ? id3Artist : null;
               const safeId3Title = id3Title && !hasCorruptedChars(id3Title) ? id3Title : null;
               
-              // Prefer Deezer API (clean and reliable), fall back to validated ID3, then original params
-              const finalArtist = sanitizeForDisk(track.artist.name || safeId3Artist || artist);
-              const finalTitle = sanitizeForDisk(track.title || safeId3Title || title);
+              // Use shared disk sanitization so separators don't get collapsed together
+              const finalArtist = sanitizeForDisk(track.artist.name || safeId3Artist || artist, 'artist');
+              const finalTitle = sanitizeForDisk(track.title || safeId3Title || title, 'title');
               const finalFilename = `${finalArtist} - ${finalTitle}.mp3`;
               const finalFilePath = path.join(finalOutputFolder, finalFilename);
               

@@ -197,7 +197,7 @@ export function useGlobalDownloadService() {
         }
         
         useRadioStore.getState().updateMissingSong(song.id, { status: 'downloaded' });
-        markSongAsDownloaded(song.artist, song.title, result.output);
+        markSongAsDownloaded(song.artist, song.title, result.verifiedFile);
 
         // === Enrich ID3 metadata (BPM + Genre) after download ===
         try {

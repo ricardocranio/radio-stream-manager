@@ -201,14 +201,21 @@ function register({ getMainWindow, safeHandle }) {
               }
 
               // Has tags → attempt rename if needed
-              const sanitizeForDisk = (str) => str
-                .replace(/&/g, 'e')
-                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-                .replace(/[<>:"/\\|?*]/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-              const sanitizedArtist = sanitizeForDisk(tags.artist);
-              const sanitizedTitle = sanitizeForDisk(tags.title);
+              if (!tags.artist || !tags.title) {
+                results.skipped++;
+                results.details.push({ old: item.name, new: '', status: 'skip-incomplete-id3' });
+                continue;
+              }
+
+              const sanitizedArtist = sanitizeForDisk(tags.artist, 'artist');
+              const sanitizedTitle = sanitizeForDisk(tags.title, 'title');
+
+              if (!sanitizedArtist || !sanitizedTitle) {
+                results.skipped++;
+                results.details.push({ old: item.name, new: '', status: 'skip-invalid-id3' });
+                continue;
+              }
+
               const correctName = `${sanitizedArtist} - ${sanitizedTitle}.mp3`;
               if (item.name === correctName) { results.skipped++; continue; }
               const newPath = path.join(folder, correctName);

@@ -115,7 +115,7 @@ export function useCapturedDownloadService() {
       const duration = Date.now() - startTime;
 
       if (result?.success) {
-        markSongAsDownloaded(song.artist, song.title, result.output);
+        markSongAsDownloaded(song.artist, song.title, result.verifiedFile);
 
         // Read ID3 genre from downloaded file and update DB
         try {
