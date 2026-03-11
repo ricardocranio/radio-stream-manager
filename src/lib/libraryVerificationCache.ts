@@ -89,6 +89,14 @@ export function clearVerificationCache(): void {
 }
 
 /**
+ * Clear cache for a specific song (e.g., after JIT download so recheck goes to disk)
+ */
+export function clearVerificationForSong(artist: string, title: string): void {
+  const key = generateKey(artist, title);
+  cache.delete(key);
+}
+
+/**
  * Get cache statistics
  */
 export function getCacheStats(): { size: number; hitRate: string } {
