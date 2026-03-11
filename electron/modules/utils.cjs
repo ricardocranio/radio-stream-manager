@@ -91,7 +91,30 @@ function parseID3TagsFromFile(filePath) {
           if (encoding === 0) {
             text = frameData.slice(1).toString('latin1').replace(/\0/g, '');
           } else if (encoding === 1) {
-            text = frameData.slice(3).toString('utf16le').replace(/\0/g, '');
+            // UTF-16 with BOM — detect byte order
+            const bom1 = frameData[1], bom2 = frameData[2];
+            if (bom1 === 0xFE && bom2 === 0xFF) {
+              // Big-endian: swap bytes
+              const beData = frameData.slice(3);
+              const swapped = Buffer.alloc(beData.length);
+              for (let b = 0; b < beData.length - 1; b += 2) {
+                swapped[b] = beData[b + 1];
+                swapped[b + 1] = beData[b];
+              }
+              text = swapped.toString('utf16le').replace(/\0/g, '');
+            } else {
+              const startOffset = (bom1 === 0xFF && bom2 === 0xFE) ? 3 : 1;
+              text = frameData.slice(startOffset).toString('utf16le').replace(/\0/g, '');
+            }
+          } else if (encoding === 2) {
+            // UTF-16BE without BOM
+            const beData = frameData.slice(1);
+            const swapped = Buffer.alloc(beData.length);
+            for (let b = 0; b < beData.length - 1; b += 2) {
+              swapped[b] = beData[b + 1];
+              swapped[b + 1] = beData[b];
+            }
+            text = swapped.toString('utf16le').replace(/\0/g, '');
           } else if (encoding === 3) {
             text = frameData.slice(1).toString('utf8').replace(/\0/g, '');
           }
