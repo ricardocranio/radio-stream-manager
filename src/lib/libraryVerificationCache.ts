@@ -106,14 +106,16 @@ export function getCacheStats(): { size: number; hitRate: string } {
   };
 }
 
-/**
- * Mark a song as downloaded (update cache to exists=true)
- */
 export function markSongAsDownloaded(artist: string, title: string, filename?: string): void {
+  const safeFilename =
+    typeof filename === 'string' && /\.(mp3|flac|wav|ogg|m4a)$/i.test(filename.trim())
+      ? filename.trim()
+      : undefined;
+
   const key = generateKey(artist, title);
   cache.set(key, {
     exists: true,
-    matchedFile: filename,
+    matchedFile: safeFilename,
     similarity: 1.0,
     timestamp: Date.now(),
   });

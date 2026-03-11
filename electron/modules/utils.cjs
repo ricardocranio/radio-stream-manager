@@ -7,6 +7,44 @@ function sanitizeFolderName(name) {
   return name.replace(/[<>:"/\\|?*]/g, '_').trim();
 }
 
+// Normalize raw metadata text from API/ID3 before sanitizing for disk
+function normalizeMetadataText(text, field = 'generic') {
+  if (!text) return '';
+
+  let result = String(text)
+    .replace(/\uFEFF/g, '')
+    .replace(/\0+/g, field === 'artist' ? ' feat ' : ' ')
+    .trim();
+
+  if (field === 'artist') {
+    // Turn multi-artist separators into something readable, but avoid breaking short names like AC/DC
+    result = result
+      .replace(
+        /([A-Za-zÀ-ÿ0-9&'.-]{3,}(?:\s+[A-Za-zÀ-ÿ0-9&'.-]{2,})*)\s*\/\s*([A-Za-zÀ-ÿ0-9&'.-]{3,}(?:\s+[A-Za-zÀ-ÿ0-9&'.-]{2,})*)/g,
+        '$1 feat $2'
+      )
+      .replace(/\s*(?:feat\.?|ft\.?)\s*/gi, ' feat ')
+      .replace(/\s*[;|]+\s*/g, ' feat ');
+  } else {
+    result = result.replace(/\s*[|]+\s*/g, ' ');
+  }
+
+  return result.replace(/\s+/g, ' ').trim();
+}
+
+function sanitizeForDisk(text, field = 'generic') {
+  const normalized = normalizeMetadataText(text, field);
+  if (!normalized) return '';
+
+  return normalized
+    .replace(/&/g, 'e')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[<>:"/\\|?*]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Normalize text for file matching (remove accents, special chars, etc.)
 function normalizeText(text) {
   return text
@@ -89,7 +127,7 @@ function parseID3TagsFromFile(filePath) {
           const encoding = frameData[0];
           let text = '';
           if (encoding === 0) {
-            text = frameData.slice(1).toString('latin1').replace(/\0/g, '');
+            text = frameData.slice(1).toString('latin1').replace(/\0/g, ' ');
           } else if (encoding === 1) {
             // UTF-16 with BOM — detect byte order
             const bom1 = frameData[1], bom2 = frameData[2];
@@ -101,10 +139,10 @@ function parseID3TagsFromFile(filePath) {
                 swapped[b] = beData[b + 1];
                 swapped[b + 1] = beData[b];
               }
-              text = swapped.toString('utf16le').replace(/\0/g, '');
+              text = swapped.toString('utf16le').replace(/\0/g, ' ');
             } else {
               const startOffset = (bom1 === 0xFF && bom2 === 0xFE) ? 3 : 1;
-              text = frameData.slice(startOffset).toString('utf16le').replace(/\0/g, '');
+              text = frameData.slice(startOffset).toString('utf16le').replace(/\0/g, ' ');
             }
           } else if (encoding === 2) {
             // UTF-16BE without BOM
@@ -114,16 +152,22 @@ function parseID3TagsFromFile(filePath) {
               swapped[b] = beData[b + 1];
               swapped[b + 1] = beData[b];
             }
-            text = swapped.toString('utf16le').replace(/\0/g, '');
+            text = swapped.toString('utf16le').replace(/\0/g, ' ');
           } else if (encoding === 3) {
-            text = frameData.slice(1).toString('utf8').replace(/\0/g, '');
+            text = frameData.slice(1).toString('utf8').replace(/\0/g, ' ');
           }
-          if (frameId === 'TPE1') result.artist = text.trim();
-          if (frameId === 'TIT2') result.title = text.trim();
-          if (frameId === 'TCON') result.genre = text.trim();
-          if (frameId === 'TBPM') result.bpm = text.trim();
+
+          const normalizedText = normalizeMetadataText(
+            text.trim(),
+            frameId === 'TPE1' ? 'artist' : frameId === 'TIT2' ? 'title' : 'generic'
+          );
+
+          if (frameId === 'TPE1') result.artist = normalizedText;
+          if (frameId === 'TIT2') result.title = normalizedText;
+          if (frameId === 'TCON') result.genre = normalizedText;
+          if (frameId === 'TBPM') result.bpm = normalizedText;
           if (frameId === 'TDRC' || frameId === 'TYER') {
-            const yearMatch = text.trim().match(/^(\d{4})/);
+            const yearMatch = normalizedText.match(/^(\d{4})/);
             if (yearMatch) result.year = yearMatch[1];
           }
         }
@@ -198,6 +242,8 @@ function cleanupPartialFiles(folder, filesBefore) {
 
 module.exports = {
   sanitizeFolderName,
+  normalizeMetadataText,
+  sanitizeForDisk,
   normalizeText,
   stripParenthetical,
   cleanNormalize,
