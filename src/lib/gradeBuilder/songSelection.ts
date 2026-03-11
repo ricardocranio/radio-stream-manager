@@ -63,10 +63,10 @@ async function tryDownloadAndWait(
 
     if (result && typeof result === 'object' && 'success' in result && result.success) {
       console.log(`[SONG-SELECT] ✅ Download concluído a tempo: ${artist} - ${title}`);
-      // Update cache so findSongInLibrary picks it up
-      const { markSongAsDownloaded } = await import('@/lib/libraryVerificationCache');
-      const safeFilename = (result as any).verifiedFile || `${artist} - ${title}.mp3`;
-      markSongAsDownloaded(artist, title, safeFilename);
+      // Clear cache so recheck goes to disk and gets the REAL filename
+      // Do NOT cache a fabricated filename here — the recheck will do a proper disk lookup
+      const { clearVerificationForSong } = await import('@/lib/libraryVerificationCache');
+      clearVerificationForSong(artist, title);
       return true;
     }
 
