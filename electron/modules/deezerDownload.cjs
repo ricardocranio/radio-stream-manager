@@ -214,74 +214,14 @@ function register({ getMainWindow, showNotification, safeHandle }) {
               let id3Title = null;
               
               try {
-                const buf = Buffer.alloc(4096);
-                const fd = fs.openSync(tempFilePath, 'r');
-                fs.readSync(fd, buf, 0, 4096, 0);
-                fs.closeSync(fd);
-                
-                if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) {
-                  const parseID3Frames = (buffer, headerSize) => {
-                    let offset = 10;
-                    const result = {};
-                    while (offset < headerSize - 10) {
-                      const frameId = buffer.slice(offset, offset + 4).toString('ascii');
-                      if (frameId === '\x00\x00\x00\x00') break;
-                      const frameSize = (buffer[offset+4] << 24) | (buffer[offset+5] << 16) | (buffer[offset+6] << 8) | buffer[offset+7];
-                      if (frameSize <= 0 || frameSize > headerSize) break;
-                      const frameData = buffer.slice(offset + 10, offset + 10 + frameSize);
-                      
-                      if (frameId === 'TPE1' || frameId === 'TIT2') {
-                        const encoding = frameData[0];
-                        let text = '';
-                        if (encoding === 0) {
-                          text = frameData.slice(1).toString('latin1').replace(/\0/g, '');
-                        } else if (encoding === 1) {
-                          // UTF-16 with BOM — detect byte order
-                          const bom1 = frameData[1], bom2 = frameData[2];
-                          if (bom1 === 0xFE && bom2 === 0xFF) {
-                            // Big-endian: swap bytes to read as utf16le
-                            const beData = frameData.slice(3);
-                            const swapped = Buffer.alloc(beData.length);
-                            for (let b = 0; b < beData.length - 1; b += 2) {
-                              swapped[b] = beData[b + 1];
-                              swapped[b + 1] = beData[b];
-                            }
-                            text = swapped.toString('utf16le').replace(/\0/g, '');
-                          } else {
-                            // Little-endian (FF FE) or missing BOM — default utf16le
-                            const startOffset = (bom1 === 0xFF && bom2 === 0xFE) ? 3 : 1;
-                            text = frameData.slice(startOffset).toString('utf16le').replace(/\0/g, '');
-                          }
-                        } else if (encoding === 2) {
-                          // UTF-16BE without BOM
-                          const beData = frameData.slice(1);
-                          const swapped = Buffer.alloc(beData.length);
-                          for (let b = 0; b < beData.length - 1; b += 2) {
-                            swapped[b] = beData[b + 1];
-                            swapped[b + 1] = beData[b];
-                          }
-                          text = swapped.toString('utf16le').replace(/\0/g, '');
-                        } else if (encoding === 3) {
-                          text = frameData.slice(1).toString('utf8').replace(/\0/g, '');
-                        }
-                        if (frameId === 'TPE1') result.artist = text.trim();
-                        if (frameId === 'TIT2') result.title = text.trim();
-                      }
-                      offset += 10 + frameSize;
-                    }
-                    return result;
-                  };
-                  
-                  const id3Size = ((buf[6] & 0x7F) << 21) | ((buf[7] & 0x7F) << 14) | ((buf[8] & 0x7F) << 7) | (buf[9] & 0x7F);
-                  const tags = parseID3Frames(buf, Math.min(id3Size + 10, 4096));
-                  if (tags.artist) id3Artist = tags.artist;
-                  if (tags.title) id3Title = tags.title;
-                  console.log(`[DEEMIX] 🏷️ ID3 Tags: Artist="${id3Artist || '?'}", Title="${id3Title || '?'}"`);
-                }
+                const tags = parseID3TagsFromFile(tempFilePath);
+                id3Artist = tags.artist || null;
+                id3Title = tags.title || null;
+                console.log(`[DEEMIX] 🏷️ ID3 Tags: Artist="${id3Artist || '?'}", Title="${id3Title || '?'}"`);
               } catch (tagErr) {
                 console.warn(`[DEEMIX] ⚠️ Could not read ID3 tags: ${tagErr.message}`);
               }
-              
+
               // Sanitize: remove filesystem chars, accents, & → e
               const sanitizeForDisk = (str) => str
                 .replace(/&/g, 'e')
