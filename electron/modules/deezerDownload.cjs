@@ -233,9 +233,37 @@ function register({ getMainWindow, showNotification, safeHandle }) {
                       if (frameId === 'TPE1' || frameId === 'TIT2') {
                         const encoding = frameData[0];
                         let text = '';
-                        if (encoding === 0) text = frameData.slice(1).toString('latin1').replace(/\0/g, '');
-                        else if (encoding === 1) text = frameData.slice(3).toString('utf16le').replace(/\0/g, '');
-                        else if (encoding === 3) text = frameData.slice(1).toString('utf8').replace(/\0/g, '');
+                        if (encoding === 0) {
+                          text = frameData.slice(1).toString('latin1').replace(/\0/g, '');
+                        } else if (encoding === 1) {
+                          // UTF-16 with BOM — detect byte order
+                          const bom1 = frameData[1], bom2 = frameData[2];
+                          if (bom1 === 0xFE && bom2 === 0xFF) {
+                            // Big-endian: swap bytes to read as utf16le
+                            const beData = frameData.slice(3);
+                            const swapped = Buffer.alloc(beData.length);
+                            for (let b = 0; b < beData.length - 1; b += 2) {
+                              swapped[b] = beData[b + 1];
+                              swapped[b + 1] = beData[b];
+                            }
+                            text = swapped.toString('utf16le').replace(/\0/g, '');
+                          } else {
+                            // Little-endian (FF FE) or missing BOM — default utf16le
+                            const startOffset = (bom1 === 0xFF && bom2 === 0xFE) ? 3 : 1;
+                            text = frameData.slice(startOffset).toString('utf16le').replace(/\0/g, '');
+                          }
+                        } else if (encoding === 2) {
+                          // UTF-16BE without BOM
+                          const beData = frameData.slice(1);
+                          const swapped = Buffer.alloc(beData.length);
+                          for (let b = 0; b < beData.length - 1; b += 2) {
+                            swapped[b] = beData[b + 1];
+                            swapped[b + 1] = beData[b];
+                          }
+                          text = swapped.toString('utf16le').replace(/\0/g, '');
+                        } else if (encoding === 3) {
+                          text = frameData.slice(1).toString('utf8').replace(/\0/g, '');
+                        }
                         if (frameId === 'TPE1') result.artist = text.trim();
                         if (frameId === 'TIT2') result.title = text.trim();
                       }
