@@ -293,7 +293,8 @@ export function useAutoGradeBuilder() {
 
   const findSongInLibrary = useCallback(async (artist: string, title: string) => {
     const cached = getCachedVerification(artist, title);
-    if (cached) {
+    if (cached && cached.matchedFile) {
+      // Only use cache if it has a real filename — otherwise recheck disk
       return { exists: cached.exists, filename: cached.matchedFile };
     }
 
