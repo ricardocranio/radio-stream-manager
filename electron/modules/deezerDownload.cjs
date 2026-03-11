@@ -3,7 +3,7 @@ const { ipcMain, shell } = require('electron');
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { sanitizeFolderName, checkFileExistsInSubfolders, cleanupPartialFiles } = require('./utils.cjs');
+const { sanitizeFolderName, checkFileExistsInSubfolders, cleanupPartialFiles, parseID3TagsFromFile, sanitizeForDisk } = require('./utils.cjs');
 const deemixModule = require('./deemix.cjs');
 
 let _getMainWindow = null;

@@ -2,7 +2,7 @@
 const { ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { sanitizeFolderName, parseID3TagsFromFile } = require('./utils.cjs');
+const { sanitizeFolderName, parseID3TagsFromFile, sanitizeForDisk } = require('./utils.cjs');
 
 let _getMainWindow = null;
 
