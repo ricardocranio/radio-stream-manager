@@ -787,7 +787,8 @@ export async function handleSpecialSequenceType(
           station: 'TOP50', style: rankSong.style,
           reason: `TOP50 posição ${sortedRanking.indexOf(rankSong) + 1}`,
         });
-        return `"${correctFilename}"`;
+        const sanitizedFilename = await ensureFileRenamedOnDisk(correctFilename, ctx.musicFolders, ctx.filterChars);
+        return `"${sanitizedFilename}"`;
       }
     }
     logs.push({
