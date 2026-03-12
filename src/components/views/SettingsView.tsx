@@ -616,9 +616,11 @@ export function SettingsView() {
                       try {
                         const selectedFolder = await window.electronAPI.selectFolder();
                         if (selectedFolder) {
-                          const newFolders = [...localConfig.musicFolders];
-                          newFolders[index] = selectedFolder;
-                          setLocalConfig((prev) => ({ ...prev, musicFolders: newFolders }));
+                          setLocalConfig((prev) => {
+                            const newFolders = [...prev.musicFolders];
+                            newFolders[index] = selectedFolder;
+                            return { ...prev, musicFolders: newFolders };
+                          });
                           toast({
                             title: '📁 Pasta selecionada',
                             description: selectedFolder,
