@@ -1557,7 +1557,7 @@ export function useAutoGradeBuilder() {
       const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
       const targetDay = dayMap[new Date().getDay()];
       const dayCode = getDayCode(targetDay);
-      const filename = `${dayCode}.txt`;
+      const filename = `${dayCode.toUpperCase()}.txt`;
 
       // If forceRegenerate (manual refresh), clear locks so blocks are rebuilt
       if (forceRegenerate) {
