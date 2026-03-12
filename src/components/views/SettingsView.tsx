@@ -649,9 +649,17 @@ export function SettingsView() {
                   size="icon"
                   className="text-destructive hover:text-destructive"
                   onClick={() => {
-                    if (localConfig.musicFolders.length > 1) {
-                      const newFolders = localConfig.musicFolders.filter((_, i) => i !== index);
-                      setLocalConfig((prev) => ({ ...prev, musicFolders: newFolders }));
+                    setLocalConfig((prev) => {
+                      if (prev.musicFolders.length > 1) {
+                        return { ...prev, musicFolders: prev.musicFolders.filter((_, i) => i !== index) };
+                      }
+                      toast({
+                        title: 'Mínimo de 1 pasta',
+                        description: 'Você precisa ter pelo menos uma pasta configurada.',
+                        variant: 'destructive',
+                      });
+                      return prev;
+                    });
                     } else {
                       toast({
                         title: 'Mínimo de 1 pasta',
