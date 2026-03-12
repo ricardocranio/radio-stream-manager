@@ -1353,7 +1353,7 @@ export function useAutoGradeBuilder() {
     
     const blockMinutes = (finalDurationSec / 60).toFixed(1);
     const durationStatus = finalDurationSec >= MIN_BLOCK_DURATION_SEC ? '✅' : '⚠️';
-    console.log(`[AUTO-GRADE] ⏱️ ${durationStatus} Bloco ${timeStr}: ${songs.length} músicas (seq=${sequenceLength}, max=${maxTotalSongs}), ${allContent.length} itens total, ${blockMinutes} min (alvo: 29-32 min)`);
+    console.log(`[AUTO-GRADE] ⏱️ ${durationStatus} Bloco ${timeStr}: ${songs.length} músicas (seq=${sequenceLength}), ${allContent.length} itens total, ${blockMinutes} min (alvo: 29-32 min)`);
 
     const lineContent = allContent.join(',vht,');
     return {
