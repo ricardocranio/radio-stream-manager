@@ -41,7 +41,7 @@ const dayMap: Record<string, string> = {
   'QUA': 'Quarta-feira',
   'QUI': 'Quinta-feira',
   'SEX': 'Sexta-feira',
-  'SAB': 'Sábado',
+  'SÁB': 'Sábado',
   'DOM': 'Domingo',
 };
 
