@@ -1236,26 +1236,46 @@ export function useAutoGradeBuilder() {
       return null;
     };
 
-    // === PHASE 1: Follow the sequence exactly (1 full cycle) ===
-    // The sequence defines the structure — respect it completely first.
+    // === PHASE 1: Follow the sequence but STOP when approaching max duration ===
+    // Each block MUST stay between 29-32 minutes. Stop adding songs near the ceiling.
     const sequenceLength = activeSequence.length;
     for (let i = 0; i < sequenceLength; i++) {
+      // HARD STOP: if we've already hit max duration, stop adding songs
+      if (accumulatedDurationSec >= MAX_BLOCK_DURATION_SEC) {
+        console.log(`[AUTO-GRADE] 🛑 Bloco ${timeStr}: parou na posição ${i}/${sequenceLength} — já atingiu ${(accumulatedDurationSec / 60).toFixed(1)} min (max 32)`);
+        break;
+      }
+
       const seq = activeSequence[i];
 
       // Try special sequence types first
       const specialResult = await handleSpecialSequenceType(seq, hour, minute, selCtx, ctx, targetDay);
       if (specialResult !== null) {
-        songs.push(specialResult);
         const dur = await getSongDuration(specialResult);
-        accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
+        const projectedTotal = accumulatedDurationSec + dur + (songs.length > 0 ? VHT_DURATION_SEC : 0);
+        // Don't add if it would push past max (allow small 30s grace)
+        if (projectedTotal > MAX_BLOCK_DURATION_SEC + 30) {
+          console.log(`[AUTO-GRADE] ⏸️ Bloco ${timeStr}: música especial pulada na pos ${i} — ultrapassaria ${(projectedTotal / 60).toFixed(1)} min`);
+          break;
+        }
+        songs.push(specialResult);
+        accumulatedDurationSec = projectedTotal;
         continue;
       }
 
       // Normal station selection (P0-P6)
       const songStr = await selectSongForSlot(seq, selCtx, ctx);
-      songs.push(songStr);
       const dur = await getSongDuration(songStr);
-      accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
+      const projectedTotal = accumulatedDurationSec + dur + (songs.length > 0 ? VHT_DURATION_SEC : 0);
+      
+      // Don't add if it would push past max (allow small 30s grace)
+      if (projectedTotal > MAX_BLOCK_DURATION_SEC + 30) {
+        console.log(`[AUTO-GRADE] ⏸️ Bloco ${timeStr}: parou na posição ${i}/${sequenceLength} — próxima música levaria a ${(projectedTotal / 60).toFixed(1)} min`);
+        break;
+      }
+      
+      songs.push(songStr);
+      accumulatedDurationSec = projectedTotal;
     }
 
     // === PHASE 2: Duration adjustment by REPLACING with different artist-song (same station) ===
