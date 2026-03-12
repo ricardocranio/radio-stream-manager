@@ -2,7 +2,8 @@
  * Library Verification Cache
  * 
  * Caches results of song library verification to avoid redundant checks.
- * Cache expires after 5 minutes to account for new downloads.
+ * Persists to localStorage so cache survives app reload.
+ * Cache expires after 3 minutes to account for new downloads.
  */
 
 interface CacheEntry {
@@ -13,7 +14,37 @@ interface CacheEntry {
 }
 
 const CACHE_TTL = 3 * 60 * 1000; // 3 minutes
+const STORAGE_KEY = 'pgmr_lib_cache';
+const MAX_CACHE_SIZE = 500;
 const cache = new Map<string, CacheEntry>();
+
+// Load persisted cache on module init
+try {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored) {
+    const entries: [string, CacheEntry][] = JSON.parse(stored);
+    const now = Date.now();
+    for (const [key, entry] of entries) {
+      if (now - entry.timestamp < CACHE_TTL) {
+        cache.set(key, entry);
+      }
+    }
+    console.log(`[CACHE] Restored ${cache.size} entries from disk`);
+  }
+} catch { /* ignore parse errors */ }
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function schedulePersist(): void {
+  if (persistTimer) return;
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    try {
+      const entries = Array.from(cache.entries()).slice(-MAX_CACHE_SIZE);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    } catch { /* storage full — ignore */ }
+  }, 2000); // debounce 2s
+}
 
 /**
  * Generate a cache key from artist and title
