@@ -1258,20 +1258,26 @@ export function useAutoGradeBuilder() {
       accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
     }
 
-    // === PHASE 2: Duration adjustment by SWAPPING songs (same station) ===
-    // Instead of adding extras, swap existing songs for longer/shorter alternatives
-    // from the SAME station to reach the 29-32 min target.
+    // === PHASE 2: Duration adjustment by REPLACING with different artist-song (same station) ===
+    // If block is short, replace the shortest song with a longer one from the same station.
+    // This picks a completely DIFFERENT artist+title, not a "version" of the same song.
     const durationGapSec = MIN_BLOCK_DURATION_SEC - accumulatedDurationSec;
     
     if (durationGapSec > 0) {
-      console.log(`[AUTO-GRADE] 🔄 Bloco ${timeStr} abaixo do alvo por ${(durationGapSec / 60).toFixed(1)} min — tentando trocar músicas por versões mais longas`);
+      console.log(`[AUTO-GRADE] 🔄 Bloco ${timeStr} abaixo do alvo por ${(durationGapSec / 60).toFixed(1)} min — tentando substituir músicas curtas por outras mais longas da mesma emissora`);
       
-      // Try swapping songs for longer alternatives from same station
-      for (let swapIdx = 0; swapIdx < songs.length && accumulatedDurationSec < MIN_BLOCK_DURATION_SEC; swapIdx++) {
-        const currentSong = songs[swapIdx];
-        const currentDur = await getSongDuration(currentSong);
+      // Build list of songs with their durations and sort by shortest first
+      const songDurations: Array<{ idx: number; dur: number; song: string }> = [];
+      for (let si = 0; si < songs.length; si++) {
+        const dur = await getSongDuration(songs[si]);
+        songDurations.push({ idx: si, dur, song: songs[si] });
+      }
+      songDurations.sort((a, b) => a.dur - b.dur); // shortest first
+      
+      // Try replacing shortest songs first with longer alternatives
+      for (const { idx: swapIdx, dur: currentDur } of songDurations) {
+        if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
         
-        // Find which station this song came from (via sequence position)
         const seqEntry = swapIdx < activeSequence.length ? activeSequence[swapIdx] : null;
         if (!seqEntry) continue;
         
@@ -1279,11 +1285,14 @@ export function useAutoGradeBuilder() {
         const resolvedName = Object.entries(STATION_ID_TO_DB_NAME).find(([k]) => k === stationName)?.[1] || stationName;
         const pool = songsByStation[resolvedName] || songsByStation[stationName] || [];
         
-        // Look for a longer song from the same station
+        // Find best candidate: different artist, longer duration, from same station
+        let bestCandidate: { file: string; dur: number; title: string; artist: string } | null = null;
+        
         for (const candidate of pool) {
           const key = `${candidate.title.toLowerCase().trim()}-${candidate.artist.toLowerCase().trim()}`;
           if (usedInBlock.has(key)) continue;
           if (usedArtistsInBlock.has(candidate.artist.toLowerCase().trim())) continue;
+          if (isRecentlyUsed(candidate.title, candidate.artist, timeStr)) continue;
           
           const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
           if (!libraryResult.exists) continue;
@@ -1291,25 +1300,32 @@ export function useAutoGradeBuilder() {
           const candidateFile = `"${libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`)}"`;
           const candidateDur = await getSongDuration(candidateFile);
           
-          // Only swap if the candidate is meaningfully longer (>15s difference)
-          if (candidateDur > currentDur + 15) {
-            const durDiff = candidateDur - currentDur;
-            console.log(`[AUTO-GRADE] 🔄 Troca pos ${swapIdx}: ${currentSong} (${(currentDur/60).toFixed(1)}min) → ${candidateFile} (${(candidateDur/60).toFixed(1)}min) [+${(durDiff/60).toFixed(1)}min]`);
-            
-            // Remove old key from used set (extract from quoted filename)
-            songs[swapIdx] = candidateFile;
-            usedInBlock.add(key);
-            usedArtistsInBlock.add(candidate.artist.toLowerCase().trim());
-            markSongAsUsed(candidate.title, candidate.artist, timeStr);
-            accumulatedDurationSec += durDiff;
-            
-            blockLogs.push({
-              blockTime: timeStr, type: 'substituted',
-              title: candidate.title, artist: candidate.artist,
-              station: stationName, reason: `Troca por duração (+${(durDiff/60).toFixed(1)} min)`,
-            });
-            break; // One swap per position
+          // Accept if candidate is longer than current song
+          if (candidateDur > currentDur + 10) {
+            if (!bestCandidate || candidateDur > bestCandidate.dur) {
+              bestCandidate = { file: candidateFile, dur: candidateDur, title: candidate.title, artist: candidate.artist };
+            }
+            // Take first good match to avoid excessive IPC
+            if (bestCandidate) break;
           }
+        }
+        
+        if (bestCandidate) {
+          const durDiff = bestCandidate.dur - currentDur;
+          console.log(`[AUTO-GRADE] 🔄 Substituição pos ${swapIdx}: "${songs[swapIdx]}" (${(currentDur/60).toFixed(1)}min) → "${bestCandidate.file}" (${(bestCandidate.dur/60).toFixed(1)}min) [+${(durDiff/60).toFixed(1)}min]`);
+          
+          songs[swapIdx] = bestCandidate.file;
+          const newKey = `${bestCandidate.title.toLowerCase().trim()}-${bestCandidate.artist.toLowerCase().trim()}`;
+          usedInBlock.add(newKey);
+          usedArtistsInBlock.add(bestCandidate.artist.toLowerCase().trim());
+          markSongAsUsed(bestCandidate.title, bestCandidate.artist, timeStr);
+          accumulatedDurationSec += durDiff;
+          
+          blockLogs.push({
+            blockTime: timeStr, type: 'substituted',
+            title: bestCandidate.title, artist: bestCandidate.artist,
+            station: stationName, reason: `Substituição por música mais longa (+${(durDiff/60).toFixed(1)} min)`,
+          });
         }
       }
     }
