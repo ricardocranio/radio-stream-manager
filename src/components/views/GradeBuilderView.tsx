@@ -408,7 +408,7 @@ export function GradeBuilderView() {
     // Insert fixed content
     let allContent = [...blockSongs];
     if (fixedItem) {
-      const dayNames = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO'];
+      const dayNames = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SABADO'];
       const dayName = dayNames[new Date().getDay()];
       let fileName = fixedItem.fileName
         .replace(/\{HH\}/gi, hour.toString().padStart(2, '0'))
