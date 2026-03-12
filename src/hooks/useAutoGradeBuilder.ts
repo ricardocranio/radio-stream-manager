@@ -1940,8 +1940,8 @@ export function useAutoGradeBuilder() {
           console.log(`[AUTO-GRADE] 🔓 Ciclo ${lastBuiltBlock || 'inicial'} → ${blockKey}, destravando próximo bloco`);
           builtBlocksRef.current.delete(blockKey);
           lastBuiltBlock = blockKey;
-          console.log(`[AUTO-GRADE] 🔄 Montando grade em memória para bloco ${blockKey} (silencioso)`);
-          await buildGrade(false);
+          console.log(`[AUTO-GRADE] 🔄 Montando grade em memória para bloco ${blockKey} (silencioso, forçando regeneração do ciclo)`);
+          await buildGrade(false, true);
         }
 
         // Escrita no disco dentro da janela configurada
