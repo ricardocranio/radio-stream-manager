@@ -1930,7 +1930,7 @@ export function useAutoGradeBuilder() {
       tickInProgress = true;
       try {
         const { isRunning } = useRadioStore.getState();
-        if (!isRunning) return;
+        if (!isRunning && !isWebOnly) return;
 
         const now = new Date();
         const { blockKey, minutesUntilBlock } = getUpcomingBlockInfo(now);
