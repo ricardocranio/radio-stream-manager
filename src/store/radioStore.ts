@@ -338,6 +338,10 @@ const defaultConfig: SystemConfig = {
     'THE HIT CREW KIDS - *',
     'PADRE MARCELO ROSSI - *',
     'Xuxa - *',
+    'promessa D - *',
+    '搖籃曲 - (鋼琴饗宴)',
+    '貴族音樂 - *',
+    'Deive Leonardo - Amanhã Não Existe (Ao Vivo)',
   ],
 };
 
