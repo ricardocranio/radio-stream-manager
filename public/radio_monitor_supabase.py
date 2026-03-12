@@ -653,6 +653,113 @@ class RadioMonitor:
         print(cor(Cores.YELLOW, f"\n  🛑 Sinal recebido ({sig_name}), encerrando graciosamente..."))
         self.running = False
     
+    # ── Buffer de frescor: métodos ───────────────────────────────────
+    
+    def atualizar_recentes(self, radio_nome: str, songs: List[str]):
+        """
+        Chamado após cada scraping.
+        Registra as músicas com timestamp estimado no buffer em memória.
+        A primeira música = tocando agora (timestamp = agora).
+        As seguintes = estimativa: cada uma ~3 min antes.
+        """
+        from datetime import timedelta
+        agora = datetime.now()
+        
+        if radio_nome not in self.recentes:
+            self.recentes[radio_nome] = []
+        
+        for i, song in enumerate(songs):
+            ts_estimado = agora - timedelta(minutes=i * 3)
+            
+            # Normalizar para comparação (lowercase, sem espaços extras)
+            song_norm = song.strip().lower()
+            
+            # Evitar duplicatas no buffer
+            ja_existe = any(r['song'].strip().lower() == song_norm 
+                           for r in self.recentes[radio_nome])
+            if not ja_existe:
+                self.recentes[radio_nome].append({
+                    'song': song.strip(),
+                    'ts': ts_estimado
+                })
+        
+        # Manter só os últimos 60 minutos no buffer (janela ampla para histórico)
+        self.recentes[radio_nome] = [
+            r for r in self.recentes[radio_nome]
+            if (agora - r['ts']).total_seconds() <= 3600
+        ]
+    
+    def get_songs_frescas(self, radio_nome: str) -> List[str]:
+        """
+        Retorna só as músicas tocadas nos últimos N minutos (janela_frescor_minutos)
+        para uma rádio específica, ordenadas por frescor (mais recente primeiro).
+        """
+        from datetime import timedelta
+        agora = datetime.now()
+        limite = timedelta(minutes=self.janela_frescor_minutos)
+        
+        frescas = [
+            r for r in self.recentes.get(radio_nome, [])
+            if (agora - r['ts']) <= limite
+        ]
+        
+        # Ordenar por timestamp descendente (mais fresca primeiro)
+        frescas.sort(key=lambda r: r['ts'], reverse=True)
+        
+        return [r['song'] for r in frescas]
+    
+    def get_all_recentes_stats(self) -> Dict[str, int]:
+        """Retorna contagem de músicas frescas por rádio (para build_pool)"""
+        stats = {}
+        for radio_nome in self.recentes:
+            stats[radio_nome] = len(self.get_songs_frescas(radio_nome))
+        return stats
+    
+    def _build_pool(self, radios: List[Dict], slots: int = 10) -> List[str]:
+        """
+        Distribui slots de scraping entre rádios ativas com peso por atividade recente.
+        - Cada rádio ativa recebe pelo menos 1 slot (garantia mínima)
+        - Slots restantes são distribuídos proporcionalmente ao volume de frescas
+        """
+        if not radios:
+            return []
+        
+        nomes = [r.get('nome', r.get('name', '')) for r in radios]
+        
+        # Se temos menos rádios que slots, cada uma aparece 1x
+        if len(nomes) >= slots:
+            return nomes[:slots]
+        
+        # 1 slot garantido por rádio
+        pool = list(nomes)
+        remaining = slots - len(pool)
+        
+        if remaining <= 0:
+            return pool
+        
+        # Pesos baseados no volume de músicas frescas
+        weights = {}
+        for nome in nomes:
+            frescas = self.get_songs_frescas(nome)
+            weights[nome] = len(frescas) + 1  # +1 para nunca ser zero
+        
+        total_weight = sum(weights.values())
+        
+        # Distribuir slots restantes proporcionalmente
+        for nome in nomes:
+            extra = int(round((weights[nome] / total_weight) * remaining))
+            pool.extend([nome] * extra)
+        
+        # Garantir que temos exatamente 'slots' entradas
+        while len(pool) < slots:
+            # Adicionar a rádio com mais peso
+            best = max(nomes, key=lambda n: weights.get(n, 0))
+            pool.append(best)
+        
+        return pool[:slots]
+    
+    # ── Métodos existentes ─────────────────────────────────────────────
+    
     def _carregar_historico(self) -> Dict:
         if Path(self.arquivo_historico).exists():
             try:
