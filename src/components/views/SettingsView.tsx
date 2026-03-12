@@ -596,9 +596,12 @@ export function SettingsView() {
                 <Input
                   value={folder}
                   onChange={(e) => {
-                    const newFolders = [...localConfig.musicFolders];
-                    newFolders[index] = e.target.value;
-                    setLocalConfig((prev) => ({ ...prev, musicFolders: newFolders }));
+                    const val = e.target.value;
+                    setLocalConfig((prev) => {
+                      const newFolders = [...prev.musicFolders];
+                      newFolders[index] = val;
+                      return { ...prev, musicFolders: newFolders };
+                    });
                   }}
                   className="flex-1 font-mono text-sm"
                   placeholder="C:\Caminho\Para\Músicas"
