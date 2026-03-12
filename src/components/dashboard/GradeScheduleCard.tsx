@@ -210,7 +210,7 @@ export function GradeScheduleCard() {
       if (dayPattern === 'WEEKDAYS') return isWeekday;
       if (dayPattern === 'WEEKEND') return isWeekend;
       // Specific days like "SEG,TER,QUA"
-      const dayNames = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
+      const dayNames = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
       return dayPattern.split(',').some(d => d.trim() === dayNames[dayOfWeek]);
     };
 

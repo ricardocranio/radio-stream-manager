@@ -602,7 +602,7 @@ export function GradeBuilderView() {
             <CardHeader className="border-b border-border flex flex-row items-center justify-between">
               <CardTitle className="text-sm flex items-center gap-2">
                 <FileText className="w-4 h-4" />
-                Prévia com Músicas Reais — {dayMap[['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'][new Date().getDay()]] || 'Hoje'}
+                Prévia com Músicas Reais — {dayMap[['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'][new Date().getDay()]] || 'Hoje'}
               </CardTitle>
               <Button variant="ghost" size="sm" onClick={generateFullGrade} disabled={isLoading || realSongs.length === 0}>
                 <RefreshCw className="w-4 h-4 mr-2" />

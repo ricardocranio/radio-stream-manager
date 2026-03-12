@@ -52,8 +52,8 @@ export const FULL_DAY_NAME_MAP: Record<WeekDay, string> = {
 };
 
 /** Day names indexed by Date.getDay() */
-export const DAY_CODES_BY_INDEX = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
-export const FULL_DAY_NAMES_BY_INDEX = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SABADO'];
+export const DAY_CODES_BY_INDEX = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+export const FULL_DAY_NAMES_BY_INDEX = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO'];
 export const WEEKDAY_KEYS: WeekDay[] = ['seg', 'ter', 'qua', 'qui', 'sex'];
 
 /** Runtime check — never cache at module level since preload may not have run yet */
