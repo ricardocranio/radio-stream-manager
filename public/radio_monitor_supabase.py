@@ -1118,7 +1118,7 @@ class RadioMonitor:
         return dados_base
     
     async def _atualizar_todas(self):
-        """Ciclo principal de scraping com multi-source"""
+        """Ciclo principal de scraping com multi-source + buffer de frescor"""
         global SUPABASE_OK
         
         # Re-verificar conexão Supabase
@@ -1138,6 +1138,13 @@ class RadioMonitor:
         if not all_radios:
             print(cor(Cores.YELLOW, "  ⚠️  Nenhuma rádio ativa para este horário!"))
             return
+        
+        # ── Build pool ponderado ─────────────────────────────────────
+        pool_names = self._build_pool(all_radios, slots=max(len(all_radios), 10))
+        frescor_stats = self.get_all_recentes_stats()
+        if frescor_stats:
+            print(cor(Cores.CYAN, f"  🧊 Buffer de frescor: {json.dumps(frescor_stats)}"))
+        print(cor(Cores.CYAN, f"  🎯 Pool ({len(pool_names)} slots): {', '.join(dict.fromkeys(pool_names))}"))
         
         # Start browser only if needed (for MyTuner fallback)
         pw = None
@@ -1159,13 +1166,26 @@ class RadioMonitor:
         
         self._exibir_cabecalho()
         
+        # ── Scrape + alimentar buffer + envio em batch ───────────────
+        batch_envio = []  # Acumula dados para envio em batch ao Supabase
+        
+        # Deduplicate pool to avoid scraping same station twice in same cycle
+        seen_stations = set()
+        unique_radios = []
+        for nome in pool_names:
+            if nome not in seen_stations:
+                seen_stations.add(nome)
+                radio = next((r for r in all_radios if r.get('nome') == nome), None)
+                if radio:
+                    unique_radios.append(radio)
+        
         # Process in batches of 3
         BATCH_SIZE = 3
-        for batch_start in range(0, len(all_radios), BATCH_SIZE):
+        for batch_start in range(0, len(unique_radios), BATCH_SIZE):
             if not self.running:
                 break
                 
-            batch = all_radios[batch_start:batch_start + BATCH_SIZE]
+            batch = unique_radios[batch_start:batch_start + BATCH_SIZE]
             
             for radio in batch:
                 if not self.running:
@@ -1173,13 +1193,28 @@ class RadioMonitor:
                 
                 is_special = radio.get('is_special', False)
                 label = f" [{radio.get('label', '')}]" if radio.get('label') else ""
-                idx = all_radios.index(radio) + 1
-                print(cor(Cores.YELLOW, f"  🔄 [{idx}/{len(all_radios)}] {radio['nome']}{label}..."))
+                idx = unique_radios.index(radio) + 1
+                print(cor(Cores.YELLOW, f"  🔄 [{idx}/{len(unique_radios)}] {radio['nome']}{label}..."))
                 
                 dados = await self._scrape_station_multisource(radio, page)
                 
-                await self._enviar_para_supabase(dados, radio)
+                # ── Alimentar buffer de frescor ──────────────────────
+                songs_para_buffer = []
+                if dados.get("tocando_agora"):
+                    songs_para_buffer.append(dados["tocando_agora"])
+                for s in (dados.get("ultimas_tocadas") or []):
+                    if s and len(s) > 5:
+                        songs_para_buffer.append(s)
                 
+                if songs_para_buffer:
+                    self.atualizar_recentes(radio['nome'], songs_para_buffer)
+                    frescas_count = len(self.get_songs_frescas(radio['nome']))
+                    print(cor(Cores.CYAN, f"     🧊 Buffer: +{len(songs_para_buffer)} músicas → {frescas_count} frescas"))
+                
+                # Acumular para envio em batch
+                batch_envio.append((dados, radio))
+                
+                # Atualizar histórico local
                 radio_id = radio['nome'].lower().replace(' ', '_')
                 if radio_id not in self.historico["radios"]:
                     self.historico["radios"][radio_id] = {
@@ -1195,6 +1230,12 @@ class RadioMonitor:
                 self.historico["radios"][radio_id]["ultimo_dado"] = dados
                 self._exibir_radio(dados, is_special)
         
+        # ── Envio em batch ao Supabase (após todos os scrapings) ─────
+        if batch_envio:
+            print(cor(Cores.BLUE, f"\n  ☁️  Enviando {len(batch_envio)} capturas em batch ao Supabase..."))
+            for dados, radio in batch_envio:
+                await self._enviar_para_supabase(dados, radio)
+        
         if page:
             try:
                 await page.close()
@@ -1205,9 +1246,15 @@ class RadioMonitor:
         self._salvar_historico()
         self._salvar_relatorio()
         
+        # ── Resumo do ciclo com stats de frescor ─────────────────────
         print()
         print(cor(Cores.GREEN, f"  💾 Ciclo #{self.cycle_count} completo — {self.total_captures} capturas totais"))
         print(cor(Cores.CYAN, f"  📡 Fontes: {json.dumps(self.source_stats)}"))
+        
+        frescor_final = self.get_all_recentes_stats()
+        total_frescas = sum(frescor_final.values())
+        print(cor(Cores.CYAN, f"  🧊 Buffer total: {total_frescas} músicas frescas em {len(frescor_final)} rádios"))
+        
         if SUPABASE_OK:
             print(cor(Cores.CYAN, f"  ☁️  Dados sincronizados com Supabase!"))
     
