@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════════════════════╗
-║                     MONITOR DE RÁDIOS - TEMPO REAL v3.0                      ║
+║                     MONITOR DE RÁDIOS - TEMPO REAL v3.5                      ║
 ║                          INTEGRADO COM SUPABASE                               ║
 ║                                                                               ║
-║  MELHORIAS v3.0:                                                              ║
+║  MELHORIAS v3.5:                                                              ║
+║  - Buffer de frescor em memória (janela 15 min, histórico 60 min)            ║
+║  - Build pool ponderado: rádios ativas ganham mais slots de scraping         ║
+║  - Envio em batch ao Supabase (após ciclo completo, menos latência)          ║
+║  - Resumo de frescor por rádio ao final de cada ciclo                        ║
+║                                                                               ║
+║  v3.0:                                                                        ║
 ║  - HTTP-first: OnlineRadioBox + Triton API antes de Playwright               ║
 ║  - Triton Digital Now Playing API para emissoras StreamTheWorld               ║
 ║  - ICY metadata com resolução de redirect                                     ║
@@ -630,6 +636,11 @@ class RadioMonitor:
         self.total_errors = 0
         self.source_stats: Dict[str, int] = {}
         
+        # ── Buffer de frescor ──────────────────────────────────────────
+        # Formato: {'BH FM': [{'song': 'Artista - Música', 'ts': datetime}, ...]}
+        self.recentes: Dict[str, List[Dict]] = {}
+        self.janela_frescor_minutos = 15
+        
         self.arquivo_historico = os.path.join(_DATA_DIR, "radio_historico.json")
         self.arquivo_relatorio = os.path.join(_DATA_DIR, "radio_relatorio.txt")
         
@@ -647,6 +658,113 @@ class RadioMonitor:
         sig_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
         print(cor(Cores.YELLOW, f"\n  🛑 Sinal recebido ({sig_name}), encerrando graciosamente..."))
         self.running = False
+    
+    # ── Buffer de frescor: métodos ───────────────────────────────────
+    
+    def atualizar_recentes(self, radio_nome: str, songs: List[str]):
+        """
+        Chamado após cada scraping.
+        Registra as músicas com timestamp estimado no buffer em memória.
+        A primeira música = tocando agora (timestamp = agora).
+        As seguintes = estimativa: cada uma ~3 min antes.
+        """
+        from datetime import timedelta
+        agora = datetime.now()
+        
+        if radio_nome not in self.recentes:
+            self.recentes[radio_nome] = []
+        
+        for i, song in enumerate(songs):
+            ts_estimado = agora - timedelta(minutes=i * 3)
+            
+            # Normalizar para comparação (lowercase, sem espaços extras)
+            song_norm = song.strip().lower()
+            
+            # Evitar duplicatas no buffer
+            ja_existe = any(r['song'].strip().lower() == song_norm 
+                           for r in self.recentes[radio_nome])
+            if not ja_existe:
+                self.recentes[radio_nome].append({
+                    'song': song.strip(),
+                    'ts': ts_estimado
+                })
+        
+        # Manter só os últimos 60 minutos no buffer (janela ampla para histórico)
+        self.recentes[radio_nome] = [
+            r for r in self.recentes[radio_nome]
+            if (agora - r['ts']).total_seconds() <= 3600
+        ]
+    
+    def get_songs_frescas(self, radio_nome: str) -> List[str]:
+        """
+        Retorna só as músicas tocadas nos últimos N minutos (janela_frescor_minutos)
+        para uma rádio específica, ordenadas por frescor (mais recente primeiro).
+        """
+        from datetime import timedelta
+        agora = datetime.now()
+        limite = timedelta(minutes=self.janela_frescor_minutos)
+        
+        frescas = [
+            r for r in self.recentes.get(radio_nome, [])
+            if (agora - r['ts']) <= limite
+        ]
+        
+        # Ordenar por timestamp descendente (mais fresca primeiro)
+        frescas.sort(key=lambda r: r['ts'], reverse=True)
+        
+        return [r['song'] for r in frescas]
+    
+    def get_all_recentes_stats(self) -> Dict[str, int]:
+        """Retorna contagem de músicas frescas por rádio (para build_pool)"""
+        stats = {}
+        for radio_nome in self.recentes:
+            stats[radio_nome] = len(self.get_songs_frescas(radio_nome))
+        return stats
+    
+    def _build_pool(self, radios: List[Dict], slots: int = 10) -> List[str]:
+        """
+        Distribui slots de scraping entre rádios ativas com peso por atividade recente.
+        - Cada rádio ativa recebe pelo menos 1 slot (garantia mínima)
+        - Slots restantes são distribuídos proporcionalmente ao volume de frescas
+        """
+        if not radios:
+            return []
+        
+        nomes = [r.get('nome', r.get('name', '')) for r in radios]
+        
+        # Se temos menos rádios que slots, cada uma aparece 1x
+        if len(nomes) >= slots:
+            return nomes[:slots]
+        
+        # 1 slot garantido por rádio
+        pool = list(nomes)
+        remaining = slots - len(pool)
+        
+        if remaining <= 0:
+            return pool
+        
+        # Pesos baseados no volume de músicas frescas
+        weights = {}
+        for nome in nomes:
+            frescas = self.get_songs_frescas(nome)
+            weights[nome] = len(frescas) + 1  # +1 para nunca ser zero
+        
+        total_weight = sum(weights.values())
+        
+        # Distribuir slots restantes proporcionalmente
+        for nome in nomes:
+            extra = int(round((weights[nome] / total_weight) * remaining))
+            pool.extend([nome] * extra)
+        
+        # Garantir que temos exatamente 'slots' entradas
+        while len(pool) < slots:
+            # Adicionar a rádio com mais peso
+            best = max(nomes, key=lambda n: weights.get(n, 0))
+            pool.append(best)
+        
+        return pool[:slots]
+    
+    # ── Métodos existentes ─────────────────────────────────────────────
     
     def _carregar_historico(self) -> Dict:
         if Path(self.arquivo_historico).exists():
@@ -672,7 +790,7 @@ class RadioMonitor:
         try:
             with open(self.arquivo_relatorio, 'w', encoding='utf-8') as f:
                 f.write("═" * 80 + "\n")
-                f.write("           RELATÓRIO DE MONITORAMENTO DE RÁDIOS v3.0\n")
+                f.write("           RELATÓRIO DE MONITORAMENTO DE RÁDIOS v3.5\n")
                 f.write("═" * 80 + "\n\n")
                 f.write(f"📅 Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
                 f.write(f"📊 Rádios normais: {len(self.radios)} | Especiais: {len(self.special_radios)}\n")
@@ -709,7 +827,7 @@ class RadioMonitor:
     def _exibir_cabecalho(self):
         print()
         print(cor(Cores.CYAN, "╔" + "═" * 70 + "╗"))
-        print(cor(Cores.CYAN, "║") + cor(Cores.BOLD + Cores.WHITE, "     🎵 MONITOR DE RÁDIOS v3.0 - MULTI-SOURCE EDITION 🎵".center(70)) + cor(Cores.CYAN, "║"))
+        print(cor(Cores.CYAN, "║") + cor(Cores.BOLD + Cores.WHITE, "  🎵 MONITOR DE RÁDIOS v3.5 - FRESCOR + POOL EDITION 🎵".center(70)) + cor(Cores.CYAN, "║"))
         print(cor(Cores.CYAN, "╚" + "═" * 70 + "╝"))
         print()
         
@@ -1006,7 +1124,7 @@ class RadioMonitor:
         return dados_base
     
     async def _atualizar_todas(self):
-        """Ciclo principal de scraping com multi-source"""
+        """Ciclo principal de scraping com multi-source + buffer de frescor"""
         global SUPABASE_OK
         
         # Re-verificar conexão Supabase
@@ -1026,6 +1144,13 @@ class RadioMonitor:
         if not all_radios:
             print(cor(Cores.YELLOW, "  ⚠️  Nenhuma rádio ativa para este horário!"))
             return
+        
+        # ── Build pool ponderado ─────────────────────────────────────
+        pool_names = self._build_pool(all_radios, slots=max(len(all_radios), 10))
+        frescor_stats = self.get_all_recentes_stats()
+        if frescor_stats:
+            print(cor(Cores.CYAN, f"  🧊 Buffer de frescor: {json.dumps(frescor_stats)}"))
+        print(cor(Cores.CYAN, f"  🎯 Pool ({len(pool_names)} slots): {', '.join(dict.fromkeys(pool_names))}"))
         
         # Start browser only if needed (for MyTuner fallback)
         pw = None
@@ -1047,13 +1172,26 @@ class RadioMonitor:
         
         self._exibir_cabecalho()
         
+        # ── Scrape + alimentar buffer + envio em batch ───────────────
+        batch_envio = []  # Acumula dados para envio em batch ao Supabase
+        
+        # Deduplicate pool to avoid scraping same station twice in same cycle
+        seen_stations = set()
+        unique_radios = []
+        for nome in pool_names:
+            if nome not in seen_stations:
+                seen_stations.add(nome)
+                radio = next((r for r in all_radios if r.get('nome') == nome), None)
+                if radio:
+                    unique_radios.append(radio)
+        
         # Process in batches of 3
         BATCH_SIZE = 3
-        for batch_start in range(0, len(all_radios), BATCH_SIZE):
+        for batch_start in range(0, len(unique_radios), BATCH_SIZE):
             if not self.running:
                 break
                 
-            batch = all_radios[batch_start:batch_start + BATCH_SIZE]
+            batch = unique_radios[batch_start:batch_start + BATCH_SIZE]
             
             for radio in batch:
                 if not self.running:
@@ -1061,13 +1199,28 @@ class RadioMonitor:
                 
                 is_special = radio.get('is_special', False)
                 label = f" [{radio.get('label', '')}]" if radio.get('label') else ""
-                idx = all_radios.index(radio) + 1
-                print(cor(Cores.YELLOW, f"  🔄 [{idx}/{len(all_radios)}] {radio['nome']}{label}..."))
+                idx = unique_radios.index(radio) + 1
+                print(cor(Cores.YELLOW, f"  🔄 [{idx}/{len(unique_radios)}] {radio['nome']}{label}..."))
                 
                 dados = await self._scrape_station_multisource(radio, page)
                 
-                await self._enviar_para_supabase(dados, radio)
+                # ── Alimentar buffer de frescor ──────────────────────
+                songs_para_buffer = []
+                if dados.get("tocando_agora"):
+                    songs_para_buffer.append(dados["tocando_agora"])
+                for s in (dados.get("ultimas_tocadas") or []):
+                    if s and len(s) > 5:
+                        songs_para_buffer.append(s)
                 
+                if songs_para_buffer:
+                    self.atualizar_recentes(radio['nome'], songs_para_buffer)
+                    frescas_count = len(self.get_songs_frescas(radio['nome']))
+                    print(cor(Cores.CYAN, f"     🧊 Buffer: +{len(songs_para_buffer)} músicas → {frescas_count} frescas"))
+                
+                # Acumular para envio em batch
+                batch_envio.append((dados, radio))
+                
+                # Atualizar histórico local
                 radio_id = radio['nome'].lower().replace(' ', '_')
                 if radio_id not in self.historico["radios"]:
                     self.historico["radios"][radio_id] = {
@@ -1083,6 +1236,12 @@ class RadioMonitor:
                 self.historico["radios"][radio_id]["ultimo_dado"] = dados
                 self._exibir_radio(dados, is_special)
         
+        # ── Envio em batch ao Supabase (após todos os scrapings) ─────
+        if batch_envio:
+            print(cor(Cores.BLUE, f"\n  ☁️  Enviando {len(batch_envio)} capturas em batch ao Supabase..."))
+            for dados, radio in batch_envio:
+                await self._enviar_para_supabase(dados, radio)
+        
         if page:
             try:
                 await page.close()
@@ -1093,9 +1252,15 @@ class RadioMonitor:
         self._salvar_historico()
         self._salvar_relatorio()
         
+        # ── Resumo do ciclo com stats de frescor ─────────────────────
         print()
         print(cor(Cores.GREEN, f"  💾 Ciclo #{self.cycle_count} completo — {self.total_captures} capturas totais"))
         print(cor(Cores.CYAN, f"  📡 Fontes: {json.dumps(self.source_stats)}"))
+        
+        frescor_final = self.get_all_recentes_stats()
+        total_frescas = sum(frescor_final.values())
+        print(cor(Cores.CYAN, f"  🧊 Buffer total: {total_frescas} músicas frescas em {len(frescor_final)} rádios"))
+        
         if SUPABASE_OK:
             print(cor(Cores.CYAN, f"  ☁️  Dados sincronizados com Supabase!"))
     
@@ -1126,7 +1291,7 @@ class RadioMonitor:
         print(cor(Cores.GREEN, "  ✅ Histórico e relatório salvos"))
     
     async def iniciar(self):
-        print(cor(Cores.CYAN, "\n🚀 Iniciando Monitor de Rádios v3.0 (Multi-Source)...\n"))
+        print(cor(Cores.CYAN, "\n🚀 Iniciando Monitor de Rádios v3.5 (Frescor + Pool)...\n"))
         
         self.radios = self._carregar_radios_supabase()
         self.special_radios = self._carregar_special_monitoring()
@@ -1186,7 +1351,7 @@ class RadioMonitor:
 if __name__ == "__main__":
     print()
     print(cor(Cores.CYAN, "╔" + "═" * 60 + "╗"))
-    print(cor(Cores.CYAN, "║") + cor(Cores.BOLD, " 🎵 MONITOR DE RÁDIOS v3.0 - MULTI-SOURCE EDITION ".center(60)) + cor(Cores.CYAN, "║"))
+    print(cor(Cores.CYAN, "║") + cor(Cores.BOLD, " 🎵 MONITOR DE RÁDIOS v3.5 - FRESCOR + POOL EDITION ".center(60)) + cor(Cores.CYAN, "║"))
     print(cor(Cores.CYAN, "╚" + "═" * 60 + "╝"))
     print()
     
@@ -1196,6 +1361,9 @@ if __name__ == "__main__":
         print(cor(Cores.GREEN, "  ✅ Modo Supabase ativo (REST API)!"))
         print(cor(Cores.CYAN, "  📻 Emissoras carregadas do banco (radio_stations + special_monitoring)"))
         print(cor(Cores.CYAN, "  📡 Fontes: OnlineRadioBox → Triton API → ICY → Playwright"))
+        print(cor(Cores.CYAN, "  🧊 Buffer de frescor: janela de 15 min, histórico de 60 min"))
+        print(cor(Cores.CYAN, "  🎯 Build pool: slots ponderados por atividade recente"))
+        print(cor(Cores.CYAN, "  📦 Envio em batch: dados acumulados e enviados após cada ciclo"))
     else:
         print(cor(Cores.YELLOW, "  ⚠️  Supabase não conectado - usando modo local"))
     print()
