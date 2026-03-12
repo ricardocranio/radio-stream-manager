@@ -51,10 +51,13 @@ export function GradePreviewCard() {
   const { gradeBuilder } = useGlobalServices();
   const [libraryStatus, setLibraryStatus] = useState<Record<string, LibraryStatus>>({});
   const [isCheckingLibrary, setIsCheckingLibrary] = useState(false);
+  const [realBlockDuration, setRealBlockDuration] = useState<number | null>(null);
+  const [vhtCount, setVhtCount] = useState(0);
+  const [songCount, setSongCount] = useState(0);
 
   // Use builder's nextBlock directly as single source of truth
   const nextBlockTime = gradeBuilder.nextBlock || '--:--';
-  const blockDuration = gradeBuilder.pendingBlockDurations?.get(nextBlockTime);
+  const blockDuration = realBlockDuration ?? gradeBuilder.pendingBlockDurations?.get(nextBlockTime);
 
   // === SINGLE SOURCE: Builder output (exact match with TXT) ===
   const displaySongs = useMemo(() => {
