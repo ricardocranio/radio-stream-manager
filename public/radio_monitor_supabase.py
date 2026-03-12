@@ -827,7 +827,7 @@ class RadioMonitor:
     def _exibir_cabecalho(self):
         print()
         print(cor(Cores.CYAN, "╔" + "═" * 70 + "╗"))
-        print(cor(Cores.CYAN, "║") + cor(Cores.BOLD + Cores.WHITE, "     🎵 MONITOR DE RÁDIOS v3.0 - MULTI-SOURCE EDITION 🎵".center(70)) + cor(Cores.CYAN, "║"))
+        print(cor(Cores.CYAN, "║") + cor(Cores.BOLD + Cores.WHITE, "  🎵 MONITOR DE RÁDIOS v3.5 - FRESCOR + POOL EDITION 🎵".center(70)) + cor(Cores.CYAN, "║"))
         print(cor(Cores.CYAN, "╚" + "═" * 70 + "╝"))
         print()
         
