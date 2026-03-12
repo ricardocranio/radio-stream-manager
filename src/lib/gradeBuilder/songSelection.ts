@@ -660,7 +660,18 @@ export async function selectSongForSlot(
       });
     }
 
-    return `"${selectedSong.filename}"`;
+    // CRITICAL SEQUENCE: Validate → Rename on disk → Write clean name to grade
+    // 1. Check if filename has accents/special chars
+    // 2. If yes, rename the physical file on disk FIRST
+    // 3. Only AFTER renaming, use the sanitized name in the grade
+    const originalFilename = selectedSong.filename || '';
+    const sanitizedFilename = await ensureFileRenamedOnDisk(
+      originalFilename,
+      ctx.musicFolders,
+      ctx.filterCharacters
+    );
+
+    return `"${sanitizedFilename}"`;
   }
 
   // PRIORITY 6: Coringa
