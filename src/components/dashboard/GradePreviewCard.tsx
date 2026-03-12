@@ -325,9 +325,18 @@ export function GradePreviewCard() {
         </div>
         <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
           <span className="flex items-center gap-1">
-            <FileText className="w-3 h-3" />
-            {displaySongs.length} faixas
+            <Music className="w-3 h-3" />
+            {songCount} músicas
           </span>
+          <span className="flex items-center gap-1">
+            🎵 {vhtCount} VHTs
+          </span>
+          {blockDuration && (
+            <span className="flex items-center gap-1 font-medium text-foreground">
+              <Clock className="w-3 h-3" />
+              {blockDuration} min
+            </span>
+          )}
           {isElectron && (foundCount > 0 || missingCount > 0) && (
             <span className="flex items-center gap-1">
               <HardDrive className="w-3 h-3" />
