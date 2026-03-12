@@ -162,6 +162,84 @@ export function GradePreviewCard() {
     }
   }, [displaySongs, checkLibrary]);
 
+  // === REAL DURATION CALCULATION from actual files ===
+  useEffect(() => {
+    if (!nextBlockLine) {
+      setRealBlockDuration(null);
+      setVhtCount(0);
+      setSongCount(0);
+      return;
+    }
+
+    // Count VHTs and songs from the raw line
+    const headerMatch = nextBlockLine.match(/^(\d{2}:\d{2}\s+\([^)]+\)\s*)(.*)/);
+    if (!headerMatch) return;
+    const tokens = headerMatch[2].split(',').map(t => t.trim()).filter(Boolean);
+    const vhts = tokens.filter(t => t.toLowerCase() === 'vht' || t.toLowerCase() === 'vhtn');
+    const songs = tokens.filter(t => t.toLowerCase() !== 'vht' && t.toLowerCase() !== 'vhtn');
+    setVhtCount(vhts.length);
+    setSongCount(songs.length);
+
+    // Calculate real duration via Electron
+    if (!isElectron || !window.electronAPI?.getFileDurationsBatch) {
+      // Estimate: 3:30 per song, 7s per VHT
+      const estimated = (songs.length * 210 + vhts.length * 7) / 60;
+      setRealBlockDuration(parseFloat(estimated.toFixed(1)));
+      return;
+    }
+
+    const calculateDuration = async () => {
+      try {
+        const musicFolders = [
+          ...(config.musicFolders || []),
+          config.contentFolder,
+          config.vinhetasFolder || 'C:\\Playlist\\Vinhetas',
+        ].filter(Boolean);
+
+        // Get filenames for batch query
+        const filenames = tokens
+          .filter(t => t.startsWith('"'))
+          .map(t => t.replace(/^"|"$/g, ''));
+
+        let totalSec = 0;
+        const DEFAULT_SONG = 210;
+        const DEFAULT_VHT = 7;
+
+        if (filenames.length > 0) {
+          const result = await window.electronAPI!.getFileDurationsBatch({
+            filenames,
+            musicFolders,
+          });
+          if (result.success && result.durations) {
+            for (const token of tokens) {
+              const lower = token.toLowerCase();
+              if (lower === 'vht' || lower === 'vhtn') {
+                totalSec += DEFAULT_VHT;
+              } else if (token.startsWith('"')) {
+                const name = token.replace(/^"|"$/g, '');
+                const dur = result.durations[name];
+                totalSec += (dur && dur > 0) ? dur : DEFAULT_SONG;
+              } else {
+                totalSec += DEFAULT_SONG;
+              }
+            }
+          } else {
+            totalSec = songs.length * DEFAULT_SONG + vhts.length * DEFAULT_VHT;
+          }
+        } else {
+          totalSec = songs.length * DEFAULT_SONG + vhts.length * DEFAULT_VHT;
+        }
+
+        setRealBlockDuration(parseFloat((totalSec / 60).toFixed(1)));
+      } catch (e) {
+        console.warn('[PREVIEW] Failed to calculate real duration:', e);
+        setRealBlockDuration(parseFloat(((songs.length * 210 + vhts.length * 7) / 60).toFixed(1)));
+      }
+    };
+
+    calculateDuration();
+  }, [nextBlockLine, config.musicFolders, config.contentFolder, config.vinhetasFolder]);
+
   const getLibraryIcon = (song: PreviewSong) => {
     if (song.isSpecial) return null;
     const key = song.filename.toLowerCase();
