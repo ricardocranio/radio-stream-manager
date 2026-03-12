@@ -153,9 +153,9 @@ export function ExportView() {
     }
   };
 
-  // Get day code for current day - without accents for file compatibility
+  // Get day code for current day
   const getDayCode = () => {
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
     return days[new Date().getDay()];
   };
 

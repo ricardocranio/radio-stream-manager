@@ -1237,8 +1237,12 @@ export function useAutoGradeBuilder() {
     };
 
     // Keep adding songs until we reach the target duration (29-32 min)
-    const maxSongsGuard = 20; // Safety: never more than 20 songs per block
-    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard) {
+    // IMPORTANT: Respect the sequence length — cycle at most 2x to avoid bloated blocks
+    const maxSequenceCycles = 2;
+    const maxSongsFromSequence = activeSequence.length * maxSequenceCycles;
+    const maxSongsGuard = Math.min(15, maxSongsFromSequence + 3); // Hard cap: 15 songs per block
+    
+    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard && sequenceCycleIndex < maxSongsFromSequence) {
       const seq = activeSequence[sequenceCycleIndex % activeSequence.length];
       sequenceCycleIndex++;
 
@@ -1263,9 +1267,9 @@ export function useAutoGradeBuilder() {
     }
 
     // === FILL WITH PRIORITY STATIONS (BH FM / Metropolitana) ===
-    // If still under 29 min after cycling through sequence, add from priority stations
+    // Only fill if sequence cycling wasn't enough — limited to 3 extra songs
     let fillAttempts = 0;
-    const maxFillAttempts = 5;
+    const maxFillAttempts = 3;
     while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard && fillAttempts < maxFillAttempts) {
       fillAttempts++;
       const fillerSong = await getFillerSong();
@@ -1355,7 +1359,7 @@ export function useAutoGradeBuilder() {
     
     const blockMinutes = (finalDurationSec / 60).toFixed(1);
     const durationStatus = finalDurationSec >= MIN_BLOCK_DURATION_SEC ? '✅' : '⚠️';
-    console.log(`[AUTO-GRADE] ⏱️ ${durationStatus} Bloco ${timeStr}: ${allContent.length} itens (${vhtCount} VHTs × ${VHT_DURATION_SEC.toFixed(1)}s = ${(totalVhtDurationSec/60).toFixed(1)}min), total ${blockMinutes} min (alvo: 29-32 min)`);
+    console.log(`[AUTO-GRADE] ⏱️ ${durationStatus} Bloco ${timeStr}: ${songs.length} músicas (seq=${activeSequence.length}, max=${maxSongsGuard}), ${allContent.length} itens total, ${blockMinutes} min (alvo: 29-32 min)`);
 
     const lineContent = allContent.join(',vht,');
     return {

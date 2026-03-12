@@ -41,7 +41,7 @@ const dayMap: Record<string, string> = {
   'QUA': 'Quarta-feira',
   'QUI': 'Quinta-feira',
   'SEX': 'Sexta-feira',
-  'SAB': 'Sábado',
+  'SÁB': 'Sábado',
   'DOM': 'Domingo',
 };
 
@@ -174,7 +174,7 @@ export function GradeBuilderView() {
 
     // Misturadão (20:00/20:30 weekdays)
     if (hour === 20 && (minute === 0 || minute === 30) && isWeekday()) {
-      const dayNames = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SABADO'];
+      const dayNames = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO'];
       const dayName = dayNames[new Date().getDay()];
       const sorted = [...rankingSongs].sort((a, b) => b.plays - a.plays);
 
@@ -306,7 +306,7 @@ export function GradeBuilderView() {
         const contentId = seq.radioSource.replace('fixo_', '');
         const content = fixedContent.find(fc => fc.id === contentId && fc.enabled);
         if (content) {
-          const dayNames = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SABADO'];
+          const dayNames = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO'];
           const dayName = dayNames[new Date().getDay()];
           let fileName = seq.customFileName || content.fileName;
           fileName = fileName.replace(/\{HH\}/gi, hour.toString().padStart(2, '0')).replace(/\{DIA\}/gi, dayName).replace(/\{DD\}/gi, dayName);
@@ -408,7 +408,7 @@ export function GradeBuilderView() {
     // Insert fixed content
     let allContent = [...blockSongs];
     if (fixedItem) {
-      const dayNames = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SABADO'];
+      const dayNames = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO'];
       const dayName = dayNames[new Date().getDay()];
       let fileName = fixedItem.fileName
         .replace(/\{HH\}/gi, hour.toString().padStart(2, '0'))
@@ -602,7 +602,7 @@ export function GradeBuilderView() {
             <CardHeader className="border-b border-border flex flex-row items-center justify-between">
               <CardTitle className="text-sm flex items-center gap-2">
                 <FileText className="w-4 h-4" />
-                Prévia com Músicas Reais — {dayMap[['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'][new Date().getDay()]] || 'Hoje'}
+                Prévia com Músicas Reais — {dayMap[['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'][new Date().getDay()]] || 'Hoje'}
               </CardTitle>
               <Button variant="ghost" size="sm" onClick={generateFullGrade} disabled={isLoading || realSongs.length === 0}>
                 <RefreshCw className="w-4 h-4 mr-2" />
