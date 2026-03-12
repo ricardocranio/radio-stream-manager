@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════════════════════╗
-║                     MONITOR DE RÁDIOS - TEMPO REAL v3.0                      ║
+║                     MONITOR DE RÁDIOS - TEMPO REAL v3.5                      ║
 ║                          INTEGRADO COM SUPABASE                               ║
 ║                                                                               ║
-║  MELHORIAS v3.0:                                                              ║
+║  MELHORIAS v3.5:                                                              ║
+║  - Buffer de frescor em memória (janela 15 min, histórico 60 min)            ║
+║  - Build pool ponderado: rádios ativas ganham mais slots de scraping         ║
+║  - Envio em batch ao Supabase (após ciclo completo, menos latência)          ║
+║  - Resumo de frescor por rádio ao final de cada ciclo                        ║
+║                                                                               ║
+║  v3.0:                                                                        ║
 ║  - HTTP-first: OnlineRadioBox + Triton API antes de Playwright               ║
 ║  - Triton Digital Now Playing API para emissoras StreamTheWorld               ║
 ║  - ICY metadata com resolução de redirect                                     ║
