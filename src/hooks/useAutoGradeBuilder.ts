@@ -1258,73 +1258,72 @@ export function useAutoGradeBuilder() {
       accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
     }
 
-    // === PHASE 2: If under 29 min after full sequence, fill sparingly ===
-    // With ~3 min/song + VHTs, 10 songs almost always reach 29 min. Max 2 extras as safety net.
-    const maxExtras = 2;
-
-    // === FILL WITH PRIORITY STATIONS (BH FM / Metropolitana) ===
-    const maxTotalSongs = sequenceLength + maxExtras;
-    let fillAttempts = 0;
-    const maxFillAttempts = 3;
-    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxTotalSongs && fillAttempts < maxFillAttempts) {
-      fillAttempts++;
-      const fillerSong = await getFillerSong();
-      if (!fillerSong) break;
+    // === PHASE 2: Duration adjustment by SWAPPING songs (same station) ===
+    // Instead of adding extras, swap existing songs for longer/shorter alternatives
+    // from the SAME station to reach the 29-32 min target.
+    const durationGapSec = MIN_BLOCK_DURATION_SEC - accumulatedDurationSec;
+    
+    if (durationGapSec > 0) {
+      console.log(`[AUTO-GRADE] 🔄 Bloco ${timeStr} abaixo do alvo por ${(durationGapSec / 60).toFixed(1)} min — tentando trocar músicas por versões mais longas`);
       
-      const dur = await getSongDuration(fillerSong);
-      const projectedTotal = accumulatedDurationSec + dur + VHT_DURATION_SEC;
-      if (projectedTotal > MAX_BLOCK_DURATION_SEC && accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
-      
-      songs.push(fillerSong);
-      accumulatedDurationSec += dur + VHT_DURATION_SEC;
-      console.log(`[AUTO-GRADE] ➕ Preenchimento prioritário: ${fillerSong} (${(dur / 60).toFixed(1)} min)`);
-    }
-
-    // === FILL WITH ANY AVAILABLE STATION (last resort before coringa) ===
-    if (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxTotalSongs) {
-      const allStationNames = Object.keys(songsByStation);
-      for (const stationName of allStationNames) {
-        if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
-        const pool = songsByStation[stationName] || [];
+      // Try swapping songs for longer alternatives from same station
+      for (let swapIdx = 0; swapIdx < songs.length && accumulatedDurationSec < MIN_BLOCK_DURATION_SEC; swapIdx++) {
+        const currentSong = songs[swapIdx];
+        const currentDur = await getSongDuration(currentSong);
+        
+        // Find which station this song came from (via sequence position)
+        const seqEntry = swapIdx < activeSequence.length ? activeSequence[swapIdx] : null;
+        if (!seqEntry) continue;
+        
+        const stationName = seqEntry.radioSource;
+        const resolvedName = Object.entries(STATION_ID_TO_DB_NAME).find(([k]) => k === stationName)?.[1] || stationName;
+        const pool = songsByStation[resolvedName] || songsByStation[stationName] || [];
+        
+        // Look for a longer song from the same station
         for (const candidate of pool) {
-          if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC || songs.length >= maxTotalSongs) break;
           const key = `${candidate.title.toLowerCase().trim()}-${candidate.artist.toLowerCase().trim()}`;
           if (usedInBlock.has(key)) continue;
           if (usedArtistsInBlock.has(candidate.artist.toLowerCase().trim())) continue;
           
           const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
-          if (libraryResult.exists) {
-            const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+          if (!libraryResult.exists) continue;
+          
+          const candidateFile = `"${libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`)}"`;
+          const candidateDur = await getSongDuration(candidateFile);
+          
+          // Only swap if the candidate is meaningfully longer (>15s difference)
+          if (candidateDur > currentDur + 15) {
+            const durDiff = candidateDur - currentDur;
+            console.log(`[AUTO-GRADE] 🔄 Troca pos ${swapIdx}: ${currentSong} (${(currentDur/60).toFixed(1)}min) → ${candidateFile} (${(candidateDur/60).toFixed(1)}min) [+${(durDiff/60).toFixed(1)}min]`);
+            
+            // Remove old key from used set (extract from quoted filename)
+            songs[swapIdx] = candidateFile;
             usedInBlock.add(key);
             usedArtistsInBlock.add(candidate.artist.toLowerCase().trim());
             markSongAsUsed(candidate.title, candidate.artist, timeStr);
-            blockLogs.push({ 
-              blockTime: timeStr, type: 'used', 
-              title: candidate.title, artist: candidate.artist, 
-              station: stationName, reason: `Preenchimento geral (${stationName})` 
+            accumulatedDurationSec += durDiff;
+            
+            blockLogs.push({
+              blockTime: timeStr, type: 'substituted',
+              title: candidate.title, artist: candidate.artist,
+              station: stationName, reason: `Troca por duração (+${(durDiff/60).toFixed(1)} min)`,
             });
-            const songFile = `"${filename}"`;
-            const dur = await getSongDuration(songFile);
-            const projectedTotal = accumulatedDurationSec + dur + VHT_DURATION_SEC;
-            if (projectedTotal > MAX_BLOCK_DURATION_SEC && accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
-            songs.push(songFile);
-            accumulatedDurationSec += dur + VHT_DURATION_SEC;
-            console.log(`[AUTO-GRADE] ➕ Preenchimento geral: ${songFile} de ${stationName} (${(dur / 60).toFixed(1)} min)`);
+            break; // One swap per position
           }
         }
       }
     }
-
-    // === CORINGA FILL (absolute last resort) ===
-    const coringaCode = config.coringaCode || 'mus';
-    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxTotalSongs) {
+    
+    // If STILL under minimum after swaps, add max 1 coringa as absolute last resort
+    if (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC) {
+      const coringaCode = config.coringaCode || 'mus';
       songs.push(`"${coringaCode}"`);
       accumulatedDurationSec += DEFAULT_SONG_DURATION_SEC + VHT_DURATION_SEC;
-      console.log(`[AUTO-GRADE] ⚠️ Preenchimento coringa: "${coringaCode}" (estimado ${(DEFAULT_SONG_DURATION_SEC / 60).toFixed(1)} min)`);
+      console.log(`[AUTO-GRADE] ⚠️ Coringa de segurança: "${coringaCode}" (bloco ainda abaixo de 29 min após trocas)`);
       blockLogs.push({
         blockTime: timeStr, type: 'substituted',
         title: coringaCode, artist: 'CORINGA',
-        station: 'fallback', reason: 'Preenchimento de duração mínima (29 min)',
+        station: 'fallback', reason: 'Segurança: bloco abaixo de 29 min após trocas',
       });
     }
 
