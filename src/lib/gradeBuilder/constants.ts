@@ -48,7 +48,7 @@ export const FULL_DAY_NAME_MAP: Record<WeekDay, string> = {
   'qua': 'QUARTA',
   'qui': 'QUINTA',
   'sex': 'SEXTA',
-  'sab': 'SABADO',
+  'sab': 'SÁBADO',
 };
 
 /** Day names indexed by Date.getDay() */
