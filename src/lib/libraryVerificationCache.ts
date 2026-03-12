@@ -117,6 +117,7 @@ export function isSongInLibrary(artist: string, title: string): boolean | null {
  */
 export function clearVerificationCache(): void {
   cache.clear();
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
   console.log('[CACHE] Library verification cache cleared');
 }
 
