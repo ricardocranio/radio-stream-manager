@@ -1974,12 +1974,9 @@ export function useAutoGradeBuilder() {
         lastRealtimeBlockRef.current = blockKey;
       }
 
-      // Only build if the block is NOT yet locked (fully resolved)
-      const isLocked = builtBlocksRef.current.has(blockKey);
-      if (!isLocked) {
-        console.log(`[AUTO-GRADE] ⚡ Montando grade em tempo real para bloco ${blockKey} (${reason})`);
-        await buildGrade(false, false); // Not forced — respects existing locks from isBlockFullyResolved
-      }
+      // Always run tick build; per-block lock/completeness is decided inside buildGrade
+      console.log(`[AUTO-GRADE] ⚡ Tick realtime para bloco ${blockKey} (${reason})`);
+      await buildGrade(false, false);
 
       // Disk write within the configured window
       const shouldWrite = !isWebOnly && minutesUntilBlock <= state.minutesBeforeBlock && lastRealtimeWrittenRef.current !== blockKey;
