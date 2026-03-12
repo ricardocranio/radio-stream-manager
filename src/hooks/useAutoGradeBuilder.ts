@@ -1641,8 +1641,8 @@ export function useAutoGradeBuilder() {
       }
 
       // Check lock state first (in-memory cycle lock)
-      const currentLocked = builtBlocksRef.current.has(currentTimeKey);
-      const nextLocked = builtBlocksRef.current.has(nextTimeKey);
+      let currentLocked = builtBlocksRef.current.has(currentTimeKey);
+      let nextLocked = builtBlocksRef.current.has(nextTimeKey);
 
       // Start from pending in-memory map to preserve already assembled lines (web + desktop)
       const lineMap = new Map<string, string>(pendingGradeRef.current?.lineMap || []);
@@ -1676,6 +1676,18 @@ export function useAutoGradeBuilder() {
       const currentFullyResolved = currentExistingLine ? isBlockFullyResolved(currentExistingLine, coringaCode) : false;
       const nextFullyResolved = nextExistingLine ? isBlockFullyResolved(nextExistingLine, coringaCode) : false;
 
+      // Heal stale locks persisted from previous cycles/sessions
+      if (currentLocked && !currentFullyResolved) {
+        builtBlocksRef.current.delete(currentTimeKey);
+        currentLocked = false;
+        console.log(`[AUTO-GRADE] 🔓 Lock antigo removido de ${currentTimeKey} (bloco ainda incompleto)`);
+      }
+      if (nextLocked && !nextFullyResolved) {
+        builtBlocksRef.current.delete(nextTimeKey);
+        nextLocked = false;
+        console.log(`[AUTO-GRADE] 🔓 Lock antigo removido de ${nextTimeKey} (bloco ainda incompleto)`);
+      }
+
       if (currentFullyResolved && !forceRegenerate) {
         builtBlocksRef.current.add(currentTimeKey);
         console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} COMPLETO (todas as músicas resolvidas) — travado`);
@@ -1705,8 +1717,10 @@ export function useAutoGradeBuilder() {
 
       if (!shouldBuildCurrent && !shouldBuildNext) {
         console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já resolvidos, pulando`);
-        builtBlocksRef.current.add(currentTimeKey);
-        builtBlocksRef.current.add(nextTimeKey);
+        if (currentFullyResolved) builtBlocksRef.current.add(currentTimeKey);
+        else builtBlocksRef.current.delete(currentTimeKey);
+        if (nextFullyResolved) builtBlocksRef.current.add(nextTimeKey);
+        else builtBlocksRef.current.delete(nextTimeKey);
         setState(prev => ({
           ...prev,
           isBuilding: false,
@@ -1771,8 +1785,15 @@ export function useAutoGradeBuilder() {
         lineMap.set(currentTimeKey, mergedCurrentLine);
         if (currentResult.durationMinutes) durationMap.set(currentTimeKey, currentResult.durationMinutes);
         allLogs.push(...currentResult.logs);
-        builtBlocksRef.current.add(currentTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} atualizado (somente faltantes quando aplicável)`);
+
+        const currentResolvedAfterBuild = isBlockFullyResolved(mergedCurrentLine, coringaCode);
+        if (currentResolvedAfterBuild) {
+          builtBlocksRef.current.add(currentTimeKey);
+          console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} COMPLETO após atualização — travado`);
+        } else {
+          builtBlocksRef.current.delete(currentTimeKey);
+          console.log(`[AUTO-GRADE] 🔄 Bloco ${currentTimeKey} ainda incompleto — continuará em atualização realtime`);
+        }
       }
 
       if (shouldBuildNext) {
@@ -1785,8 +1806,15 @@ export function useAutoGradeBuilder() {
         lineMap.set(nextTimeKey, mergedNextLine);
         if (nextResult.durationMinutes) durationMap.set(nextTimeKey, nextResult.durationMinutes);
         allLogs.push(...nextResult.logs);
-        builtBlocksRef.current.add(nextTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} atualizado (somente faltantes quando aplicável)`);
+
+        const nextResolvedAfterBuild = isBlockFullyResolved(mergedNextLine, coringaCode);
+        if (nextResolvedAfterBuild) {
+          builtBlocksRef.current.add(nextTimeKey);
+          console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} COMPLETO após atualização — travado`);
+        } else {
+          builtBlocksRef.current.delete(nextTimeKey);
+          console.log(`[AUTO-GRADE] 🔄 Bloco ${nextTimeKey} ainda incompleto — continuará em atualização realtime`);
+        }
       }
 
       if (allLogs.length > 0) {
@@ -1946,12 +1974,9 @@ export function useAutoGradeBuilder() {
         lastRealtimeBlockRef.current = blockKey;
       }
 
-      // Only build if the block is NOT yet locked (fully resolved)
-      const isLocked = builtBlocksRef.current.has(blockKey);
-      if (!isLocked) {
-        console.log(`[AUTO-GRADE] ⚡ Montando grade em tempo real para bloco ${blockKey} (${reason})`);
-        await buildGrade(false, false); // Not forced — respects existing locks from isBlockFullyResolved
-      }
+      // Always run tick build; per-block lock/completeness is decided inside buildGrade
+      console.log(`[AUTO-GRADE] ⚡ Tick realtime para bloco ${blockKey} (${reason})`);
+      await buildGrade(false, false);
 
       // Disk write within the configured window
       const shouldWrite = !isWebOnly && minutesUntilBlock <= state.minutesBeforeBlock && lastRealtimeWrittenRef.current !== blockKey;
