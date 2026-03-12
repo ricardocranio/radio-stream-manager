@@ -660,13 +660,6 @@ export function SettingsView() {
                       });
                       return prev;
                     });
-                    } else {
-                      toast({
-                        title: 'Mínimo de 1 pasta',
-                        description: 'Você precisa ter pelo menos uma pasta configurada.',
-                        variant: 'destructive',
-                      });
-                    }
                   }}
                 >
                   <Trash2 className="w-4 h-4" />
