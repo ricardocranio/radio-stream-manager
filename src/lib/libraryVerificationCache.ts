@@ -152,6 +152,7 @@ export function markSongAsDownloaded(artist: string, title: string, filename?: s
     similarity: 1.0,
     timestamp: Date.now(),
   });
+  schedulePersist();
 }
 
 /**
