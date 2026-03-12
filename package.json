@@ -1,7 +1,7 @@
-8{
+{
   "name": "programador-de-radio",
   "private": true,
-  "version": "8.0.0-teste",
+  "version": "7.0.0-beta",
   "type": "module",
   "scripts": {
     "dev": "vite",
