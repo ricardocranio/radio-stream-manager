@@ -1267,9 +1267,9 @@ export function useAutoGradeBuilder() {
     }
 
     // === FILL WITH PRIORITY STATIONS (BH FM / Metropolitana) ===
-    // If still under 29 min after cycling through sequence, add from priority stations
+    // Only fill if sequence cycling wasn't enough — limited to 3 extra songs
     let fillAttempts = 0;
-    const maxFillAttempts = 5;
+    const maxFillAttempts = 3;
     while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard && fillAttempts < maxFillAttempts) {
       fillAttempts++;
       const fillerSong = await getFillerSong();
