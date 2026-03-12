@@ -245,12 +245,11 @@ export async function selectSongForSlot(
 
   // ============================================================
   // PRIORITY 1: Station Pool (primary source — the configured radio)
+  // STRATEGY: First scan ALL candidates for one that EXISTS in library.
+  // Only attempt JIT downloads if NO candidate from this station is available.
+  // This ensures missing songs are instantly replaced by another from the SAME radio.
   // ============================================================
   if (!selectedSong) {
-    let jitAttemptsP1 = 0;
-    const maxJitAttemptsP1 = 8;
-    let missingMarks = 0;
-
     const freshnessSorted = [...stationSongs].sort((a, b) => {
       if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
       if (a.scrapedAt) return -1;
@@ -265,6 +264,8 @@ export async function selectSongForSlot(
       ? await ctx.batchFindSongsInLibrary(p1Candidates.map(c => ({ artist: c.artist, title: c.title })))
       : new Map();
 
+    // PHASE 1: Pick the first candidate that ALREADY exists in library (instant, no download)
+    const missingFromStation: SongEntry[] = [];
     for (const candidate of p1Candidates) {
       const key = toLibKey(candidate.artist, candidate.title);
       const libraryResult = (p1Map as Map<string, any>).get(key) as { exists: boolean; filename?: string } | undefined;
@@ -284,10 +285,22 @@ export async function selectSongForSlot(
           reason: `[P1] Pool da estação "${stationName}" (resolvedBy: ${resolvedBy}) [smart/batch]`,
         });
         break;
+      } else {
+        missingFromStation.push(candidate);
       }
+    }
 
-      // Missing: attempt JIT (limited)
-      if (jitAttemptsP1 < maxJitAttemptsP1) {
+    // PHASE 2: No song from this station exists in library — try JIT download for the top candidates
+    if (!selectedSong && missingFromStation.length > 0) {
+      let jitAttemptsP1 = 0;
+      const maxJitAttemptsP1 = 8;
+      let missingMarks = 0;
+
+      console.log(`[SONG-SELECT] ⚠️ [P1] Nenhuma música de "${stationName}" na biblioteca (${missingFromStation.length} candidatas). Tentando JIT...`);
+
+      for (const candidate of missingFromStation) {
+        if (jitAttemptsP1 >= maxJitAttemptsP1) break;
+
         jitAttemptsP1++;
         console.log(`[SONG-SELECT] 🔍 [P1] "${candidate.artist} - ${candidate.title}" ausente, tentativa JIT ${jitAttemptsP1}/${maxJitAttemptsP1}...`);
         const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
@@ -309,30 +322,30 @@ export async function selectSongForSlot(
           }
         }
         console.log(`[SONG-SELECT] ⚠️ [P1] JIT ${jitAttemptsP1}/${maxJitAttemptsP1} falhou, continuando...`);
-      }
 
-      // Mark missing + carry-over (capped)
-      if (missingMarks < MAX_MISSING_MARKS_PER_PRIORITY) {
-        missingMarks++;
-        if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
-          ctx.addMissingSong({
-            id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        // Mark missing + carry-over (capped)
+        if (missingMarks < MAX_MISSING_MARKS_PER_PRIORITY) {
+          missingMarks++;
+          if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
+            ctx.addMissingSong({
+              id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              title: candidate.title,
+              artist: candidate.artist,
+              station: stationName || 'UNKNOWN',
+              timestamp: new Date(),
+              status: 'missing',
+              dna: stationStyle,
+              urgency: 'grade',
+            });
+          }
+          ctx.addCarryOverSong({
             title: candidate.title,
             artist: candidate.artist,
             station: stationName || 'UNKNOWN',
-            timestamp: new Date(),
-            status: 'missing',
-            dna: stationStyle,
-            urgency: 'grade',
+            style: stationStyle,
+            targetBlock: timeStr,
           });
         }
-        ctx.addCarryOverSong({
-          title: candidate.title,
-          artist: candidate.artist,
-          station: stationName || 'UNKNOWN',
-          style: stationStyle,
-          targetBlock: timeStr,
-        });
       }
     }
   }
