@@ -790,7 +790,7 @@ class RadioMonitor:
         try:
             with open(self.arquivo_relatorio, 'w', encoding='utf-8') as f:
                 f.write("═" * 80 + "\n")
-                f.write("           RELATÓRIO DE MONITORAMENTO DE RÁDIOS v3.0\n")
+                f.write("           RELATÓRIO DE MONITORAMENTO DE RÁDIOS v3.5\n")
                 f.write("═" * 80 + "\n\n")
                 f.write(f"📅 Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
                 f.write(f"📊 Rádios normais: {len(self.radios)} | Especiais: {len(self.special_radios)}\n")
