@@ -20,6 +20,7 @@
  */
 
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
+import { ensureFileRenamedOnDisk, sanitizeGradeFilename } from './sanitize';
 import type { SongEntry, BlockLogItem, BlockStats, GradeContext, CarryOverSong } from './types';
 import { STATION_ID_TO_DB_NAME } from './constants';
 import type { WeekDay, SequenceConfig } from '@/types/radio';
@@ -659,7 +660,18 @@ export async function selectSongForSlot(
       });
     }
 
-    return `"${selectedSong.filename}"`;
+    // CRITICAL SEQUENCE: Validate → Rename on disk → Write clean name to grade
+    // 1. Check if filename has accents/special chars
+    // 2. If yes, rename the physical file on disk FIRST
+    // 3. Only AFTER renaming, use the sanitized name in the grade
+    const originalFilename = selectedSong.filename || '';
+    const sanitizedFilename = await ensureFileRenamedOnDisk(
+      originalFilename,
+      ctx.musicFolders,
+      ctx.filterChars
+    );
+
+    return `"${sanitizedFilename}"`;
   }
 
   // PRIORITY 6: Coringa
@@ -775,7 +787,8 @@ export async function handleSpecialSequenceType(
           station: 'TOP50', style: rankSong.style,
           reason: `TOP50 posição ${sortedRanking.indexOf(rankSong) + 1}`,
         });
-        return `"${correctFilename}"`;
+        const sanitizedFilename = await ensureFileRenamedOnDisk(correctFilename, ctx.musicFolders, ctx.filterChars);
+        return `"${sanitizedFilename}"`;
       }
     }
     logs.push({
@@ -804,7 +817,8 @@ export async function handleSpecialSequenceType(
             station: candidate.station, style: candidate.style,
             reason: 'Aleatório',
           });
-          return `"${correctFilename}"`;
+          const sanitizedFilename = await ensureFileRenamedOnDisk(correctFilename, ctx.musicFolders, ctx.filterChars);
+          return `"${sanitizedFilename}"`;
         }
       }
     }
