@@ -1351,7 +1351,7 @@ class RadioMonitor:
 if __name__ == "__main__":
     print()
     print(cor(Cores.CYAN, "╔" + "═" * 60 + "╗"))
-    print(cor(Cores.CYAN, "║") + cor(Cores.BOLD, " 🎵 MONITOR DE RÁDIOS v3.0 - MULTI-SOURCE EDITION ".center(60)) + cor(Cores.CYAN, "║"))
+    print(cor(Cores.CYAN, "║") + cor(Cores.BOLD, " 🎵 MONITOR DE RÁDIOS v3.5 - FRESCOR + POOL EDITION ".center(60)) + cor(Cores.CYAN, "║"))
     print(cor(Cores.CYAN, "╚" + "═" * 60 + "╝"))
     print()
     
