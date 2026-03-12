@@ -306,7 +306,7 @@ export function GradeBuilderView() {
         const contentId = seq.radioSource.replace('fixo_', '');
         const content = fixedContent.find(fc => fc.id === contentId && fc.enabled);
         if (content) {
-          const dayNames = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO'];
+          const dayNames = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SABADO'];
           const dayName = dayNames[new Date().getDay()];
           let fileName = seq.customFileName || content.fileName;
           fileName = fileName.replace(/\{HH\}/gi, hour.toString().padStart(2, '0')).replace(/\{DIA\}/gi, dayName).replace(/\{DD\}/gi, dayName);
