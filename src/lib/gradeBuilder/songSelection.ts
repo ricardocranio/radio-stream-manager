@@ -668,7 +668,7 @@ export async function selectSongForSlot(
     const sanitizedFilename = await ensureFileRenamedOnDisk(
       originalFilename,
       ctx.musicFolders,
-      ctx.filterCharacters
+      ctx.filterChars
     );
 
     return `"${sanitizedFilename}"`;
