@@ -1,22 +1,39 @@
 /**
  * Sanitization functions for grade filenames and lines.
  * 
- * CRITICAL: When a filename comes from the library match (real file on disk),
- * we must preserve it EXACTLY as-is (only uppercase). Replacing & with "e"
- * or removing characters would cause the Playlist Digital to not find the file.
+ * RULE: The grade .TXT must NEVER contain accents, cedilla, or special characters.
+ * The physical file on disk must be renamed FIRST, then the clean name goes into the grade.
  * 
- * Only apply minimal normalization: UPPERCASE + user filter characters.
+ * Sequence: Validate → Rename on disk → Write clean name to grade
  */
 
 /**
- * Light sanitization for grade line filenames.
- * PRESERVES the real filename from disk — only applies:
- * 1. User-configured filter character removal (encoding artifacts)
- * 2. Space normalization
- * 3. Force UPPERCASE for radio automation compatibility
+ * Remove accents using Unicode NFD normalization
+ */
+function removeAccents(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
+ * Check if a filename contains accents, cedilla, or special characters
+ * that need to be cleaned before going into the grade.
+ */
+export function filenameNeedsSanitization(filename: string): boolean {
+  if (!filename) return false;
+  // Check for accented characters (NFD decomposable), &, or other special chars
+  const cleaned = removeAccents(filename).replace(/&/g, 'e');
+  return cleaned !== filename || /[^a-zA-Z0-9\s\-._()]/g.test(removeAccents(filename));
+}
+
+/**
+ * Full sanitization for grade line filenames.
+ * Removes accents, replaces & with "e", strips special characters.
+ * Forces UPPERCASE for radio automation compatibility.
  * 
- * Does NOT replace & or remove accents/special chars, because
- * the filename must match what exists on disk exactly.
+ * The physical file on disk MUST be renamed to match this output
+ * BEFORE writing to the grade .TXT file.
  */
 export function sanitizeGradeFilename(filename: string, filterCharacters?: string[]): string {
   if (!filename) return '';
@@ -33,6 +50,15 @@ export function sanitizeGradeFilename(filename: string, filterCharacters?: strin
     }
   }
   
+  // Replace & with "e" (Jorge & Mateus → Jorge e Mateus)
+  result = result.replace(/&/g, 'e');
+  
+  // Remove accents (ação → acao, canção → cancao)
+  result = removeAccents(result);
+  
+  // Remove special characters except: letters, numbers, spaces, dash, dot, underscore, parens
+  result = result.replace(/[^a-zA-Z0-9\s\-._()]/g, '');
+  
   // Normalize multiple spaces to single space
   result = result.replace(/\s+/g, ' ').trim();
   
@@ -46,6 +72,52 @@ export function sanitizeGradeFilename(filename: string, filterCharacters?: strin
   result = result.toUpperCase();
   
   return result;
+}
+
+/**
+ * Rename a physical file on disk to match the sanitized grade name.
+ * MUST be called BEFORE writing the clean name to the grade .TXT.
+ * Returns the sanitized filename (whether rename happened or not).
+ */
+export async function ensureFileRenamedOnDisk(
+  originalFilename: string,
+  musicFolders: string[],
+  filterCharacters?: string[]
+): Promise<string> {
+  const sanitized = sanitizeGradeFilename(originalFilename, filterCharacters);
+  
+  // If nothing changed, no rename needed
+  if (sanitized === originalFilename.toUpperCase()) {
+    return sanitized;
+  }
+  
+  const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+  if (!isElectron || !window.electronAPI?.renameMusicFile) {
+    console.warn('[SANITIZE] Cannot rename file — not in Electron environment');
+    return sanitized;
+  }
+  
+  try {
+    const result = await window.electronAPI.renameMusicFile({
+      musicFolders,
+      currentFilename: originalFilename,
+      newFilename: sanitized,
+    });
+    
+    if (result.success) {
+      if (result.renamed) {
+        console.log(`[SANITIZE] ✅ Renamed on disk: "${originalFilename}" → "${sanitized}"`);
+      } else {
+        console.log(`[SANITIZE] ℹ️ No rename needed: ${result.reason}`);
+      }
+    } else {
+      console.warn(`[SANITIZE] ⚠️ Could not rename "${originalFilename}": ${result.reason || result.error}`);
+    }
+  } catch (err) {
+    console.error(`[SANITIZE] ❌ Error renaming "${originalFilename}":`, err);
+  }
+  
+  return sanitized;
 }
 
 /**
