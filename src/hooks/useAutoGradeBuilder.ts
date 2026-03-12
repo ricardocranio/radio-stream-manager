@@ -1263,10 +1263,10 @@ export function useAutoGradeBuilder() {
     const maxExtras = 5;
 
     // === FILL WITH PRIORITY STATIONS (BH FM / Metropolitana) ===
-    // Only fill if sequence cycling wasn't enough — limited to 3 extra songs
+    const maxTotalSongs = sequenceLength + maxExtras;
     let fillAttempts = 0;
     const maxFillAttempts = 3;
-    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard && fillAttempts < maxFillAttempts) {
+    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxTotalSongs && fillAttempts < maxFillAttempts) {
       fillAttempts++;
       const fillerSong = await getFillerSong();
       if (!fillerSong) break;
@@ -1281,13 +1281,13 @@ export function useAutoGradeBuilder() {
     }
 
     // === FILL WITH ANY AVAILABLE STATION (last resort before coringa) ===
-    if (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard) {
+    if (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxTotalSongs) {
       const allStationNames = Object.keys(songsByStation);
       for (const stationName of allStationNames) {
         if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
         const pool = songsByStation[stationName] || [];
         for (const candidate of pool) {
-          if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC || songs.length >= maxSongsGuard) break;
+          if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC || songs.length >= maxTotalSongs) break;
           const key = `${candidate.title.toLowerCase().trim()}-${candidate.artist.toLowerCase().trim()}`;
           if (usedInBlock.has(key)) continue;
           if (usedArtistsInBlock.has(candidate.artist.toLowerCase().trim())) continue;
@@ -1316,9 +1316,8 @@ export function useAutoGradeBuilder() {
     }
 
     // === CORINGA FILL (absolute last resort) ===
-    // If still under 29 min, pad with coringa codes
     const coringaCode = config.coringaCode || 'mus';
-    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard) {
+    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxTotalSongs) {
       songs.push(`"${coringaCode}"`);
       accumulatedDurationSec += DEFAULT_SONG_DURATION_SEC + VHT_DURATION_SEC;
       console.log(`[AUTO-GRADE] ⚠️ Preenchimento coringa: "${coringaCode}" (estimado ${(DEFAULT_SONG_DURATION_SEC / 60).toFixed(1)} min)`);
