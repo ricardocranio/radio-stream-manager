@@ -2,7 +2,8 @@
  * Library Verification Cache
  * 
  * Caches results of song library verification to avoid redundant checks.
- * Cache expires after 5 minutes to account for new downloads.
+ * Persists to localStorage so cache survives app reload.
+ * Cache expires after 3 minutes to account for new downloads.
  */
 
 interface CacheEntry {
@@ -13,7 +14,37 @@ interface CacheEntry {
 }
 
 const CACHE_TTL = 3 * 60 * 1000; // 3 minutes
+const STORAGE_KEY = 'pgmr_lib_cache';
+const MAX_CACHE_SIZE = 500;
 const cache = new Map<string, CacheEntry>();
+
+// Load persisted cache on module init
+try {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored) {
+    const entries: [string, CacheEntry][] = JSON.parse(stored);
+    const now = Date.now();
+    for (const [key, entry] of entries) {
+      if (now - entry.timestamp < CACHE_TTL) {
+        cache.set(key, entry);
+      }
+    }
+    console.log(`[CACHE] Restored ${cache.size} entries from disk`);
+  }
+} catch { /* ignore parse errors */ }
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function schedulePersist(): void {
+  if (persistTimer) return;
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    try {
+      const entries = Array.from(cache.entries()).slice(-MAX_CACHE_SIZE);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    } catch { /* storage full — ignore */ }
+  }, 2000); // debounce 2s
+}
 
 /**
  * Generate a cache key from artist and title
@@ -54,14 +85,15 @@ export function setCachedVerification(
     timestamp: Date.now(),
   });
   
-  // Limit cache size to prevent memory bloat (500 entries max)
-  if (cache.size > 500) {
-    // Remove oldest entries (remove 100 at a time)
+  // Limit cache size to prevent memory bloat
+  if (cache.size > MAX_CACHE_SIZE) {
     const entries = Array.from(cache.entries());
     entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
     const toRemove = entries.slice(0, 100);
-    toRemove.forEach(([key]) => cache.delete(key));
+    toRemove.forEach(([k]) => cache.delete(k));
   }
+  
+  schedulePersist();
 }
 
 /**
@@ -85,6 +117,7 @@ export function isSongInLibrary(artist: string, title: string): boolean | null {
  */
 export function clearVerificationCache(): void {
   cache.clear();
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
   console.log('[CACHE] Library verification cache cleared');
 }
 
@@ -119,6 +152,7 @@ export function markSongAsDownloaded(artist: string, title: string, filename?: s
     similarity: 1.0,
     timestamp: Date.now(),
   });
+  schedulePersist();
 }
 
 /**
