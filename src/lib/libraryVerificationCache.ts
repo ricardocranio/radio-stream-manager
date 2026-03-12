@@ -85,14 +85,15 @@ export function setCachedVerification(
     timestamp: Date.now(),
   });
   
-  // Limit cache size to prevent memory bloat (500 entries max)
-  if (cache.size > 500) {
-    // Remove oldest entries (remove 100 at a time)
+  // Limit cache size to prevent memory bloat
+  if (cache.size > MAX_CACHE_SIZE) {
     const entries = Array.from(cache.entries());
     entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
     const toRemove = entries.slice(0, 100);
-    toRemove.forEach(([key]) => cache.delete(key));
+    toRemove.forEach(([k]) => cache.delete(k));
   }
+  
+  schedulePersist();
 }
 
 /**
