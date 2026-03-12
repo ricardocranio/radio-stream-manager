@@ -596,9 +596,12 @@ export function SettingsView() {
                 <Input
                   value={folder}
                   onChange={(e) => {
-                    const newFolders = [...localConfig.musicFolders];
-                    newFolders[index] = e.target.value;
-                    setLocalConfig((prev) => ({ ...prev, musicFolders: newFolders }));
+                    const val = e.target.value;
+                    setLocalConfig((prev) => {
+                      const newFolders = [...prev.musicFolders];
+                      newFolders[index] = val;
+                      return { ...prev, musicFolders: newFolders };
+                    });
                   }}
                   className="flex-1 font-mono text-sm"
                   placeholder="C:\Caminho\Para\Músicas"
@@ -613,9 +616,11 @@ export function SettingsView() {
                       try {
                         const selectedFolder = await window.electronAPI.selectFolder();
                         if (selectedFolder) {
-                          const newFolders = [...localConfig.musicFolders];
-                          newFolders[index] = selectedFolder;
-                          setLocalConfig((prev) => ({ ...prev, musicFolders: newFolders }));
+                          setLocalConfig((prev) => {
+                            const newFolders = [...prev.musicFolders];
+                            newFolders[index] = selectedFolder;
+                            return { ...prev, musicFolders: newFolders };
+                          });
                           toast({
                             title: '📁 Pasta selecionada',
                             description: selectedFolder,
@@ -644,16 +649,17 @@ export function SettingsView() {
                   size="icon"
                   className="text-destructive hover:text-destructive"
                   onClick={() => {
-                    if (localConfig.musicFolders.length > 1) {
-                      const newFolders = localConfig.musicFolders.filter((_, i) => i !== index);
-                      setLocalConfig((prev) => ({ ...prev, musicFolders: newFolders }));
-                    } else {
+                    setLocalConfig((prev) => {
+                      if (prev.musicFolders.length > 1) {
+                        return { ...prev, musicFolders: prev.musicFolders.filter((_, i) => i !== index) };
+                      }
                       toast({
                         title: 'Mínimo de 1 pasta',
                         description: 'Você precisa ter pelo menos uma pasta configurada.',
                         variant: 'destructive',
                       });
-                    }
+                      return prev;
+                    });
                   }}
                 >
                   <Trash2 className="w-4 h-4" />
