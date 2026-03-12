@@ -19,6 +19,7 @@ interface PreviewSong {
   artist: string;
   title: string;
   isSpecial: boolean;
+  durationSec?: number;
 }
 
 /**
