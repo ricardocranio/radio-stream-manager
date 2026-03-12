@@ -1236,47 +1236,66 @@ export function useAutoGradeBuilder() {
       return null;
     };
 
-    // === PHASE 1: Follow the sequence exactly (1 full cycle) ===
-    // The sequence defines the structure — respect it completely first.
+    // === PHASE 1: Follow the sequence but STOP when approaching max duration ===
+    // Each block MUST stay between 29-32 minutes. Stop adding songs near the ceiling.
     const sequenceLength = activeSequence.length;
     for (let i = 0; i < sequenceLength; i++) {
+      // HARD STOP: if we've already hit max duration, stop adding songs
+      if (accumulatedDurationSec >= MAX_BLOCK_DURATION_SEC) {
+        console.log(`[AUTO-GRADE] 🛑 Bloco ${timeStr}: parou na posição ${i}/${sequenceLength} — já atingiu ${(accumulatedDurationSec / 60).toFixed(1)} min (max 32)`);
+        break;
+      }
+
       const seq = activeSequence[i];
 
       // Try special sequence types first
       const specialResult = await handleSpecialSequenceType(seq, hour, minute, selCtx, ctx, targetDay);
       if (specialResult !== null) {
-        songs.push(specialResult);
         const dur = await getSongDuration(specialResult);
-        accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
+        const projectedTotal = accumulatedDurationSec + dur + (songs.length > 0 ? VHT_DURATION_SEC : 0);
+        // Don't add if it would push past max (allow small 30s grace)
+        if (projectedTotal > MAX_BLOCK_DURATION_SEC + 30) {
+          console.log(`[AUTO-GRADE] ⏸️ Bloco ${timeStr}: música especial pulada na pos ${i} — ultrapassaria ${(projectedTotal / 60).toFixed(1)} min`);
+          break;
+        }
+        songs.push(specialResult);
+        accumulatedDurationSec = projectedTotal;
         continue;
       }
 
       // Normal station selection (P0-P6)
       const songStr = await selectSongForSlot(seq, selCtx, ctx);
-      songs.push(songStr);
       const dur = await getSongDuration(songStr);
-      accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
+      const projectedTotal = accumulatedDurationSec + dur + (songs.length > 0 ? VHT_DURATION_SEC : 0);
+      
+      // Don't add if it would push past max (allow small 30s grace)
+      if (projectedTotal > MAX_BLOCK_DURATION_SEC + 30) {
+        console.log(`[AUTO-GRADE] ⏸️ Bloco ${timeStr}: parou na posição ${i}/${sequenceLength} — próxima música levaria a ${(projectedTotal / 60).toFixed(1)} min`);
+        break;
+      }
+      
+      songs.push(songStr);
+      accumulatedDurationSec = projectedTotal;
     }
 
-    // === PHASE 2: Duration adjustment by REPLACING with different artist-song (same station) ===
-    // If block is short, replace the shortest song with a longer one from the same station.
-    // This picks a completely DIFFERENT artist+title, not a "version" of the same song.
-    const durationGapSec = MIN_BLOCK_DURATION_SEC - accumulatedDurationSec;
+    // === PHASE 2: Duration adjustment by REPLACING songs ===
+    // If block is TOO LONG (>32min): replace longest songs with shorter alternatives from same station
+    // If block is TOO SHORT (<29min): replace shortest songs with longer alternatives from same station
     
-    if (durationGapSec > 0) {
-      console.log(`[AUTO-GRADE] 🔄 Bloco ${timeStr} abaixo do alvo por ${(durationGapSec / 60).toFixed(1)} min — tentando substituir músicas curtas por outras mais longas da mesma emissora`);
+    // Build list of songs with their durations
+    const songDurations: Array<{ idx: number; dur: number; song: string }> = [];
+    for (let si = 0; si < songs.length; si++) {
+      const dur = await getSongDuration(songs[si]);
+      songDurations.push({ idx: si, dur, song: songs[si] });
+    }
+    
+    if (accumulatedDurationSec > MAX_BLOCK_DURATION_SEC) {
+      // === TOO LONG: Replace longest songs with shorter alternatives ===
+      console.log(`[AUTO-GRADE] 🔻 Bloco ${timeStr} acima do máximo: ${(accumulatedDurationSec / 60).toFixed(1)} min > 32 min — tentando encurtar`);
+      songDurations.sort((a, b) => b.dur - a.dur); // longest first
       
-      // Build list of songs with their durations and sort by shortest first
-      const songDurations: Array<{ idx: number; dur: number; song: string }> = [];
-      for (let si = 0; si < songs.length; si++) {
-        const dur = await getSongDuration(songs[si]);
-        songDurations.push({ idx: si, dur, song: songs[si] });
-      }
-      songDurations.sort((a, b) => a.dur - b.dur); // shortest first
-      
-      // Try replacing shortest songs first with longer alternatives
       for (const { idx: swapIdx, dur: currentDur } of songDurations) {
-        if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
+        if (accumulatedDurationSec <= MAX_BLOCK_DURATION_SEC) break;
         
         const seqEntry = swapIdx < activeSequence.length ? activeSequence[swapIdx] : null;
         if (!seqEntry) continue;
@@ -1284,9 +1303,6 @@ export function useAutoGradeBuilder() {
         const stationName = seqEntry.radioSource;
         const resolvedName = Object.entries(STATION_ID_TO_DB_NAME).find(([k]) => k === stationName)?.[1] || stationName;
         const pool = songsByStation[resolvedName] || songsByStation[stationName] || [];
-        
-        // Find best candidate: different artist, longer duration, from same station
-        let bestCandidate: { file: string; dur: number; title: string; artist: string } | null = null;
         
         for (const candidate of pool) {
           const key = `${candidate.title.toLowerCase().trim()}-${candidate.artist.toLowerCase().trim()}`;
@@ -1300,47 +1316,91 @@ export function useAutoGradeBuilder() {
           const candidateFile = `"${libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`)}"`;
           const candidateDur = await getSongDuration(candidateFile);
           
-          // Accept if candidate is longer than current song
-          if (candidateDur > currentDur + 10) {
-            if (!bestCandidate || candidateDur > bestCandidate.dur) {
-              bestCandidate = { file: candidateFile, dur: candidateDur, title: candidate.title, artist: candidate.artist };
-            }
-            // Take first good match to avoid excessive IPC
-            if (bestCandidate) break;
+          // Accept if candidate is SHORTER than current (at least 15s shorter)
+          if (candidateDur < currentDur - 15 && candidateDur >= 120) {
+            const durDiff = currentDur - candidateDur;
+            console.log(`[AUTO-GRADE] 🔻 Encurtou pos ${swapIdx}: "${songs[swapIdx]}" (${(currentDur/60).toFixed(1)}min) → "${candidateFile}" (${(candidateDur/60).toFixed(1)}min) [-${(durDiff/60).toFixed(1)}min]`);
+            songs[swapIdx] = candidateFile;
+            usedInBlock.add(key);
+            usedArtistsInBlock.add(candidate.artist.toLowerCase().trim());
+            markSongAsUsed(candidate.title, candidate.artist, timeStr);
+            accumulatedDurationSec -= durDiff;
+            blockLogs.push({
+              blockTime: timeStr, type: 'substituted',
+              title: candidate.title, artist: candidate.artist,
+              station: stationName, reason: `Encurtou bloco (-${(durDiff/60).toFixed(1)} min)`,
+            });
+            break;
           }
         }
+      }
+      
+      // If STILL too long after swaps, remove last songs until under max
+      while (accumulatedDurationSec > MAX_BLOCK_DURATION_SEC + 30 && songs.length > 5) {
+        const removedSong = songs.pop()!;
+        const removedDur = songDurations.find(sd => sd.song === removedSong)?.dur || DEFAULT_SONG_DURATION_SEC;
+        accumulatedDurationSec -= removedDur + VHT_DURATION_SEC;
+        console.log(`[AUTO-GRADE] ✂️ Removida música do final do bloco ${timeStr}: ${removedSong} — bloco agora ${(accumulatedDurationSec / 60).toFixed(1)} min`);
+      }
+      
+    } else if (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC) {
+      // === TOO SHORT: Replace shortest songs with longer alternatives ===
+      console.log(`[AUTO-GRADE] 🔺 Bloco ${timeStr} abaixo do mínimo: ${(accumulatedDurationSec / 60).toFixed(1)} min < 29 min — tentando alongar`);
+      songDurations.sort((a, b) => a.dur - b.dur); // shortest first
+      
+      for (const { idx: swapIdx, dur: currentDur } of songDurations) {
+        if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
         
-        if (bestCandidate) {
-          const durDiff = bestCandidate.dur - currentDur;
-          console.log(`[AUTO-GRADE] 🔄 Substituição pos ${swapIdx}: "${songs[swapIdx]}" (${(currentDur/60).toFixed(1)}min) → "${bestCandidate.file}" (${(bestCandidate.dur/60).toFixed(1)}min) [+${(durDiff/60).toFixed(1)}min]`);
+        const seqEntry = swapIdx < activeSequence.length ? activeSequence[swapIdx] : null;
+        if (!seqEntry) continue;
+        
+        const stationName = seqEntry.radioSource;
+        const resolvedName = Object.entries(STATION_ID_TO_DB_NAME).find(([k]) => k === stationName)?.[1] || stationName;
+        const pool = songsByStation[resolvedName] || songsByStation[stationName] || [];
+        
+        for (const candidate of pool) {
+          const key = `${candidate.title.toLowerCase().trim()}-${candidate.artist.toLowerCase().trim()}`;
+          if (usedInBlock.has(key)) continue;
+          if (usedArtistsInBlock.has(candidate.artist.toLowerCase().trim())) continue;
+          if (isRecentlyUsed(candidate.title, candidate.artist, timeStr)) continue;
           
-          songs[swapIdx] = bestCandidate.file;
-          const newKey = `${bestCandidate.title.toLowerCase().trim()}-${bestCandidate.artist.toLowerCase().trim()}`;
-          usedInBlock.add(newKey);
-          usedArtistsInBlock.add(bestCandidate.artist.toLowerCase().trim());
-          markSongAsUsed(bestCandidate.title, bestCandidate.artist, timeStr);
-          accumulatedDurationSec += durDiff;
+          const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
+          if (!libraryResult.exists) continue;
           
-          blockLogs.push({
-            blockTime: timeStr, type: 'substituted',
-            title: bestCandidate.title, artist: bestCandidate.artist,
-            station: stationName, reason: `Substituição por música mais longa (+${(durDiff/60).toFixed(1)} min)`,
-          });
+          const candidateFile = `"${libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`)}"`;
+          const candidateDur = await getSongDuration(candidateFile);
+          
+          // Accept if candidate is LONGER (at least 15s longer)
+          if (candidateDur > currentDur + 15) {
+            const durDiff = candidateDur - currentDur;
+            console.log(`[AUTO-GRADE] 🔺 Alongou pos ${swapIdx}: "${songs[swapIdx]}" (${(currentDur/60).toFixed(1)}min) → "${candidateFile}" (${(candidateDur/60).toFixed(1)}min) [+${(durDiff/60).toFixed(1)}min]`);
+            songs[swapIdx] = candidateFile;
+            usedInBlock.add(key);
+            usedArtistsInBlock.add(candidate.artist.toLowerCase().trim());
+            markSongAsUsed(candidate.title, candidate.artist, timeStr);
+            accumulatedDurationSec += durDiff;
+            blockLogs.push({
+              blockTime: timeStr, type: 'substituted',
+              title: candidate.title, artist: candidate.artist,
+              station: stationName, reason: `Alongou bloco (+${(durDiff/60).toFixed(1)} min)`,
+            });
+            break;
+          }
         }
       }
-    }
-    
-    // If STILL under minimum after swaps, add max 1 coringa as absolute last resort
-    if (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC) {
-      const coringaCode = config.coringaCode || 'mus';
-      songs.push(`"${coringaCode}"`);
-      accumulatedDurationSec += DEFAULT_SONG_DURATION_SEC + VHT_DURATION_SEC;
-      console.log(`[AUTO-GRADE] ⚠️ Coringa de segurança: "${coringaCode}" (bloco ainda abaixo de 29 min após trocas)`);
-      blockLogs.push({
-        blockTime: timeStr, type: 'substituted',
-        title: coringaCode, artist: 'CORINGA',
-        station: 'fallback', reason: 'Segurança: bloco abaixo de 29 min após trocas',
-      });
+      
+      // If STILL under minimum after swaps, add max 1 coringa as absolute last resort
+      if (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC) {
+        const coringaCode = config.coringaCode || 'mus';
+        songs.push(coringaCode);
+        accumulatedDurationSec += DEFAULT_SONG_DURATION_SEC + VHT_DURATION_SEC;
+        console.log(`[AUTO-GRADE] ⚠️ Coringa de segurança: "${coringaCode}" (bloco ainda abaixo de 29 min após trocas)`);
+        blockLogs.push({
+          blockTime: timeStr, type: 'substituted',
+          title: coringaCode, artist: 'CORINGA',
+          station: 'fallback', reason: 'Segurança: bloco abaixo de 29 min após trocas',
+        });
+      }
     }
 
     // Insert fixed content at configured position
