@@ -1904,74 +1904,120 @@ export function useAutoGradeBuilder() {
     setState(prev => ({ ...prev, minutesBeforeBlock: Math.max(1, Math.min(10, minutes)) }));
   }, []);
 
-  // Auto-build effect: monta e escreve de forma sequencial para não perder janela de escrita
-  useEffect(() => {
-    if (!state.isAutoEnabled) return;
-    const isWebOnly = !getIsElectronEnv();
-    console.log(`[AUTO-GRADE] ⏰ Modo automático ATIVO - monta silenciosamente, escreve ${state.minutesBeforeBlock} min antes do bloco`);
-    let lastBuiltBlock = '';
-    let lastWrittenBlock = '';
-    let tickInProgress = false;
+  // === REALTIME-TRIGGERED GRADE GENERATION ===
+  // Builds immediately when new scraped songs arrive via Supabase realtime.
+  // Once a block is fully resolved (all songs + correct duration), it locks permanently for that cycle.
+  // A safety polling interval (every 2 min) catches any missed realtime events.
+  // Disk write still happens only within the configured minutesBeforeBlock window.
 
-    const getUpcomingBlockInfo = (now: Date) => {
-      const currentMinute = now.getMinutes();
-      const currentHour = now.getHours();
-      let targetBlockHour = currentHour;
-      let targetBlockMinute = 0;
-      if (currentMinute < 30) targetBlockMinute = 30;
-      else { targetBlockHour = (currentHour + 1) % 24; targetBlockMinute = 0; }
-      const minutesUntilBlock = currentMinute < 30 ? 30 - currentMinute : 60 - currentMinute;
-      const blockKey = `${targetBlockHour.toString().padStart(2, '0')}:${targetBlockMinute.toString().padStart(2, '0')}`;
-      return { blockKey, minutesUntilBlock };
-    };
+  const realtimeBuildRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRealtimeBlockRef = useRef<string>('');
+  const lastRealtimeWrittenRef = useRef<string>('');
+  const realtimeTickInProgressRef = useRef(false);
 
-    const runTick = async () => {
-      if (tickInProgress) return;
-      tickInProgress = true;
-      try {
-        const { isRunning } = useRadioStore.getState();
-        if (!isRunning && !isWebOnly) return;
+  const getUpcomingBlockInfo = useCallback(() => {
+    const now = new Date();
+    const currentMinute = now.getMinutes();
+    const currentHour = now.getHours();
+    let targetBlockHour = currentHour;
+    let targetBlockMinute = 0;
+    if (currentMinute < 30) targetBlockMinute = 30;
+    else { targetBlockHour = (currentHour + 1) % 24; targetBlockMinute = 0; }
+    const minutesUntilBlock = currentMinute < 30 ? 30 - currentMinute : 60 - currentMinute;
+    const blockKey = `${targetBlockHour.toString().padStart(2, '0')}:${targetBlockMinute.toString().padStart(2, '0')}`;
+    return { blockKey, minutesUntilBlock };
+  }, []);
 
-        const now = new Date();
-        const { blockKey, minutesUntilBlock } = getUpcomingBlockInfo(now);
+  // Core tick: build grade + write if in window
+  const runGradeTick = useCallback(async (reason: string) => {
+    if (realtimeTickInProgressRef.current) return;
+    realtimeTickInProgressRef.current = true;
+    try {
+      const isWebOnly = !getIsElectronEnv();
+      const { isRunning } = useRadioStore.getState();
+      if (!isRunning && !isWebOnly) return;
 
-        // Novo ciclo (inclui primeira execução): sempre destrava o próximo bloco
-        if (lastBuiltBlock !== blockKey) {
-          console.log(`[AUTO-GRADE] 🔓 Ciclo ${lastBuiltBlock || 'inicial'} → ${blockKey}, destravando próximo bloco`);
-          builtBlocksRef.current.delete(blockKey);
-          lastBuiltBlock = blockKey;
-          console.log(`[AUTO-GRADE] 🔄 Montando grade em memória para bloco ${blockKey} (silencioso, forçando regeneração do ciclo)`);
+      const { blockKey, minutesUntilBlock } = getUpcomingBlockInfo();
+
+      // New cycle detection — unlock next block
+      if (lastRealtimeBlockRef.current !== blockKey) {
+        console.log(`[AUTO-GRADE] 🔓 Ciclo ${lastRealtimeBlockRef.current || 'inicial'} → ${blockKey} (${reason})`);
+        builtBlocksRef.current.delete(blockKey);
+        lastRealtimeBlockRef.current = blockKey;
+      }
+
+      // Only build if the block is NOT yet locked (fully resolved)
+      const isLocked = builtBlocksRef.current.has(blockKey);
+      if (!isLocked) {
+        console.log(`[AUTO-GRADE] ⚡ Montando grade em tempo real para bloco ${blockKey} (${reason})`);
+        await buildGrade(false, false); // Not forced — respects existing locks from isBlockFullyResolved
+      }
+
+      // Disk write within the configured window
+      const shouldWrite = !isWebOnly && minutesUntilBlock <= state.minutesBeforeBlock && lastRealtimeWrittenRef.current !== blockKey;
+      if (shouldWrite) {
+        if (pendingGradeRef.current?.blockKey !== blockKey) {
+          console.log(`[AUTO-GRADE] ♻️ Buffer desatualizado, regenerando ${blockKey} antes da escrita`);
           await buildGrade(false, true);
         }
-
-        // Escrita no disco dentro da janela configurada
-        const shouldWrite = !isWebOnly && minutesUntilBlock <= state.minutesBeforeBlock && lastWrittenBlock !== blockKey;
-        if (shouldWrite) {
-          // Garante que o buffer pendente corresponde ao bloco-alvo antes de gravar
-          if (pendingGradeRef.current?.blockKey !== blockKey) {
-            console.log(`[AUTO-GRADE] ♻️ Buffer pendente desatualizado (${pendingGradeRef.current?.blockKey || 'vazio'}), regenerando ${blockKey} antes da escrita`);
-            await buildGrade(false, true);
-          }
-          console.log(`[AUTO-GRADE] 📝 Janela de ${state.minutesBeforeBlock}min atingida! Escrevendo grade no disco para bloco ${blockKey}`);
-          await flushGradeToDisk();
-          lastWrittenBlock = blockKey;
-        }
-      } finally {
-        tickInProgress = false;
+        console.log(`[AUTO-GRADE] 📝 Escrevendo grade no disco para bloco ${blockKey} (${minutesUntilBlock} min antes)`);
+        await flushGradeToDisk();
+        lastRealtimeWrittenRef.current = blockKey;
       }
-    };
+    } finally {
+      realtimeTickInProgressRef.current = false;
+    }
+  }, [getUpcomingBlockInfo, buildGrade, flushGradeToDisk, state.minutesBeforeBlock]);
 
-    buildIntervalRef.current = setInterval(() => { void runTick(); }, 30 * 1000);
+  // Debounced trigger for realtime events (avoid building 10x in 1 second)
+  const debouncedRealtimeBuild = useCallback(() => {
+    if (realtimeBuildRef.current) clearTimeout(realtimeBuildRef.current);
+    realtimeBuildRef.current = setTimeout(() => {
+      void runGradeTick('realtime-event');
+    }, 3000); // 3s debounce — batches rapid inserts
+  }, [runGradeTick]);
 
-    // Initial tick imediato
+  // Realtime subscription: triggers build on new scraped_songs
+  useEffect(() => {
+    if (!state.isAutoEnabled) return;
+
+    console.log('[AUTO-GRADE] 📡 Realtime grade builder ATIVO — monta assim que novos dados chegam');
+
+    // Subscribe to scraped_songs inserts
+    const channel = supabase
+      .channel('grade-realtime-trigger')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'scraped_songs' },
+        (payload) => {
+          const song = payload.new as { artist?: string; station_name?: string };
+          console.log(`[AUTO-GRADE] 📡 Nova captura: ${song.artist || '?'} (${song.station_name || '?'}) — disparando montagem`);
+          debouncedRealtimeBuild();
+        }
+      )
+      .subscribe((status) => {
+        console.log(`[AUTO-GRADE] 📡 Realtime status: ${status}`);
+      });
+
+    // Safety polling fallback: every 2 min, in case realtime misses events
+    const pollingInterval = setInterval(() => {
+      void runGradeTick('polling-fallback');
+    }, 120 * 1000);
+
+    // Initial build immediately
     const { isRunning } = useRadioStore.getState();
+    const isWebOnly = !getIsElectronEnv();
     if (isRunning || isWebOnly) {
-      console.log('[AUTO-GRADE] 🚀 Tick inicial automático');
-      void runTick();
+      console.log('[AUTO-GRADE] 🚀 Build inicial imediato');
+      void runGradeTick('initial');
     }
 
-    return () => { if (buildIntervalRef.current) clearInterval(buildIntervalRef.current); };
-  }, [state.isAutoEnabled, state.minutesBeforeBlock, buildGrade, flushGradeToDisk]);
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(pollingInterval);
+      if (realtimeBuildRef.current) clearTimeout(realtimeBuildRef.current);
+    };
+  }, [state.isAutoEnabled, state.minutesBeforeBlock, debouncedRealtimeBuild, runGradeTick]);
 
   // Countdown update effect
   useEffect(() => {
