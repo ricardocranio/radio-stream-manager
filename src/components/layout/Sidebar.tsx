@@ -238,7 +238,7 @@ export function Sidebar({ activeTab, onTabChange, onTabHover, collapsed = false,
               <span className="text-[11px] font-medium text-success/80">Sistema Ativo</span>
             </div>
             <p className="text-[10px] text-muted-foreground/60 mt-1 font-mono">
-              v8 correções • PGM-FM
+              v5.1 • PGM-FM
             </p>
           </div>
         )}
