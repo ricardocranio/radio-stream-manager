@@ -1361,6 +1361,9 @@ if __name__ == "__main__":
         print(cor(Cores.GREEN, "  ✅ Modo Supabase ativo (REST API)!"))
         print(cor(Cores.CYAN, "  📻 Emissoras carregadas do banco (radio_stations + special_monitoring)"))
         print(cor(Cores.CYAN, "  📡 Fontes: OnlineRadioBox → Triton API → ICY → Playwright"))
+        print(cor(Cores.CYAN, "  🧊 Buffer de frescor: janela de 15 min, histórico de 60 min"))
+        print(cor(Cores.CYAN, "  🎯 Build pool: slots ponderados por atividade recente"))
+        print(cor(Cores.CYAN, "  📦 Envio em batch: dados acumulados e enviados após cada ciclo"))
     else:
         print(cor(Cores.YELLOW, "  ⚠️  Supabase não conectado - usando modo local"))
     print()
