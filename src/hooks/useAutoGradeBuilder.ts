@@ -1904,18 +1904,16 @@ export function useAutoGradeBuilder() {
     setState(prev => ({ ...prev, minutesBeforeBlock: Math.max(1, Math.min(10, minutes)) }));
   }, []);
 
-  // Auto-build effect: builds silently in memory every 6 min, writes TXT only at 10 min before block
+  // Auto-build effect: monta e escreve de forma sequencial para não perder janela de escrita
   useEffect(() => {
     if (!state.isAutoEnabled) return;
     const isWebOnly = !getIsElectronEnv();
     console.log(`[AUTO-GRADE] ⏰ Modo automático ATIVO - monta silenciosamente, escreve ${state.minutesBeforeBlock} min antes do bloco`);
     let lastBuiltBlock = '';
     let lastWrittenBlock = '';
+    let tickInProgress = false;
 
-    buildIntervalRef.current = setInterval(() => {
-      const { isRunning } = useRadioStore.getState();
-      if (!isRunning) return;
-      const now = new Date();
+    const getUpcomingBlockInfo = (now: Date) => {
       const currentMinute = now.getMinutes();
       const currentHour = now.getHours();
       let targetBlockHour = currentHour;
@@ -1924,44 +1922,52 @@ export function useAutoGradeBuilder() {
       else { targetBlockHour = (currentHour + 1) % 24; targetBlockMinute = 0; }
       const minutesUntilBlock = currentMinute < 30 ? 30 - currentMinute : 60 - currentMinute;
       const blockKey = `${targetBlockHour.toString().padStart(2, '0')}:${targetBlockMinute.toString().padStart(2, '0')}`;
+      return { blockKey, minutesUntilBlock };
+    };
 
-      // Clear only the NEXT block lock when transitioning to a new cycle
-      // The current block (already playing) stays locked unless it has unresolved fallbacks
-      if (lastBuiltBlock && lastBuiltBlock !== blockKey) {
-        console.log(`[AUTO-GRADE] 🔓 Novo ciclo de blocos (${lastBuiltBlock} → ${blockKey}), limpando lock do próximo bloco`);
-        builtBlocksRef.current.delete(blockKey);
-        // Keep current block locked — it's already playing and should not change
-        lastBuiltBlock = '';
+    const runTick = async () => {
+      if (tickInProgress) return;
+      tickInProgress = true;
+      try {
+        const { isRunning } = useRadioStore.getState();
+        if (!isRunning) return;
+
+        const now = new Date();
+        const { blockKey, minutesUntilBlock } = getUpcomingBlockInfo(now);
+
+        // Novo ciclo (inclui primeira execução): sempre destrava o próximo bloco
+        if (lastBuiltBlock !== blockKey) {
+          console.log(`[AUTO-GRADE] 🔓 Ciclo ${lastBuiltBlock || 'inicial'} → ${blockKey}, destravando próximo bloco`);
+          builtBlocksRef.current.delete(blockKey);
+          lastBuiltBlock = blockKey;
+          console.log(`[AUTO-GRADE] 🔄 Montando grade em memória para bloco ${blockKey} (silencioso)`);
+          await buildGrade(false);
+        }
+
+        // Escrita no disco dentro da janela configurada
+        const shouldWrite = !isWebOnly && minutesUntilBlock <= state.minutesBeforeBlock && lastWrittenBlock !== blockKey;
+        if (shouldWrite) {
+          // Garante que o buffer pendente corresponde ao bloco-alvo antes de gravar
+          if (pendingGradeRef.current?.blockKey !== blockKey) {
+            console.log(`[AUTO-GRADE] ♻️ Buffer pendente desatualizado (${pendingGradeRef.current?.blockKey || 'vazio'}), regenerando ${blockKey} antes da escrita`);
+            await buildGrade(false, true);
+          }
+          console.log(`[AUTO-GRADE] 📝 Janela de ${state.minutesBeforeBlock}min atingida! Escrevendo grade no disco para bloco ${blockKey}`);
+          await flushGradeToDisk();
+          lastWrittenBlock = blockKey;
+        }
+      } finally {
+        tickInProgress = false;
       }
+    };
 
-      // Silent build: mount in memory (every cycle if not yet locked)
-      if (lastBuiltBlock !== blockKey) {
-        console.log(`[AUTO-GRADE] 🔄 Montando grade em memória para bloco ${blockKey} (silencioso)`);
-        lastBuiltBlock = blockKey;
-        buildGrade(false); // silent, no file write
-      }
+    buildIntervalRef.current = setInterval(() => { void runTick(); }, 60 * 1000);
 
-      // Disk write: only exactly at the minutesBeforeBlock window (Electron only)
-      const shouldWrite = !isWebOnly && minutesUntilBlock <= state.minutesBeforeBlock && lastWrittenBlock !== blockKey;
-      if (shouldWrite) {
-        console.log(`[AUTO-GRADE] 📝 Janela de ${state.minutesBeforeBlock}min atingida! Escrevendo grade no disco para bloco ${blockKey}`);
-        lastWrittenBlock = blockKey;
-        flushGradeToDisk();
-      }
-    }, 60 * 1000);
-
-    // Initial build (silent)
+    // Initial tick imediato
     const { isRunning } = useRadioStore.getState();
     if (isRunning || isWebOnly) {
-      console.log(`[AUTO-GRADE] 🚀 Build inicial (silencioso em memória)`);
-      
-      // Check if we're already within the write window
-      const now = new Date();
-      const currentMinute = now.getMinutes();
-      const minutesUntilBlock = currentMinute < 30 ? 30 - currentMinute : 60 - currentMinute;
-      const shouldWriteNow = !isWebOnly && minutesUntilBlock <= state.minutesBeforeBlock;
-      
-      buildGrade(shouldWriteNow);
+      console.log('[AUTO-GRADE] 🚀 Tick inicial automático');
+      void runTick();
     }
 
     return () => { if (buildIntervalRef.current) clearInterval(buildIntervalRef.current); };
