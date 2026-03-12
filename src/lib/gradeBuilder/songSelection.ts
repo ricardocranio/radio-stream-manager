@@ -817,7 +817,8 @@ export async function handleSpecialSequenceType(
             station: candidate.station, style: candidate.style,
             reason: 'Aleatório',
           });
-          return `"${correctFilename}"`;
+          const sanitizedFilename = await ensureFileRenamedOnDisk(correctFilename, ctx.musicFolders, ctx.filterChars);
+          return `"${sanitizedFilename}"`;
         }
       }
     }
