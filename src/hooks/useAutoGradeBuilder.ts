@@ -1018,22 +1018,9 @@ export function useAutoGradeBuilder() {
         if (weekendResult) return fillBlockIfShort(weekendResult);
       }
 
-      // Voz do Brasil (21:00-21:30 weekdays) - obrigatório por lei
-      if (hour === 21 && (minute === 0 || minute === 30) && isWeekday(targetDay)) {
-        if (minute === 0) {
-          return generateVozDoBrasil(timeStr);
-        }
-        return {
-          line: '21:30 (FIXO ID=VOZ DO BRASIL) vht,vozbrasil',
-          logs: [{
-            blockTime: '21:30',
-            type: 'fixed' as const,
-            title: 'A Voz do Brasil (continuação)',
-            artist: 'Governo Federal',
-            station: 'EBC',
-            reason: 'Programa de 60 minutos — bloco 21:30 absorvido',
-          }],
-        };
+      // Voz do Brasil (21:00 weekdays) - obrigatório por lei (60 min, bloco 21:30 eliminado)
+      if (hour === 21 && minute === 0 && isWeekday(targetDay)) {
+        return generateVozDoBrasil(timeStr);
       }
 
       // TOP10 (18:30 weekdays)
