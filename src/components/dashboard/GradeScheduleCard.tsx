@@ -79,10 +79,10 @@ export function GradeScheduleCard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Get current day info - SÁB with accent for file compatibility
+  // Get current day info - without accents for file compatibility
   const dayInfo = useMemo(() => {
     const now = new Date();
-    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+    const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
     const dayName = days[now.getDay()];
     const dateFormatted = format(now, "EEEE, dd 'de' MMMM", { locale: ptBR });
     return { dayName, dateFormatted };
