@@ -174,7 +174,7 @@ export function GradeBuilderView() {
 
     // Misturadão (20:00/20:30 weekdays)
     if (hour === 20 && (minute === 0 || minute === 30) && isWeekday()) {
-      const dayNames = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SABADO'];
+      const dayNames = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO'];
       const dayName = dayNames[new Date().getDay()];
       const sorted = [...rankingSongs].sort((a, b) => b.plays - a.plays);
 
