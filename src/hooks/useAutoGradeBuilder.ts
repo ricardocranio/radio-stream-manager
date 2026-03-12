@@ -1236,41 +1236,37 @@ export function useAutoGradeBuilder() {
       return null;
     };
 
-    // Keep adding songs until we reach the target duration (29-32 min)
-    // IMPORTANT: Respect the sequence length — cycle at most 2x to avoid bloated blocks
-    const maxSequenceCycles = 2;
-    const maxSongsFromSequence = activeSequence.length * maxSequenceCycles;
-    const maxSongsGuard = Math.min(15, maxSongsFromSequence + 3); // Hard cap: 15 songs per block
-    
-    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard && sequenceCycleIndex < maxSongsFromSequence) {
-      const seq = activeSequence[sequenceCycleIndex % activeSequence.length];
-      sequenceCycleIndex++;
+    // === PHASE 1: Follow the sequence exactly (1 full cycle) ===
+    // The sequence defines the structure — respect it completely first.
+    const sequenceLength = activeSequence.length;
+    for (let i = 0; i < sequenceLength; i++) {
+      const seq = activeSequence[i];
 
       // Try special sequence types first
       const specialResult = await handleSpecialSequenceType(seq, hour, minute, selCtx, ctx, targetDay);
       if (specialResult !== null) {
-        const dur = await getSongDuration(specialResult);
-        const projectedTotal = accumulatedDurationSec + dur + (songs.length > 0 ? VHT_DURATION_SEC : 0);
-        if (projectedTotal > MAX_BLOCK_DURATION_SEC && accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
         songs.push(specialResult);
+        const dur = await getSongDuration(specialResult);
         accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
         continue;
       }
 
       // Normal station selection (P0-P6)
       const songStr = await selectSongForSlot(seq, selCtx, ctx);
-      const dur = await getSongDuration(songStr);
-      const projectedTotal = accumulatedDurationSec + dur + (songs.length > 0 ? VHT_DURATION_SEC : 0);
-      if (projectedTotal > MAX_BLOCK_DURATION_SEC && accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
       songs.push(songStr);
+      const dur = await getSongDuration(songStr);
       accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
     }
 
+    // === PHASE 2: If under 29 min after full sequence, fill with priority stations ===
+    // Only add extras to reach minimum duration — never more than 5 extras
+    const maxExtras = 5;
+
     // === FILL WITH PRIORITY STATIONS (BH FM / Metropolitana) ===
-    // Only fill if sequence cycling wasn't enough — limited to 3 extra songs
+    const maxTotalSongs = sequenceLength + maxExtras;
     let fillAttempts = 0;
     const maxFillAttempts = 3;
-    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard && fillAttempts < maxFillAttempts) {
+    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxTotalSongs && fillAttempts < maxFillAttempts) {
       fillAttempts++;
       const fillerSong = await getFillerSong();
       if (!fillerSong) break;
@@ -1285,13 +1281,13 @@ export function useAutoGradeBuilder() {
     }
 
     // === FILL WITH ANY AVAILABLE STATION (last resort before coringa) ===
-    if (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard) {
+    if (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxTotalSongs) {
       const allStationNames = Object.keys(songsByStation);
       for (const stationName of allStationNames) {
         if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
         const pool = songsByStation[stationName] || [];
         for (const candidate of pool) {
-          if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC || songs.length >= maxSongsGuard) break;
+          if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC || songs.length >= maxTotalSongs) break;
           const key = `${candidate.title.toLowerCase().trim()}-${candidate.artist.toLowerCase().trim()}`;
           if (usedInBlock.has(key)) continue;
           if (usedArtistsInBlock.has(candidate.artist.toLowerCase().trim())) continue;
@@ -1320,9 +1316,8 @@ export function useAutoGradeBuilder() {
     }
 
     // === CORINGA FILL (absolute last resort) ===
-    // If still under 29 min, pad with coringa codes
     const coringaCode = config.coringaCode || 'mus';
-    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard) {
+    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxTotalSongs) {
       songs.push(`"${coringaCode}"`);
       accumulatedDurationSec += DEFAULT_SONG_DURATION_SEC + VHT_DURATION_SEC;
       console.log(`[AUTO-GRADE] ⚠️ Preenchimento coringa: "${coringaCode}" (estimado ${(DEFAULT_SONG_DURATION_SEC / 60).toFixed(1)} min)`);
@@ -1359,7 +1354,7 @@ export function useAutoGradeBuilder() {
     
     const blockMinutes = (finalDurationSec / 60).toFixed(1);
     const durationStatus = finalDurationSec >= MIN_BLOCK_DURATION_SEC ? '✅' : '⚠️';
-    console.log(`[AUTO-GRADE] ⏱️ ${durationStatus} Bloco ${timeStr}: ${songs.length} músicas (seq=${activeSequence.length}, max=${maxSongsGuard}), ${allContent.length} itens total, ${blockMinutes} min (alvo: 29-32 min)`);
+    console.log(`[AUTO-GRADE] ⏱️ ${durationStatus} Bloco ${timeStr}: ${songs.length} músicas (seq=${sequenceLength}, max=${maxTotalSongs}), ${allContent.length} itens total, ${blockMinutes} min (alvo: 29-32 min)`);
 
     const lineContent = allContent.join(',vht,');
     return {
