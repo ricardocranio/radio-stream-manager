@@ -37,7 +37,7 @@ export const DAY_CODE_MAP: Record<WeekDay, string> = {
   'qua': 'QUA',
   'qui': 'QUI',
   'sex': 'SEX',
-  'sab': 'SAB',
+  'sab': 'SÁB',
 };
 
 /** Full day name mapping for fixed content filenames */
