@@ -637,6 +637,8 @@ export const useRadioStore = create<RadioState>()(
       // Song Aliases (corrections)
       songAliases: [
         { id: 'default-1', fromArtist: 'naldo lima', fromTitle: 'retrovisor', toArtist: 'Gusttavo Lima', toTitle: 'Retrovisor' },
+        { id: 'default-2', fromArtist: 'Kaize', fromTitle: 'Olha onde eu tô', toArtist: 'Ana Castela', toTitle: 'Olha onde eu tô' },
+        { id: 'default-3', fromArtist: 'Olho Seco', fromTitle: 'Olho Seco', toArtist: 'Luan Santana', toTitle: 'OLHO MARROM (Ao Vivo em Lisboa)' },
       ],
       setSongAliases: (songAliases) => set({ songAliases }),
       addSongAlias: (alias) => set((state) => ({ songAliases: [...state.songAliases, alias] })),
