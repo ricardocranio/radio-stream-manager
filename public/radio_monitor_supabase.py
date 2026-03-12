@@ -1291,7 +1291,7 @@ class RadioMonitor:
         print(cor(Cores.GREEN, "  ✅ Histórico e relatório salvos"))
     
     async def iniciar(self):
-        print(cor(Cores.CYAN, "\n🚀 Iniciando Monitor de Rádios v3.0 (Multi-Source)...\n"))
+        print(cor(Cores.CYAN, "\n🚀 Iniciando Monitor de Rádios v3.5 (Frescor + Pool)...\n"))
         
         self.radios = self._carregar_radios_supabase()
         self.special_radios = self._carregar_special_monitoring()
