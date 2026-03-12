@@ -1961,7 +1961,7 @@ export function useAutoGradeBuilder() {
       }
     };
 
-    buildIntervalRef.current = setInterval(() => { void runTick(); }, 60 * 1000);
+    buildIntervalRef.current = setInterval(() => { void runTick(); }, 30 * 1000);
 
     // Initial tick imediato
     const { isRunning } = useRadioStore.getState();
