@@ -1236,35 +1236,31 @@ export function useAutoGradeBuilder() {
       return null;
     };
 
-    // Keep adding songs until we reach the target duration (29-32 min)
-    // IMPORTANT: Respect the sequence length — cycle at most 2x to avoid bloated blocks
-    const maxSequenceCycles = 2;
-    const maxSongsFromSequence = activeSequence.length * maxSequenceCycles;
-    const maxSongsGuard = Math.min(15, maxSongsFromSequence + 3); // Hard cap: 15 songs per block
-    
-    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard && sequenceCycleIndex < maxSongsFromSequence) {
-      const seq = activeSequence[sequenceCycleIndex % activeSequence.length];
-      sequenceCycleIndex++;
+    // === PHASE 1: Follow the sequence exactly (1 full cycle) ===
+    // The sequence defines the structure — respect it completely first.
+    const sequenceLength = activeSequence.length;
+    for (let i = 0; i < sequenceLength; i++) {
+      const seq = activeSequence[i];
 
       // Try special sequence types first
       const specialResult = await handleSpecialSequenceType(seq, hour, minute, selCtx, ctx, targetDay);
       if (specialResult !== null) {
-        const dur = await getSongDuration(specialResult);
-        const projectedTotal = accumulatedDurationSec + dur + (songs.length > 0 ? VHT_DURATION_SEC : 0);
-        if (projectedTotal > MAX_BLOCK_DURATION_SEC && accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
         songs.push(specialResult);
+        const dur = await getSongDuration(specialResult);
         accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
         continue;
       }
 
       // Normal station selection (P0-P6)
       const songStr = await selectSongForSlot(seq, selCtx, ctx);
-      const dur = await getSongDuration(songStr);
-      const projectedTotal = accumulatedDurationSec + dur + (songs.length > 0 ? VHT_DURATION_SEC : 0);
-      if (projectedTotal > MAX_BLOCK_DURATION_SEC && accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
       songs.push(songStr);
+      const dur = await getSongDuration(songStr);
       accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
     }
+
+    // === PHASE 2: If under 29 min after full sequence, fill with priority stations ===
+    // Only add extras to reach minimum duration — never more than 5 extras
+    const maxExtras = 5;
 
     // === FILL WITH PRIORITY STATIONS (BH FM / Metropolitana) ===
     // Only fill if sequence cycling wasn't enough — limited to 3 extra songs
