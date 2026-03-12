@@ -1785,8 +1785,15 @@ export function useAutoGradeBuilder() {
         lineMap.set(currentTimeKey, mergedCurrentLine);
         if (currentResult.durationMinutes) durationMap.set(currentTimeKey, currentResult.durationMinutes);
         allLogs.push(...currentResult.logs);
-        builtBlocksRef.current.add(currentTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} atualizado (somente faltantes quando aplicável)`);
+
+        const currentResolvedAfterBuild = isBlockFullyResolved(mergedCurrentLine, coringaCode);
+        if (currentResolvedAfterBuild) {
+          builtBlocksRef.current.add(currentTimeKey);
+          console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} COMPLETO após atualização — travado`);
+        } else {
+          builtBlocksRef.current.delete(currentTimeKey);
+          console.log(`[AUTO-GRADE] 🔄 Bloco ${currentTimeKey} ainda incompleto — continuará em atualização realtime`);
+        }
       }
 
       if (shouldBuildNext) {
@@ -1799,8 +1806,15 @@ export function useAutoGradeBuilder() {
         lineMap.set(nextTimeKey, mergedNextLine);
         if (nextResult.durationMinutes) durationMap.set(nextTimeKey, nextResult.durationMinutes);
         allLogs.push(...nextResult.logs);
-        builtBlocksRef.current.add(nextTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} atualizado (somente faltantes quando aplicável)`);
+
+        const nextResolvedAfterBuild = isBlockFullyResolved(mergedNextLine, coringaCode);
+        if (nextResolvedAfterBuild) {
+          builtBlocksRef.current.add(nextTimeKey);
+          console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} COMPLETO após atualização — travado`);
+        } else {
+          builtBlocksRef.current.delete(nextTimeKey);
+          console.log(`[AUTO-GRADE] 🔄 Bloco ${nextTimeKey} ainda incompleto — continuará em atualização realtime`);
+        }
       }
 
       if (allLogs.length > 0) {
