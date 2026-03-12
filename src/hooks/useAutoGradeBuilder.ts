@@ -1237,8 +1237,12 @@ export function useAutoGradeBuilder() {
     };
 
     // Keep adding songs until we reach the target duration (29-32 min)
-    const maxSongsGuard = 20; // Safety: never more than 20 songs per block
-    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard) {
+    // IMPORTANT: Respect the sequence length — cycle at most 2x to avoid bloated blocks
+    const maxSequenceCycles = 2;
+    const maxSongsFromSequence = activeSequence.length * maxSequenceCycles;
+    const maxSongsGuard = Math.min(15, maxSongsFromSequence + 3); // Hard cap: 15 songs per block
+    
+    while (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC && songs.length < maxSongsGuard && sequenceCycleIndex < maxSongsFromSequence) {
       const seq = activeSequence[sequenceCycleIndex % activeSequence.length];
       sequenceCycleIndex++;
 
