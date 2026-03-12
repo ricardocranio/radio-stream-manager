@@ -30,30 +30,26 @@ function getPythonCommand() {
 
 function getMonitorScriptPath() {
   const app = _app;
-  if (app.isPackaged) {
-    const possiblePaths = [
-      path.join(process.resourcesPath, 'app.asar', 'dist', 'radio_monitor_supabase.py'),
-      path.join(process.resourcesPath, 'app', 'dist', 'radio_monitor_supabase.py'),
-      path.join(app.getAppPath(), 'dist', 'radio_monitor_supabase.py'),
-      path.join(app.getAppPath(), 'public', 'radio_monitor_supabase.py'),
-    ];
-    for (const p of possiblePaths) {
-      if (fs.existsSync(p)) return p;
-    }
-    const asarPath = path.join(app.getAppPath(), 'dist', 'radio_monitor_supabase.py');
-    const tempPath = path.join(app.getPath('userData'), 'radio_monitor_supabase.py');
-    try {
-      if (fs.existsSync(asarPath)) {
-        fs.copyFileSync(asarPath, tempPath);
-        return tempPath;
-      }
-    } catch (e) {
-      console.error('[MONITOR] Failed to extract script:', e.message);
-    }
-    return tempPath;
-  } else {
+
+  if (!app.isPackaged) {
     return path.join(__dirname, '..', '..', 'public', 'radio_monitor_supabase.py');
   }
+
+  const userDataPath = path.join(app.getPath('userData'), 'radio_monitor_supabase.py');
+  const possiblePaths = [
+    userDataPath,
+    path.join(process.resourcesPath, 'app', 'public', 'radio_monitor_supabase.py'),
+    path.join(app.getAppPath(), 'public', 'radio_monitor_supabase.py'),
+    path.join(process.resourcesPath, 'app.asar', 'dist', 'radio_monitor_supabase.py'),
+    path.join(process.resourcesPath, 'app', 'dist', 'radio_monitor_supabase.py'),
+    path.join(app.getAppPath(), 'dist', 'radio_monitor_supabase.py'),
+  ];
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+
+  return userDataPath;
 }
 
 function addMonitorLog(line) {
