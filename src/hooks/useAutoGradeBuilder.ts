@@ -1258,9 +1258,9 @@ export function useAutoGradeBuilder() {
       accumulatedDurationSec += dur + (songs.length > 1 ? VHT_DURATION_SEC : 0);
     }
 
-    // === PHASE 2: If under 29 min after full sequence, fill with priority stations ===
-    // Only add extras to reach minimum duration — never more than 5 extras
-    const maxExtras = 5;
+    // === PHASE 2: If under 29 min after full sequence, fill sparingly ===
+    // With ~3 min/song + VHTs, 10 songs almost always reach 29 min. Max 2 extras as safety net.
+    const maxExtras = 2;
 
     // === FILL WITH PRIORITY STATIONS (BH FM / Metropolitana) ===
     const maxTotalSongs = sequenceLength + maxExtras;
