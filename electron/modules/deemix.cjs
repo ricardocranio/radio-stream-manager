@@ -119,10 +119,11 @@ function installDeemix() {
   });
 }
 
-function searchDeezerTrack(artist, title) {
+function searchDeezerTrack(artist, title, options = {}) {
+  const { minDurationSec = 150, returnAll = false } = options; // 2:30 minimum by default
   return new Promise((resolve, reject) => {
     const searchQuery = encodeURIComponent(`${artist} ${title}`);
-    const searchUrl = `https://api.deezer.com/search?q=${searchQuery}&limit=5`;
+    const searchUrl = `https://api.deezer.com/search?q=${searchQuery}&limit=10`;
     
     https.get(searchUrl, (res) => {
       let data = '';
@@ -130,10 +131,32 @@ function searchDeezerTrack(artist, title) {
       res.on('end', () => {
         try {
           const result = JSON.parse(data);
-          if (result.data && result.data.length > 0) {
-            resolve(result.data[0]);
-          } else {
+          if (!result.data || result.data.length === 0) {
             reject(new Error('Música não encontrada no Deezer'));
+            return;
+          }
+
+          if (returnAll) {
+            resolve(result.data);
+            return;
+          }
+
+          // Try to find a version with acceptable duration
+          const validTracks = result.data.filter(t => t.duration >= minDurationSec);
+          
+          if (validTracks.length > 0) {
+            const chosen = validTracks[0];
+            const mins = Math.floor(chosen.duration / 60);
+            const secs = chosen.duration % 60;
+            console.log(`[DEEZER] ✅ Selected: ${chosen.artist.name} - ${chosen.title} (${mins}:${String(secs).padStart(2, '0')}) — passed min ${minDurationSec}s`);
+            resolve(chosen);
+          } else {
+            // All results are too short — use first but warn
+            const first = result.data[0];
+            const mins = Math.floor(first.duration / 60);
+            const secs = first.duration % 60;
+            console.log(`[DEEZER] ⚠️ All results under ${minDurationSec}s. Using: ${first.artist.name} - ${first.title} (${mins}:${String(secs).padStart(2, '0')})`);
+            resolve(first);
           }
         } catch (e) {
           reject(new Error('Falha ao parsear resposta do Deezer'));
