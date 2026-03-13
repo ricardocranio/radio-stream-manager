@@ -5,6 +5,7 @@
  * - AI song classification every 30 minutes
  * - Auto-purge blocked files from disk every 12 hours (Electron only)
  * - Auto-deduplicate music library every 24 hours (Electron only)
+ * - Library ID3 metadata scan once per session (Electron only)
  * - History compression daily at 4:00 AM
  * 
  * NOTE: ARL validation is handled by useGlobalDownloadService (every 15 min)
@@ -13,6 +14,7 @@
 import { useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useRadioStore } from '@/store/radioStore';
+import { normalizeId3Genre, genreToEnergy } from '@/lib/id3GenreUtils';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 const CLASSIFY_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
@@ -20,6 +22,7 @@ const PURGE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 const DEDUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const TEMP_PROCESS_INTERVAL_MS = 2 * 60 * 1000; // Every 2 minutes
 const MAINTENANCE_CHECK_MS = 60 * 1000; // Check every minute
+const ID3_SCAN_KEY = 'pgmr_last_id3_scan'; // localStorage key for scan date
 
 export function useBackgroundMaintenance() {
   const lastClassifyRef = useRef<number>(0);
@@ -28,6 +31,7 @@ export function useBackgroundMaintenance() {
   const lastTempProcessRef = useRef<number>(0);
   const lastCompressRef = useRef<string>(''); // Date string of last compression
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const id3ScanRunningRef = useRef(false);
 
   const classifySongs = useCallback(async () => {
     try {
@@ -152,6 +156,131 @@ export function useBackgroundMaintenance() {
     }
   }, []);
 
+  /**
+   * Scan entire music library ID3 tags and enrich scraped_songs in the database.
+   * Runs once per day silently in the background.
+   * Matches library files to DB records by artist+title and updates genre/energy/year.
+   */
+  const scanLibraryId3 = useCallback(async () => {
+    if (!isElectron || !window.electronAPI?.scanLibraryMetadata || id3ScanRunningRef.current) return;
+
+    // Check if already scanned today
+    try {
+      const lastScan = localStorage.getItem(ID3_SCAN_KEY);
+      const today = new Date().toDateString();
+      if (lastScan === today) return;
+    } catch { /* proceed */ }
+
+    id3ScanRunningRef.current = true;
+    console.log('[MAINTENANCE] 🏷️ Iniciando scan ID3 da biblioteca (silencioso)...');
+
+    try {
+      const { config, deezerConfig } = useRadioStore.getState();
+      const allFolders = [
+        ...config.musicFolders,
+        deezerConfig.downloadFolder,
+      ].filter(Boolean);
+
+      if (allFolders.length === 0) {
+        id3ScanRunningRef.current = false;
+        return;
+      }
+
+      const result = await window.electronAPI.scanLibraryMetadata({ musicFolders: allFolders });
+      if (!result?.success || !result.songs?.length) {
+        console.log('[MAINTENANCE] 🏷️ Scan ID3: nenhum arquivo encontrado');
+        id3ScanRunningRef.current = false;
+        return;
+      }
+
+      console.log(`[MAINTENANCE] 🏷️ Scan ID3: ${result.songs.length} arquivos escaneados, enriquecendo banco...`);
+
+      // Build a map of normalized artist+title → genre/year from library files
+      const libraryMap = new Map<string, { genre: string | null; year: string | null; bpm: number | null }>();
+      for (const song of result.songs) {
+        const key = `${(song.artist || '').toLowerCase().trim()}|${(song.title || '').toLowerCase().trim()}`;
+        if (key === '|' || key.startsWith('desconhecido|')) continue;
+        libraryMap.set(key, {
+          genre: song.genre ? normalizeId3Genre(song.genre) : null,
+          year: song.year || null,
+          bpm: song.bpm || null,
+        });
+      }
+
+      // Fetch songs from DB that are missing genre or year
+      const { data: dbSongs, error } = await supabase
+        .from('scraped_songs')
+        .select('id, artist, title, ai_genre, year')
+        .or('ai_genre.is.null,year.is.null')
+        .limit(2000);
+
+      if (error || !dbSongs?.length) {
+        console.log(`[MAINTENANCE] 🏷️ Scan ID3: ${error ? 'erro no DB' : 'nenhuma música sem gênero/ano no DB'}`);
+        localStorage.setItem(ID3_SCAN_KEY, new Date().toDateString());
+        id3ScanRunningRef.current = false;
+        return;
+      }
+
+      // Match and batch update
+      let enrichedCount = 0;
+      const BATCH_SIZE = 50;
+      
+      for (let i = 0; i < dbSongs.length; i += BATCH_SIZE) {
+        const batch = dbSongs.slice(i, i + BATCH_SIZE);
+        
+        for (const dbSong of batch) {
+          const key = `${dbSong.artist.toLowerCase().trim()}|${dbSong.title.toLowerCase().trim()}`;
+          const libData = libraryMap.get(key);
+          if (!libData) continue;
+
+          const updates: Record<string, string> = {};
+          if (!dbSong.ai_genre && libData.genre && libData.genre !== 'OUTRO') {
+            updates.ai_genre = libData.genre;
+            updates.ai_energy = genreToEnergy(libData.genre);
+          }
+          if (!dbSong.year && libData.year) {
+            updates.year = libData.year;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await supabase
+              .from('scraped_songs')
+              .update(updates)
+              .eq('id', dbSong.id);
+            enrichedCount++;
+          }
+        }
+
+        // Yield to event loop between batches
+        if (i + BATCH_SIZE < dbSongs.length) {
+          await new Promise(r => setTimeout(r, 100));
+        }
+      }
+
+      // Also update BPM cache from library scan
+      try {
+        const { updateBpmCacheEntry } = await import('@/lib/bpmCacheBridge');
+        let bpmCount = 0;
+        for (const song of result.songs) {
+          if (song.bpm && song.bpm > 0 && song.bpm < 300 && song.artist && song.title) {
+            updateBpmCacheEntry(song.artist, song.title, song.bpm);
+            bpmCount++;
+          }
+        }
+        if (bpmCount > 0) {
+          console.log(`[MAINTENANCE] 🥁 BPM cache atualizado com ${bpmCount} valores da biblioteca`);
+        }
+      } catch { /* non-critical */ }
+
+      console.log(`[MAINTENANCE] 🏷️ Scan ID3 concluído: ${enrichedCount} músicas enriquecidas no banco`);
+      localStorage.setItem(ID3_SCAN_KEY, new Date().toDateString());
+    } catch (error) {
+      console.error('[MAINTENANCE] Erro no scan ID3:', error);
+    } finally {
+      id3ScanRunningRef.current = false;
+    }
+  }, []);
+
   const start = useCallback(() => {
     // Initial classification after 2 minutes
     setTimeout(() => classifySongs(), 2 * 60 * 1000);
@@ -169,6 +298,11 @@ export function useBackgroundMaintenance() {
     // Initial temp processing after 1 minute
     if (isElectron) {
       setTimeout(() => processTempFiles(), 60 * 1000);
+    }
+
+    // Library ID3 scan after 5 minutes (silent, once per day)
+    if (isElectron) {
+      setTimeout(() => scanLibraryId3(), 5 * 60 * 1000);
     }
 
     intervalRef.current = setInterval(() => {
@@ -207,12 +341,12 @@ export function useBackgroundMaintenance() {
       }
     }, MAINTENANCE_CHECK_MS);
 
-    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, purge 12h, dedup 24h, compressão 4h)');
+    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, ID3 scan diário, purge 12h, dedup 24h, compressão 4h)');
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary, processTempFiles]);
+  }, [classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary, processTempFiles, scanLibraryId3]);
 
-  return { start, classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary, processTempFiles };
+  return { start, classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary, processTempFiles, scanLibraryId3 };
 }
