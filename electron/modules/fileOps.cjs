@@ -338,7 +338,80 @@ function register({ getMainWindow, safeHandle }) {
     }
   });
 
-  // IPC: Move file to genre subfolder
+  // IPC: Reorganize existing files by ID3 genre (only Rock/Metal)
+  handle('reorganize-by-genre', async (event, { sourceFolder, genreRoutes }) => {
+    console.log(`[GENRE-REORG] 🔍 Scanning: ${sourceFolder}`);
+    const results = { scanned: 0, moved: 0, skipped: 0, errors: 0, details: [] };
+    try {
+      if (!fs.existsSync(sourceFolder)) {
+        return { success: false, error: `Pasta não encontrada: ${sourceFolder}` };
+      }
+      const files = fs.readdirSync(sourceFolder).filter(f => /\.(mp3|flac)$/i.test(f));
+      results.scanned = files.length;
+      console.log(`[GENRE-REORG] Found ${files.length} audio files`);
+
+      // Build genre map from routes: { 'rock': 'Rock', 'metal': 'Metal' }
+      const genreMap = {};
+      for (const route of (genreRoutes || [])) {
+        if (route.genre && route.folderName) {
+          genreMap[route.genre.toLowerCase()] = route.folderName;
+        }
+      }
+
+      for (const file of files) {
+        try {
+          const filePath = path.join(sourceFolder, file);
+          const tags = parseID3TagsFromFile(filePath);
+          const rawGenre = (tags.genre || '').toLowerCase().replace(/[()]/g, '').trim();
+          
+          if (!rawGenre) {
+            results.skipped++;
+            continue;
+          }
+
+          // Check if genre matches any route
+          let matchedFolder = null;
+          for (const [genreKey, folder] of Object.entries(genreMap)) {
+            if (rawGenre.includes(genreKey)) {
+              matchedFolder = folder;
+              break;
+            }
+          }
+
+          if (!matchedFolder) {
+            results.skipped++;
+            continue;
+          }
+
+          const targetFolder = path.join(sourceFolder, matchedFolder);
+          if (!fs.existsSync(targetFolder)) {
+            fs.mkdirSync(targetFolder, { recursive: true });
+          }
+          const targetPath = path.join(targetFolder, file);
+          if (fs.existsSync(targetPath)) {
+            results.skipped++;
+            continue;
+          }
+          try {
+            fs.renameSync(filePath, targetPath);
+          } catch (e) {
+            fs.copyFileSync(filePath, targetPath);
+            fs.unlinkSync(filePath);
+          }
+          results.moved++;
+          results.details.push({ file, genre: rawGenre, folder: matchedFolder });
+          console.log(`[GENRE-REORG] ✅ ${file} → ${matchedFolder}/ (${rawGenre})`);
+        } catch (fileErr) {
+          results.errors++;
+          console.warn(`[GENRE-REORG] ⚠️ Erro em ${file}: ${fileErr.message}`);
+        }
+      }
+      console.log(`[GENRE-REORG] Done: ${results.moved} moved, ${results.skipped} skipped, ${results.errors} errors`);
+      return { success: true, ...results };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
   handle('move-file-to-genre-folder', async (event, { sourceFolder, fileName, targetSubfolder }) => {
     try {
       const sourcePath = path.join(sourceFolder, fileName);
