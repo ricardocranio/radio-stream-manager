@@ -81,12 +81,6 @@ function downloadFile(url, outputFolder, filename, onProgress, deleteExisting = 
 
       fileStream.on('finish', () => {
         fileStream.close();
-        const MIN_VOZ_SIZE = 40 * 1024 * 1024;
-        if (filename.startsWith('VozDoBrasil') && downloadedSize < MIN_VOZ_SIZE) {
-          try { fs.unlinkSync(filePath); } catch (e) {}
-          resolve({ success: false, error: `Arquivo inválido: ${(downloadedSize / 1024 / 1024).toFixed(1)}MB (mínimo 40MB)` });
-          return;
-        }
         resolve({ success: true, filePath, fileSize: downloadedSize });
       });
       fileStream.on('error', (err) => { fs.unlink(filePath, () => {}); reject(err); });
