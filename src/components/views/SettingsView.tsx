@@ -540,6 +540,44 @@ export function SettingsView() {
                           Ex: {deezerConfig.downloadFolder}{'\\' + (deezerConfig.genreDefaultFolder || 'Musicas')}
                         </p>
                       </div>
+
+                      {/* Reorganize button */}
+                      <div className="pt-2 border-t border-border">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          disabled={!window.electronAPI?.isElectron}
+                          onClick={async () => {
+                            if (!window.electronAPI?.isElectron || !(window.electronAPI as any)?.reorganizeByGenre) {
+                              toast({ title: 'Recurso Desktop', description: 'Disponível apenas no app desktop.', variant: 'destructive' });
+                              return;
+                            }
+                            toast({ title: '🔍 Escaneando...', description: 'Lendo tags ID3 dos arquivos existentes...' });
+                            try {
+                              const result = await (window.electronAPI as any).reorganizeByGenre({
+                                sourceFolder: deezerConfig.downloadFolder,
+                                genreRoutes: deezerConfig.genreRoutes || [],
+                              });
+                              if (result?.success) {
+                                toast({
+                                  title: '✅ Reorganização concluída',
+                                  description: `${result.scanned} escaneados, ${result.moved} movidos, ${result.skipped} sem alteração`,
+                                });
+                              } else {
+                                toast({ title: 'Erro', description: result?.error || 'Falha ao reorganizar', variant: 'destructive' });
+                              }
+                            } catch (err) {
+                              toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                            }
+                          }}
+                        >
+                          <ArrowRightLeft className="w-3 h-3 mr-1" /> Reorganizar Biblioteca por Gênero
+                        </Button>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Escaneia arquivos na pasta de downloads e move Rock/Metal para subpastas
+                        </p>
+                      </div>
                     </div>
 
                     {/* Reorganize button */}
