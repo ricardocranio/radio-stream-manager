@@ -105,7 +105,7 @@ const ID3_GENRE_MAP: Record<string, string> = {
 
   // Reggae
   reggae: 'REGGAE', 'roots reggae': 'REGGAE', dub: 'REGGAE',
-  dancehall: 'REGGAE', ska: 'ROCK', // ska more associated with rock energy
+  dancehall: 'REGGAE',
 
   // Other Brazilian
   'brega': 'FORRO', 'tecnobrega': 'FORRO', 'brega funk': 'FUNK',
