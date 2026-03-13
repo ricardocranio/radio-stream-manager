@@ -387,8 +387,26 @@ function register({ getMainWindow, safeHandle }) {
           if (!fs.existsSync(targetFolder)) {
             fs.mkdirSync(targetFolder, { recursive: true });
           }
-          const targetPath = path.join(targetFolder, file);
+          
+          // Apply sanitizeForDisk to the filename before moving
+          let finalFileName = file;
+          if (tags.artist && tags.title) {
+            const sanitizedArtist = sanitizeForDisk(tags.artist, 'artist');
+            const sanitizedTitle = sanitizeForDisk(tags.title, 'title');
+            if (sanitizedArtist && sanitizedTitle) {
+              const ext = path.extname(file).toLowerCase() || '.mp3';
+              finalFileName = `${sanitizedArtist} - ${sanitizedTitle}${ext}`;
+            }
+          }
+          
+          const targetPath = path.join(targetFolder, finalFileName);
           if (fs.existsSync(targetPath)) {
+            // If sanitized version exists, delete source
+            if (finalFileName !== file) {
+              try { fs.unlinkSync(filePath); } catch (e) {}
+              results.skipped++;
+              continue;
+            }
             results.skipped++;
             continue;
           }
@@ -399,8 +417,8 @@ function register({ getMainWindow, safeHandle }) {
             fs.unlinkSync(filePath);
           }
           results.moved++;
-          results.details.push({ file, genre: rawGenre, folder: matchedFolder });
-          console.log(`[GENRE-REORG] ✅ ${file} → ${matchedFolder}/ (${rawGenre})`);
+          results.details.push({ file: finalFileName, genre: rawGenre, folder: matchedFolder });
+          console.log(`[GENRE-REORG] ✅ ${file} → ${matchedFolder}/${finalFileName} (${rawGenre})`);
         } catch (fileErr) {
           results.errors++;
           console.warn(`[GENRE-REORG] ⚠️ Erro em ${file}: ${fileErr.message}`);
