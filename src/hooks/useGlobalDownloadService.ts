@@ -223,43 +223,15 @@ export function useGlobalDownloadService() {
           console.warn('[DL-SVC] ID3 enrichment failed (non-critical):', e);
         }
 
-        // === Genre-based folder routing ===
-        // Skip for Voz do Brasil files (they have their own dedicated folder)
+        // === Genre-based folder routing (uses shared utility, no duplicate ID3 read) ===
         const isVozDoBrasil = song.title?.toLowerCase().includes('voz do brasil') || 
                               song.artist?.toLowerCase().includes('voz do brasil');
-        try {
+        if (!isVozDoBrasil) {
           const { deezerConfig: dlConfig } = useRadioStore.getState();
-          if (dlConfig.genreRoutingEnabled && !isVozDoBrasil && isElectron && (window.electronAPI as any)?.moveFileToGenreFolder) {
-            const verifiedFile = (result as any).verifiedFile || `${song.artist} - ${song.title}.mp3`;
-            // Determine genre from enrichment or existing data
-            let songGenre: string | null = null;
-            if (isElectron && window.electronAPI?.readId3Genre) {
-              try {
-                const id3Check = await window.electronAPI.readId3Genre({
-                  filePath: verifiedFile,
-                  musicFolders: [dlConfig.downloadFolder],
-                });
-                if (id3Check?.genre) {
-                  songGenre = normalizeId3GenreForDl(id3Check.genre);
-                }
-              } catch { /* use null */ }
-            }
-
-            const routes = dlConfig.genreRoutes || [];
-            const matchedRoute = songGenre ? routes.find(r => r.genre.toUpperCase() === songGenre!.toUpperCase()) : null;
-            const targetSubfolder = matchedRoute ? matchedRoute.folderName : (dlConfig.genreDefaultFolder || 'Musicas');
-
-            const moveResult = await (window.electronAPI as any).moveFileToGenreFolder({
-              sourceFolder: dlConfig.downloadFolder,
-              fileName: verifiedFile,
-              targetSubfolder,
-            });
-            if (moveResult?.success) {
-              console.log(`[DL-SVC] 📂 Roteado: ${verifiedFile} → ${targetSubfolder}/ (gênero: ${songGenre || 'padrão'})`);
-            }
+          if (dlConfig.genreRoutingEnabled) {
+            const fileForRoute = (result as any).verifiedFile || `${song.artist} - ${song.title}.mp3`;
+            await routeFileByGenre(fileForRoute, dlConfig.downloadFolder, storeState.config.musicFolders || [], '[DL-SVC]');
           }
-        } catch (e) {
-          console.warn('[DL-SVC] Genre routing failed (non-critical):', e);
         }
         
         // Clear failure tracker on success
