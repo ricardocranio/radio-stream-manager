@@ -272,6 +272,57 @@ export function useBackgroundMaintenance() {
         }
       } catch { /* non-critical */ }
 
+      // === Auto-reorganize Rock/Metal files to genre folders ===
+      try {
+        const { deezerConfig } = useRadioStore.getState();
+        if (deezerConfig.genreRoutingEnabled && (window.electronAPI as any)?.moveFileToGenreFolder) {
+          const routes = deezerConfig.genreRoutes || [];
+          const defaultFolder = deezerConfig.genreDefaultFolder || 'Musicas';
+          let movedCount = 0;
+
+          for (const song of result.songs as Array<{ artist: string; title: string; genre: string | null; filename: string; folder: string; [k: string]: any }>) {
+            if (!song.genre || !song.filename || !song.folder) continue;
+            const normalized = normalizeId3Genre(song.genre);
+            const matchedRoute = routes.find(r => r.genre.toUpperCase() === normalized.toUpperCase());
+            if (!matchedRoute) continue; // Only move if there's a specific route (Rock/Metal)
+
+            // Check if file is already in the correct subfolder
+            const currentFolder = song.folder.replace(/[\\/]+$/, '');
+            const expectedFolder = matchedRoute.folderName;
+            if (currentFolder.endsWith(expectedFolder)) continue; // Already in correct folder
+
+            // Don't move files from non-download folders (e.g. Românticas, custom folders)
+            // Only move files from the root download folder or default folder
+            const downloadFolder = deezerConfig.downloadFolder?.replace(/[\\/]+$/, '');
+            const isInDownloadRoot = currentFolder === downloadFolder;
+            const isInDefaultFolder = currentFolder.endsWith(defaultFolder);
+            if (!isInDownloadRoot && !isInDefaultFolder) continue;
+
+            try {
+              const moveResult = await (window.electronAPI as any).moveFileToGenreFolder({
+                sourceFolder: currentFolder,
+                fileName: song.filename,
+                targetSubfolder: expectedFolder,
+              });
+              if (moveResult?.success) {
+                movedCount++;
+              }
+            } catch { /* non-critical */ }
+
+            // Yield every 10 moves
+            if (movedCount % 10 === 0 && movedCount > 0) {
+              await new Promise(r => setTimeout(r, 50));
+            }
+          }
+
+          if (movedCount > 0) {
+            console.log(`[MAINTENANCE] 📂 Reorganização ID3: ${movedCount} arquivo(s) movido(s) para pastas de gênero`);
+          }
+        }
+      } catch (e) {
+        console.warn('[MAINTENANCE] Genre reorganization failed (non-critical):', e);
+      }
+
       console.log(`[MAINTENANCE] 🏷️ Scan ID3 concluído: ${enrichedCount} músicas enriquecidas no banco`);
       localStorage.setItem(ID3_SCAN_KEY, new Date().toDateString());
     } catch (error) {
