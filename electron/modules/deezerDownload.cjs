@@ -140,7 +140,7 @@ function register({ getMainWindow, showNotification, safeHandle }) {
           }
 
           // Wait for file to be fully written to disk
-          const waitForStableFile = (filePath, maxWaitMs = 10000) => {
+          const waitForStableFile = (filePath, maxWaitMs = 180000) => { // 3 minutes max
             return new Promise((resolveWait) => {
               let lastSize = -1;
               let stableCount = 0;
