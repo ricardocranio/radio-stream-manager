@@ -553,20 +553,35 @@ export function SettingsView() {
                               toast({ title: 'Recurso Desktop', description: 'Disponível apenas no app desktop.', variant: 'destructive' });
                               return;
                             }
-                            toast({ title: '🔍 Escaneando...', description: 'Lendo tags ID3 dos arquivos existentes...' });
+                            toast({ title: '🔍 Escaneando...', description: 'Lendo tags ID3 de todas as pastas da biblioteca...' });
                             try {
-                              const result = await (window.electronAPI as any).reorganizeByGenre({
-                                sourceFolder: deezerConfig.downloadFolder,
-                                genreRoutes: deezerConfig.genreRoutes || [],
-                              });
-                              if (result?.success) {
-                                toast({
-                                  title: '✅ Reorganização concluída',
-                                  description: `${result.scanned} escaneados, ${result.moved} movidos, ${result.skipped} sem alteração`,
+                              // Scan download folder + all music library folders
+                              const foldersToScan = [
+                                deezerConfig.downloadFolder,
+                                ...(localConfig.musicFolders || []),
+                              ].filter(Boolean);
+                              
+                              // Deduplicate folders
+                              const uniqueFolders = [...new Set(foldersToScan)];
+                              
+                              let totalScanned = 0, totalMoved = 0, totalSkipped = 0;
+                              
+                              for (const folder of uniqueFolders) {
+                                const result = await (window.electronAPI as any).reorganizeByGenre({
+                                  sourceFolder: folder,
+                                  genreRoutes: deezerConfig.genreRoutes || [],
                                 });
-                              } else {
-                                toast({ title: 'Erro', description: result?.error || 'Falha ao reorganizar', variant: 'destructive' });
+                                if (result?.success) {
+                                  totalScanned += result.scanned || 0;
+                                  totalMoved += result.moved || 0;
+                                  totalSkipped += result.skipped || 0;
+                                }
                               }
+                              
+                              toast({
+                                title: '✅ Reorganização concluída',
+                                description: `${uniqueFolders.length} pastas escaneadas: ${totalScanned} arquivos, ${totalMoved} movidos, ${totalSkipped} sem alteração`,
+                              });
                             } catch (err) {
                               toast({ title: 'Erro', description: String(err), variant: 'destructive' });
                             }
@@ -575,7 +590,7 @@ export function SettingsView() {
                           <ArrowRightLeft className="w-3 h-3 mr-1" /> Reorganizar Biblioteca por Gênero
                         </Button>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Escaneia arquivos na pasta de downloads e move Rock/Metal para subpastas
+                          Escaneia todas as pastas da biblioteca e move Rock/Metal para subpastas
                         </p>
                       </div>
                     </div>
