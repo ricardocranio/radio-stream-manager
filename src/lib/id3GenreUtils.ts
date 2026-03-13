@@ -256,6 +256,7 @@ export async function routeFileByGenre(
   sourceFolder: string,
   musicFolders: string[],
   logPrefix: string = '[DL]',
+  preReadGenre?: string | null,
 ): Promise<string | null> {
   const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
   if (!isElectron || !(window.electronAPI as any)?.moveFileToGenreFolder) return null;
@@ -265,24 +266,28 @@ export async function routeFileByGenre(
   const routes = deezerConfig.genreRoutes || [];
   const defaultFolder = deezerConfig.genreDefaultFolder || 'Musicas';
 
-  // Read ID3 genre
-  let songGenre: string | null = null;
-  try {
-    if (window.electronAPI?.readId3Genre) {
-      const id3Result = await window.electronAPI.readId3Genre({
-        filePath: verifiedFile,
-        musicFolders: [sourceFolder, ...musicFolders],
-      });
-      if (id3Result?.success && id3Result.genre) {
-        songGenre = normalizeId3Genre(id3Result.genre);
+  // Use pre-read genre if available, otherwise read from file
+  let songGenre: string | null = preReadGenre || null;
+  if (!songGenre) {
+    try {
+      if (window.electronAPI?.readId3Genre) {
+        const id3Result = await window.electronAPI.readId3Genre({
+          filePath: verifiedFile,
+          musicFolders: [sourceFolder, ...musicFolders],
+        });
+        if (id3Result?.success && id3Result.genre) {
+          songGenre = normalizeId3Genre(id3Result.genre);
+        }
       }
-    }
-  } catch { /* use null */ }
+    } catch { /* use null */ }
+  }
 
   const matchedRoute = songGenre
     ? routes.find(r => r.genre.toUpperCase() === songGenre!.toUpperCase())
     : null;
   const targetSubfolder = matchedRoute ? matchedRoute.folderName : defaultFolder;
+
+  console.log(`${logPrefix} 📂 Genre routing: genre=${songGenre || 'null'} → matched=${matchedRoute?.folderName || 'none'} → target=${targetSubfolder}`);
 
   try {
     const moveResult = await (window.electronAPI as any).moveFileToGenreFolder({
@@ -293,6 +298,8 @@ export async function routeFileByGenre(
     if (moveResult?.success) {
       console.log(`${logPrefix} 📂 Roteado: ${verifiedFile} → ${targetSubfolder}/ (gênero: ${songGenre || 'padrão'})`);
       return targetSubfolder;
+    } else {
+      console.warn(`${logPrefix} 📂 Move falhou: ${moveResult?.error || 'unknown'}`);
     }
   } catch (e) {
     console.warn(`${logPrefix} Genre routing failed (non-critical):`, e);
