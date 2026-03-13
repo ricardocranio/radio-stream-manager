@@ -81,12 +81,6 @@ function downloadFile(url, outputFolder, filename, onProgress, deleteExisting = 
 
       fileStream.on('finish', () => {
         fileStream.close();
-        const MIN_VOZ_SIZE = 40 * 1024 * 1024;
-        if (filename.startsWith('VozDoBrasil') && downloadedSize < MIN_VOZ_SIZE) {
-          try { fs.unlinkSync(filePath); } catch (e) {}
-          resolve({ success: false, error: `Arquivo inválido: ${(downloadedSize / 1024 / 1024).toFixed(1)}MB (mínimo 40MB)` });
-          return;
-        }
         resolve({ success: true, filePath, fileSize: downloadedSize });
       });
       fileStream.on('error', (err) => { fs.unlink(filePath, () => {}); reject(err); });
@@ -157,13 +151,29 @@ function register({ getMainWindow, showNotification, safeHandle }) {
         }
       });
       
-      if (!result.success) return result;
+      if (!result.success) {
+        // Clean temp file on failure
+        try {
+          const failedTemp = path.join(tempDir, tempFilename);
+          if (fs.existsSync(failedTemp)) fs.unlinkSync(failedTemp);
+        } catch (e) {}
+        return result;
+      }
       
       const tempFilePath = path.join(tempDir, tempFilename);
       const finalFilePath = path.join(outputFolder, filename);
       
       if (fs.existsSync(tempFilePath)) {
         const stats = fs.statSync(tempFilePath);
+        const MIN_VOZ_SIZE = 25 * 1024 * 1024; // 25MB minimum
+        
+        // Reject and clean temp if file is too small (error page or incomplete)
+        if (stats.size < MIN_VOZ_SIZE) {
+          console.log(`[VOZ] File too small: ${(stats.size / 1024 / 1024).toFixed(1)}MB < 25MB, deleting temp`);
+          try { fs.unlinkSync(tempFilePath); } catch (e) {}
+          return { success: false, error: `Arquivo muito pequeno: ${(stats.size / 1024 / 1024).toFixed(1)}MB (mínimo 25MB)`, fileSize: stats.size };
+        }
+        
         if (fs.existsSync(finalFilePath)) fs.unlinkSync(finalFilePath);
         
         try {
@@ -173,6 +183,7 @@ function register({ getMainWindow, showNotification, safeHandle }) {
           fs.unlinkSync(tempFilePath);
         }
         
+        // Clean empty _temp folder
         try {
           const remaining = fs.readdirSync(tempDir);
           if (remaining.length === 0) fs.rmdirSync(tempDir);

@@ -10,7 +10,7 @@ import { useRadioStore } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
-const MIN_FILE_SIZE_BYTES = 40 * 1024 * 1024; // 40MB minimum to avoid saving error pages
+const MIN_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25MB minimum to avoid saving error pages
 
 export function useVozBrasilService() {
   const schedulerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
