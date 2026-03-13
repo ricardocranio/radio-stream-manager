@@ -1490,6 +1490,9 @@ export function useAutoGradeBuilder() {
 
       for (let hour = 0; hour < 24; hour++) {
         for (const minute of [0, 30]) {
+          // Skip 21:30 on weekdays — Voz do Brasil occupies 21:00-22:00 (60 min)
+          if (hour === 21 && minute === 30 && isWeekday(targetDay)) continue;
+
           const blockTimeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
           setState(prev => ({
             ...prev, currentProcessingBlock: blockTimeStr,
