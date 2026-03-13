@@ -25,6 +25,7 @@ import { sanitizeGradeFilename, sanitizeGradeLine, createLineSanitizer } from '@
 import {
   generateVozDoBrasil, generateMisturadao,
   generateTop50Block, generateTop10Block, generateMadrugada, generateSertanejoNossa,
+  generateRaridades,
 } from '@/lib/gradeBuilder/specialPrograms';
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
 import { batchFindSongsInLibrary, findSongInLibrary as findSongInLibraryFn } from '@/lib/gradeBuilder/batchLibrary';
