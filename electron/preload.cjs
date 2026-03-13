@@ -76,6 +76,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveBpmCache: (params) => ipcRenderer.invoke('save-bpm-cache', params),
   loadBpmCache: (params) => ipcRenderer.invoke('load-bpm-cache', params),
   scanLibraryMetadata: (params) => ipcRenderer.invoke('scan-library-metadata', params),
+  moveFileToGenreFolder: (params) => ipcRenderer.invoke('move-file-to-genre-folder', params),
   
   // Window management
   showWindow: () => ipcRenderer.invoke('show-window'),
