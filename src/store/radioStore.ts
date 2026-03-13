@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule, ScheduledSequence } from '@/types/radio';
 
+export interface GenreRouteRule {
+  genre: string;      // normalized genre key e.g. "ROCK", "METAL"
+  folderName: string;  // subfolder name e.g. "Rock", "Metal"
+}
+
 export interface DeezerConfig {
   arl: string;
   downloadFolder: string;
@@ -9,6 +14,9 @@ export interface DeezerConfig {
   enabled: boolean;
   autoDownload: boolean;
   autoDownloadIntervalMinutes: number; // Interval between auto-downloads
+  genreRoutingEnabled?: boolean;       // Route downloads to genre subfolders
+  genreRoutes?: GenreRouteRule[];      // Genre → subfolder mapping
+  genreDefaultFolder?: string;         // Default subfolder for unmatched genres (e.g. "Musicas")
 }
 
 export interface FixedContent {
@@ -352,6 +360,12 @@ const defaultDeezerConfig: DeezerConfig = {
   enabled: true,
   autoDownload: true, // ENABLED by default - downloads start immediately when songs are missing
   autoDownloadIntervalMinutes: 1, // Legacy - now uses 5s between downloads
+  genreRoutingEnabled: false,
+  genreRoutes: [
+    { genre: 'ROCK', folderName: 'Rock' },
+    { genre: 'METAL', folderName: 'Metal' },
+  ],
+  genreDefaultFolder: 'Musicas',
 };
 
 const defaultFixedContent: FixedContent[] = [

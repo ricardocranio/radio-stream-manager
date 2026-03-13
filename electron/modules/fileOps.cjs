@@ -337,6 +337,38 @@ function register({ getMainWindow, safeHandle }) {
       return { success: false, renamed: false, error: error.message };
     }
   });
+
+  // IPC: Move file to genre subfolder
+  handle('move-file-to-genre-folder', async (event, { sourceFolder, fileName, targetSubfolder }) => {
+    try {
+      const sourcePath = path.join(sourceFolder, fileName);
+      if (!fs.existsSync(sourcePath)) {
+        return { success: false, error: `Arquivo não encontrado: ${fileName}` };
+      }
+      const targetFolder = path.join(sourceFolder, targetSubfolder);
+      if (!fs.existsSync(targetFolder)) {
+        fs.mkdirSync(targetFolder, { recursive: true });
+        console.log(`[GENRE-ROUTE] 📁 Pasta criada: ${targetFolder}`);
+      }
+      const targetPath = path.join(targetFolder, fileName);
+      if (fs.existsSync(targetPath)) {
+        console.log(`[GENRE-ROUTE] ⏭️ Arquivo já existe no destino: ${targetPath}`);
+        try { fs.unlinkSync(sourcePath); } catch (e) {}
+        return { success: true, skipped: true, path: targetPath };
+      }
+      try {
+        fs.renameSync(sourcePath, targetPath);
+      } catch (renameErr) {
+        fs.copyFileSync(sourcePath, targetPath);
+        fs.unlinkSync(sourcePath);
+      }
+      console.log(`[GENRE-ROUTE] ✅ ${fileName} → ${targetSubfolder}/`);
+      return { success: true, path: targetPath, folder: targetSubfolder };
+    } catch (error) {
+      console.error(`[GENRE-ROUTE] ❌ Erro: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  });
 }
 
 module.exports = { register };

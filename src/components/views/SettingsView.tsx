@@ -464,6 +464,86 @@ export function SettingsView() {
                   </p>
                 </div>
 
+                {/* Genre Routing */}
+                <div className="space-y-3 border border-border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Roteamento por Gênero</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Mover arquivos para subpastas baseado no gênero ID3
+                      </p>
+                    </div>
+                    <Switch
+                      checked={deezerConfig.genreRoutingEnabled || false}
+                      onCheckedChange={(checked) => updateDeezerConfig({ genreRoutingEnabled: checked })}
+                    />
+                  </div>
+
+                  {deezerConfig.genreRoutingEnabled && (
+                    <div className="space-y-3 pt-2">
+                      <div className="space-y-2">
+                        <Label className="text-xs">Rotas de Gênero (gênero → subpasta)</Label>
+                        {(deezerConfig.genreRoutes || []).map((route, idx) => (
+                          <div key={idx} className="flex gap-2 items-center">
+                            <Input
+                              value={route.genre}
+                              onChange={(e) => {
+                                const routes = [...(deezerConfig.genreRoutes || [])];
+                                routes[idx] = { ...routes[idx], genre: e.target.value.toUpperCase() };
+                                updateDeezerConfig({ genreRoutes: routes });
+                              }}
+                              placeholder="ROCK"
+                              className="w-32"
+                            />
+                            <span className="text-xs text-muted-foreground">→</span>
+                            <Input
+                              value={route.folderName}
+                              onChange={(e) => {
+                                const routes = [...(deezerConfig.genreRoutes || [])];
+                                routes[idx] = { ...routes[idx], folderName: e.target.value };
+                                updateDeezerConfig({ genreRoutes: routes });
+                              }}
+                              placeholder="Rock"
+                              className="flex-1"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const routes = (deezerConfig.genreRoutes || []).filter((_, i) => i !== idx);
+                                updateDeezerConfig({ genreRoutes: routes });
+                              }}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const routes = [...(deezerConfig.genreRoutes || []), { genre: '', folderName: '' }];
+                            updateDeezerConfig({ genreRoutes: routes });
+                          }}
+                        >
+                          <Plus className="w-3 h-3 mr-1" /> Adicionar Rota
+                        </Button>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Pasta padrão (outros gêneros)</Label>
+                        <Input
+                          value={deezerConfig.genreDefaultFolder || 'Musicas'}
+                          onChange={(e) => updateDeezerConfig({ genreDefaultFolder: e.target.value })}
+                          placeholder="Musicas"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Ex: {deezerConfig.downloadFolder}\{deezerConfig.genreDefaultFolder || 'Musicas'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="vinhetasFolder">Pasta de Vinhetas</Label>

@@ -240,6 +240,54 @@ export function useGlobalDownloadService() {
         } catch (e) {
           console.warn('[DL-SVC] ID3 enrichment failed (non-critical):', e);
         }
+
+        // === Genre-based folder routing ===
+        try {
+          const { deezerConfig: dlConfig } = useRadioStore.getState();
+          if (dlConfig.genreRoutingEnabled && isElectron && (window.electronAPI as any)?.moveFileToGenreFolder) {
+            const verifiedFile = (result as any).verifiedFile || `${song.artist} - ${song.title}.mp3`;
+            // Determine genre from enrichment or existing data
+            let songGenre: string | null = null;
+            // Try to get from the enrichment we just did
+            if (isElectron && window.electronAPI?.readId3Genre) {
+              try {
+                const id3Check = await window.electronAPI.readId3Genre({
+                  filePath: verifiedFile,
+                  musicFolders: [dlConfig.downloadFolder],
+                });
+                if (id3Check?.genre) {
+                  songGenre = normalizeId3GenreForDl(id3Check.genre);
+                }
+              } catch { /* use null */ }
+            }
+
+            if (songGenre) {
+              const routes = dlConfig.genreRoutes || [];
+              const matchedRoute = routes.find(r => r.genre.toUpperCase() === songGenre!.toUpperCase());
+              const targetSubfolder = matchedRoute ? matchedRoute.folderName : (dlConfig.genreDefaultFolder || 'Musicas');
+
+              const moveResult = await (window.electronAPI as any).moveFileToGenreFolder({
+                sourceFolder: dlConfig.downloadFolder,
+                fileName: verifiedFile,
+                targetSubfolder,
+              });
+              if (moveResult?.success) {
+                console.log(`[DL-SVC] 📂 Roteado por gênero: ${verifiedFile} → ${targetSubfolder}/`);
+              }
+            } else {
+              // No genre data — move to default folder
+              const defaultFolder = dlConfig.genreDefaultFolder || 'Musicas';
+              await (window.electronAPI as any).moveFileToGenreFolder({
+                sourceFolder: dlConfig.downloadFolder,
+                fileName: (result as any).verifiedFile || `${song.artist} - ${song.title}.mp3`,
+                targetSubfolder: defaultFolder,
+              });
+              console.log(`[DL-SVC] 📂 Sem gênero, movido para: ${defaultFolder}/`);
+            }
+          }
+        } catch (e) {
+          console.warn('[DL-SVC] Genre routing failed (non-critical):', e);
+        }
         
         // Clear failure tracker on success
         const failKey = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
