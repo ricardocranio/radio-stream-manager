@@ -461,9 +461,9 @@ function register({ getMainWindow, safeHandle }) {
     }
   });
 
-  // IPC: Process files in _temp folders — read ID3, rename and move to parent folder
+  // IPC: Process files in _temp folders — read ID3, rename, move to parent, return genre for routing
   handle('process-temp-files', async (event, { musicFolders }) => {
-    const results = { processed: 0, moved: 0, skipped: 0, errors: 0, details: [] };
+    const results = { processed: 0, moved: 0, skipped: 0, errors: 0, details: [], movedFiles: [] };
     const mainWindow = _getMainWindow();
 
     const STABILITY_MS = 2000; // file must be stable for 2s
@@ -472,7 +472,6 @@ function register({ getMainWindow, safeHandle }) {
       try {
         const stat1 = fs.statSync(filePath);
         if (stat1.size === 0) return false;
-        // Check if file was modified in the last 2 seconds
         return (Date.now() - stat1.mtimeMs) > STABILITY_MS;
       } catch { return false; }
     };
@@ -486,7 +485,6 @@ function register({ getMainWindow, safeHandle }) {
           const fullPath = path.join(tempFolder, file);
           results.processed++;
 
-          // Skip files still being written
           if (!isFileStable(fullPath)) {
             results.skipped++;
             results.details.push({ file, status: 'skip-unstable' });
@@ -515,9 +513,7 @@ function register({ getMainWindow, safeHandle }) {
             const correctName = `${sanitizedArtist} - ${sanitizedTitle}${ext}`;
             const destPath = path.join(parentFolder, correctName);
 
-            // Skip if already exists in parent
             if (fs.existsSync(destPath)) {
-              // Remove the temp copy
               fs.unlinkSync(fullPath);
               results.skipped++;
               results.details.push({ file, correctName, status: 'skip-exists-removed-temp' });
@@ -525,18 +521,25 @@ function register({ getMainWindow, safeHandle }) {
               continue;
             }
 
-            // Move to parent folder with correct name
             try {
               fs.renameSync(fullPath, destPath);
             } catch (renameErr) {
-              // EXDEV fallback: copy + delete
               fs.copyFileSync(fullPath, destPath);
               fs.unlinkSync(fullPath);
             }
 
             results.moved++;
             results.details.push({ file, correctName, status: 'moved' });
-            console.log(`[TEMP-ID3] ✅ ${file} → ${correctName}`);
+            // Include genre/year info for frontend routing
+            results.movedFiles.push({
+              filename: correctName,
+              folder: parentFolder,
+              genre: tags.genre || null,
+              year: tags.year || null,
+              artist: sanitizedArtist,
+              title: sanitizedTitle,
+            });
+            console.log(`[TEMP-ID3] ✅ ${file} → ${correctName} (genre: ${tags.genre || 'N/A'})`);
 
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('lib-fix-progress', {
@@ -557,15 +560,12 @@ function register({ getMainWindow, safeHandle }) {
       }
     };
 
-    // Scan _temp in each music folder and its subfolders (station folders)
     for (const folder of (musicFolders || [])) {
       if (!fs.existsSync(folder)) continue;
       
-      // Direct _temp in music folder
       const directTemp = path.join(folder, '_temp');
       processTempFolder(folder, directTemp);
 
-      // Station subfolders
       try {
         const items = fs.readdirSync(folder, { withFileTypes: true });
         for (const item of items) {
