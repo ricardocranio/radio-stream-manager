@@ -447,6 +447,7 @@ function register({ safeHandle }) {
                 title: title || baseName,
                 bpm: tags.bpm ? parseInt(tags.bpm, 10) || null : null,
                 genre: tags.genre || null,
+                year: tags.year || null,
                 folder: dir,
               });
             } catch (e) {
