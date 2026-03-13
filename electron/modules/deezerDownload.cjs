@@ -337,7 +337,7 @@ function register({ getMainWindow, showNotification, safeHandle }) {
                 message: `Download concluído (verificação parcial): ${artist} - ${title}`
               });
             }
-          }, 3000);
+          })();
         });
       });
       
