@@ -189,8 +189,25 @@ function register({ getMainWindow, showNotification, safeHandle }) {
               }
               
               let validFile = null;
-              const MIN_FILE_SIZE = 1.5 * 1024 * 1024; // 1.5MB min (a real song at 128kbps ~3min = ~2.8MB)
+              const MIN_FILE_SIZE = 1.5 * 1024 * 1024; // 1.5MB min
               const MAX_FILE_SIZE = 25 * 1024 * 1024;   // 25MB max
+              
+              // Calculate expected file size range from Deezer API duration
+              const expectedDurationSec = track.duration || 0;
+              const bitrateMap = { '128': 128000, '320': 320000, 'flac': 800000 };
+              const bitrateBps = bitrateMap[deemixQuality] || 320000;
+              const expectedSizeBytes = (expectedDurationSec * bitrateBps) / 8;
+              const expectedSizeMB = (expectedSizeBytes / (1024 * 1024)).toFixed(1);
+              // Allow 30% tolerance below, but flag if file is >1.7x expected (doubled)
+              const minExpectedSize = expectedSizeBytes * 0.7;
+              const maxExpectedSize = expectedSizeBytes * 1.7; // anything above 1.7x is likely doubled
+              
+              if (expectedDurationSec > 0) {
+                const expMin = Math.floor(expectedDurationSec / 60);
+                const expSec = expectedDurationSec % 60;
+                console.log(`[DEEMIX] 📏 Expected: ${expMin}:${String(expSec).padStart(2, '0')} (~${expectedSizeMB}MB at ${deemixQuality}kbps)`);
+              }
+
               for (const newFile of newFiles) {
                 const filePath = path.join(tempDownloadFolder, newFile);
                 
@@ -208,6 +225,24 @@ function register({ getMainWindow, showNotification, safeHandle }) {
                 if (stat.size > MAX_FILE_SIZE) {
                   console.log(`[DEEMIX] ⚠️ File too large (${fileSizeMB} MB), skipping: ${newFile}`);
                   try { fs.unlinkSync(filePath); } catch (e) {}
+                  continue;
+                }
+                
+                // Duration validation: reject files with doubled duration
+                if (expectedDurationSec > 0 && stat.size > maxExpectedSize) {
+                  const estimatedDuration = Math.round((stat.size * 8) / bitrateBps);
+                  const estMin = Math.floor(estimatedDuration / 60);
+                  const estSec = estimatedDuration % 60;
+                  console.log(`[DEEMIX] ❌ DURATION MISMATCH: file ~${estMin}:${String(estSec).padStart(2, '0')} but expected ~${Math.floor(expectedDurationSec / 60)}:${String(expectedDurationSec % 60).padStart(2, '0')} — likely doubled! Rejecting: ${newFile}`);
+                  try { fs.unlinkSync(filePath); } catch (e) {}
+                  
+                  const mainWindow = _getMainWindow();
+                  if (mainWindow) {
+                    mainWindow.webContents.send('download-warning', {
+                      artist, title,
+                      message: `❌ Arquivo com duração dobrada detectado e removido (${estMin}:${String(estSec).padStart(2, '0')} vs esperado ${Math.floor(expectedDurationSec / 60)}:${String(expectedDurationSec % 60).padStart(2, '0')})`
+                    });
+                  }
                   continue;
                 }
                 
@@ -231,7 +266,10 @@ function register({ getMainWindow, showNotification, safeHandle }) {
                 }
                 
                 validFile = newFile;
-                console.log(`[DEEMIX] ✅ File integrity OK: ${newFile} (${fileSizeMB} MB)`);
+                const estimatedDur = expectedDurationSec > 0 ? Math.round((stat.size * 8) / bitrateBps) : 0;
+                const edMin = Math.floor(estimatedDur / 60);
+                const edSec = estimatedDur % 60;
+                console.log(`[DEEMIX] ✅ File integrity OK: ${newFile} (${fileSizeMB} MB, ~${edMin}:${String(edSec).padStart(2, '0')})`);
                 break;
               }
               
