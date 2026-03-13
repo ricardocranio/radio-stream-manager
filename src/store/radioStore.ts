@@ -386,10 +386,8 @@ const defaultFixedContent: FixedContent[] = [
   { id: '11', name: 'Raridades', fileName: 'RARIDADES_BLOCO{ED}', type: 'raridades', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 12, minute: 0 }, { hour: 12, minute: 30 }], enabled: true, yearMin: 1990, yearMax: 2000 },
   { id: '12', name: 'Mamãe Cheguei', fileName: 'MAMAE_CHEGUEI', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 20, minute: 0 }], enabled: true },
   { id: '13', name: 'Curiosidades', fileName: 'CURIOSIDADES', type: 'curiosity', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 17, minute: 30 }], enabled: true },
-  // TOP50 às 19:00 - 10 músicas
-  { id: '14', name: 'TOP50 Bloco 19h', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 19, minute: 0 }], enabled: true, top50Count: 10 },
-  // TOP50 às 19:30 - 10 músicas
-  { id: '15', name: 'TOP50 Bloco 19h30', fileName: 'POSICAO{N}', type: 'top50', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 19, minute: 30 }], enabled: true, top50Count: 10 },
+  // Rock & Metal às 19:00 e 19:30 - 10 músicas das pastas Rock/Metal
+  { id: '14', name: 'Rock & Metal Mix', fileName: 'ROCK_METAL', type: 'rockmetal', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 19, minute: 0 }, { hour: 19, minute: 30 }], enabled: true },
   // A Voz do Brasil às 21:00
   { id: '16', name: 'A Voz do Brasil', fileName: 'VOZ_DO_BRASIL', type: 'vozbrasil', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 21, minute: 0 }], enabled: true },
   // Weekend programs
