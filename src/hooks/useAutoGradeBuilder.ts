@@ -1044,6 +1044,19 @@ export function useAutoGradeBuilder() {
         return fillBlockIfShort(await generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay));
       }
 
+      // Raridades (year-filtered program)
+      const raridadesItem = fixedItems.find(fc => fc.type === 'raridades' && fc.yearMin && fc.yearMax);
+      if (raridadesItem) {
+        const slotIndex = raridadesItem.timeSlots.findIndex(ts => ts.hour === hour && ts.minute === minute);
+        return fillBlockIfShort(await generateRaridades(
+          hour, minute,
+          raridadesItem.yearMin!, raridadesItem.yearMax!,
+          raridadesItem.fileName,
+          slotIndex >= 0 ? slotIndex : 0,
+          songsByStation, stats, isFullDay, ctx, targetDay
+        ));
+      }
+
       // TOP50 blocks (skip on Sunday)
       const top50Item = targetDay !== 'dom' ? fixedItems.find(fc => fc.type === 'top50') : undefined;
       if (top50Item) {
