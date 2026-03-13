@@ -26,7 +26,8 @@ export const STATION_ID_TO_DB_NAME: Record<string, string> = {
   'transamerica': 'Transamérica',
   'show': 'Show FM 101.1',
   '105fm': '105 FM',
-  '89fm': '89 FM',
+  '89fm': '89 rock',
+  '89rock': '89 rock',
 };
 
 /** Day code mapping for file naming (abbreviated) */
