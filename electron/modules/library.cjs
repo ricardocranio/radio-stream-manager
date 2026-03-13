@@ -457,6 +457,7 @@ function register({ safeHandle }) {
                 title: path.basename(entry.name, '.mp3'),
                 bpm: null,
                 genre: null,
+                year: null,
                 folder: dir,
               });
             }
