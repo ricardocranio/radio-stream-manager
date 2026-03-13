@@ -360,7 +360,7 @@ const defaultDeezerConfig: DeezerConfig = {
   enabled: true,
   autoDownload: true, // ENABLED by default - downloads start immediately when songs are missing
   autoDownloadIntervalMinutes: 1, // Legacy - now uses 5s between downloads
-  genreRoutingEnabled: false,
+  genreRoutingEnabled: true,
   genreRoutes: [
     { genre: 'ROCK', folderName: 'Rock' },
     { genre: 'METAL', folderName: 'Metal' },
