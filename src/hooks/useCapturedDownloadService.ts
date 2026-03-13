@@ -114,6 +114,14 @@ export function useCapturedDownloadService() {
           console.warn('[CAP-DL] ID3 genre read failed:', e);
         }
 
+        // === Genre-based folder routing (automatic, no intervention needed) ===
+        const isVozDoBrasil = song.title?.toLowerCase().includes('voz do brasil') || 
+                              song.artist?.toLowerCase().includes('voz do brasil');
+        if (!isVozDoBrasil && deezerConfig.genreRoutingEnabled) {
+          const fileForRoute = result.verifiedFile || `${song.artist} - ${song.title}.mp3`;
+          await routeFileByGenre(fileForRoute, deezerConfig.downloadFolder, config.musicFolders || [], '[CAP-DL]');
+        }
+
         const entry: DownloadHistoryEntry = {
           id: crypto.randomUUID(),
           songId: song.id,
