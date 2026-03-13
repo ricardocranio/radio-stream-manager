@@ -716,6 +716,19 @@ export const useRadioStore = create<RadioState>()(
               timestamp: new Date(entry.timestamp),
             }));
           }
+          // Ensure default aliases are always present
+          const defaultAliases = [
+            { id: 'default-1', fromArtist: 'naldo lima', fromTitle: 'retrovisor', toArtist: 'Gusttavo Lima', toTitle: 'Retrovisor' },
+            { id: 'default-2', fromArtist: 'Kaize', fromTitle: 'Olha onde eu tô', toArtist: 'Ana Castela', toTitle: 'Olha onde eu tô' },
+            { id: 'default-3', fromArtist: 'Olho Seco', fromTitle: 'Olho Seco', toArtist: 'Luan Santana', toTitle: 'OLHO MARROM (Ao Vivo em Lisboa)' },
+            { id: 'default-4', fromArtist: 'x-terra', fromTitle: 'i will survive', toArtist: 'Léo Santana', toTitle: 'Desliza (Olhinho No Corpinho)' },
+          ];
+          const existing = state.songAliases || [];
+          const existingIds = new Set(existing.map(a => a.id));
+          const missing = defaultAliases.filter(d => !existingIds.has(d.id));
+          if (missing.length > 0) {
+            state.songAliases = [...existing, ...missing];
+          }
         }
       },
       version: 1, // For future migrations
