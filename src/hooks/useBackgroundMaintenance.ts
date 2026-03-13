@@ -136,6 +136,22 @@ export function useBackgroundMaintenance() {
     }
   }, []);
 
+  const processTempFiles = useCallback(async () => {
+    if (!isElectron || !window.electronAPI?.processTempFiles) return;
+    try {
+      const { config } = useRadioStore.getState();
+      const folders = config.musicFolders || [];
+      if (folders.length === 0) return;
+
+      const result = await window.electronAPI.processTempFiles({ musicFolders: folders });
+      if (result.moved > 0) {
+        console.log(`[MAINTENANCE] 📂 _temp ID3: ${result.moved} arquivo(s) processado(s) e movido(s)`);
+      }
+    } catch (error) {
+      // Silent — runs frequently
+    }
+  }, []);
+
   const start = useCallback(() => {
     // Initial classification after 2 minutes
     setTimeout(() => classifySongs(), 2 * 60 * 1000);
