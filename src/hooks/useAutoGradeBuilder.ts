@@ -1018,22 +1018,9 @@ export function useAutoGradeBuilder() {
         if (weekendResult) return fillBlockIfShort(weekendResult);
       }
 
-      // Voz do Brasil (21:00-21:30 weekdays) - obrigatório por lei
-      if (hour === 21 && (minute === 0 || minute === 30) && isWeekday(targetDay)) {
-        if (minute === 0) {
-          return generateVozDoBrasil(timeStr);
-        }
-        return {
-          line: '21:30 (FIXO ID=VOZ DO BRASIL) vht,vozbrasil',
-          logs: [{
-            blockTime: '21:30',
-            type: 'fixed' as const,
-            title: 'A Voz do Brasil (continuação)',
-            artist: 'Governo Federal',
-            station: 'EBC',
-            reason: 'Programa de 60 minutos — bloco 21:30 absorvido',
-          }],
-        };
+      // Voz do Brasil (21:00 weekdays) - obrigatório por lei (60 min, bloco 21:30 eliminado)
+      if (hour === 21 && minute === 0 && isWeekday(targetDay)) {
+        return generateVozDoBrasil(timeStr);
       }
 
       // TOP10 (18:30 weekdays)
@@ -1503,6 +1490,9 @@ export function useAutoGradeBuilder() {
 
       for (let hour = 0; hour < 24; hour++) {
         for (const minute of [0, 30]) {
+          // Skip 21:30 on weekdays — Voz do Brasil occupies 21:00-22:00 (60 min)
+          if (hour === 21 && minute === 30 && isWeekday(targetDay)) continue;
+
           const blockTimeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
           setState(prev => ({
             ...prev, currentProcessingBlock: blockTimeStr,
