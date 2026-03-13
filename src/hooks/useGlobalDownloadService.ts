@@ -182,6 +182,7 @@ export function useGlobalDownloadService() {
         markSongAsDownloaded(song.artist, song.title, result.verifiedFile);
 
         // === Enrich ID3 metadata (BPM + Genre) after download ===
+        let downloadedGenre: string | null = null;
         try {
           const { config } = useRadioStore.getState();
           const verifiedFile = (result as any).verifiedFile || `${song.artist} - ${song.title}.mp3`;
@@ -194,6 +195,7 @@ export function useGlobalDownloadService() {
               const updates: Record<string, string> = {};
               if (id3Result.genre) {
                 const normalizedGenre = normalizeId3GenreForDl(id3Result.genre);
+                downloadedGenre = normalizedGenre;
                 updates.ai_genre = normalizedGenre;
                 updates.ai_energy = genreToEnergyForDl(normalizedGenre);
                 console.log(`[DL-SVC] 🏷️ ID3 genre: ${id3Result.genre} → ${normalizedGenre}`);
@@ -226,14 +228,14 @@ export function useGlobalDownloadService() {
           console.warn('[DL-SVC] ID3 enrichment failed (non-critical):', e);
         }
 
-        // === Genre-based folder routing (uses shared utility, no duplicate ID3 read) ===
+        // === Genre-based folder routing (passes pre-read genre, no duplicate ID3 read) ===
         const isVozDoBrasil = song.title?.toLowerCase().includes('voz do brasil') || 
                               song.artist?.toLowerCase().includes('voz do brasil');
         if (!isVozDoBrasil) {
           const { deezerConfig: dlConfig } = useRadioStore.getState();
           if (dlConfig.genreRoutingEnabled) {
             const fileForRoute = (result as any).verifiedFile || `${song.artist} - ${song.title}.mp3`;
-            await routeFileByGenre(fileForRoute, dlConfig.downloadFolder, storeState.config.musicFolders || [], '[DL-SVC]');
+            await routeFileByGenre(fileForRoute, dlConfig.downloadFolder, storeState.config.musicFolders || [], '[DL-SVC]', downloadedGenre);
           }
         }
         

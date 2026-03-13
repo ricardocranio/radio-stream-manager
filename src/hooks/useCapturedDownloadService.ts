@@ -83,6 +83,7 @@ export function useCapturedDownloadService() {
         markSongAsDownloaded(song.artist, song.title, result.verifiedFile);
 
         // Read ID3 genre from downloaded file and update DB
+        let downloadedGenre: string | null = null;
         try {
           const { config } = useRadioStore.getState();
           const verifiedFile = result.verifiedFile || `${song.artist} - ${song.title}.mp3`;
@@ -94,6 +95,7 @@ export function useCapturedDownloadService() {
             const updatePayload: Record<string, string> = {};
             if (id3Result.genre) {
               const normalizedGenre = normalizeId3Genre(id3Result.genre);
+              downloadedGenre = normalizedGenre;
               updatePayload.ai_genre = normalizedGenre;
               updatePayload.ai_energy = genreToEnergy(normalizedGenre);
               console.log(`[CAP-DL] 🏷️ ID3 genre: ${id3Result.genre} → ${normalizedGenre}`);
@@ -114,12 +116,12 @@ export function useCapturedDownloadService() {
           console.warn('[CAP-DL] ID3 genre read failed:', e);
         }
 
-        // === Genre-based folder routing (automatic, no intervention needed) ===
+        // === Genre-based folder routing (passes pre-read genre directly) ===
         const isVozDoBrasil = song.title?.toLowerCase().includes('voz do brasil') || 
                               song.artist?.toLowerCase().includes('voz do brasil');
         if (!isVozDoBrasil && deezerConfig.genreRoutingEnabled) {
           const fileForRoute = result.verifiedFile || `${song.artist} - ${song.title}.mp3`;
-          await routeFileByGenre(fileForRoute, deezerConfig.downloadFolder, config.musicFolders || [], '[CAP-DL]');
+          await routeFileByGenre(fileForRoute, deezerConfig.downloadFolder, config.musicFolders || [], '[CAP-DL]', downloadedGenre);
         }
 
         const entry: DownloadHistoryEntry = {
