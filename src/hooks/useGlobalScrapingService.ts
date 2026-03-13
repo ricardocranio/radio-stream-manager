@@ -156,6 +156,13 @@ export function useGlobalScrapingService(
       const processKey = `${stationName.toLowerCase().trim()}|${songArtist.toLowerCase().trim()}|${songTitle.toLowerCase().trim()}`;
       processedSongsRef.current.add(processKey);
       
+      // Cap processedSongs to prevent unbounded memory growth in 24/7 operation
+      if (processedSongsRef.current.size > 5000) {
+        const entries = Array.from(processedSongsRef.current);
+        processedSongsRef.current = new Set(entries.slice(-3000));
+        console.log(`[SCRAPE-SVC] 🧹 processedSongs trimmed: 5000 → 3000`);
+      }
+      
       let existsInLibrary = false;
       if (isElectron && config.musicFolders?.length > 0) {
         try {
