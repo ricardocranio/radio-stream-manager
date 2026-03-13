@@ -1080,7 +1080,7 @@ export function useAutoGradeBuilder() {
 
     // Fixed content handling — SKIPPED on Sunday (DOM.txt = 100% monitoring) and when a scheduled sequence is active
     const isSunday = targetDay === 'dom';
-    const fixedItem = (hasScheduledSequence || isSunday) ? undefined : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil');
+    const fixedItem = (hasScheduledSequence || isSunday) ? undefined : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil' && fc.type !== 'raridades');
     let fixedContentFile: string | null = null;
     let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
 
