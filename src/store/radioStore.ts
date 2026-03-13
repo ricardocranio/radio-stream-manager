@@ -23,7 +23,7 @@ export interface FixedContent {
   id: string;
   name: string;
   fileName: string;
-  type: 'news' | 'horoscope' | 'sports' | 'weather' | 'romance' | 'curiosity' | 'other' | 'top50' | 'vozbrasil';
+  type: 'news' | 'horoscope' | 'sports' | 'weather' | 'romance' | 'curiosity' | 'other' | 'top50' | 'vozbrasil' | 'raridades';
   dayPattern: string; // WEEKDAYS, WEEKEND, ALL, or specific days
   timeSlots: { hour: number; minute: number }[];
   enabled: boolean;
@@ -31,6 +31,9 @@ export interface FixedContent {
   top50Count?: number; // How many songs from TOP50 to include
   // Position in block: 'start' | 'middle' | 'end' | number (1-10 for specific position)
   position?: 'start' | 'middle' | 'end' | number;
+  // Year-based filtering for decade programs (e.g. Raridades)
+  yearMin?: number; // Minimum year (inclusive), e.g. 1990
+  yearMax?: number; // Maximum year (inclusive), e.g. 2000
 }
 
 export interface BlockSong {
