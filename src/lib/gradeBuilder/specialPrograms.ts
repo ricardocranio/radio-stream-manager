@@ -325,7 +325,7 @@ export async function generateMadrugada(
  */
 /**
  * Generate Rock & Metal block (19:00/19:30 weekdays).
- * Pulls 10 songs from Rock and Metal download folders, intercalated with vhtn.
+ * Pulls 10 songs from Rock and Metal subfolders within the music library, intercalated with vhtn.
  */
 export async function generateRockMetal(
   hour: number,
@@ -337,34 +337,45 @@ export async function generateRockMetal(
   const logs: BlockLogItem[] = [];
   const TARGET_SONGS = 10;
 
-  // Get files from Rock and Metal folders via Electron IPC
+  // Get files from Rock and Metal subfolders within each music library folder
   const rockFiles: string[] = [];
   const metalFiles: string[] = [];
 
   if (typeof window !== 'undefined' && (window as any).electron) {
     const electron = (window as any).electron;
-    try {
-      const rockResult = await electron.invoke('list-folder-files', {
-        folder: 'C:\\Playlist\\Downloads\\Rock',
-        extension: '.mp3',
-      });
-      if (rockResult?.success && rockResult.files) {
-        rockFiles.push(...rockResult.files.map((f: any) => f.name));
-      }
-    } catch (e) {
-      console.warn('[ROCK-METAL] Falha ao listar pasta Rock:', e);
-    }
 
-    try {
-      const metalResult = await electron.invoke('list-folder-files', {
-        folder: 'C:\\Playlist\\Downloads\\Metal',
-        extension: '.mp3',
-      });
-      if (metalResult?.success && metalResult.files) {
-        metalFiles.push(...metalResult.files.map((f: any) => f.name));
+    for (const musicFolder of ctx.musicFolders) {
+      // Look for Rock subfolder in each music library path
+      try {
+        const rockFolder = musicFolder.includes('\\')
+          ? `${musicFolder}\\Rock`
+          : `${musicFolder}/Rock`;
+        const rockResult = await electron.invoke('list-folder-files', {
+          folder: rockFolder,
+          extension: '.mp3',
+        });
+        if (rockResult?.success && rockResult.files) {
+          rockFiles.push(...rockResult.files.map((f: any) => f.name));
+        }
+      } catch (e) {
+        // Rock subfolder may not exist in this library path
       }
-    } catch (e) {
-      console.warn('[ROCK-METAL] Falha ao listar pasta Metal:', e);
+
+      // Look for Metal subfolder in each music library path
+      try {
+        const metalFolder = musicFolder.includes('\\')
+          ? `${musicFolder}\\Metal`
+          : `${musicFolder}/Metal`;
+        const metalResult = await electron.invoke('list-folder-files', {
+          folder: metalFolder,
+          extension: '.mp3',
+        });
+        if (metalResult?.success && metalResult.files) {
+          metalFiles.push(...metalResult.files.map((f: any) => f.name));
+        }
+      } catch (e) {
+        // Metal subfolder may not exist in this library path
+      }
     }
   }
 
