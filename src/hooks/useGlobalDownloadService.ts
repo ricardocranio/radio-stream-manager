@@ -198,11 +198,14 @@ export function useGlobalDownloadService() {
                 updates.ai_energy = genreToEnergyForDl(normalizedGenre);
                 console.log(`[DL-SVC] 🏷️ ID3 genre: ${id3Result.genre} → ${normalizedGenre}`);
               }
+              if ((id3Result as any).year) {
+                updates.year = String((id3Result as any).year);
+                console.log(`[DL-SVC] 📅 ID3 year: ${(id3Result as any).year}`);
+              }
               if ((id3Result as any).bpm) {
                 const bpmNum = parseInt(String((id3Result as any).bpm), 10);
                 if (bpmNum > 0 && bpmNum < 300) {
                   console.log(`[DL-SVC] 🥁 ID3 BPM: ${bpmNum}`);
-                  // Store BPM in local cache for grade builder access
                   try {
                     const { updateBpmCacheEntry } = await import('@/lib/bpmCacheBridge');
                     updateBpmCacheEntry(song.artist, song.title, bpmNum);
