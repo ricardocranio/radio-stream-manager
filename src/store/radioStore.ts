@@ -383,7 +383,7 @@ const defaultFixedContent: FixedContent[] = [
   { id: '9', name: 'Momento de Reflexão', fileName: 'MOMENTO_DE_REFLEXAO', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 20, minute: 30 }], enabled: true },
   // Romance movido para 22:00-00:00
   { id: '10', name: 'Romance', fileName: 'ROMANCE_BLOCO{ED}', type: 'romance', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 22, minute: 0 }, { hour: 22, minute: 30 }, { hour: 23, minute: 0 }, { hour: 23, minute: 30 }, { hour: 0, minute: 0 }], enabled: true },
-  { id: '11', name: 'Raridades', fileName: 'RARIDADES_BLOCO{ED}', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 12, minute: 0 }, { hour: 12, minute: 30 }], enabled: true },
+  { id: '11', name: 'Raridades', fileName: 'RARIDADES_BLOCO{ED}', type: 'raridades', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 12, minute: 0 }, { hour: 12, minute: 30 }], enabled: true, yearMin: 1990, yearMax: 2000 },
   { id: '12', name: 'Mamãe Cheguei', fileName: 'MAMAE_CHEGUEI', type: 'other', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 20, minute: 0 }], enabled: true },
   { id: '13', name: 'Curiosidades', fileName: 'CURIOSIDADES', type: 'curiosity', dayPattern: 'WEEKDAYS', timeSlots: [{ hour: 17, minute: 30 }], enabled: true },
   // TOP50 às 19:00 - 10 músicas
