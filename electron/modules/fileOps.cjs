@@ -442,6 +442,130 @@ function register({ getMainWindow, safeHandle }) {
       return { success: false, error: error.message };
     }
   });
+
+  // IPC: Process files in _temp folders — read ID3, rename and move to parent folder
+  handle('process-temp-files', async (event, { musicFolders }) => {
+    const results = { processed: 0, moved: 0, skipped: 0, errors: 0, details: [] };
+    const mainWindow = _getMainWindow();
+
+    const STABILITY_MS = 2000; // file must be stable for 2s
+
+    const isFileStable = (filePath) => {
+      try {
+        const stat1 = fs.statSync(filePath);
+        if (stat1.size === 0) return false;
+        // Check if file was modified in the last 2 seconds
+        return (Date.now() - stat1.mtimeMs) > STABILITY_MS;
+      } catch { return false; }
+    };
+
+    const processTempFolder = (parentFolder, tempFolder) => {
+      try {
+        if (!fs.existsSync(tempFolder)) return;
+        const files = fs.readdirSync(tempFolder).filter(f => /\.(mp3|flac)$/i.test(f));
+        
+        for (const file of files) {
+          const fullPath = path.join(tempFolder, file);
+          results.processed++;
+
+          // Skip files still being written
+          if (!isFileStable(fullPath)) {
+            results.skipped++;
+            results.details.push({ file, status: 'skip-unstable' });
+            continue;
+          }
+
+          try {
+            const tags = parseID3TagsFromFile(fullPath);
+            
+            if (!tags.artist || !tags.title) {
+              results.skipped++;
+              results.details.push({ file, status: 'skip-no-id3' });
+              continue;
+            }
+
+            const sanitizedArtist = sanitizeForDisk(tags.artist, 'artist');
+            const sanitizedTitle = sanitizeForDisk(tags.title, 'title');
+
+            if (!sanitizedArtist || !sanitizedTitle) {
+              results.skipped++;
+              results.details.push({ file, status: 'skip-invalid-id3' });
+              continue;
+            }
+
+            const ext = path.extname(file).toLowerCase();
+            const correctName = `${sanitizedArtist} - ${sanitizedTitle}${ext}`;
+            const destPath = path.join(parentFolder, correctName);
+
+            // Skip if already exists in parent
+            if (fs.existsSync(destPath)) {
+              // Remove the temp copy
+              fs.unlinkSync(fullPath);
+              results.skipped++;
+              results.details.push({ file, correctName, status: 'skip-exists-removed-temp' });
+              console.log(`[TEMP-ID3] ⏭ Already exists, removed temp: ${file}`);
+              continue;
+            }
+
+            // Move to parent folder with correct name
+            try {
+              fs.renameSync(fullPath, destPath);
+            } catch (renameErr) {
+              // EXDEV fallback: copy + delete
+              fs.copyFileSync(fullPath, destPath);
+              fs.unlinkSync(fullPath);
+            }
+
+            results.moved++;
+            results.details.push({ file, correctName, status: 'moved' });
+            console.log(`[TEMP-ID3] ✅ ${file} → ${correctName}`);
+
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('lib-fix-progress', {
+                scanned: results.processed,
+                renamed: results.moved,
+                purged: 0,
+                current: `📂 ${correctName}`,
+              });
+            }
+          } catch (fileErr) {
+            results.errors++;
+            results.details.push({ file, status: 'error', error: fileErr.message });
+            console.error(`[TEMP-ID3] ❌ ${file}: ${fileErr.message}`);
+          }
+        }
+      } catch (err) {
+        console.error(`[TEMP-ID3] Error scanning ${tempFolder}:`, err.message);
+      }
+    };
+
+    // Scan _temp in each music folder and its subfolders (station folders)
+    for (const folder of (musicFolders || [])) {
+      if (!fs.existsSync(folder)) continue;
+      
+      // Direct _temp in music folder
+      const directTemp = path.join(folder, '_temp');
+      processTempFolder(folder, directTemp);
+
+      // Station subfolders
+      try {
+        const items = fs.readdirSync(folder, { withFileTypes: true });
+        for (const item of items) {
+          if (item.isDirectory() && item.name !== '_temp') {
+            const subTemp = path.join(folder, item.name, '_temp');
+            processTempFolder(path.join(folder, item.name), subTemp);
+          }
+        }
+      } catch (err) {
+        console.error(`[TEMP-ID3] Error listing ${folder}:`, err.message);
+      }
+    }
+
+    if (results.moved > 0) {
+      console.log(`[TEMP-ID3] Done: ${results.processed} found, ${results.moved} moved, ${results.skipped} skipped, ${results.errors} errors`);
+    }
+    return results;
+  });
 }
 
 module.exports = { register };
