@@ -133,10 +133,26 @@ export function useGlobalDownloadService() {
       return false;
     }
 
+    // Apply song aliases (corrections) before download
+    let dlArtist = song.artist;
+    let dlTitle = song.title;
+    const aliases = storeState.songAliases || [];
+    for (const alias of aliases) {
+      if (
+        dlArtist.toLowerCase().trim() === alias.fromArtist.toLowerCase().trim() &&
+        dlTitle.toLowerCase().trim() === alias.fromTitle.toLowerCase().trim()
+      ) {
+        console.log(`[DL-SVC] 🔄 Alias aplicado: "${dlArtist} - ${dlTitle}" → "${alias.toArtist} - ${alias.toTitle}"`);
+        dlArtist = alias.toArtist;
+        dlTitle = alias.toTitle;
+        break;
+      }
+    }
+
     // Block check before downloading
     const { blockedSongs = [], forbiddenWords = [] } = storeState.config;
-    const artistL = song.artist.trim().toLowerCase();
-    const titleL = song.title.trim().toLowerCase();
+    const artistL = dlArtist.trim().toLowerCase();
+    const titleL = dlTitle.trim().toLowerCase();
     const songKey = `${artistL} - ${titleL}`;
     const blockedList = blockedSongs.map(s => s.toLowerCase().trim());
     const blockedExact = new Set(blockedList.filter(s => !s.endsWith(' - *')));
@@ -147,28 +163,28 @@ export function useGlobalDownloadService() {
       blockedWild.some(b => artistL === b || artistL.includes(b)) ||
       forbiddenLower.some(w => artistL.includes(w) || titleL.includes(w))
     ) {
-      console.log(`[DL-SVC] 🚫 Bloqueada, não será baixada: ${song.artist} - ${song.title}`);
+      console.log(`[DL-SVC] 🚫 Bloqueada, não será baixada: ${dlArtist} - ${dlTitle}`);
       useRadioStore.getState().removeMissingSong(song.id);
       return false;
     }
 
     // Check ARL validity
     if (!useAutoDownloadStore.getState().arlValid) {
-      console.warn(`[DL-SVC] ⏸️ ARL inválida, pulando: ${song.artist} - ${song.title}`);
+      console.warn(`[DL-SVC] ⏸️ ARL inválida, pulando: ${dlArtist} - ${dlTitle}`);
       return false;
     }
 
     const quality = fallbackQuality ? 'MP3_128' : storeState.deezerConfig.quality;
     if (fallbackQuality) {
-      console.log(`[DL-SVC] 🔄 Fallback 128kbps: ${song.artist} - ${song.title}`);
+      console.log(`[DL-SVC] 🔄 Fallback 128kbps: ${dlArtist} - ${dlTitle}`);
     } else {
-      console.log(`[DL-SVC] 🎵 Downloading (${quality}): ${song.artist} - ${song.title}`);
+      console.log(`[DL-SVC] 🎵 Downloading (${quality}): ${dlArtist} - ${dlTitle}`);
     }
 
     useRadioStore.getState().updateMissingSong(song.id, { status: 'downloading' });
     useAutoDownloadStore.getState().setActiveDownload({
-      artist: song.artist,
-      title: song.title,
+      artist: dlArtist,
+      title: dlTitle,
       startedAt: Date.now(),
     });
 
@@ -176,8 +192,8 @@ export function useGlobalDownloadService() {
 
     try {
       const result = await window.electronAPI.downloadFromDeezer({
-        artist: song.artist,
-        title: song.title,
+        artist: dlArtist,
+        title: dlTitle,
         arl: storeState.deezerConfig.arl,
         outputFolder: storeState.deezerConfig.downloadFolder,
         quality,
