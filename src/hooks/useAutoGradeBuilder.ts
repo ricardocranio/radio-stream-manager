@@ -2003,15 +2003,25 @@ export function useAutoGradeBuilder() {
     }
   }, [getUpcomingBlockInfo, buildGrade, flushGradeToDisk, state.minutesBeforeBlock]);
 
+  // Use refs for stable callback references in the realtime effect
+  // This prevents re-subscribing to the channel every time buildGrade deps change
+  const runGradeTickRef = useRef(runGradeTick);
+  runGradeTickRef.current = runGradeTick;
+
   // Debounced trigger for realtime events (avoid building 10x in 1 second)
   const debouncedRealtimeBuild = useCallback(() => {
     if (realtimeBuildRef.current) clearTimeout(realtimeBuildRef.current);
     realtimeBuildRef.current = setTimeout(() => {
-      void runGradeTick('realtime-event');
+      void runGradeTickRef.current('realtime-event');
     }, 3000); // 3s debounce — batches rapid inserts
-  }, [runGradeTick]);
+  }, []); // stable — uses ref
 
   // Realtime subscription: triggers build on new scraped_songs
+  // IMPORTANT: deps are minimal to prevent channel re-subscription loops.
+  // Callback changes are handled via refs above.
+  const isAutoEnabledRef = useRef(state.isAutoEnabled);
+  isAutoEnabledRef.current = state.isAutoEnabled;
+
   useEffect(() => {
     if (!state.isAutoEnabled) return;
 
@@ -2035,7 +2045,7 @@ export function useAutoGradeBuilder() {
 
     // Safety polling fallback: every 2 min, in case realtime misses events
     const pollingInterval = setInterval(() => {
-      void runGradeTick('polling-fallback');
+      void runGradeTickRef.current('polling-fallback');
     }, 120 * 1000);
 
     // Initial build immediately
@@ -2043,7 +2053,7 @@ export function useAutoGradeBuilder() {
     const isWebOnly = !getIsElectronEnv();
     if (isRunning || isWebOnly) {
       console.log('[AUTO-GRADE] 🚀 Build inicial imediato');
-      void runGradeTick('initial');
+      void runGradeTickRef.current('initial');
     }
 
     return () => {
@@ -2051,7 +2061,7 @@ export function useAutoGradeBuilder() {
       clearInterval(pollingInterval);
       if (realtimeBuildRef.current) clearTimeout(realtimeBuildRef.current);
     };
-  }, [state.isAutoEnabled, state.minutesBeforeBlock, debouncedRealtimeBuild, runGradeTick]);
+  }, [state.isAutoEnabled, debouncedRealtimeBuild]); // minimal deps — no more loop
 
   // Countdown update effect
   useEffect(() => {
