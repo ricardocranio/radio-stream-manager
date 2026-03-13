@@ -23,7 +23,7 @@ export interface FixedContent {
   id: string;
   name: string;
   fileName: string;
-  type: 'news' | 'horoscope' | 'sports' | 'weather' | 'romance' | 'curiosity' | 'other' | 'top50' | 'vozbrasil' | 'raridades';
+  type: 'news' | 'horoscope' | 'sports' | 'weather' | 'romance' | 'curiosity' | 'other' | 'top50' | 'vozbrasil' | 'raridades' | 'rockmetal';
   dayPattern: string; // WEEKDAYS, WEEKEND, ALL, or specific days
   timeSlots: { hour: number; minute: number }[];
   enabled: boolean;
