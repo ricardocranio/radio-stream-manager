@@ -18,6 +18,7 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 const CLASSIFY_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const PURGE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 const DEDUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const TEMP_PROCESS_INTERVAL_MS = 2 * 60 * 1000; // Every 2 minutes
 const MAINTENANCE_CHECK_MS = 60 * 1000; // Check every minute
 
 export function useBackgroundMaintenance() {
