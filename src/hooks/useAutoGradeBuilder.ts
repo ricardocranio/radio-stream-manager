@@ -1024,7 +1024,12 @@ export function useAutoGradeBuilder() {
         return generateVozDoBrasil(timeStr);
       }
 
-      // TOP10 (18:30 weekdays)
+      // TOP10 Década (18:00 weekdays) - 10 músicas de 2000-2010 com vhtn
+      if (hour === 18 && minute === 0 && isWeekday(targetDay)) {
+        return fillBlockIfShort(await generateTop10Decada(hour, minute, 2000, 2010, ctx, targetDay));
+      }
+
+      // TOP10 (18:30 weekdays) - template com esporte + mix + ranking
       if (hour === 18 && minute === 30 && isWeekday(targetDay)) {
         return fillBlockIfShort(await generateTop10Block(hour, minute, ctx, targetDay));
       }

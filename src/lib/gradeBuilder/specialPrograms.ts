@@ -324,6 +324,118 @@ export async function generateMadrugada(
  * Alternates Liberdade FM and Positiva FM. Coringa: clas.
  */
 /**
+ * Generate TOP10 Década block (18:00 weekdays).
+ * Pulls 10 songs from years 2000-2010, intercalated with vhtn.
+ */
+export async function generateTop10Decada(
+  hour: number,
+  minute: number,
+  yearMin: number,
+  yearMax: number,
+  ctx: GradeContext,
+  targetDay?: WeekDay
+): Promise<BlockResult> {
+  const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+  const logs: BlockLogItem[] = [];
+  const TARGET_SONGS = 10;
+
+  // Fetch songs from DB filtered by year range
+  let dbYearSongs: Array<{ artist: string; title: string; station_name: string; year: string }> = [];
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { data, error } = await supabase
+      .from('scraped_songs')
+      .select('artist, title, station_name, year')
+      .not('year', 'is', null)
+      .gte('year', String(yearMin))
+      .lte('year', String(yearMax))
+      .order('scraped_at', { ascending: false })
+      .limit(300);
+
+    if (!error && data) {
+      dbYearSongs = data as typeof dbYearSongs;
+    }
+  } catch (e) {
+    console.warn('[TOP10-DECADA] Falha ao buscar músicas por ano:', e);
+  }
+
+  // Deduplicate and shuffle
+  const seen = new Set<string>();
+  const candidates: Array<{ artist: string; title: string; station: string }> = [];
+  for (const s of dbYearSongs) {
+    const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ artist: s.artist, title: s.title, station: s.station_name });
+  }
+  candidates.sort(() => Math.random() - 0.5);
+
+  // Batch check library
+  const batchResults = await ctx.batchFindSongsInLibrary(
+    candidates.slice(0, 60).map(c => ({ artist: c.artist, title: c.title }))
+  );
+
+  const decadeSongs: string[] = [];
+  const usedArtists = new Set<string>();
+
+  for (const candidate of candidates) {
+    if (decadeSongs.length >= TARGET_SONGS) break;
+
+    const normalizedArtist = candidate.artist.toLowerCase().trim();
+    if (usedArtists.has(normalizedArtist)) continue;
+    if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr)) continue;
+
+    const batchKey = `${normalizedArtist}|${candidate.title.toLowerCase().trim()}`;
+    const libraryResult = batchResults.get(batchKey) || await ctx.findSongInLibrary(candidate.artist, candidate.title);
+
+    if (libraryResult.exists) {
+      const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+      decadeSongs.push(`"${filename}"`);
+      usedArtists.add(normalizedArtist);
+      ctx.markSongAsUsed(candidate.title, candidate.artist, timeStr);
+
+      logs.push({
+        blockTime: timeStr,
+        type: 'used',
+        title: candidate.title,
+        artist: candidate.artist,
+        station: candidate.station,
+        reason: `TOP10 Década ${yearMin}-${yearMax}`,
+      });
+    }
+  }
+
+  // Fill remaining with coringa
+  while (decadeSongs.length < TARGET_SONGS) {
+    decadeSongs.push(ctx.coringaCode);
+    logs.push({
+      blockTime: timeStr,
+      type: 'substituted',
+      title: ctx.coringaCode,
+      artist: 'CORINGA',
+      station: 'FALLBACK',
+      reason: `Pool década ${yearMin}-${yearMax} esgotado`,
+    });
+  }
+
+  logs.push({
+    blockTime: timeStr,
+    type: 'fixed',
+    title: `TOP10 Década ${yearMin}-${yearMax}`,
+    artist: `${decadeSongs.length} músicas`,
+    station: 'DÉCADA',
+    reason: `10 músicas de ${yearMin} a ${yearMax} intercaladas com vhtn`,
+  });
+
+  return {
+    line: ctx.sanitizeGradeLine(
+      `${timeStr} (ID=TOP10) ${decadeSongs.join(',vhtn,')}`
+    ),
+    logs,
+  };
+}
+
+/**
  * Generate TOP10 block (18:30 weekdays).
  * Fixed template with sports news and music mix blocks.
  */
