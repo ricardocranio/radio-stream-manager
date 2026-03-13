@@ -659,6 +659,7 @@ export const useRadioStore = create<RadioState>()(
         { id: 'default-2', fromArtist: 'Kaize', fromTitle: 'Olha onde eu tô', toArtist: 'Ana Castela', toTitle: 'Olha onde eu tô' },
         { id: 'default-3', fromArtist: 'Olho Seco', fromTitle: 'Olho Seco', toArtist: 'Luan Santana', toTitle: 'OLHO MARROM (Ao Vivo em Lisboa)' },
         { id: 'default-4', fromArtist: 'x-terra', fromTitle: 'i will survive', toArtist: 'Léo Santana', toTitle: 'Desliza (Olhinho No Corpinho)' },
+        { id: 'default-5', fromArtist: 'PROMESSA D', fromTitle: 'PEDIDO DE SOCORRO', toArtist: 'Gustavo Mioto', toTitle: 'Pedido De Socorro (Ao Vivo)' },
       ],
       setSongAliases: (songAliases) => set({ songAliases }),
       addSongAlias: (alias) => set((state) => ({ songAliases: [...state.songAliases, alias] })),
@@ -723,6 +724,7 @@ export const useRadioStore = create<RadioState>()(
             { id: 'default-2', fromArtist: 'Kaize', fromTitle: 'Olha onde eu tô', toArtist: 'Ana Castela', toTitle: 'Olha onde eu tô' },
             { id: 'default-3', fromArtist: 'Olho Seco', fromTitle: 'Olho Seco', toArtist: 'Luan Santana', toTitle: 'OLHO MARROM (Ao Vivo em Lisboa)' },
             { id: 'default-4', fromArtist: 'x-terra', fromTitle: 'i will survive', toArtist: 'Léo Santana', toTitle: 'Desliza (Olhinho No Corpinho)' },
+            { id: 'default-5', fromArtist: 'PROMESSA D', fromTitle: 'PEDIDO DE SOCORRO', toArtist: 'Gustavo Mioto', toTitle: 'Pedido De Socorro (Ao Vivo)' },
           ];
           const existing = state.songAliases || [];
           const existingIds = new Set(existing.map(a => a.id));
