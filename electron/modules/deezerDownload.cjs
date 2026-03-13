@@ -61,6 +61,26 @@ function register({ getMainWindow, showNotification, safeHandle }) {
         }
       }
 
+      // === Auto-cleanup _temp: remove 0-byte and oversized files ===
+      try {
+        const tempFiles = fs.existsSync(tempDownloadFolder) ? fs.readdirSync(tempDownloadFolder) : [];
+        const MAX_TEMP_SIZE = 25 * 1024 * 1024; // 25MB
+        const MAX_TEMP_AGE_MS = 10 * 60 * 1000; // 10 minutes
+        const now = Date.now();
+        for (const tf of tempFiles) {
+          try {
+            const tfPath = path.join(tempDownloadFolder, tf);
+            const stat = fs.statSync(tfPath);
+            const ageMins = (now - stat.mtimeMs) / 60000;
+            if (stat.size === 0 || stat.size > MAX_TEMP_SIZE || ageMins > 10) {
+              fs.unlinkSync(tfPath);
+              const reason = stat.size === 0 ? '0 bytes' : stat.size > MAX_TEMP_SIZE ? `${(stat.size / 1024 / 1024).toFixed(1)}MB (oversized)` : `${ageMins.toFixed(0)}min old`;
+              console.log(`[DEEMIX] 🧹 Temp cleanup: ${tf} (${reason})`);
+            }
+          } catch (e) {}
+        }
+      } catch (e) {}
+
       try {
         const testFile = path.join(tempDownloadFolder, '.deemix_test');
         fs.writeFileSync(testFile, 'test', 'utf8');
