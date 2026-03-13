@@ -78,6 +78,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scanLibraryMetadata: (params) => ipcRenderer.invoke('scan-library-metadata', params),
   moveFileToGenreFolder: (params) => ipcRenderer.invoke('move-file-to-genre-folder', params),
   reorganizeByGenre: (params) => ipcRenderer.invoke('reorganize-by-genre', params),
+  processTempFiles: (params) => ipcRenderer.invoke('process-temp-files', params),
   
   // Window management
   showWindow: () => ipcRenderer.invoke('show-window'),

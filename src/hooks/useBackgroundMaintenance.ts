@@ -18,12 +18,14 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 const CLASSIFY_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const PURGE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 const DEDUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const TEMP_PROCESS_INTERVAL_MS = 2 * 60 * 1000; // Every 2 minutes
 const MAINTENANCE_CHECK_MS = 60 * 1000; // Check every minute
 
 export function useBackgroundMaintenance() {
   const lastClassifyRef = useRef<number>(0);
   const lastPurgeRef = useRef<number>(0);
   const lastDedupRef = useRef<number>(0);
+  const lastTempProcessRef = useRef<number>(0);
   const lastCompressRef = useRef<string>(''); // Date string of last compression
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -134,6 +136,22 @@ export function useBackgroundMaintenance() {
     }
   }, []);
 
+  const processTempFiles = useCallback(async () => {
+    if (!isElectron || !window.electronAPI?.processTempFiles) return;
+    try {
+      const { config } = useRadioStore.getState();
+      const folders = config.musicFolders || [];
+      if (folders.length === 0) return;
+
+      const result = await window.electronAPI.processTempFiles({ musicFolders: folders });
+      if (result.moved > 0) {
+        console.log(`[MAINTENANCE] 📂 _temp ID3: ${result.moved} arquivo(s) processado(s) e movido(s)`);
+      }
+    } catch (error) {
+      // Silent — runs frequently
+    }
+  }, []);
+
   const start = useCallback(() => {
     // Initial classification after 2 minutes
     setTimeout(() => classifySongs(), 2 * 60 * 1000);
@@ -148,8 +166,19 @@ export function useBackgroundMaintenance() {
       setTimeout(() => autoDeduplicateLibrary(), 10 * 60 * 1000);
     }
 
+    // Initial temp processing after 1 minute
+    if (isElectron) {
+      setTimeout(() => processTempFiles(), 60 * 1000);
+    }
+
     intervalRef.current = setInterval(() => {
       const now = Date.now();
+
+      // Process _temp files every 2 minutes (Electron only)
+      if (isElectron && now - lastTempProcessRef.current >= TEMP_PROCESS_INTERVAL_MS) {
+        lastTempProcessRef.current = now;
+        processTempFiles();
+      }
 
       // Classify every 30 minutes
       if (now - lastClassifyRef.current >= CLASSIFY_INTERVAL_MS) {
@@ -178,12 +207,12 @@ export function useBackgroundMaintenance() {
       }
     }, MAINTENANCE_CHECK_MS);
 
-    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (classificação 30min, purge 12h, dedup 24h, compressão 4h)');
+    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, purge 12h, dedup 24h, compressão 4h)');
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary]);
+  }, [classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary, processTempFiles]);
 
-  return { start, classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary };
+  return { start, classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary, processTempFiles };
 }
