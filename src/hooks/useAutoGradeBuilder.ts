@@ -25,6 +25,7 @@ import { sanitizeGradeFilename, sanitizeGradeLine, createLineSanitizer } from '@
 import {
   generateVozDoBrasil, generateMisturadao,
   generateTop50Block, generateTop10Block, generateMadrugada, generateSertanejoNossa,
+  generateRaridades,
 } from '@/lib/gradeBuilder/specialPrograms';
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
 import { batchFindSongsInLibrary, findSongInLibrary as findSongInLibraryFn } from '@/lib/gradeBuilder/batchLibrary';
@@ -1043,6 +1044,19 @@ export function useAutoGradeBuilder() {
         return fillBlockIfShort(await generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay));
       }
 
+      // Raridades (year-filtered program)
+      const raridadesItem = fixedItems.find(fc => fc.type === 'raridades' && fc.yearMin && fc.yearMax);
+      if (raridadesItem) {
+        const slotIndex = raridadesItem.timeSlots.findIndex(ts => ts.hour === hour && ts.minute === minute);
+        return fillBlockIfShort(await generateRaridades(
+          hour, minute,
+          raridadesItem.yearMin!, raridadesItem.yearMax!,
+          raridadesItem.fileName,
+          slotIndex >= 0 ? slotIndex : 0,
+          songsByStation, stats, isFullDay, ctx, targetDay
+        ));
+      }
+
       // TOP50 blocks (skip on Sunday)
       const top50Item = targetDay !== 'dom' ? fixedItems.find(fc => fc.type === 'top50') : undefined;
       if (top50Item) {
@@ -1066,7 +1080,7 @@ export function useAutoGradeBuilder() {
 
     // Fixed content handling — SKIPPED on Sunday (DOM.txt = 100% monitoring) and when a scheduled sequence is active
     const isSunday = targetDay === 'dom';
-    const fixedItem = (hasScheduledSequence || isSunday) ? undefined : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil');
+    const fixedItem = (hasScheduledSequence || isSunday) ? undefined : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil' && fc.type !== 'raridades');
     let fixedContentFile: string | null = null;
     let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
 

@@ -510,3 +510,136 @@ export async function generateSertanejoNossa(
     logs,
   };
 }
+
+/**
+ * Generate Raridades block — filters songs by year range (e.g. 1990-2000).
+ * Queries scraped_songs with the `year` field and verifies library existence.
+ */
+export async function generateRaridades(
+  hour: number,
+  minute: number,
+  yearMin: number,
+  yearMax: number,
+  fixedFileName: string,
+  editionIndex: number,
+  songsByStation: Record<string, SongEntry[]>,
+  stats: BlockStats,
+  isFullDay: boolean,
+  ctx: GradeContext,
+  targetDay?: WeekDay
+): Promise<BlockResult> {
+  const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+  const dayName = ctx.getFullDayName(targetDay);
+  const logs: BlockLogItem[] = [];
+  const TARGET_SONGS = 8; // Leave room for fixed content + vinhetas
+
+  // 1. Build a pool of songs that have a year within the range
+  const yearPool: SongEntry[] = [];
+  for (const stationSongs of Object.values(songsByStation)) {
+    for (const song of stationSongs) {
+      if (!song.scrapedAt) continue;
+      // The year might be stored on the song entry or we check later
+    }
+  }
+
+  // 2. Also query Supabase for songs with year in range (the main source)
+  let dbYearSongs: Array<{ artist: string; title: string; station_name: string; year: string }> = [];
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { data, error } = await supabase
+      .from('scraped_songs')
+      .select('artist, title, station_name, year')
+      .not('year', 'is', null)
+      .gte('year', String(yearMin))
+      .lte('year', String(yearMax))
+      .order('scraped_at', { ascending: false })
+      .limit(200);
+
+    if (!error && data) {
+      dbYearSongs = data as typeof dbYearSongs;
+    }
+  } catch (e) {
+    console.warn('[RARIDADES] Falha ao buscar músicas por ano:', e);
+  }
+
+  // 3. Deduplicate and shuffle
+  const seen = new Set<string>();
+  const candidates: Array<{ artist: string; title: string; station: string }> = [];
+  for (const s of dbYearSongs) {
+    const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ artist: s.artist, title: s.title, station: s.station_name });
+  }
+  // Shuffle for variety
+  candidates.sort(() => Math.random() - 0.5);
+
+  // 4. Batch check library
+  const batchResults = await ctx.batchFindSongsInLibrary(
+    candidates.slice(0, 50).map(c => ({ artist: c.artist, title: c.title }))
+  );
+
+  // 5. Select songs
+  const selectedSongs: string[] = [];
+  const usedArtists = new Set<string>();
+
+  for (const candidate of candidates) {
+    if (selectedSongs.length >= TARGET_SONGS) break;
+    const normArtist = candidate.artist.toLowerCase().trim();
+    if (usedArtists.has(normArtist)) continue;
+    if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
+
+    const batchKey = `${normArtist}|${candidate.title.toLowerCase().trim()}`;
+    const libraryResult = batchResults.get(batchKey) || await ctx.findSongInLibrary(candidate.artist, candidate.title);
+
+    if (libraryResult.exists) {
+      const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+      selectedSongs.push(`"${filename}"`);
+      usedArtists.add(normArtist);
+      ctx.markSongAsUsed(candidate.title, candidate.artist, timeStr);
+
+      logs.push({
+        blockTime: timeStr,
+        type: 'used',
+        title: candidate.title,
+        artist: candidate.artist,
+        station: candidate.station,
+        reason: `Raridades (ano ${yearMin}-${yearMax})`,
+      });
+    }
+  }
+
+  // 6. Fill remaining with coringa
+  while (selectedSongs.length < TARGET_SONGS) {
+    selectedSongs.push(ctx.coringaCode);
+    stats.missing++;
+    logs.push({
+      blockTime: timeStr,
+      type: 'substituted',
+      title: ctx.coringaCode,
+      artist: 'CORINGA',
+      station: 'FALLBACK',
+      reason: `Pool de raridades ${yearMin}-${yearMax} esgotado`,
+    });
+  }
+
+  // 7. Build the line with fixed content file + songs
+  const processedFile = fixedFileName
+    .replace('{ED}', String(editionIndex + 1).padStart(2, '0'))
+    .replace('{DAY}', dayName);
+  const fixedFile = processedFile.toLowerCase().endsWith('.mp3') ? processedFile : `${processedFile}.mp3`;
+
+  logs.push({
+    blockTime: timeStr,
+    type: 'fixed',
+    title: `Raridades ${yearMin}-${yearMax}`,
+    artist: fixedFile,
+    station: 'FIXO',
+    reason: `Programa Raridades com ${selectedSongs.filter(s => s !== ctx.coringaCode).length} músicas da década`,
+  });
+
+  return {
+    line: ctx.sanitizeGradeLine(`${timeStr} (ID=RARIDADES) "${fixedFile}",vht,${selectedSongs.join(',vht,')}`),
+    logs,
+  };
+}
