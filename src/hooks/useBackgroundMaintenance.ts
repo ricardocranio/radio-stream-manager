@@ -152,11 +152,12 @@ export function useBackgroundMaintenance() {
         console.log(`[MAINTENANCE] 📂 _temp ID3: ${result.moved} arquivo(s) processado(s) e movido(s)`);
 
         // Genre-route newly moved files (Rock/Metal → subfolders)
-        if (deezerConfig.genreRoutingEnabled && result.movedFiles?.length > 0) {
+        const movedFiles = (result as any).movedFiles as Array<{ filename: string; folder: string; genre: string | null; year: string | null; artist: string; title: string }> | undefined;
+        if (deezerConfig.genreRoutingEnabled && movedFiles?.length) {
           const routes = deezerConfig.genreRoutes || [];
           let routedCount = 0;
 
-          for (const file of result.movedFiles as Array<{ filename: string; folder: string; genre: string | null; year: string | null; artist: string; title: string }>) {
+          for (const file of movedFiles) {
             if (!file.genre) continue;
             const normalized = normalizeId3Genre(file.genre);
             const matchedRoute = routes.find(r => r.genre.toUpperCase() === normalized.toUpperCase());
