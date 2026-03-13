@@ -146,10 +146,48 @@ function register({ getMainWindow, showNotification, safeHandle }) {
             });
           };
 
-          setTimeout(async () => {
+          // Poll for newly downloaded audio files instead of always waiting a fixed 3s
+          const waitForNewAudioFiles = (folder, filesBeforeSet, maxWaitMs = 3000, pollMs = 200) => {
+            return new Promise((resolveFiles) => {
+              const startedAt = Date.now();
+
+              const checkNow = () => {
+                try {
+                  const filesAfter = fs.readdirSync(folder);
+                  const newFiles = filesAfter.filter(
+                    (f) => !filesBeforeSet.has(f) && /\.(mp3|flac|MP3|FLAC)$/i.test(f)
+                  );
+
+                  if (newFiles.length > 0) {
+                    resolveFiles(newFiles);
+                    return true;
+                  }
+                } catch (e) {
+                  resolveFiles([]);
+                  return true;
+                }
+
+                if (Date.now() - startedAt >= maxWaitMs) {
+                  resolveFiles([]);
+                  return true;
+                }
+
+                return false;
+              };
+
+              if (checkNow()) return;
+
+              const interval = setInterval(() => {
+                if (checkNow()) {
+                  clearInterval(interval);
+                }
+              }, pollMs);
+            });
+          };
+
+          (async () => {
             try {
-              const filesAfter = fs.readdirSync(tempDownloadFolder);
-              const newFiles = filesAfter.filter(f => !filesBefore.has(f) && /\.(mp3|flac|MP3|FLAC)$/i.test(f));
+              const newFiles = await waitForNewAudioFiles(tempDownloadFolder, filesBefore);
               
               if (newFiles.length === 0) {
                 resolve({ success: false, error: 'Download aparentemente concluiu mas nenhum arquivo de áudio foi encontrado.', output: stdout + stderr });
