@@ -308,6 +308,8 @@ interface ElectronAPI {
     genreSummary: Array<{ genre: string; count: number }>;
   }>;
   
+  moveFileToGenreFolder: (params: { sourceFolder: string; fileName: string; targetSubfolder: string }) => Promise<{ success: boolean; path?: string; folder?: string; skipped?: boolean; error?: string }>;
+
   // Station folder management
   ensureStationFolders: (params: EnsureStationFoldersParams) => Promise<EnsureStationFoldersResult>;
   checkFileInSubfolders: (params: CheckFileInSubfoldersParams) => Promise<CheckFileInSubfoldersResult>;
