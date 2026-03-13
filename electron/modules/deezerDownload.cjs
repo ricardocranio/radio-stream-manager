@@ -94,8 +94,20 @@ function register({ getMainWindow, showNotification, safeHandle }) {
       console.log(`[DEEMIX] Searching Deezer API...`);
       let track;
       try {
-        track = await deemixModule.searchDeezerTrack(artist, title);
-        console.log(`[DEEMIX] Found: ${track.artist.name} - ${track.title} (ID: ${track.id})`);
+        track = await deemixModule.searchDeezerTrack(artist, title, { minDurationSec: 150 });
+        const durMin = Math.floor(track.duration / 60);
+        const durSec = track.duration % 60;
+        console.log(`[DEEMIX] Found: ${track.artist.name} - ${track.title} (ID: ${track.id}, Duration: ${durMin}:${String(durSec).padStart(2, '0')})`);
+        
+        // Warn dashboard about short tracks
+        const mainWindow = _getMainWindow();
+        if (track.duration < 150 && mainWindow) {
+          mainWindow.webContents.send('download-warning', {
+            artist, title,
+            duration: track.duration,
+            message: `⚠️ Faixa curta: ${durMin}:${String(durSec).padStart(2, '0')} — pode ser versão rádio/preview`
+          });
+        }
       } catch (searchError) {
         return { success: false, error: `Música não encontrada no Deezer: ${artist} - ${title}` };
       }
