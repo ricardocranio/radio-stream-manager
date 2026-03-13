@@ -24,7 +24,7 @@ import {
 import { sanitizeGradeFilename, sanitizeGradeLine, createLineSanitizer } from '@/lib/gradeBuilder/sanitize';
 import {
   generateVozDoBrasil, generateMisturadao,
-  generateTop50Block, generateTop10Block, generateTop10Decada, generateMadrugada, generateSertanejoNossa,
+  generateTop50Block, generateTop10Block, generateTop10Decada, generateRockMetal, generateMadrugada, generateSertanejoNossa,
   generateRaridades,
 } from '@/lib/gradeBuilder/specialPrograms';
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
