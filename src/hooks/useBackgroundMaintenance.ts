@@ -166,8 +166,19 @@ export function useBackgroundMaintenance() {
       setTimeout(() => autoDeduplicateLibrary(), 10 * 60 * 1000);
     }
 
+    // Initial temp processing after 1 minute
+    if (isElectron) {
+      setTimeout(() => processTempFiles(), 60 * 1000);
+    }
+
     intervalRef.current = setInterval(() => {
       const now = Date.now();
+
+      // Process _temp files every 2 minutes (Electron only)
+      if (isElectron && now - lastTempProcessRef.current >= TEMP_PROCESS_INTERVAL_MS) {
+        lastTempProcessRef.current = now;
+        processTempFiles();
+      }
 
       // Classify every 30 minutes
       if (now - lastClassifyRef.current >= CLASSIFY_INTERVAL_MS) {
@@ -196,12 +207,12 @@ export function useBackgroundMaintenance() {
       }
     }, MAINTENANCE_CHECK_MS);
 
-    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (classificação 30min, purge 12h, dedup 24h, compressão 4h)');
+    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, purge 12h, dedup 24h, compressão 4h)');
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary]);
+  }, [classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary, processTempFiles]);
 
-  return { start, classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary };
+  return { start, classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary, processTempFiles };
 }
