@@ -324,6 +324,124 @@ export async function generateMadrugada(
  * Alternates Liberdade FM and Positiva FM. Coringa: clas.
  */
 /**
+ * Generate Rock & Metal block (19:00/19:30 weekdays).
+ * Pulls 10 songs from Rock and Metal download folders, intercalated with vhtn.
+ */
+export async function generateRockMetal(
+  hour: number,
+  minute: number,
+  ctx: GradeContext,
+  targetDay?: WeekDay
+): Promise<BlockResult> {
+  const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+  const logs: BlockLogItem[] = [];
+  const TARGET_SONGS = 10;
+
+  // Get files from Rock and Metal folders via Electron IPC
+  const rockFiles: string[] = [];
+  const metalFiles: string[] = [];
+
+  if (typeof window !== 'undefined' && (window as any).electron) {
+    const electron = (window as any).electron;
+    try {
+      const rockResult = await electron.invoke('list-folder-files', {
+        folder: 'C:\\Playlist\\Downloads\\Rock',
+        extension: '.mp3',
+      });
+      if (rockResult?.success && rockResult.files) {
+        rockFiles.push(...rockResult.files.map((f: any) => f.name));
+      }
+    } catch (e) {
+      console.warn('[ROCK-METAL] Falha ao listar pasta Rock:', e);
+    }
+
+    try {
+      const metalResult = await electron.invoke('list-folder-files', {
+        folder: 'C:\\Playlist\\Downloads\\Metal',
+        extension: '.mp3',
+      });
+      if (metalResult?.success && metalResult.files) {
+        metalFiles.push(...metalResult.files.map((f: any) => f.name));
+      }
+    } catch (e) {
+      console.warn('[ROCK-METAL] Falha ao listar pasta Metal:', e);
+    }
+  }
+
+  // Combine and shuffle, alternating between Rock and Metal
+  const combined: Array<{ filename: string; genre: string }> = [];
+  const maxLen = Math.max(rockFiles.length, metalFiles.length);
+  for (let i = 0; i < maxLen; i++) {
+    if (i < rockFiles.length) combined.push({ filename: rockFiles[i], genre: 'Rock' });
+    if (i < metalFiles.length) combined.push({ filename: metalFiles[i], genre: 'Metal' });
+  }
+
+  // Shuffle to avoid predictable patterns
+  combined.sort(() => Math.random() - 0.5);
+
+  // Select songs avoiding duplicates and recently used
+  const selectedSongs: string[] = [];
+  const usedKeys = new Set<string>();
+
+  for (const item of combined) {
+    if (selectedSongs.length >= TARGET_SONGS) break;
+
+    const key = item.filename.toLowerCase();
+    if (usedKeys.has(key)) continue;
+
+    // Extract artist from filename pattern "Artist - Title.mp3"
+    const nameWithoutExt = item.filename.replace(/\.(mp3|flac)$/i, '');
+    const parts = nameWithoutExt.split(/\s*-\s*/);
+    const artist = parts[0]?.trim() || '';
+    const title = parts.slice(1).join(' - ').trim() || nameWithoutExt;
+
+    if (ctx.isRecentlyUsed(title, artist, timeStr)) continue;
+
+    selectedSongs.push(`"${item.filename}"`);
+    usedKeys.add(key);
+    ctx.markSongAsUsed(title, artist, timeStr);
+
+    logs.push({
+      blockTime: timeStr,
+      type: 'used',
+      title,
+      artist,
+      station: item.genre,
+      reason: `Rock/Metal da pasta ${item.genre}`,
+    });
+  }
+
+  // Fill remaining with coringa
+  while (selectedSongs.length < TARGET_SONGS) {
+    selectedSongs.push(ctx.coringaCode);
+    logs.push({
+      blockTime: timeStr,
+      type: 'substituted',
+      title: ctx.coringaCode,
+      artist: 'CORINGA',
+      station: 'FALLBACK',
+      reason: 'Pool Rock/Metal esgotado',
+    });
+  }
+
+  logs.push({
+    blockTime: timeStr,
+    type: 'fixed',
+    title: 'Rock & Metal Mix',
+    artist: `${selectedSongs.length} músicas (Rock: ${rockFiles.length}, Metal: ${metalFiles.length})`,
+    station: 'ROCK/METAL',
+    reason: `10 músicas das pastas Rock e Metal intercaladas com vhtn`,
+  });
+
+  return {
+    line: ctx.sanitizeGradeLine(
+      `${timeStr} (ID=ROCK METAL) ${selectedSongs.join(',vhtn,')}`
+    ),
+    logs,
+  };
+}
+
+/**
  * Generate TOP10 Década block (18:00 weekdays).
  * Pulls 10 songs from years 2000-2010, intercalated with vhtn.
  */
