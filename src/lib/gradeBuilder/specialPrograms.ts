@@ -513,15 +513,26 @@ export async function generateSertanejoNossa(
 
 /**
  * Generate Raridades block — filters songs by year range (e.g. 1990-2000).
- * Queries scraped_songs with the `year` field and verifies library existence.
+ * Uses a fixed template with intercalated fixed content and decade songs.
+ *
+ * 12:00 template:
+ *   NOTICIA_DA_HORA_12HORAS_{DIA}, vht, RARIDADES_BLOCO01_{DIA},
+ *   AS_ULTIMAS_DO_ESPORTE_EDICAO01_{DIA}, vht, FATOS_E_BOATOS_EDICAO01_{DIA},
+ *   RARIDADES_BLOCO02_{DIA}, vht, (década), vht, (década)
+ *
+ * 12:30 template:
+ *   NOTICIA_DA_HORA_10HORAS_{DIA}, vht, RARIDADES_BLOCO03_{DIA},
+ *   PATRULHA_DO_CONSUMIDOR_{DIA}, vht, AS_ULTIMAS_DO_ESPORTE_EDICAO02_{DIA},
+ *   vht, FATOS_E_BOATOS_EDICAO04_{DIA}, RARIDADES_BLOCO04_{DIA},
+ *   vht, (década), vht, (década)
  */
 export async function generateRaridades(
   hour: number,
   minute: number,
   yearMin: number,
   yearMax: number,
-  fixedFileName: string,
-  editionIndex: number,
+  _fixedFileName: string,
+  _editionIndex: number,
   songsByStation: Record<string, SongEntry[]>,
   stats: BlockStats,
   isFullDay: boolean,
@@ -531,18 +542,9 @@ export async function generateRaridades(
   const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
   const dayName = ctx.getFullDayName(targetDay);
   const logs: BlockLogItem[] = [];
-  const TARGET_SONGS = 8; // Leave room for fixed content + vinhetas
+  const DECADE_SONGS_NEEDED = 2;
 
-  // 1. Build a pool of songs that have a year within the range
-  const yearPool: SongEntry[] = [];
-  for (const stationSongs of Object.values(songsByStation)) {
-    for (const song of stationSongs) {
-      if (!song.scrapedAt) continue;
-      // The year might be stored on the song entry or we check later
-    }
-  }
-
-  // 2. Also query Supabase for songs with year in range (the main source)
+  // === Fetch decade songs from DB ===
   let dbYearSongs: Array<{ artist: string; title: string; station_name: string; year: string }> = [];
   try {
     const { supabase } = await import('@/integrations/supabase/client');
@@ -562,7 +564,7 @@ export async function generateRaridades(
     console.warn('[RARIDADES] Falha ao buscar músicas por ano:', e);
   }
 
-  // 3. Deduplicate and shuffle
+  // Deduplicate and shuffle
   const seen = new Set<string>();
   const candidates: Array<{ artist: string; title: string; station: string }> = [];
   for (const s of dbYearSongs) {
@@ -571,20 +573,19 @@ export async function generateRaridades(
     seen.add(key);
     candidates.push({ artist: s.artist, title: s.title, station: s.station_name });
   }
-  // Shuffle for variety
   candidates.sort(() => Math.random() - 0.5);
 
-  // 4. Batch check library
+  // Batch check library
   const batchResults = await ctx.batchFindSongsInLibrary(
     candidates.slice(0, 50).map(c => ({ artist: c.artist, title: c.title }))
   );
 
-  // 5. Select songs
-  const selectedSongs: string[] = [];
+  // Select decade songs
+  const decadeSongs: string[] = [];
   const usedArtists = new Set<string>();
 
   for (const candidate of candidates) {
-    if (selectedSongs.length >= TARGET_SONGS) break;
+    if (decadeSongs.length >= DECADE_SONGS_NEEDED) break;
     const normArtist = candidate.artist.toLowerCase().trim();
     if (usedArtists.has(normArtist)) continue;
     if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
@@ -594,7 +595,7 @@ export async function generateRaridades(
 
     if (libraryResult.exists) {
       const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-      selectedSongs.push(`"${filename}"`);
+      decadeSongs.push(`"${filename}"`);
       usedArtists.add(normArtist);
       ctx.markSongAsUsed(candidate.title, candidate.artist, timeStr);
 
@@ -609,9 +610,9 @@ export async function generateRaridades(
     }
   }
 
-  // 6. Fill remaining with coringa
-  while (selectedSongs.length < TARGET_SONGS) {
-    selectedSongs.push(ctx.coringaCode);
+  // Fill remaining decade slots with coringa
+  while (decadeSongs.length < DECADE_SONGS_NEEDED) {
+    decadeSongs.push(ctx.coringaCode);
     stats.missing++;
     logs.push({
       blockTime: timeStr,
@@ -623,23 +624,50 @@ export async function generateRaridades(
     });
   }
 
-  // 7. Build the line with fixed content file + songs
-  const processedFile = fixedFileName
-    .replace('{ED}', String(editionIndex + 1).padStart(2, '0'))
-    .replace('{DAY}', dayName);
-  const fixedFile = processedFile.toLowerCase().endsWith('.mp3') ? processedFile : `${processedFile}.mp3`;
+  // === Build template line ===
+  let line: string;
 
-  logs.push({
-    blockTime: timeStr,
-    type: 'fixed',
-    title: `Raridades ${yearMin}-${yearMax}`,
-    artist: fixedFile,
-    station: 'FIXO',
-    reason: `Programa Raridades com ${selectedSongs.filter(s => s !== ctx.coringaCode).length} músicas da década`,
-  });
+  if (minute === 0) {
+    // 12:00 block
+    const noticia = `NOTICIA_DA_HORA_12HORAS_${dayName}.MP3`;
+    const rarBloco01 = `RARIDADES_BLOCO01_${dayName}.mp3`;
+    const esporte01 = `AS_ULTIMAS_DO_ESPORTE_EDICAO01_${dayName}.MP3`;
+    const fatos01 = `FATOS_E_BOATOS_EDICAO01_${dayName}.MP3`;
+    const rarBloco02 = `RARIDADES_BLOCO02_${dayName}.mp3`;
+
+    line = `${timeStr} (ID=Raridades) "${noticia}",vht,"${rarBloco01}","${esporte01}",vht,"${fatos01}","${rarBloco02}",vht,${decadeSongs[0]},vht,${decadeSongs[1]}`;
+
+    logs.push({
+      blockTime: timeStr,
+      type: 'fixed',
+      title: 'Raridades Bloco 12:00',
+      artist: `${noticia}, ${rarBloco01}, ${rarBloco02}`,
+      station: 'FIXO',
+      reason: `Template Raridades 12:00 com ${decadeSongs.filter(s => s !== ctx.coringaCode).length} músicas da década ${yearMin}-${yearMax}`,
+    });
+  } else {
+    // 12:30 block
+    const noticia = `NOTICIA_DA_HORA_10HORAS_${dayName}.MP3`;
+    const rarBloco03 = `RARIDADES_BLOCO03_${dayName}.mp3`;
+    const patrulha = `PATRULHA_DO_CONSUMIDOR_${dayName}.mp3`;
+    const esporte02 = `AS_ULTIMAS_DO_ESPORTE_EDICAO02_${dayName}.MP3`;
+    const fatos04 = `FATOS_E_BOATOS_EDICAO04_${dayName}.MP3`;
+    const rarBloco04 = `RARIDADES_BLOCO04_${dayName}.mp3`;
+
+    line = `${timeStr} (ID=Raridades) "${noticia}",vht,"${rarBloco03}","${patrulha}",vht,"${esporte02}",vht,"${fatos04}","${rarBloco04}",vht,${decadeSongs[0]},vht,${decadeSongs[1]}`;
+
+    logs.push({
+      blockTime: timeStr,
+      type: 'fixed',
+      title: 'Raridades Bloco 12:30',
+      artist: `${noticia}, ${rarBloco03}, ${rarBloco04}`,
+      station: 'FIXO',
+      reason: `Template Raridades 12:30 com ${decadeSongs.filter(s => s !== ctx.coringaCode).length} músicas da década ${yearMin}-${yearMax}`,
+    });
+  }
 
   return {
-    line: ctx.sanitizeGradeLine(`${timeStr} (ID=RARIDADES) "${fixedFile}",vht,${selectedSongs.join(',vht,')}`),
+    line: ctx.sanitizeGradeLine(line),
     logs,
   };
 }
