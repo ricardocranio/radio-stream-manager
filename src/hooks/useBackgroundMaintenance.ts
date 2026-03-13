@@ -197,7 +197,7 @@ export function useBackgroundMaintenance() {
 
       // Build a map of normalized artist+title → genre/year from library files
       const libraryMap = new Map<string, { genre: string | null; year: string | null; bpm: number | null }>();
-      for (const song of result.songs) {
+      for (const song of result.songs as Array<{ artist: string; title: string; genre: string | null; year?: string | null; bpm: number | null; filename: string; folder: string }>) {
         const key = `${(song.artist || '').toLowerCase().trim()}|${(song.title || '').toLowerCase().trim()}`;
         if (key === '|' || key.startsWith('desconhecido|')) continue;
         libraryMap.set(key, {
