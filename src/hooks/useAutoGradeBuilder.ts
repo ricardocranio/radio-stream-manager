@@ -24,7 +24,7 @@ import {
 import { sanitizeGradeFilename, sanitizeGradeLine, createLineSanitizer } from '@/lib/gradeBuilder/sanitize';
 import {
   generateVozDoBrasil, generateMisturadao,
-  generateTop50Block, generateTop10Block, generateTop10Decada, generateMadrugada, generateSertanejoNossa,
+  generateTop50Block, generateTop10Block, generateTop10Decada, generateRockMetal, generateMadrugada, generateSertanejoNossa,
   generateRaridades,
 } from '@/lib/gradeBuilder/specialPrograms';
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
@@ -1034,9 +1034,9 @@ export function useAutoGradeBuilder() {
         return fillBlockIfShort(await generateTop10Block(hour, minute, ctx, targetDay));
       }
 
-      // TOP50 Ranking (19:00/19:30 weekdays)
+      // Rock & Metal (19:00/19:30 weekdays) - 10 músicas das pastas Rock e Metal
       if (hour === 19 && (minute === 0 || minute === 30) && isWeekday(targetDay)) {
-        return fillBlockIfShort(await generateTop50Block(hour, minute, 10, ctx));
+        return fillBlockIfShort(await generateRockMetal(hour, minute, ctx, targetDay));
       }
 
       // Misturadão (20:00, 20:30 weekdays)
