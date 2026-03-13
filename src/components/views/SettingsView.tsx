@@ -537,7 +537,7 @@ export function SettingsView() {
                           placeholder="Musicas"
                         />
                         <p className="text-xs text-muted-foreground">
-                          Ex: {deezerConfig.downloadFolder}\{deezerConfig.genreDefaultFolder || 'Musicas'}
+                          Ex: {deezerConfig.downloadFolder}{'\\' + (deezerConfig.genreDefaultFolder || 'Musicas')}
                         </p>
                       </div>
                     </div>
