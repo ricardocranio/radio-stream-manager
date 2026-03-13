@@ -261,7 +261,7 @@ export function useBackgroundMaintenance() {
       try {
         const { updateBpmCacheEntry } = await import('@/lib/bpmCacheBridge');
         let bpmCount = 0;
-        for (const song of result.songs) {
+        for (const song of result.songs as Array<{ artist: string; title: string; bpm: number | null; [k: string]: any }>) {
           if (song.bpm && song.bpm > 0 && song.bpm < 300 && song.artist && song.title) {
             updateBpmCacheEntry(song.artist, song.title, song.bpm);
             bpmCount++;
