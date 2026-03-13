@@ -11,42 +11,8 @@ import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 
-// ID3 genre normalization (shared with captured download service)
-const ID3_GENRE_MAP_DL: Record<string, string> = {
-  pop: 'POP', rock: 'ROCK', sertanejo: 'SERTANEJO', 'sertanejo universitário': 'SERTANEJO',
-  pagode: 'PAGODE', mpb: 'MPB', 'hip-hop': 'RAP/HIP-HOP', 'hip hop': 'RAP/HIP-HOP',
-  rap: 'RAP/HIP-HOP', electronic: 'ELETRONICA', dance: 'ELETRONICA', edm: 'ELETRONICA',
-  funk: 'FUNK', 'funk carioca': 'FUNK', gospel: 'GOSPEL', forró: 'FORRO', forro: 'FORRO',
-  reggaeton: 'REGGAETON', 'r&b': 'R&B', rnb: 'R&B', country: 'COUNTRY', jazz: 'JAZZ',
-  classical: 'CLASSICA', indie: 'INDIE', metal: 'METAL', reggae: 'REGGAE',
-  latin: 'LATINA', latina: 'LATINA', soul: 'R&B', blues: 'MPB',
-  'bossa nova': 'MPB', samba: 'PAGODE', axé: 'FORRO', axe: 'FORRO',
-};
-
-function normalizeId3GenreForDl(raw: string): string {
-  const lower = raw.toLowerCase().replace(/[()]/g, '').trim();
-  const num = parseInt(lower);
-  if (!isNaN(num)) {
-    const map: Record<number, string> = {
-      0: 'MPB', 1: 'ROCK', 2: 'POP', 3: 'ELETRONICA', 13: 'POP', 14: 'R&B',
-      15: 'RAP/HIP-HOP', 17: 'ROCK', 18: 'ELETRONICA', 32: 'CLASSICA',
-      52: 'ELETRONICA', 59: 'REGGAE', 62: 'POP', 80: 'COUNTRY', 85: 'RAP/HIP-HOP',
-    };
-    return map[num] || 'OUTRO';
-  }
-  return ID3_GENRE_MAP_DL[lower] || 'OUTRO';
-}
-
-function genreToEnergyForDl(genre: string): string {
-  const map: Record<string, string> = {
-    SERTANEJO: 'MEDIUM', PAGODE: 'MEDIUM', POP: 'HIGH', ELETRONICA: 'VERY_HIGH',
-    MPB: 'LOW', ROCK: 'HIGH', FUNK: 'VERY_HIGH', GOSPEL: 'MEDIUM', FORRO: 'HIGH',
-    'RAP/HIP-HOP': 'HIGH', REGGAETON: 'HIGH', 'R&B': 'MEDIUM', COUNTRY: 'MEDIUM',
-    JAZZ: 'LOW', CLASSICA: 'LOW', INDIE: 'MEDIUM', METAL: 'VERY_HIGH',
-    REGGAE: 'LOW', LATINA: 'HIGH', OUTRO: 'MEDIUM',
-  };
-  return map[genre] || 'MEDIUM';
-}
+// Shared ID3 genre utilities
+import { normalizeId3Genre as normalizeId3GenreForDl, genreToEnergy as genreToEnergyForDl, routeFileByGenre } from '@/lib/id3GenreUtils';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -257,43 +223,15 @@ export function useGlobalDownloadService() {
           console.warn('[DL-SVC] ID3 enrichment failed (non-critical):', e);
         }
 
-        // === Genre-based folder routing ===
-        // Skip for Voz do Brasil files (they have their own dedicated folder)
+        // === Genre-based folder routing (uses shared utility, no duplicate ID3 read) ===
         const isVozDoBrasil = song.title?.toLowerCase().includes('voz do brasil') || 
                               song.artist?.toLowerCase().includes('voz do brasil');
-        try {
+        if (!isVozDoBrasil) {
           const { deezerConfig: dlConfig } = useRadioStore.getState();
-          if (dlConfig.genreRoutingEnabled && !isVozDoBrasil && isElectron && (window.electronAPI as any)?.moveFileToGenreFolder) {
-            const verifiedFile = (result as any).verifiedFile || `${song.artist} - ${song.title}.mp3`;
-            // Determine genre from enrichment or existing data
-            let songGenre: string | null = null;
-            if (isElectron && window.electronAPI?.readId3Genre) {
-              try {
-                const id3Check = await window.electronAPI.readId3Genre({
-                  filePath: verifiedFile,
-                  musicFolders: [dlConfig.downloadFolder],
-                });
-                if (id3Check?.genre) {
-                  songGenre = normalizeId3GenreForDl(id3Check.genre);
-                }
-              } catch { /* use null */ }
-            }
-
-            const routes = dlConfig.genreRoutes || [];
-            const matchedRoute = songGenre ? routes.find(r => r.genre.toUpperCase() === songGenre!.toUpperCase()) : null;
-            const targetSubfolder = matchedRoute ? matchedRoute.folderName : (dlConfig.genreDefaultFolder || 'Musicas');
-
-            const moveResult = await (window.electronAPI as any).moveFileToGenreFolder({
-              sourceFolder: dlConfig.downloadFolder,
-              fileName: verifiedFile,
-              targetSubfolder,
-            });
-            if (moveResult?.success) {
-              console.log(`[DL-SVC] 📂 Roteado: ${verifiedFile} → ${targetSubfolder}/ (gênero: ${songGenre || 'padrão'})`);
-            }
+          if (dlConfig.genreRoutingEnabled) {
+            const fileForRoute = (result as any).verifiedFile || `${song.artist} - ${song.title}.mp3`;
+            await routeFileByGenre(fileForRoute, dlConfig.downloadFolder, storeState.config.musicFolders || [], '[DL-SVC]');
           }
-        } catch (e) {
-          console.warn('[DL-SVC] Genre routing failed (non-critical):', e);
         }
         
         // Clear failure tracker on success

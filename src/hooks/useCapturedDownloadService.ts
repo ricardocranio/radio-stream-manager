@@ -22,43 +22,8 @@ const POLL_INTERVAL = 120_000; // 2 minutes
 const DOWNLOAD_DELAY = 15_000; // 15s between downloads
 const MAX_RETRIES = 3; // After 3 failures, skip permanently
 
-// Map ID3 genre text to normalized genre
-const ID3_GENRE_MAP: Record<string, string> = {
-  pop: 'POP', rock: 'ROCK', sertanejo: 'SERTANEJO', 'sertanejo universitário': 'SERTANEJO',
-  pagode: 'PAGODE', mpb: 'MPB', 'hip-hop': 'RAP/HIP-HOP', 'hip hop': 'RAP/HIP-HOP',
-  rap: 'RAP/HIP-HOP', electronic: 'ELETRONICA', dance: 'ELETRONICA', edm: 'ELETRONICA',
-  funk: 'FUNK', 'funk carioca': 'FUNK', gospel: 'GOSPEL', forró: 'FORRO', forro: 'FORRO',
-  reggaeton: 'REGGAETON', 'r&b': 'R&B', rnb: 'R&B', country: 'COUNTRY', jazz: 'JAZZ',
-  classical: 'CLASSICA', indie: 'INDIE', metal: 'METAL', 'heavy metal': 'METAL',
-  reggae: 'REGGAE', latin: 'LATINA', latina: 'LATINA', soul: 'R&B', blues: 'MPB',
-  'bossa nova': 'MPB', samba: 'PAGODE', axé: 'FORRO', axe: 'FORRO',
-};
-
-function normalizeId3Genre(raw: string): string {
-  const lower = raw.toLowerCase().replace(/[()]/g, '').trim();
-  // Check numeric ID3v1 genre codes
-  const num = parseInt(lower);
-  if (!isNaN(num)) {
-    const id3v1Genres: Record<number, string> = {
-      0: 'MPB', 1: 'ROCK', 2: 'POP', 3: 'ELETRONICA', 13: 'POP', 14: 'R&B',
-      15: 'RAP/HIP-HOP', 17: 'ROCK', 18: 'ELETRONICA', 32: 'CLASSICA',
-      52: 'ELETRONICA', 59: 'REGGAE', 62: 'POP', 80: 'COUNTRY', 85: 'RAP/HIP-HOP',
-    };
-    return id3v1Genres[num] || 'OUTRO';
-  }
-  return ID3_GENRE_MAP[lower] || 'OUTRO';
-}
-
-function genreToEnergy(genre: string): string {
-  const map: Record<string, string> = {
-    SERTANEJO: 'MEDIUM', PAGODE: 'MEDIUM', POP: 'HIGH', ELETRONICA: 'VERY_HIGH',
-    MPB: 'LOW', ROCK: 'HIGH', FUNK: 'VERY_HIGH', GOSPEL: 'MEDIUM', FORRO: 'HIGH',
-    'RAP/HIP-HOP': 'HIGH', REGGAETON: 'HIGH', 'R&B': 'MEDIUM', COUNTRY: 'MEDIUM',
-    JAZZ: 'LOW', CLASSICA: 'LOW', INDIE: 'MEDIUM', METAL: 'VERY_HIGH',
-    REGGAE: 'LOW', LATINA: 'HIGH', OUTRO: 'MEDIUM',
-  };
-  return map[genre] || 'MEDIUM';
-}
+// Shared ID3 genre utilities
+import { normalizeId3Genre, genreToEnergy, routeFileByGenre } from '@/lib/id3GenreUtils';
 
 interface CapturedQueueItem {
   id: string;
@@ -147,6 +112,14 @@ export function useCapturedDownloadService() {
         } catch (e) {
           // Non-critical — don't fail the download
           console.warn('[CAP-DL] ID3 genre read failed:', e);
+        }
+
+        // === Genre-based folder routing (automatic, no intervention needed) ===
+        const isVozDoBrasil = song.title?.toLowerCase().includes('voz do brasil') || 
+                              song.artist?.toLowerCase().includes('voz do brasil');
+        if (!isVozDoBrasil && deezerConfig.genreRoutingEnabled) {
+          const fileForRoute = result.verifiedFile || `${song.artist} - ${song.title}.mp3`;
+          await routeFileByGenre(fileForRoute, deezerConfig.downloadFolder, config.musicFolders || [], '[CAP-DL]');
         }
 
         const entry: DownloadHistoryEntry = {
