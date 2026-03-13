@@ -343,7 +343,6 @@ export async function generateRockMetal(
 
   if (typeof window !== 'undefined' && (window as any).electron) {
     const electron = (window as any).electron;
-    const path = await import('path').catch(() => null);
 
     for (const musicFolder of ctx.musicFolders) {
       // Look for Rock subfolder in each music library path
