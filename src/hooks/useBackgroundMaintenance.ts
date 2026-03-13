@@ -143,13 +143,60 @@ export function useBackgroundMaintenance() {
   const processTempFiles = useCallback(async () => {
     if (!isElectron || !window.electronAPI?.processTempFiles) return;
     try {
-      const { config } = useRadioStore.getState();
+      const { config, deezerConfig } = useRadioStore.getState();
       const folders = config.musicFolders || [];
       if (folders.length === 0) return;
 
       const result = await window.electronAPI.processTempFiles({ musicFolders: folders });
       if (result.moved > 0) {
         console.log(`[MAINTENANCE] 📂 _temp ID3: ${result.moved} arquivo(s) processado(s) e movido(s)`);
+
+        // Genre-route newly moved files (Rock/Metal → subfolders)
+        const movedFiles = (result as any).movedFiles as Array<{ filename: string; folder: string; genre: string | null; year: string | null; artist: string; title: string }> | undefined;
+        if (deezerConfig.genreRoutingEnabled && movedFiles?.length) {
+          const routes = deezerConfig.genreRoutes || [];
+          let routedCount = 0;
+
+          for (const file of movedFiles) {
+            if (!file.genre) continue;
+            const normalized = normalizeId3Genre(file.genre);
+            const matchedRoute = routes.find(r => r.genre.toUpperCase() === normalized.toUpperCase());
+            if (!matchedRoute) continue;
+
+            // Already in correct folder?
+            if (file.folder.replace(/[\\/]+$/, '').endsWith(matchedRoute.folderName)) continue;
+
+            try {
+              const moveResult = await (window.electronAPI as any).moveFileToGenreFolder({
+                sourceFolder: file.folder,
+                fileName: file.filename,
+                targetSubfolder: matchedRoute.folderName,
+              });
+              if (moveResult?.success) {
+                routedCount++;
+                console.log(`[MAINTENANCE] 📂 _temp route: ${file.filename} → ${matchedRoute.folderName}/`);
+              }
+            } catch { /* non-critical */ }
+
+            // Also enrich DB
+            try {
+              const updates: Record<string, string> = {
+                ai_genre: normalized,
+                ai_energy: genreToEnergy(normalized),
+              };
+              if (file.year) updates.year = file.year;
+              await supabase
+                .from('scraped_songs')
+                .update(updates)
+                .eq('artist', file.artist)
+                .eq('title', file.title);
+            } catch { /* non-critical */ }
+          }
+
+          if (routedCount > 0) {
+            console.log(`[MAINTENANCE] 📂 _temp: ${routedCount} arquivo(s) roteado(s) por gênero`);
+          }
+        }
       }
     } catch (error) {
       // Silent — runs frequently
