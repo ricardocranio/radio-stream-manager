@@ -576,7 +576,7 @@ export function SettingsView() {
                         <ArrowRightLeft className="w-3 h-3 mr-1" /> Reorganizar Biblioteca por Gênero
                       </Button>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Escaneia arquivos em "{deezerConfig.downloadFolder}" e move Rock/Metal para subpastas
+                        Escaneia arquivos na pasta de downloads e move Rock/Metal para subpastas
                       </p>
                     </div>
                   )}
