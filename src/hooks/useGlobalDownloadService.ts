@@ -361,7 +361,8 @@ export function useGlobalDownloadService() {
         break;
       }
 
-      // Clean up items that exceeded max retries
+      // Clean up items that exceeded max retries OR are stale (>30min in queue without urgency)
+      const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
       const before = downloadQueueRef.current.length;
       downloadQueueRef.current = downloadQueueRef.current.filter(item => {
         if (item.retryCount >= MAX_RETRIES) {
@@ -369,6 +370,18 @@ export function useGlobalDownloadService() {
           useRadioStore.getState().removeMissingSong(item.song.id);
           const failKey = `${item.song.artist.toLowerCase().trim()}|${item.song.title.toLowerCase().trim()}`;
           failureTracker.current.delete(failKey);
+          return false;
+        }
+        // Remove stale non-urgent items (>30min in queue)
+        if (item.addedAt && (now - item.addedAt > STALE_THRESHOLD_MS) && item.song.urgency !== 'grade') {
+          console.log(`[DL-SVC] ⏰ Removida por tempo (>30min na fila): ${item.song.artist} - ${item.song.title}`);
+          useRadioStore.getState().removeMissingSong(item.song.id);
+          return false;
+        }
+        // Filter vinhetas that slipped through
+        if (isVinhetaOrJingle(item.song.artist, item.song.title)) {
+          console.log(`[DL-SVC] 🚫 Vinheta removida da fila: ${item.song.artist} - ${item.song.title}`);
+          useRadioStore.getState().removeMissingSong(item.song.id);
           return false;
         }
         return true;
