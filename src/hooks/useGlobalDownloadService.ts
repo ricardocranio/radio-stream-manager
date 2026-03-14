@@ -95,6 +95,13 @@ export function useGlobalDownloadService() {
       return false;
     }
 
+    // Last-barrier: never download vinhetas/jingles via Deemix
+    if (isVinhetaOrJingle(song.artist, song.title)) {
+      console.log(`[DL-SVC] 🚫 Vinheta/jingle bloqueada no download: ${song.artist} - ${song.title}`);
+      useRadioStore.getState().removeMissingSong(song.id);
+      return false;
+    }
+
     const storeState = useRadioStore.getState();
     if (!storeState.deezerConfig.enabled || !storeState.deezerConfig.arl) {
       return false;
