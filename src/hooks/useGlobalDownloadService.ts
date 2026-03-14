@@ -24,6 +24,7 @@ interface DownloadQueueItem {
   lastFailedAt?: number;
   consecutiveFailures?: number;
   fallbackQuality?: boolean; // true = try 128 instead of 320
+  addedAt: number; // timestamp for stale detection
 }
 
 const PRIORITY_GRADE_BOOST = 500;
