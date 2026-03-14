@@ -502,6 +502,13 @@ export function useGlobalDownloadService() {
       );
 
       for (const song of newToQueue) {
+        // Skip vinhetas/jingles at queue entry
+        if (isVinhetaOrJingle(song.artist, song.title)) {
+          console.log(`[DL-SVC] 🚫 Vinheta/jingle filtrada na fila: ${song.artist} - ${song.title}`);
+          useRadioStore.getState().removeMissingSong(song.id);
+          continue;
+        }
+
         const downloadKey = getDownloadKey(song);
         processedSongsRef.current.add(downloadKey);
         
@@ -521,7 +528,7 @@ export function useGlobalDownloadService() {
           priority += PRIORITY_STATION_BOOST;
         }
 
-        downloadQueueRef.current.push({ song, retryCount: 0, priority });
+        downloadQueueRef.current.push({ song, retryCount: 0, priority, addedAt: Date.now() });
       }
       
       // Cap processedSongs to prevent memory leak
