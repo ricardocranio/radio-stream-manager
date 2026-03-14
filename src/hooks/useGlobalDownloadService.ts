@@ -440,6 +440,7 @@ export function useGlobalDownloadService() {
             song: item.song,
             retryCount: newRetryCount,
             priority: item.priority,
+            addedAt: item.addedAt,
           });
         }
         
