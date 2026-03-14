@@ -1636,11 +1636,29 @@ export function useAutoGradeBuilder() {
     try {
       const blocks = getBlockTimes();
       const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
-      const nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
+      let nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
       const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
       const targetDay = dayMap[new Date().getDay()];
       const dayCode = getDayCode(targetDay);
       const filename = `${dayCode.toUpperCase()}.txt`;
+
+      // Skip 21:30 on weekdays — Voz do Brasil occupies 21:00-22:00 (60 min)
+      // If current block is 21:30 on a weekday, shift to 22:00/22:30
+      if (blocks.current.hour === 21 && blocks.current.minute === 30 && isWeekday(targetDay)) {
+        console.log('[AUTO-GRADE] ⏭️ Bloco atual 21:30 pulado (Voz do Brasil) — avançando para 22:00/22:30');
+        blocks.current = { hour: 22, minute: 0 };
+        blocks.next = { hour: 22, minute: 30 };
+        const newCurrentKey = '22:00';
+        const newNextKey = '22:30';
+        // Re-run with corrected blocks
+        return buildGrade(forceWrite, forceRegenerate);
+      }
+      // If next block would be 21:30 on a weekday, advance to 22:00
+      if (blocks.next.hour === 21 && blocks.next.minute === 30 && isWeekday(targetDay)) {
+        nextTimeKey = '22:00';
+        blocks.next = { hour: 22, minute: 0 };
+        console.log('[AUTO-GRADE] ⏭️ Pulando 21:30 (Voz do Brasil) — próximo bloco: 22:00');
+      }
 
       // If forceRegenerate (manual refresh), clear locks so blocks are rebuilt
       if (forceRegenerate) {
@@ -1887,7 +1905,16 @@ export function useAutoGradeBuilder() {
     }
 
     try {
-      const sortedContent = Array.from(pending.lineMap.keys()).sort().map(t => pending.lineMap.get(t)).join('\n');
+      // Remove 21:30 from weekday grades (Voz do Brasil occupies 21:00-22:00)
+      const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
+      const currentDay = dayMap[new Date().getDay()];
+      const isWeekdayNow = isWeekday(currentDay);
+      
+      const sortedContent = Array.from(pending.lineMap.keys())
+        .filter(t => !(isWeekdayNow && t === '21:30'))
+        .sort()
+        .map(t => pending.lineMap.get(t))
+        .join('\n');
       await renameFilesInGradeContent(sortedContent);
 
       const result = await window.electronAPI.saveGradeFile({
