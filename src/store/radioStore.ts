@@ -474,7 +474,6 @@ export const useRadioStore = create<RadioState>()(
       addMissingSong: (song) =>
         set((state) => {
           // Filter out vinhetas/jingles — they must NEVER go to Deemix
-          const { isVinhetaOrJingle } = require('@/lib/vinhetaFilter');
           if (isVinhetaOrJingle(song.artist || '', song.title || '')) {
             console.log(`[STORE] 🚫 Vinheta/jingle filtrada, não adicionada: ${song.artist} - ${song.title}`);
             return state;
