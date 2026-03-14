@@ -26,20 +26,30 @@ interface PreviewSong {
  * Parse a builder grade line into PreviewSong entries.
  * This is the ONLY source of truth — matches the TXT file exactly.
  */
+import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
+
+/**
+ * Parse a builder grade line into PreviewSong entries.
+ * This is the ONLY source of truth — matches the TXT file exactly.
+ * Marks vinhetas/jingles as isSpecial so they never go to Deemix.
+ */
 function parseGradeLine(line: string): PreviewSong[] {
   const songs: PreviewSong[] = [];
   const matches = line.matchAll(/"([^"]+)"/g);
   let pos = 1;
   for (const match of matches) {
     const filename = match[1];
-    const isSpecial = !filename.includes(' - ');
     const withoutExt = filename.replace(/\.mp3$/i, '');
     const parts = withoutExt.split(' - ');
+    const artist = parts[0] || filename;
+    const title = parts.slice(1).join(' - ') || '';
+    // Mark as special if no " - " separator OR if it's a vinheta/jingle
+    const isSpecial = !filename.includes(' - ') || isVinhetaOrJingle(artist, title, filename);
     songs.push({
       position: pos++,
       filename,
-      artist: parts[0] || filename,
-      title: parts.slice(1).join(' - ') || '',
+      artist,
+      title,
       isSpecial,
     });
   }

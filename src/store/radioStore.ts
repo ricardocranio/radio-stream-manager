@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule, ScheduledSequence } from '@/types/radio';
+import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
 
 export interface GenreRouteRule {
   genre: string;      // normalized genre key e.g. "ROCK", "METAL"
@@ -472,6 +473,11 @@ export const useRadioStore = create<RadioState>()(
       setMissingSongs: (missingSongs) => set({ missingSongs }),
       addMissingSong: (song) =>
         set((state) => {
+          // Filter out vinhetas/jingles — they must NEVER go to Deemix
+          if (isVinhetaOrJingle(song.artist || '', song.title || '')) {
+            console.log(`[STORE] 🚫 Vinheta/jingle filtrada, não adicionada: ${song.artist} - ${song.title}`);
+            return state;
+          }
           // Cap at 500 entries, trim oldest
           const updated = [...state.missingSongs, song];
           return { missingSongs: updated.length > 500 ? updated.slice(-500) : updated };
