@@ -1905,7 +1905,16 @@ export function useAutoGradeBuilder() {
     }
 
     try {
-      const sortedContent = Array.from(pending.lineMap.keys()).sort().map(t => pending.lineMap.get(t)).join('\n');
+      // Remove 21:30 from weekday grades (Voz do Brasil occupies 21:00-22:00)
+      const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
+      const currentDay = dayMap[new Date().getDay()];
+      const isWeekdayNow = isWeekday(currentDay);
+      
+      const sortedContent = Array.from(pending.lineMap.keys())
+        .filter(t => !(isWeekdayNow && t === '21:30'))
+        .sort()
+        .map(t => pending.lineMap.get(t))
+        .join('\n');
       await renameFilesInGradeContent(sortedContent);
 
       const result = await window.electronAPI.saveGradeFile({
