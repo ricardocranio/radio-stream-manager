@@ -193,43 +193,98 @@ async function checkSongInLibrary(artist, title, musicFolders) {
   return { exists: false };
 }
 
-// =============== MP3 DURATION READER ===============
+// =============== MP3 DURATION READER (v2 - Xing/VBRI/TLEN support) ===============
 function getMP3Duration(filePath) {
   try {
     const stat = fs.statSync(filePath);
     const fileSize = stat.size;
+    if (fileSize < 128) return 0;
+
+    // Read enough for ID3v2 header + first audio frames + Xing header
+    const readSize = Math.min(65536, fileSize);
     const fd = fs.openSync(filePath, 'r');
-    const headerBuf = Buffer.alloc(16384);
-    fs.readSync(fd, headerBuf, 0, 16384, 0);
+    const buf = Buffer.alloc(readSize);
+    fs.readSync(fd, buf, 0, readSize, 0);
     fs.closeSync(fd);
-    
-    let offset = 0;
-    if (headerBuf[0] === 0x49 && headerBuf[1] === 0x44 && headerBuf[2] === 0x33) {
-      const size = (headerBuf[6] << 21) | (headerBuf[7] << 14) | (headerBuf[8] << 7) | headerBuf[9];
-      offset = 10 + size;
+
+    let id3Size = 0;
+    let tlenMs = 0;
+
+    // === Parse ID3v2 header ===
+    if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) {
+      id3Size = 10 + ((buf[6] << 21) | (buf[7] << 14) | (buf[8] << 7) | buf[9]);
+
+      // Search for TLEN frame in ID3v2 tag
+      let pos = 10;
+      const id3End = Math.min(id3Size, readSize - 10);
+      while (pos < id3End) {
+        const frameId = buf.toString('ascii', pos, pos + 4);
+        if (frameId === '\0\0\0\0' || pos + 10 > id3End) break;
+        const frameSize = (buf[pos + 4] << 24) | (buf[pos + 5] << 16) | (buf[pos + 6] << 8) | buf[pos + 7];
+        if (frameSize <= 0 || frameSize > id3End - pos) break;
+
+        if (frameId === 'TLEN') {
+          // Text frame: 1 byte encoding + text
+          const encoding = buf[pos + 10];
+          let text = '';
+          if (encoding === 0 || encoding === 3) {
+            text = buf.toString('utf8', pos + 11, pos + 10 + frameSize).replace(/\0/g, '');
+          } else if (encoding === 1) {
+            // UTF-16 with BOM
+            const start = pos + 11;
+            const hasBom = buf[start] === 0xFF && buf[start + 1] === 0xFE;
+            const textStart = hasBom ? start + 2 : start;
+            text = buf.toString('utf16le', textStart, pos + 10 + frameSize).replace(/\0/g, '');
+          }
+          const parsed = parseInt(text, 10);
+          if (parsed > 0 && parsed < 3600000) tlenMs = parsed;
+        }
+        pos += 10 + frameSize;
+      }
     }
-    
-    let searchBuf = headerBuf;
-    if (offset > 0 && offset < fileSize) {
-      const fd2 = fs.openSync(filePath, 'r');
-      searchBuf = Buffer.alloc(Math.min(4096, fileSize - offset));
-      fs.readSync(fd2, searchBuf, 0, searchBuf.length, offset);
-      fs.closeSync(fd2);
+
+    // If TLEN found, use it (most accurate)
+    if (tlenMs > 0) {
+      return Math.round(tlenMs / 1000);
     }
-    const searchStart = offset > 0 ? 0 : offset;
-    
-    for (let i = searchStart; i < searchBuf.length - 4; i++) {
-      if (searchBuf[i] === 0xFF && (searchBuf[i + 1] & 0xE0) === 0xE0) {
-        const b1 = searchBuf[i + 1];
-        const b2 = searchBuf[i + 2];
+
+    // === Find first audio frame after ID3 ===
+    let audioBuf = buf;
+    let audioOffset = 0;
+    if (id3Size > 0 && id3Size < fileSize) {
+      if (id3Size >= readSize) {
+        // Need to read from id3Size
+        const fd2 = fs.openSync(filePath, 'r');
+        audioBuf = Buffer.alloc(Math.min(8192, fileSize - id3Size));
+        fs.readSync(fd2, audioBuf, 0, audioBuf.length, id3Size);
+        fs.closeSync(fd2);
+        audioOffset = 0;
+      } else {
+        audioOffset = id3Size;
+        audioBuf = buf;
+      }
+    }
+
+    // Find sync word (0xFF 0xE0+)
+    let frameStart = -1;
+    let bitrate = 0;
+    let sampleRate = 0;
+    let version = 0;
+    let layer = 0;
+    let samplesPerFrame = 0;
+
+    for (let i = audioOffset; i < audioBuf.length - 4; i++) {
+      if (audioBuf[i] === 0xFF && (audioBuf[i + 1] & 0xE0) === 0xE0) {
+        const b1 = audioBuf[i + 1];
+        const b2 = audioBuf[i + 2];
         const versionBits = (b1 >> 3) & 0x03;
         const layerBits = (b1 >> 1) & 0x03;
         const bitrateIndex = (b2 >> 4) & 0x0F;
         const sampleRateIndex = (b2 >> 2) & 0x03;
-        
+
         if (bitrateIndex === 0 || bitrateIndex === 15 || sampleRateIndex === 3) continue;
         if (layerBits === 0 || versionBits === 1) continue;
-        
+
         const bitrateTables = {
           '3_1': [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0],
           '3_3': [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0],
@@ -239,26 +294,71 @@ function getMP3Duration(filePath) {
           '2_2': [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0],
         };
         const sampleRates = { 3: [44100, 48000, 32000], 2: [22050, 24000, 16000], 0: [11025, 12000, 8000] };
-        
-        const version = versionBits === 3 ? 3 : 2;
-        const layer = layerBits;
+
+        version = versionBits === 3 ? 3 : 2;
+        layer = layerBits;
         const tableKey = `${version}_${layer}`;
         const bitrateTable = bitrateTables[tableKey] || bitrateTables['3_3'];
-        const bitrate = bitrateTable[bitrateIndex];
+        bitrate = bitrateTable[bitrateIndex];
         const sampleRateArr = sampleRates[versionBits] || sampleRates[3];
-        const sampleRate = sampleRateArr[sampleRateIndex];
-        
-        if (bitrate > 0 && sampleRate > 0) {
-          const audioSize = fileSize - (offset > 0 ? offset : i);
-          const durationSec = (audioSize * 8) / (bitrate * 1000);
-          if (durationSec > 0 && durationSec < 3600) return Math.round(durationSec);
-        }
+        sampleRate = sampleRateArr[sampleRateIndex];
+
+        // Samples per frame: Layer 1 = 384, Layer 2/3 MPEG1 = 1152, MPEG2 = 576
+        samplesPerFrame = (layer === 1) ? 384 : (versionBits === 3 ? 1152 : 576);
+
+        frameStart = i;
         break;
       }
     }
-    
-    const estimatedDuration = (fileSize * 8) / (192 * 1000);
-    if (estimatedDuration > 0 && estimatedDuration < 3600) return Math.round(estimatedDuration);
+
+    if (frameStart < 0 || bitrate <= 0 || sampleRate <= 0) {
+      const est = (fileSize * 8) / (192 * 1000);
+      return (est > 0 && est < 3600) ? Math.round(est) : 0;
+    }
+
+    // === Check for Xing/VBRI header (accurate VBR duration) ===
+    // Xing header is located after the first frame header (4 bytes) + side information
+    const sideInfoSize = (version === 3)
+      ? ((audioBuf[frameStart + 3] & 0xC0) === 0xC0 ? 17 : 32) // mono vs stereo
+      : ((audioBuf[frameStart + 3] & 0xC0) === 0xC0 ? 9 : 17);
+
+    const xingOffset = frameStart + 4 + sideInfoSize;
+    if (xingOffset + 12 < audioBuf.length) {
+      const tag = audioBuf.toString('ascii', xingOffset, xingOffset + 4);
+      if (tag === 'Xing' || tag === 'Info') {
+        const flags = audioBuf.readUInt32BE(xingOffset + 4);
+        if (flags & 0x01) { // Has frame count
+          const totalFrames = audioBuf.readUInt32BE(xingOffset + 8);
+          if (totalFrames > 0 && sampleRate > 0) {
+            const durationSec = (totalFrames * samplesPerFrame) / sampleRate;
+            if (durationSec > 0 && durationSec < 3600) {
+              return Math.round(durationSec);
+            }
+          }
+        }
+      }
+    }
+
+    // Check VBRI header (always at offset 36 from frame start)
+    const vbriOffset = frameStart + 36;
+    if (vbriOffset + 26 < audioBuf.length) {
+      const vbriTag = audioBuf.toString('ascii', vbriOffset, vbriOffset + 4);
+      if (vbriTag === 'VBRI') {
+        const totalFrames = audioBuf.readUInt32BE(vbriOffset + 14);
+        if (totalFrames > 0 && sampleRate > 0) {
+          const durationSec = (totalFrames * samplesPerFrame) / sampleRate;
+          if (durationSec > 0 && durationSec < 3600) {
+            return Math.round(durationSec);
+          }
+        }
+      }
+    }
+
+    // === CBR fallback: estimate from bitrate ===
+    const audioSize = fileSize - (id3Size > 0 ? id3Size : frameStart);
+    const durationSec = (audioSize * 8) / (bitrate * 1000);
+    if (durationSec > 0 && durationSec < 3600) return Math.round(durationSec);
+
     return 0;
   } catch (error) {
     console.error(`[DURATION] Error reading ${filePath}:`, error.message);
