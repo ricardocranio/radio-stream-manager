@@ -109,6 +109,7 @@ export function useRealtimeStats() {
           const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
           const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
 
+          // 6 parallel queries (was 7 — removed redundant station_name-only query)
           const [totalResult, last24hResult, lastHourResult, stationsResult, lastSongResult, recentSongsResult] = await Promise.all([
             supabase.from('scraped_songs').select('*', { count: 'exact', head: true }),
             supabase.from('scraped_songs').select('*', { count: 'exact', head: true }).gte('scraped_at', last24h.toISOString()),
@@ -122,13 +123,9 @@ export function useRealtimeStats() {
             throw new Error(`Query failed: ${totalResult.error.message}`);
           }
 
-          const { data: stationSongs } = await supabase
-            .from('scraped_songs')
-            .select('station_name')
-            .gte('scraped_at', last24h.toISOString());
-
+          // Derive station counts from the already-fetched recent songs (avoids extra query that could return thousands of rows)
           const newStationCounts: Record<string, number> = {};
-          stationSongs?.forEach(song => {
+          recentSongsResult.data?.forEach(song => {
             newStationCounts[song.station_name] = (newStationCounts[song.station_name] || 0) + 1;
           });
 
