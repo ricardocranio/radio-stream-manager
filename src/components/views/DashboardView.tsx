@@ -244,7 +244,7 @@ export function DashboardView() {
   return (
     <div className="p-4 md:p-6 space-y-5 animate-fade-in">
       {/* === METRICS — Compact Strip === */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
         {[
           { label: 'Faltando', value: missingSongs.filter(s => s.status === 'missing').length, icon: AlertTriangle, glow: '0 80% 55%' },
           { label: 'Banco Musical', value: libraryStats.isLoading ? '...' : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%' },
@@ -267,6 +267,65 @@ export function DashboardView() {
             </div>
           );
         })}
+        {/* Zerar Sistema — compact card with AlertDialog */}
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <div className="glass-card p-3 flex items-center gap-3 cursor-pointer hover:border-destructive/40 transition-colors border border-transparent">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'hsl(0 70% 50% / 0.1)' }}>
+                <RotateCcw className="w-4 h-4" style={{ color: 'hsl(0 70% 50%)' }} />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Zerar</p>
+                <p className="text-xs font-bold text-destructive">Sistema</p>
+              </div>
+            </div>
+          </AlertDialogTrigger>
+          <AlertDialogContent className="max-w-md">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                <Shield className="w-5 h-5" />
+                Reset Completo do Sistema
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-3">
+                <p>Esta ação irá limpar <strong>TODOS</strong> os dados do sistema:</p>
+                <div className="space-y-2 p-3 rounded-lg bg-muted/50 text-sm">
+                  <p>✓ Músicas capturadas (local)</p>
+                  <p>✓ Ranking TOP25</p>
+                  <p>✓ Músicas faltando</p>
+                  <p>✓ Histórico de downloads</p>
+                  <p>✓ Histórico de grades</p>
+                  <p>✓ Estatísticas de similaridade</p>
+                </div>
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="clearSupabase" checked={resetOptions.clearSupabase} onCheckedChange={(checked) => setResetOptions(prev => ({ ...prev, clearSupabase: checked === true }))} />
+                    <Label htmlFor="clearSupabase" className="text-sm font-medium cursor-pointer">Limpar banco de dados remoto (Supabase)</Label>
+                  </div>
+                  {resetOptions.clearSupabase && (
+                    <>
+                      <div className="flex items-center space-x-2 ml-6">
+                        <Checkbox id="clearSchedules" checked={resetOptions.clearSchedules} onCheckedChange={(checked) => setResetOptions(prev => ({ ...prev, clearSchedules: checked === true }))} />
+                        <Label htmlFor="clearSchedules" className="text-sm cursor-pointer">Limpar monitoramentos especiais</Label>
+                      </div>
+                      <div className="flex items-center space-x-2 ml-6">
+                        <Checkbox id="resetStations" checked={resetOptions.resetStations} onCheckedChange={(checked) => setResetOptions(prev => ({ ...prev, resetStations: checked === true }))} />
+                        <Label htmlFor="resetStations" className="text-sm cursor-pointer">Desativar todas as emissoras</Label>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <p className="text-destructive text-xs font-medium pt-2">⚠️ Esta ação é irreversível!</p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleFullSystemReset} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                {isResetting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                Confirmar Reset
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {/* Voz do Brasil Alert */}
