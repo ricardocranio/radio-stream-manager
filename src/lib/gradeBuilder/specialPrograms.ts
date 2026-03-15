@@ -325,7 +325,8 @@ export async function generateMadrugada(
  */
 /**
  * Generate Rock & Metal block (19:00/19:30 weekdays).
- * Pulls 10 songs from Rock and Metal subfolders within the music library, intercalated with vhtn.
+ * Pulls 10 songs from the database filtered by ai_genre = ROCK or METAL,
+ * then verifies they exist in the local library before adding to the grade.
  */
 export async function generateRockMetal(
   hour: number,
@@ -337,89 +338,64 @@ export async function generateRockMetal(
   const logs: BlockLogItem[] = [];
   const TARGET_SONGS = 10;
 
-  // Get files from Rock and Metal subfolders within each music library folder
-  const rockFiles: string[] = [];
-  const metalFiles: string[] = [];
+  // Fetch Rock and Metal songs from the database by ai_genre
+  let dbGenreSongs: Array<{ artist: string; title: string; station_name: string; ai_genre: string }> = [];
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { data, error } = await supabase
+      .from('scraped_songs')
+      .select('artist, title, station_name, ai_genre')
+      .in('ai_genre', ['ROCK', 'METAL', 'Rock', 'Metal'])
+      .order('scraped_at', { ascending: false })
+      .limit(500);
 
-  if (typeof window !== 'undefined' && (window as any).electron) {
-    const electron = (window as any).electron;
-
-    for (const musicFolder of ctx.musicFolders) {
-      // Look for Rock subfolder in each music library path
-      try {
-        const rockFolder = musicFolder.includes('\\')
-          ? `${musicFolder}\\Rock`
-          : `${musicFolder}/Rock`;
-        const rockResult = await electron.invoke('list-folder-files', {
-          folder: rockFolder,
-          extension: '.mp3',
-        });
-        if (rockResult?.success && rockResult.files) {
-          rockFiles.push(...rockResult.files.map((f: any) => f.name));
-        }
-      } catch (e) {
-        // Rock subfolder may not exist in this library path
-      }
-
-      // Look for Metal subfolder in each music library path
-      try {
-        const metalFolder = musicFolder.includes('\\')
-          ? `${musicFolder}\\Metal`
-          : `${musicFolder}/Metal`;
-        const metalResult = await electron.invoke('list-folder-files', {
-          folder: metalFolder,
-          extension: '.mp3',
-        });
-        if (metalResult?.success && metalResult.files) {
-          metalFiles.push(...metalResult.files.map((f: any) => f.name));
-        }
-      } catch (e) {
-        // Metal subfolder may not exist in this library path
-      }
+    if (!error && data) {
+      dbGenreSongs = data as typeof dbGenreSongs;
     }
+  } catch (e) {
+    console.warn('[ROCK-METAL] Falha ao buscar músicas por gênero:', e);
   }
 
-  // Combine and shuffle, alternating between Rock and Metal
-  const combined: Array<{ filename: string; genre: string }> = [];
-  const maxLen = Math.max(rockFiles.length, metalFiles.length);
-  for (let i = 0; i < maxLen; i++) {
-    if (i < rockFiles.length) combined.push({ filename: rockFiles[i], genre: 'Rock' });
-    if (i < metalFiles.length) combined.push({ filename: metalFiles[i], genre: 'Metal' });
+  // Deduplicate by artist+title
+  const seen = new Set<string>();
+  const candidates: Array<{ artist: string; title: string; station: string; genre: string }> = [];
+  for (const s of dbGenreSongs) {
+    const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ artist: s.artist, title: s.title, station: s.station_name, genre: s.ai_genre });
   }
 
-  // Shuffle to avoid predictable patterns
-  combined.sort(() => Math.random() - 0.5);
+  // Shuffle for variety
+  candidates.sort(() => Math.random() - 0.5);
 
-  // Select songs avoiding duplicates and recently used
+  // Select songs, checking library and anti-repetition
   const selectedSongs: string[] = [];
-  const usedKeys = new Set<string>();
+  const usedArtists = new Set<string>();
 
-  for (const item of combined) {
+  for (const candidate of candidates) {
     if (selectedSongs.length >= TARGET_SONGS) break;
 
-    const key = item.filename.toLowerCase();
-    if (usedKeys.has(key)) continue;
+    const normalizedArtist = candidate.artist.toLowerCase().trim();
+    if (usedArtists.has(normalizedArtist)) continue;
+    if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr)) continue;
 
-    // Extract artist from filename pattern "Artist - Title.mp3"
-    const nameWithoutExt = item.filename.replace(/\.(mp3|flac)$/i, '');
-    const parts = nameWithoutExt.split(/\s*-\s*/);
-    const artist = parts[0]?.trim() || '';
-    const title = parts.slice(1).join(' - ').trim() || nameWithoutExt;
+    const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+    if (libraryResult.exists) {
+      const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+      selectedSongs.push(`"${filename}"`);
+      usedArtists.add(normalizedArtist);
+      ctx.markSongAsUsed(candidate.title, candidate.artist, timeStr);
 
-    if (ctx.isRecentlyUsed(title, artist, timeStr)) continue;
-
-    selectedSongs.push(`"${item.filename}"`);
-    usedKeys.add(key);
-    ctx.markSongAsUsed(title, artist, timeStr);
-
-    logs.push({
-      blockTime: timeStr,
-      type: 'used',
-      title,
-      artist,
-      station: item.genre,
-      reason: `Rock/Metal da pasta ${item.genre}`,
-    });
+      logs.push({
+        blockTime: timeStr,
+        type: 'used',
+        title: candidate.title,
+        artist: candidate.artist,
+        station: candidate.genre.toUpperCase(),
+        reason: `Rock/Metal por gênero (ai_genre=${candidate.genre})`,
+      });
+    }
   }
 
   // Fill remaining with coringa
@@ -431,7 +407,7 @@ export async function generateRockMetal(
       title: ctx.coringaCode,
       artist: 'CORINGA',
       station: 'FALLBACK',
-      reason: 'Pool Rock/Metal esgotado',
+      reason: 'Pool Rock/Metal por gênero esgotado',
     });
   }
 
@@ -439,9 +415,9 @@ export async function generateRockMetal(
     blockTime: timeStr,
     type: 'fixed',
     title: 'Rock & Metal Mix',
-    artist: `${selectedSongs.length} músicas (Rock: ${rockFiles.length}, Metal: ${metalFiles.length})`,
+    artist: `${selectedSongs.length} músicas (pool: ${candidates.length} candidatos por gênero)`,
     station: 'ROCK/METAL',
-    reason: `10 músicas das pastas Rock e Metal intercaladas com vhtn`,
+    reason: `10 músicas filtradas por ai_genre ROCK/METAL intercaladas com vhtn`,
   });
 
   return {
