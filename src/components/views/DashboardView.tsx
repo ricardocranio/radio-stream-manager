@@ -566,14 +566,16 @@ export function DashboardView() {
           <CardTitle className="text-sm md:text-base flex items-center gap-2">
             <Eye className="w-4 h-4 text-amber-500" />
             Preview da Próxima Grade
-            {previewCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground ml-auto" /> : <ChevronUp className="w-4 h-4 text-muted-foreground ml-auto" />}
+            <ChevronDown className={`w-4 h-4 text-muted-foreground ml-auto transition-transform duration-300 ${!previewCollapsed ? 'rotate-180' : ''}`} />
           </CardTitle>
         </CardHeader>
-        {!previewCollapsed && (
-          <CardContent className="pt-0">
-            <GradePreviewCard />
-          </CardContent>
-        )}
+        <div className="collapsible-content" data-open={!previewCollapsed}>
+          <div>
+            <CardContent className="pt-0">
+              <GradePreviewCard />
+            </CardContent>
+          </div>
+        </div>
       </Card>
 
       {/* Grades Montadas — Collapsible */}
@@ -582,14 +584,16 @@ export function DashboardView() {
           <CardTitle className="text-sm md:text-base flex items-center gap-2">
             <FileText className="w-4 h-4 text-emerald-500" />
             Grades Montadas
-            {scheduleCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground ml-auto" /> : <ChevronUp className="w-4 h-4 text-muted-foreground ml-auto" />}
+            <ChevronDown className={`w-4 h-4 text-muted-foreground ml-auto transition-transform duration-300 ${!scheduleCollapsed ? 'rotate-180' : ''}`} />
           </CardTitle>
         </CardHeader>
-        {!scheduleCollapsed && (
-          <CardContent className="pt-0">
-            <GradeScheduleCard />
-          </CardContent>
-        )}
+        <div className="collapsible-content" data-open={!scheduleCollapsed}>
+          <div>
+            <CardContent className="pt-0">
+              <GradeScheduleCard />
+            </CardContent>
+          </div>
+        </div>
       </Card>
 
       {/* Ranking and ID3 moved to footer area below */}
