@@ -639,23 +639,23 @@ export function DashboardView() {
 
       </Card>
 
-      {/* Status Panel */}
+      {/* Status Panel - Collapsible */}
       <Card className="glass-card">
-        <CardHeader className="border-b border-border py-3">
-          <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-            <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-primary" />
-            Status do Sistema
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-3 md:p-4 space-y-3 md:space-y-4">
-          <div className="space-y-2 md:space-y-3">
-            <div className="flex items-center justify-between p-2 md:p-3 rounded-lg bg-secondary/50">
-              <span className="text-xs md:text-sm text-muted-foreground">Status</span>
-              <Badge className={isRunning ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'}>
+        <CardHeader className="border-b border-border py-3 cursor-pointer select-none" onClick={() => setStatusCollapsed(!statusCollapsed)}>
+          <CardTitle className="flex items-center justify-between text-base md:text-lg">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+              Status do Sistema
+              <Badge className={isRunning ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'} variant="secondary">
                 {isRunning ? 'Ativo' : 'Parado'}
               </Badge>
             </div>
-            
+            {statusCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
+          </CardTitle>
+        </CardHeader>
+        {!statusCollapsed && (
+        <CardContent className="p-3 md:p-4 space-y-3 md:space-y-4">
+          <div className="space-y-2 md:space-y-3">
             <div className="flex items-center justify-between p-2 md:p-3 rounded-lg bg-secondary/50">
               <span className="text-xs md:text-sm text-muted-foreground">Intervalo</span>
               <span className="text-xs md:text-sm font-mono text-foreground">{config.updateIntervalMinutes} min</span>
@@ -720,6 +720,7 @@ export function DashboardView() {
             </div>
           </div>
         </CardContent>
+        )}
       </Card>
 
       {/* System Reset Card */}
