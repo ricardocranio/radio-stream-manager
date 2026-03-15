@@ -142,6 +142,7 @@ export function useAutoGradeBuilder() {
       return p?.lockedBlocks || new Set<string>();
     })()
   );
+  const activeDayCodeRef = useRef<string>(DAY_CODES_BY_INDEX[new Date().getDay()]);
 
   // Restore pendingGradeRef from localStorage on mount
   const pendingGradeRestored = useRef(false);
@@ -1641,6 +1642,23 @@ export function useAutoGradeBuilder() {
       const targetDay = dayMap[new Date().getDay()];
       const dayCode = getDayCode(targetDay);
       const filename = `${dayCode.toUpperCase()}.txt`;
+
+      // Day rollover guard: at midnight, clear stale locks/buffer from previous day
+      // to prevent Saturday lines from being kept in Sunday preview/build.
+      if (activeDayCodeRef.current !== dayCode) {
+        console.log(`[AUTO-GRADE] 🌅 Virada de dia: ${activeDayCodeRef.current} → ${dayCode}. Limpando buffers da grade.`);
+        activeDayCodeRef.current = dayCode;
+        usedSongsRef.current = [];
+        carryOverSongsRef.current = [];
+        builtBlocksRef.current.clear();
+        pendingGradeRef.current = null;
+        clearGradeStorage();
+        setState(prev => ({
+          ...prev,
+          pendingGradeLines: new Map(),
+          pendingBlockDurations: new Map(),
+        }));
+      }
 
       // Skip 21:30 on weekdays — Voz do Brasil occupies 21:00-22:00 (60 min)
       // If current block is 21:30 on a weekday, shift to 22:00/22:30
