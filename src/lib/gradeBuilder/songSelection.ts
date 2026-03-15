@@ -726,7 +726,9 @@ export async function selectSongForSlot(
     const sanitizedFilename = await finalizeGradeFilename(
       originalFilename,
       selectedSong.artist,
-      selectedSong.title
+      selectedSong.title,
+      ctx.musicFolders,
+      ctx.filterChars
     );
 
     return `"${sanitizedFilename}"`;
