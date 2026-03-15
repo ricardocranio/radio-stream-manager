@@ -53,7 +53,9 @@ export function useRealtimeStats() {
   
   // Local loading state
   const [isLoading, setIsLoading] = useState(!persistedStore.isHydrated);
+  // Use ref for countdown — avoids re-rendering entire tree every 40s
   const [nextRefreshIn, setNextRefreshIn] = useState(REFRESH_INTERVAL);
+  const nextRefreshThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Extract individual values to avoid object-reference churn in useMemo
   const {
