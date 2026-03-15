@@ -909,7 +909,7 @@ export async function handleSpecialSequenceType(
             station: candidate.station, style: candidate.style,
             reason: 'Aleatório',
           });
-          const sanitizedFilename = await ensureFileRenamedOnDisk(correctFilename, ctx.musicFolders, ctx.filterChars);
+          const sanitizedFilename = await finalizeGradeFilename(correctFilename, candidate.artist, candidate.title);
           return `"${sanitizedFilename}"`;
         }
       }
