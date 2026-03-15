@@ -72,28 +72,42 @@ export function GradePreviewCard() {
   const mockSongs: PreviewSong[] = useMemo(() => {
     if (isElectron) return [];
     return [
-      { position: 1, filename: 'Anitta - Envolver.mp3', artist: 'Anitta', title: 'Envolver', isSpecial: false },
-      { position: 2, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true },
-      { position: 3, filename: 'Jorge & Mateus - Enquanto Houver Razões.mp3', artist: 'Jorge & Mateus', title: 'Enquanto Houver Razões', isSpecial: false },
-      { position: 4, filename: 'Marília Mendonça - Supera.mp3', artist: 'Marília Mendonça', title: 'Supera', isSpecial: false },
-      { position: 5, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true },
-      { position: 6, filename: 'Henrique & Juliano - Vidinha de Balada.mp3', artist: 'Henrique & Juliano', title: 'Vidinha de Balada', isSpecial: false },
-      { position: 7, filename: 'Luísa Sonza - Sentadona.mp3', artist: 'Luísa Sonza', title: 'Sentadona', isSpecial: false },
-      { position: 8, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true },
-      { position: 9, filename: 'Zé Neto & Cristiano - Largado Às Traças.mp3', artist: 'Zé Neto & Cristiano', title: 'Largado Às Traças', isSpecial: false },
+      { position: 1, filename: 'Anitta - Envolver.mp3', artist: 'Anitta', title: 'Envolver', isSpecial: false, durationSec: 197 },
+      { position: 2, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true, durationSec: 7 },
+      { position: 3, filename: 'Jorge & Mateus - Enquanto Houver Razões.mp3', artist: 'Jorge & Mateus', title: 'Enquanto Houver Razões', isSpecial: false, durationSec: 223 },
+      { position: 4, filename: 'Marília Mendonça - Supera.mp3', artist: 'Marília Mendonça', title: 'Supera', isSpecial: false, durationSec: 185 },
+      { position: 5, filename: 'VHTN_NOSSA.mp3', artist: 'VHTN_NOSSA', title: '', isSpecial: true, durationSec: 8 },
+      { position: 6, filename: 'Henrique & Juliano - Vidinha de Balada.mp3', artist: 'Henrique & Juliano', title: 'Vidinha de Balada', isSpecial: false, durationSec: 241 },
+      { position: 7, filename: 'Luísa Sonza - Sentadona.mp3', artist: 'Luísa Sonza', title: 'Sentadona', isSpecial: false, durationSec: 178 },
+      { position: 8, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true, durationSec: 7 },
+      { position: 9, filename: 'Zé Neto & Cristiano - Largado Às Traças.mp3', artist: 'Zé Neto & Cristiano', title: 'Largado Às Traças', isSpecial: false, durationSec: 215 },
+      { position: 10, filename: 'Gusttavo Lima - Balada.mp3', artist: 'Gusttavo Lima', title: 'Balada', isSpecial: false, durationSec: 202 },
+      { position: 11, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true, durationSec: 7 },
+      { position: 12, filename: 'Luan Santana - Acordando o Prédio.mp3', artist: 'Luan Santana', title: 'Acordando o Prédio', isSpecial: false, durationSec: 193 },
     ];
   }, []);
 
+  // Fixed mock durations keyed by filename (realistic values)
+  const mockDurationsMap: Record<string, number> = useMemo(() => {
+    if (isElectron) return {};
+    const map: Record<string, number> = {};
+    for (const s of mockSongs) {
+      if (s.durationSec) map[s.filename.toLowerCase()] = s.durationSec;
+    }
+    return map;
+  }, [mockSongs]);
+
   const mockStationMap: Record<string, string> = useMemo(() => {
     if (isElectron) return {};
-    // Keys normalized via same normalizeKey logic (no accents, & removed, single spaces)
     return {
       'anitta-envolver': 'BH FM',
       'jorge mateus-enquanto houver razoes': 'Metropolitana FM',
       'marilia mendonca-supera': 'Band FM',
       'henrique juliano-vidinha de balada': 'Clube FM',
       'luisa sonza-sentadona': 'Mix FM',
-      'ze neto cristiano-largado as tracas': '89 rock',
+      'ze neto cristiano-largado as tracas': '89 Rock',
+      'gusttavo lima-balada': 'Globo FM',
+      'luan santana-acordando o predio': 'Disney FM',
     };
   }, []);
 
@@ -105,7 +119,7 @@ export function GradePreviewCard() {
     const nextH = m === '00' ? (h + 1) % 24 : h;
     return `${nextH.toString().padStart(2, '0')}:${m}`;
   })());
-  const blockDuration = realBlockDuration ?? gradeBuilder.pendingBlockDurations?.get(nextBlockTime) ?? (!isElectron ? 30.2 : undefined);
+  const blockDuration = realBlockDuration ?? gradeBuilder.pendingBlockDurations?.get(nextBlockTime) ?? undefined;
 
   // === SINGLE SOURCE: Builder output (exact match with TXT) ===
   // In web preview (non-Electron), use mock data to demonstrate the radio badges
@@ -259,16 +273,11 @@ export function GradePreviewCard() {
         const mockSongsCount = displaySongs.filter(s => !s.isSpecial).length;
         setVhtCount(mockVhts);
         setSongCount(mockSongsCount);
-        // Mock durations between 3:00 and 4:30
-        const mockDurs: Record<string, number> = {};
-        displaySongs.forEach(s => {
-          if (!s.isSpecial) {
-            mockDurs[s.filename.toLowerCase()] = 180 + Math.floor(Math.random() * 90);
-          } else {
-            mockDurs[s.filename.toLowerCase()] = 7;
-          }
-        });
-        setSongDurations(mockDurs);
+        // Use fixed mock durations from durationSec field
+        setSongDurations(mockDurationsMap);
+        // Calculate total from fixed durations
+        const totalSec = displaySongs.reduce((acc, s) => acc + (s.durationSec || (s.isSpecial ? 7 : 210)), 0);
+        setRealBlockDuration(parseFloat((totalSec / 60).toFixed(1)));
       } else {
         setVhtCount(0);
         setSongCount(0);
