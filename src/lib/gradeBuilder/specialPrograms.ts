@@ -429,7 +429,63 @@ export async function generateRockMetal(
 }
 
 /**
- * Generate TOP10 Década block (18:00 weekdays).
+ * Generic genre-based song finder for sequence positions.
+ * Pulls a single song from the database filtered by ai_genre.
+ * Used by sequence positions with source "genre_SERTANEJO", "genre_PAGODE", etc.
+ */
+export async function findSongByGenre(
+  genres: string[],
+  timeStr: string,
+  usedInBlock: Set<string>,
+  usedArtistsInBlock: Set<string>,
+  ctx: GradeContext,
+  isFullDay: boolean = false,
+): Promise<{ filename: string; artist: string; title: string; genre: string } | null> {
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const genreVariants = genres.flatMap(g => [
+      g.toUpperCase(), g, g.charAt(0).toUpperCase() + g.slice(1).toLowerCase()
+    ]);
+    const uniqueVariants = [...new Set(genreVariants)];
+    
+    const { data, error } = await supabase
+      .from('scraped_songs')
+      .select('artist, title, station_name, ai_genre')
+      .in('ai_genre', uniqueVariants)
+      .order('scraped_at', { ascending: false })
+      .limit(300);
+
+    if (error || !data || data.length === 0) return null;
+
+    const seen = new Set<string>();
+    const candidates: Array<{ artist: string; title: string; station: string; genre: string }> = [];
+    for (const s of data) {
+      const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      candidates.push({ artist: s.artist, title: s.title, station: s.station_name, genre: s.ai_genre || genres[0] });
+    }
+    candidates.sort(() => Math.random() - 0.5);
+
+    for (const candidate of candidates) {
+      const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+      const normalizedArtist = candidate.artist.toLowerCase().trim();
+      if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+      if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
+
+      const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+      if (libraryResult.exists) {
+        const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+        return { filename, artist: candidate.artist, title: candidate.title, genre: candidate.genre };
+      }
+    }
+  } catch (e) {
+    console.warn(`[GENRE-BLOCK] Falha ao buscar por gênero ${genres.join('/')}:`, e);
+  }
+  return null;
+}
+
+/**
  * Pulls 10 songs from years 2000-2010, intercalated with vhtn.
  */
 export async function generateTop10Decada(
