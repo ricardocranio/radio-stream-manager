@@ -92,6 +92,20 @@ export function GradePreviewCard() {
     return [];
   }, [gradeBuilder.pendingGradeLines, nextBlockTime]);
 
+  // Build a map of song key -> station from block logs
+  const songStationMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (nextBlockTime === '--:--') return map;
+    const logs = getLogsByBlock(nextBlockTime);
+    for (const log of logs) {
+      if (log.station && log.title && log.artist) {
+        const key = `${log.artist.toLowerCase().trim()}-${(log.title || '').toLowerCase().trim()}`;
+        map[key] = log.station;
+      }
+    }
+    return map;
+  }, [nextBlockTime, getLogsByBlock]);
+
   // Get the raw grade line from builder
   const nextBlockLine = useMemo(() => {
     const lines = gradeBuilder.pendingGradeLines;
