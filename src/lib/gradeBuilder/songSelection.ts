@@ -850,7 +850,7 @@ export async function handleSpecialSequenceType(
           station: 'TOP50', style: rankSong.style,
           reason: `TOP50 posição ${sortedRanking.indexOf(rankSong) + 1}`,
         });
-        const sanitizedFilename = await ensureFileRenamedOnDisk(correctFilename, ctx.musicFolders, ctx.filterChars);
+        const sanitizedFilename = await finalizeGradeFilename(correctFilename, rankSong.artist, rankSong.title);
         return `"${sanitizedFilename}"`;
       }
     }
