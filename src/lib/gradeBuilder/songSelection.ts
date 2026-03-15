@@ -79,7 +79,7 @@ async function tryDownloadAndWait(
   }
 }
 
-async function finalizeGradeFilename(
+function finalizeGradeFilename(
   currentFilename: string,
   artist: string,
   title: string,
