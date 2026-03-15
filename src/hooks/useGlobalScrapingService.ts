@@ -155,10 +155,15 @@ export function useGlobalScrapingService(
       processedSongsRef.current.add(processKey);
       
       // Cap processedSongs to prevent unbounded memory growth in 24/7 operation
+      // Use iterator-based trimming instead of Array.from (avoids temporary array allocation)
       if (processedSongsRef.current.size > 5000) {
-        const entries = Array.from(processedSongsRef.current);
-        processedSongsRef.current = new Set(entries.slice(-3000));
-        console.log(`[SCRAPE-SVC] 🧹 processedSongs trimmed: 5000 → 3000`);
+        const iter = processedSongsRef.current.values();
+        const deleteCount = processedSongsRef.current.size - 3000;
+        for (let d = 0; d < deleteCount; d++) {
+          const val = iter.next().value;
+          if (val) processedSongsRef.current.delete(val);
+        }
+        console.log(`[SCRAPE-SVC] 🧹 processedSongs trimmed: 5000 → ${processedSongsRef.current.size}`);
       }
       
       let existsInLibrary = false;
