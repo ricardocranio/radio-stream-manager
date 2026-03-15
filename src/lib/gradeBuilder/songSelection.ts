@@ -766,6 +766,10 @@ export async function handleSpecialSequenceType(
 
   // Handle generic fixo
   if (seq.radioSource === 'fixo') {
+    if (isSunday) {
+      console.log(`[SONG-SELECT] 🌞 Domingo: conteúdo fixo genérico ignorado às ${timeStr}`);
+      return null;
+    }
     // Simplified: pick round-robin from available fixed content
     const availableFixed = ctx.fixedContent.filter(fc => fc.enabled && fc.type !== 'top50' && fc.type !== 'vozbrasil');
     if (availableFixed.length > 0) {
