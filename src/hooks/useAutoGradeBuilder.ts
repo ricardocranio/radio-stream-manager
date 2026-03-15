@@ -1871,7 +1871,7 @@ export function useAutoGradeBuilder() {
       let prePopulatedCount = 0;
       for (const [timeKey, line] of lineMap.entries()) {
         // Skip the blocks we're about to regenerate
-        if ((shouldBuildCurrent && timeKey === currentTimeKey) || (shouldBuildNext && timeKey === nextTimeKey)) continue;
+        if ((shouldBuildCurrent && timeKey === currentTimeKey) || (shouldBuildNext && timeKey === nextTimeKey) || (shouldBuildThird && timeKey === thirdTimeKey)) continue;
         // Extract quoted filenames like "ARTIST - TITLE.MP3"
         const quotedTokens = line.match(/"([^"]+)"/g);
         if (!quotedTokens) continue;
