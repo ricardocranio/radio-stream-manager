@@ -86,13 +86,14 @@ export function GradePreviewCard() {
 
   const mockStationMap: Record<string, string> = useMemo(() => {
     if (isElectron) return {};
+    // Keys must be normalized (no accents, lowercase, alphanumeric+spaces)
     return {
       'anitta-envolver': 'BH FM',
-      'jorge & mateus-enquanto houver razões': 'Metropolitana FM',
-      'marília mendonça-supera': 'Disney FM',
-      'henrique & juliano-vidinha de balada': 'BH FM',
-      'luísa sonza-sentadona': 'Jovem Pan',
-      'zé neto & cristiano-largado às traças': 'Metropolitana FM',
+      'jorge  mateus-enquanto houver razoes': 'Metropolitana FM',
+      'marilia mendonca-supera': 'Disney FM',
+      'henrique  juliano-vidinha de balada': 'BH FM',
+      'luisa sonza-sentadona': 'Jovem Pan',
+      'ze neto  cristiano-largado as tracas': 'Metropolitana FM',
     };
   }, []);
 
