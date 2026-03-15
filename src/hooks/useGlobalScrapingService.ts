@@ -116,14 +116,17 @@ export function useGlobalScrapingService(
     let missingCount = 0;
     const failedStations: string[] = [];
 
+    // Build O(1) lookup sets from missingSongs and downloadQueue (avoids O(n) scans per song)
+    const currentMissing = useRadioStore.getState().missingSongs;
+    const missingSongsSet = new Set(
+      currentMissing.map(s => `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`)
+    );
+    const downloadQueueSet = new Set(
+      downloadQueueRef.current.map(item => `${item.song.artist.toLowerCase().trim()}|${item.song.title.toLowerCase().trim()}`)
+    );
+
     const isSongAlreadyMissing = (artist: string, title: string): boolean => {
-      const normalizedArtist = artist.toLowerCase().trim();
-      const normalizedTitle = title.toLowerCase().trim();
-      const currentMissing = useRadioStore.getState().missingSongs;
-      return currentMissing.some(
-        s => s.artist.toLowerCase().trim() === normalizedArtist && 
-             s.title.toLowerCase().trim() === normalizedTitle
-      );
+      return missingSongsSet.has(`${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`);
     };
     
     const isSongAlreadyProcessedForStation = (artist: string, title: string, stationName: string): boolean => {
@@ -132,12 +135,7 @@ export function useGlobalScrapingService(
     };
     
     const isSongContentAlreadyQueued = (artist: string, title: string): boolean => {
-      const normalizedArtist = artist.toLowerCase().trim();
-      const normalizedTitle = title.toLowerCase().trim();
-      return downloadQueueRef.current.some(
-        item => item.song.artist.toLowerCase().trim() === normalizedArtist &&
-                item.song.title.toLowerCase().trim() === normalizedTitle
-      );
+      return downloadQueueSet.has(`${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`);
     };
 
     const processSong = async (
