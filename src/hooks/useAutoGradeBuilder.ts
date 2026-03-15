@@ -1479,9 +1479,12 @@ export function useAutoGradeBuilder() {
     const currentBlockMinute = currentMinute < 30 ? 0 : 30;
     const nextBlockHour = currentBlockMinute === 30 ? (currentHour + 1) % 24 : currentHour;
     const nextBlockMinute = currentBlockMinute === 30 ? 0 : 30;
+    const thirdBlockHour = nextBlockMinute === 30 ? (nextBlockHour + 1) % 24 : nextBlockHour;
+    const thirdBlockMinute = nextBlockMinute === 30 ? 0 : 30;
     return {
       current: { hour: currentHour, minute: currentBlockMinute },
       next: { hour: nextBlockHour, minute: nextBlockMinute },
+      third: { hour: thirdBlockHour, minute: thirdBlockMinute },
     };
   }, []);
 
