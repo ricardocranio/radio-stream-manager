@@ -143,6 +143,7 @@ export function Sidebar({ activeTab, onTabChange, onTabHover, collapsed = false,
             <div>
               <h1 className="font-bold text-base tracking-tight bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-pulse">PROGRAMADOR</h1>
               <p className="text-[10px] tracking-[0.2em] font-semibold bg-gradient-to-r from-muted-foreground via-primary to-muted-foreground bg-clip-text text-transparent animate-pulse">AUDIOSOLUTIONS</p>
+              <p className="text-[9px] text-muted-foreground/60 font-mono mt-0.5">v8.0.0 • AudioSolutions</p>
             </div>
           )}
         </div>
