@@ -140,10 +140,13 @@ export function Sidebar({ activeTab, onTabChange, onTabHover, collapsed = false,
             />
           </div>
           {!collapsed && (
-            <div>
-              <h1 className="font-bold text-base tracking-tight bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-pulse">PROGRAMADOR</h1>
+            <div className="flex-1 min-w-0">
+              <h1 className="font-bold text-base tracking-tight bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-pulse leading-tight">PROGRAMADOR</h1>
               <p className="text-[10px] tracking-[0.2em] font-semibold bg-gradient-to-r from-muted-foreground via-primary to-muted-foreground bg-clip-text text-transparent animate-pulse">AUDIOSOLUTIONS</p>
-              <p className="text-[9px] text-muted-foreground/60 font-mono mt-0.5">v8.0.0 • AudioSolutions</p>
+              <div className="flex items-center gap-1.5 mt-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" style={{ boxShadow: '0 0 4px hsl(155 85% 42% / 0.6)' }} />
+                <span className="text-[9px] font-mono text-muted-foreground/70">v8.0.0 • <span className="text-success/80">Ativo</span></span>
+              </div>
             </div>
           )}
         </div>
@@ -229,17 +232,6 @@ export function Sidebar({ activeTab, onTabChange, onTabHover, collapsed = false,
           </div>
         )}
 
-        {/* System status - minimal */}
-        {!collapsed && (
-          <div className="px-3 pb-2">
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-success"
-                style={{ boxShadow: '0 0 4px hsl(155 85% 42% / 0.5)' }}
-              />
-              <span className="text-[10px] text-success/70 font-medium">Ativo</span>
-            </div>
-          </div>
-        )}
       </div>
     </aside>
   );
