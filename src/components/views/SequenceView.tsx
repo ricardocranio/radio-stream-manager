@@ -87,10 +87,23 @@ export function SequenceView() {
       isFixo: true 
     }));
   
+  // Genre-based options for sequence building
+  const genreOptions = [
+    { value: 'genre_SERTANEJO', label: '🎸 Sertanejo', isFixo: false },
+    { value: 'genre_PAGODE', label: '🥁 Pagode', isFixo: false },
+    { value: 'genre_FUNK', label: '🎵 Funk', isFixo: false },
+    { value: 'genre_POP', label: '🎤 Pop', isFixo: false },
+    { value: 'genre_MPB', label: '🎶 MPB', isFixo: false },
+    { value: 'genre_ROCK,METAL', label: '🤘 Rock & Metal', isFixo: false },
+    { value: 'genre_ROMANTICO', label: '💕 Romântico', isFixo: false },
+    { value: 'genre_FORRO', label: '🪗 Forró', isFixo: false },
+  ];
+
   const radioOptions = [
     ...stationOptions,
     { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)', isFixo: false },
     { value: 'top50', label: '🏆 TOP25 (Curadoria)', isFixo: false },
+    ...genreOptions,
     ...fixedContentOptions,
   ];
 
@@ -330,9 +343,11 @@ export function SequenceView() {
   };
 
   const getStationColor = (source: string) => {
-    // Check if it's a fixed content item
     if (source.startsWith('fixo_')) {
       return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+    }
+    if (source.startsWith('genre_')) {
+      return 'bg-violet-500/20 text-violet-400 border-violet-500/30';
     }
     
     const colors: Record<string, string> = {
@@ -369,29 +384,37 @@ export function SequenceView() {
 
   // Get display name for a sequence item source
   const getSourceDisplayName = (source: string): string => {
-    // Check if it's a fixed content item
     if (source.startsWith('fixo_')) {
       const contentId = source.replace('fixo_', '');
       const content = fixedContent.find(c => c.id === contentId);
       return content?.name || 'FIXO';
     }
+    if (source.startsWith('genre_')) {
+      const genreLabel: Record<string, string> = {
+        'genre_SERTANEJO': 'Sertanejo',
+        'genre_PAGODE': 'Pagode',
+        'genre_FUNK': 'Funk',
+        'genre_POP': 'Pop',
+        'genre_MPB': 'MPB',
+        'genre_ROCK,METAL': 'Rock & Metal',
+        'genre_ROMANTICO': 'Romântico',
+        'genre_FORRO': 'Forró',
+      };
+      return genreLabel[source] || source.replace('genre_', '');
+    }
     
-    // Check if it's a station
     const station = stations.find(s => s.id === source);
     if (station) return station.name;
     
-    // Special options
     if (source === 'random_pop') return 'Aleatório';
     if (source === 'top50') return 'TOP25';
     
     return source;
   };
 
-  // Get short label for badge
   const getSourceBadgeLabel = (source: string): string => {
-    if (source.startsWith('fixo_')) {
-      return '📌';
-    }
+    if (source.startsWith('fixo_')) return '📌';
+    if (source.startsWith('genre_')) return '🎵';
     return source.toUpperCase().slice(0, 4);
   };
 
