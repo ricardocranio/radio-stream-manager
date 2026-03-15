@@ -1,11 +1,14 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Eye, Music, Clock, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive, AlertTriangle, FileText, Flame } from 'lucide-react';
+import { Eye, Music, Clock, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive, AlertTriangle, FileText, Flame, Radio } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore } from '@/store/radioStore';
 import { useGlobalServices } from '@/contexts/GlobalServicesContext';
+import { useGradeLogStore } from '@/store/gradeLogStore';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
