@@ -241,7 +241,8 @@ export function useAutoGradeBuilder() {
 
   const markSongAsUsed = useCallback((title: string, artist: string, blockTime: string) => {
     usedSongsRef.current.push({ title, artist, usedAt: new Date(), blockTime });
-    if (usedSongsRef.current.length > 100) usedSongsRef.current = usedSongsRef.current.slice(-100);
+    // Full day = 48 blocks × ~10 songs = ~480 entries; keep 500 to cover full day without evicting
+    if (usedSongsRef.current.length > 500) usedSongsRef.current = usedSongsRef.current.slice(-500);
     // Persist for cross-day repetition prevention
     saveCrossDayBuffer(usedSongsRef.current);
   }, []);
