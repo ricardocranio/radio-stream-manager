@@ -1479,9 +1479,12 @@ export function useAutoGradeBuilder() {
     const currentBlockMinute = currentMinute < 30 ? 0 : 30;
     const nextBlockHour = currentBlockMinute === 30 ? (currentHour + 1) % 24 : currentHour;
     const nextBlockMinute = currentBlockMinute === 30 ? 0 : 30;
+    const thirdBlockHour = nextBlockMinute === 30 ? (nextBlockHour + 1) % 24 : nextBlockHour;
+    const thirdBlockMinute = nextBlockMinute === 30 ? 0 : 30;
     return {
       current: { hour: currentHour, minute: currentBlockMinute },
       next: { hour: nextBlockHour, minute: nextBlockMinute },
+      third: { hour: thirdBlockHour, minute: thirdBlockMinute },
     };
   }, []);
 
@@ -1657,13 +1660,13 @@ export function useAutoGradeBuilder() {
       const blocks = getBlockTimes();
       const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       let nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
+      let thirdTimeKey = `${blocks.third.hour.toString().padStart(2, '0')}:${blocks.third.minute.toString().padStart(2, '0')}`;
       const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
       const targetDay = dayMap[new Date().getDay()];
       const dayCode = getDayCode(targetDay);
       const filename = `${dayCode.toUpperCase()}.txt`;
 
       // Day rollover guard: at midnight, clear stale locks/buffer from previous day
-      // to prevent Saturday lines from being kept in Sunday preview/build.
       if (activeDayCodeRef.current !== dayCode) {
         console.log(`[AUTO-GRADE] 🌅 Virada de dia: ${activeDayCodeRef.current} → ${dayCode}. Limpando buffers da grade.`);
         activeDayCodeRef.current = dayCode;
@@ -1680,21 +1683,24 @@ export function useAutoGradeBuilder() {
       }
 
       // Skip 21:30 on weekdays — Voz do Brasil occupies 21:00-22:00 (60 min)
-      // If current block is 21:30 on a weekday, shift to 22:00/22:30
       if (blocks.current.hour === 21 && blocks.current.minute === 30 && isWeekday(targetDay)) {
         console.log('[AUTO-GRADE] ⏭️ Bloco atual 21:30 pulado (Voz do Brasil) — avançando para 22:00/22:30');
         blocks.current = { hour: 22, minute: 0 };
         blocks.next = { hour: 22, minute: 30 };
-        const newCurrentKey = '22:00';
-        const newNextKey = '22:30';
-        // Re-run with corrected blocks
+        blocks.third = { hour: 23, minute: 0 };
         return buildGrade(forceWrite, forceRegenerate);
       }
-      // If next block would be 21:30 on a weekday, advance to 22:00
       if (blocks.next.hour === 21 && blocks.next.minute === 30 && isWeekday(targetDay)) {
         nextTimeKey = '22:00';
         blocks.next = { hour: 22, minute: 0 };
+        thirdTimeKey = '22:30';
+        blocks.third = { hour: 22, minute: 30 };
         console.log('[AUTO-GRADE] ⏭️ Pulando 21:30 (Voz do Brasil) — próximo bloco: 22:00');
+      }
+      if (blocks.third.hour === 21 && blocks.third.minute === 30 && isWeekday(targetDay)) {
+        thirdTimeKey = '22:00';
+        blocks.third = { hour: 22, minute: 0 };
+        console.log('[AUTO-GRADE] ⏭️ Pulando 21:30 (Voz do Brasil) — terceiro bloco: 22:00');
       }
 
       // === SEQUÊNCIA AGENDADA: forçar rebuild de blocos cobertos ===
@@ -1715,6 +1721,7 @@ export function useAutoGradeBuilder() {
 
       const currentCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.current.hour, blocks.current.minute);
       const nextCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.next.hour, blocks.next.minute);
+      const thirdCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.third.hour, blocks.third.minute);
 
       if (currentCoveredBySchedule) {
         builtBlocksRef.current.delete(currentTimeKey);
@@ -1724,17 +1731,23 @@ export function useAutoGradeBuilder() {
         builtBlocksRef.current.delete(nextTimeKey);
         console.log(`[AUTO-GRADE] 📅 Sequência agendada cobre ${nextTimeKey} — forçando rebuild`);
       }
+      if (thirdCoveredBySchedule) {
+        builtBlocksRef.current.delete(thirdTimeKey);
+        console.log(`[AUTO-GRADE] 📅 Sequência agendada cobre ${thirdTimeKey} — forçando rebuild`);
+      }
 
       // If forceRegenerate (manual refresh), clear locks so blocks are rebuilt
       if (forceRegenerate) {
         builtBlocksRef.current.delete(currentTimeKey);
         builtBlocksRef.current.delete(nextTimeKey);
-        console.log(`[AUTO-GRADE] 🔓 Force regenerate: locks limpos para ${currentTimeKey} e ${nextTimeKey}`);
+        builtBlocksRef.current.delete(thirdTimeKey);
+        console.log(`[AUTO-GRADE] 🔓 Force regenerate: locks limpos para ${currentTimeKey}, ${nextTimeKey} e ${thirdTimeKey}`);
       }
 
       // Check lock state first (in-memory cycle lock)
       let currentLocked = builtBlocksRef.current.has(currentTimeKey);
       let nextLocked = builtBlocksRef.current.has(nextTimeKey);
+      let thirdLocked = builtBlocksRef.current.has(thirdTimeKey);
 
       // Start from pending in-memory map to preserve already assembled lines (web + desktop)
       const lineMap = new Map<string, string>(pendingGradeRef.current?.lineMap || []);
@@ -1762,11 +1775,13 @@ export function useAutoGradeBuilder() {
       const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
       const currentExistingLine = lineMap.get(currentTimeKey);
       const nextExistingLine = lineMap.get(nextTimeKey);
+      const thirdExistingLine = lineMap.get(thirdTimeKey);
 
       // Check if blocks are fully resolved (all song slots filled — no fallbacks)
       const { isBlockFullyResolved } = await import('@/lib/gradeBuilder/lineMerge');
       const currentFullyResolved = currentExistingLine ? isBlockFullyResolved(currentExistingLine, coringaCode) : false;
       const nextFullyResolved = nextExistingLine ? isBlockFullyResolved(nextExistingLine, coringaCode) : false;
+      const thirdFullyResolved = thirdExistingLine ? isBlockFullyResolved(thirdExistingLine, coringaCode) : false;
 
       // Heal stale locks persisted from previous cycles/sessions
       if (currentLocked && !currentFullyResolved) {
@@ -1779,6 +1794,11 @@ export function useAutoGradeBuilder() {
         nextLocked = false;
         console.log(`[AUTO-GRADE] 🔓 Lock antigo removido de ${nextTimeKey} (bloco ainda incompleto)`);
       }
+      if (thirdLocked && !thirdFullyResolved) {
+        builtBlocksRef.current.delete(thirdTimeKey);
+        thirdLocked = false;
+        console.log(`[AUTO-GRADE] 🔓 Lock antigo removido de ${thirdTimeKey} (bloco ainda incompleto)`);
+      }
 
       // Blocks covered by scheduled sequences should NOT be locked — they must always rebuild
       if (currentFullyResolved && !forceRegenerate && !currentCoveredBySchedule) {
@@ -1788,6 +1808,10 @@ export function useAutoGradeBuilder() {
       if (nextFullyResolved && !forceRegenerate && !nextCoveredBySchedule) {
         builtBlocksRef.current.add(nextTimeKey);
         console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} COMPLETO (todas as músicas resolvidas) — travado`);
+      }
+      if (thirdFullyResolved && !forceRegenerate && !thirdCoveredBySchedule) {
+        builtBlocksRef.current.add(thirdTimeKey);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${thirdTimeKey} COMPLETO (todas as músicas resolvidas) — travado`);
       }
 
       // Detect legacy weekday lines that should never persist on Saturday
@@ -1804,10 +1828,11 @@ export function useAutoGradeBuilder() {
 
       const currentSaturdayMismatch = hasSaturdayMismatch(currentExistingLine);
       const nextSaturdayMismatch = hasSaturdayMismatch(nextExistingLine);
+      const thirdSaturdayMismatch = hasSaturdayMismatch(thirdExistingLine);
       const currentSundayMismatch = hasSundayMismatch(currentExistingLine);
       const nextSundayMismatch = hasSundayMismatch(nextExistingLine);
+      const thirdSundayMismatch = hasSundayMismatch(thirdExistingLine);
 
-      // Manual refresh should force regeneration of current/next blocks
       // Fully resolved blocks are LOCKED and skip rebuild (unless force refresh or scheduled sequence)
       const shouldBuildCurrent = forceRegenerate || currentCoveredBySchedule
         ? true
@@ -1815,13 +1840,18 @@ export function useAutoGradeBuilder() {
       const shouldBuildNext = forceRegenerate || nextCoveredBySchedule
         ? true
         : (!nextLocked && !nextFullyResolved) || nextSaturdayMismatch || nextSundayMismatch;
+      const shouldBuildThird = forceRegenerate || thirdCoveredBySchedule
+        ? true
+        : (!thirdLocked && !thirdFullyResolved) || thirdSaturdayMismatch || thirdSundayMismatch;
 
-      if (!shouldBuildCurrent && !shouldBuildNext) {
-        console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já resolvidos, pulando`);
+      if (!shouldBuildCurrent && !shouldBuildNext && !shouldBuildThird) {
+        console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey}, ${nextTimeKey} e ${thirdTimeKey} já resolvidos, pulando`);
         if (currentFullyResolved) builtBlocksRef.current.add(currentTimeKey);
         else builtBlocksRef.current.delete(currentTimeKey);
         if (nextFullyResolved) builtBlocksRef.current.add(nextTimeKey);
         else builtBlocksRef.current.delete(nextTimeKey);
+        if (thirdFullyResolved) builtBlocksRef.current.add(thirdTimeKey);
+        else builtBlocksRef.current.delete(thirdTimeKey);
         setState(prev => ({
           ...prev,
           isBuilding: false,
@@ -1841,7 +1871,7 @@ export function useAutoGradeBuilder() {
       let prePopulatedCount = 0;
       for (const [timeKey, line] of lineMap.entries()) {
         // Skip the blocks we're about to regenerate
-        if ((shouldBuildCurrent && timeKey === currentTimeKey) || (shouldBuildNext && timeKey === nextTimeKey)) continue;
+        if ((shouldBuildCurrent && timeKey === currentTimeKey) || (shouldBuildNext && timeKey === nextTimeKey) || (shouldBuildThird && timeKey === thirdTimeKey)) continue;
         // Extract quoted filenames like "ARTIST - TITLE.MP3"
         const quotedTokens = line.match(/"([^"]+)"/g);
         if (!quotedTokens) continue;
@@ -1918,6 +1948,27 @@ export function useAutoGradeBuilder() {
         }
       }
 
+      if (shouldBuildThird) {
+        const thirdResult = await generateBlockLine(blocks.third.hour, blocks.third.minute, fullPool, stats, false, targetDay);
+        const resolvedThirdLine = await resolveVinhetasInLine(thirdResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
+        const forceReplaceThird = forceRegenerate || thirdSaturdayMismatch || thirdSundayMismatch || thirdCoveredBySchedule;
+        const mergedThirdLine = thirdExistingLine && !forceReplaceThird
+          ? mergeGradeLinePreservingResolved(thirdExistingLine, resolvedThirdLine, coringaCode)
+          : resolvedThirdLine;
+        lineMap.set(thirdTimeKey, mergedThirdLine);
+        if (thirdResult.durationMinutes) durationMap.set(thirdTimeKey, thirdResult.durationMinutes);
+        allLogs.push(...thirdResult.logs);
+
+        const thirdResolvedAfterBuild = isBlockFullyResolved(mergedThirdLine, coringaCode);
+        if (thirdResolvedAfterBuild && !thirdCoveredBySchedule) {
+          builtBlocksRef.current.add(thirdTimeKey);
+          console.log(`[AUTO-GRADE] 🔒 Bloco ${thirdTimeKey} COMPLETO após atualização — travado`);
+        } else {
+          builtBlocksRef.current.delete(thirdTimeKey);
+          console.log(`[AUTO-GRADE] 🔄 Bloco ${thirdTimeKey} ${thirdCoveredBySchedule ? '(seq. agendada - sem lock)' : 'ainda incompleto'}`);
+        }
+      }
+
       if (allLogs.length > 0) {
         addBlockLogs(allLogs);
         
@@ -1937,7 +1988,7 @@ export function useAutoGradeBuilder() {
       }
 
       // Store in memory buffer
-      pendingGradeRef.current = { lineMap, filename, blockKey: nextTimeKey };
+      pendingGradeRef.current = { lineMap, filename, blockKey: thirdTimeKey };
 
       // Persist to localStorage for refresh survival
       saveGradeToStorage(lineMap, builtBlocksRef.current, dayCode);
@@ -1946,7 +1997,7 @@ export function useAutoGradeBuilder() {
       setState(prev => ({
         ...prev, isBuilding: false, lastBuildTime: new Date(),
         currentBlock: currentTimeKey, nextBlock: nextTimeKey,
-        blocksGenerated: prev.blocksGenerated + (shouldBuildCurrent ? 1 : 0) + (shouldBuildNext ? 1 : 0),
+        blocksGenerated: prev.blocksGenerated + (shouldBuildCurrent ? 1 : 0) + (shouldBuildNext ? 1 : 0) + (shouldBuildThird ? 1 : 0),
         skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
         pendingGradeLines: new Map(lineMap),
         pendingBlockDurations: new Map(durationMap),
