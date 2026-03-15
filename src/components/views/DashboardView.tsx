@@ -602,7 +602,7 @@ export function DashboardView() {
             )}
           </div>
         </CardHeader>
-        <CardContent className="pt-0">
+        {!realtimeCollapsed && <CardContent className="pt-0">
         
         {stations.filter(s => s.enabled).length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
