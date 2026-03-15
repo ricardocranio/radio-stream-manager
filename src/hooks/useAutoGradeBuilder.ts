@@ -1811,10 +1811,10 @@ export function useAutoGradeBuilder() {
       // Fully resolved blocks are LOCKED and skip rebuild (unless force refresh or scheduled sequence)
       const shouldBuildCurrent = forceRegenerate || currentCoveredBySchedule
         ? true
-        : (!currentLocked && !currentFullyResolved) || currentSaturdayMismatch;
+        : (!currentLocked && !currentFullyResolved) || currentSaturdayMismatch || currentSundayMismatch;
       const shouldBuildNext = forceRegenerate || nextCoveredBySchedule
         ? true
-        : (!nextLocked && !nextFullyResolved) || nextSaturdayMismatch;
+        : (!nextLocked && !nextFullyResolved) || nextSaturdayMismatch || nextSundayMismatch;
 
       if (!shouldBuildCurrent && !shouldBuildNext) {
         console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já resolvidos, pulando`);
