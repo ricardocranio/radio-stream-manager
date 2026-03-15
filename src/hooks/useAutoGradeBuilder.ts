@@ -1796,8 +1796,16 @@ export function useAutoGradeBuilder() {
         return /(VOZ[_\s]?BRASIL|\(ID=TOP10\)|\(ID=TOP50\)|\(ID=MISTURADAO\)|\(ID=ROMANCE\)|\bROMANCE\b|HAPPY\s*HOUR)/i.test(line);
       };
 
+      // Detect weekday-only program lines that should NEVER persist on Sunday
+      const hasSundayMismatch = (line?: string | null) => {
+        if (targetDay !== 'dom' || !line) return false;
+        return /(VOZ[_\s]?BRASIL|\(ID=TOP10\)|\(ID=TOP50\)|\(ID=MISTURADAO\)|\(ID=ROMANCE\)|\(ID=ROCK\s*METAL\)|\(ID=RARIDADES\)|\bROMANCE\b|HAPPY\s*HOUR|SERTANEJO)/i.test(line);
+      };
+
       const currentSaturdayMismatch = hasSaturdayMismatch(currentExistingLine);
       const nextSaturdayMismatch = hasSaturdayMismatch(nextExistingLine);
+      const currentSundayMismatch = hasSundayMismatch(currentExistingLine);
+      const nextSundayMismatch = hasSundayMismatch(nextExistingLine);
 
       // Manual refresh should force regeneration of current/next blocks
       // Fully resolved blocks are LOCKED and skip rebuild (unless force refresh or scheduled sequence)
