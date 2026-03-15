@@ -1643,6 +1643,23 @@ export function useAutoGradeBuilder() {
       const dayCode = getDayCode(targetDay);
       const filename = `${dayCode.toUpperCase()}.txt`;
 
+      // Day rollover guard: at midnight, clear stale locks/buffer from previous day
+      // to prevent Saturday lines from being kept in Sunday preview/build.
+      if (activeDayCodeRef.current !== dayCode) {
+        console.log(`[AUTO-GRADE] 🌅 Virada de dia: ${activeDayCodeRef.current} → ${dayCode}. Limpando buffers da grade.`);
+        activeDayCodeRef.current = dayCode;
+        usedSongsRef.current = [];
+        carryOverSongsRef.current = [];
+        builtBlocksRef.current.clear();
+        pendingGradeRef.current = null;
+        clearGradeStorage();
+        setState(prev => ({
+          ...prev,
+          pendingGradeLines: new Map(),
+          pendingBlockDurations: new Map(),
+        }));
+      }
+
       // Skip 21:30 on weekdays — Voz do Brasil occupies 21:00-22:00 (60 min)
       // If current block is 21:30 on a weekday, shift to 22:00/22:30
       if (blocks.current.hour === 21 && blocks.current.minute === 30 && isWeekday(targetDay)) {
