@@ -254,12 +254,12 @@ export function useBackgroundMaintenance() {
         });
       }
 
-      // Fetch songs from DB that are missing genre or year
+      // Fetch songs from DB that are missing genre or year (aggressive year population)
       const { data: dbSongs, error } = await supabase
         .from('scraped_songs')
         .select('id, artist, title, ai_genre, year')
         .or('ai_genre.is.null,year.is.null')
-        .limit(2000);
+        .limit(5000);
 
       if (error || !dbSongs?.length) {
         console.log(`[MAINTENANCE] 🏷️ Scan ID3: ${error ? 'erro no DB' : 'nenhuma música sem gênero/ano no DB'}`);
