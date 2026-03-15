@@ -142,7 +142,8 @@ export function GradePreviewCard() {
     const logs = getLogsByBlock(nextBlockTime);
     for (const log of logs) {
       if (log.station && log.title && log.artist) {
-        const key = `${log.artist.toLowerCase().trim()}-${(log.title || '').toLowerCase().trim()}`;
+        // Use accent-normalized key so "Arranhão" matches "ARRANHAO" from filename
+        const key = `${normalizeKey(log.artist)}-${normalizeKey(log.title)}`;
         map[key] = log.station;
       }
     }
