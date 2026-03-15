@@ -622,14 +622,8 @@ export function SequenceView() {
                           <SelectTrigger className="flex-1 h-8 text-sm">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent>
-                            <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Emissoras</div>
-                            {stationOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                            <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Gêneros</div>
+                          <SelectContent className="max-h-[320px]">
+                            <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Gêneros</div>
                             {genreOptions.map((option) => (
                               <SelectItem key={option.value} value={option.value}>
                                 {option.label}
@@ -639,6 +633,12 @@ export function SequenceView() {
                             <SelectItem value="random_pop">🎲 Aleatório (Disney/Metro)</SelectItem>
                             <SelectItem value="top50">🏆 TOP25 (Curadoria)</SelectItem>
                             {fixedContentOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                            <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Emissoras</div>
+                            {stationOptions.map((option) => (
                               <SelectItem key={option.value} value={option.value}>
                                 {option.label}
                               </SelectItem>
