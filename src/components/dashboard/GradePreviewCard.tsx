@@ -29,6 +29,11 @@ interface PreviewSong {
  */
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
 
+/** Remove accents/diacritics for fuzzy key matching */
+function normalizeKey(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
 /**
  * Parse a builder grade line into PreviewSong entries.
  * This is the ONLY source of truth — matches the TXT file exactly.
@@ -136,9 +141,15 @@ export function GradePreviewCard() {
     if (nextBlockTime === '--:--') return map;
     const logs = getLogsByBlock(nextBlockTime);
     for (const log of logs) {
-      if (log.station && log.title && log.artist) {
-        const key = `${log.artist.toLowerCase().trim()}-${(log.title || '').toLowerCase().trim()}`;
+      if (log.station && log.artist) {
+        // Primary key: accent-normalized artist-title
+        const key = `${normalizeKey(log.artist)}-${normalizeKey(log.title || '')}`;
         map[key] = log.station;
+        // Secondary key: also store by normalized title only (for filename-only matches)
+        if (log.title) {
+          const titleKey = normalizeKey(log.title);
+          if (!map[titleKey]) map[titleKey] = log.station;
+        }
       }
     }
     return map;
@@ -307,7 +318,7 @@ export function GradePreviewCard() {
                 totalSec += DEFAULT_VHT;
               } else if (token.startsWith('"')) {
                 const name = token.replace(/^"|"$/g, '');
-                const dur = result.durations[name];
+                const dur = result.durations[name] ?? result.durations[name.toLowerCase()];
                 const finalDur = (dur && dur > 0) ? dur : DEFAULT_SONG;
                 totalSec += finalDur;
                 perSongDurs[name.toLowerCase()] = finalDur;
@@ -489,8 +500,8 @@ export function GradePreviewCard() {
             <div className="space-y-1.5">
               {displaySongs.map((song, index) => {
                 const isMissing = libraryStatus[song.filename.toLowerCase()] === 'missing';
-                const stationKey = `${song.artist.toLowerCase().trim()}-${(song.title || '').toLowerCase().trim()}`;
-                const stationName = songStationMap[stationKey];
+                const stationKey = `${normalizeKey(song.artist)}-${normalizeKey(song.title)}`;
+                const stationName = songStationMap[stationKey] || songStationMap[normalizeKey(song.title)];
 
                 return (
                   <div
