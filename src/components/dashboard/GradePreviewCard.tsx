@@ -416,6 +416,8 @@ export function GradePreviewCard() {
             <div className="space-y-1.5">
               {displaySongs.map((song, index) => {
                 const isMissing = libraryStatus[song.filename.toLowerCase()] === 'missing';
+                const stationKey = `${song.artist.toLowerCase().trim()}-${(song.title || '').toLowerCase().trim()}`;
+                const stationName = songStationMap[stationKey];
 
                 return (
                   <div
@@ -447,9 +449,17 @@ export function GradePreviewCard() {
                           <p className="text-sm font-medium truncate leading-tight">
                             {song.title || song.artist}
                           </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {song.artist}
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs text-muted-foreground truncate">
+                              {song.artist}
+                            </p>
+                            {stationName && (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 bg-accent/30 text-accent-foreground/70 border-accent/40 shrink-0">
+                                <Radio className="w-2.5 h-2.5 mr-0.5" />
+                                {stationName}
+                              </Badge>
+                            )}
+                          </div>
                         </>
                       )}
                     </div>
