@@ -288,11 +288,7 @@ export function DashboardView() {
         </Card>
       )}
 
-      {/* Phase 1: Smart Notifications */}
-      <SmartNotificationsCard />
-
-      {/* ID3 Tag Processing Activity */}
-      <Id3ActivityCard />
+      {/* SmartNotifications and Id3Activity moved to footer */}
 
       {/* Station Distribution removed for cleaner UI */}
 
