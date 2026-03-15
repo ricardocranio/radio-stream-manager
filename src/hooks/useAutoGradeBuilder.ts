@@ -1050,8 +1050,8 @@ export function useAutoGradeBuilder() {
         return fillBlockIfShort(await generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay));
       }
 
-      // Raridades (year-filtered program)
-      const raridadesItem = fixedItems.find(fc => fc.type === 'raridades' && fc.yearMin && fc.yearMax);
+      // Raridades (year-filtered program) — skip on Sunday (no fixed programs)
+      const raridadesItem = !isSunday ? fixedItems.find(fc => fc.type === 'raridades' && fc.yearMin && fc.yearMax) : undefined;
       if (raridadesItem) {
         const slotIndex = raridadesItem.timeSlots.findIndex(ts => ts.hour === hour && ts.minute === minute);
         return fillBlockIfShort(await generateRaridades(
