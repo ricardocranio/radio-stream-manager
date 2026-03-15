@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Eye, Music, Clock, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive, AlertTriangle, FileText, Flame } from 'lucide-react';
+import { Eye, Music, Clock, RefreshCw, Loader2, CheckCircle, XCircle, HardDrive, AlertTriangle, FileText, Flame, Radio } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore } from '@/store/radioStore';
 import { useGlobalServices } from '@/contexts/GlobalServicesContext';
+import { useGradeLogStore } from '@/store/gradeLogStore';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -59,6 +60,7 @@ function parseGradeLine(line: string): PreviewSong[] {
 export function GradePreviewCard() {
   const { config } = useRadioStore();
   const { gradeBuilder } = useGlobalServices();
+  const { getLogsByBlock } = useGradeLogStore();
   const [libraryStatus, setLibraryStatus] = useState<Record<string, LibraryStatus>>({});
   const [isCheckingLibrary, setIsCheckingLibrary] = useState(false);
   const [realBlockDuration, setRealBlockDuration] = useState<number | null>(null);
@@ -89,6 +91,20 @@ export function GradePreviewCard() {
     }
     return [];
   }, [gradeBuilder.pendingGradeLines, nextBlockTime]);
+
+  // Build a map of song key -> station from block logs
+  const songStationMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (nextBlockTime === '--:--') return map;
+    const logs = getLogsByBlock(nextBlockTime);
+    for (const log of logs) {
+      if (log.station && log.title && log.artist) {
+        const key = `${log.artist.toLowerCase().trim()}-${(log.title || '').toLowerCase().trim()}`;
+        map[key] = log.station;
+      }
+    }
+    return map;
+  }, [nextBlockTime, getLogsByBlock]);
 
   // Get the raw grade line from builder
   const nextBlockLine = useMemo(() => {
@@ -400,6 +416,8 @@ export function GradePreviewCard() {
             <div className="space-y-1.5">
               {displaySongs.map((song, index) => {
                 const isMissing = libraryStatus[song.filename.toLowerCase()] === 'missing';
+                const stationKey = `${song.artist.toLowerCase().trim()}-${(song.title || '').toLowerCase().trim()}`;
+                const stationName = songStationMap[stationKey];
 
                 return (
                   <div
@@ -431,9 +449,17 @@ export function GradePreviewCard() {
                           <p className="text-sm font-medium truncate leading-tight">
                             {song.title || song.artist}
                           </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {song.artist}
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs text-muted-foreground truncate">
+                              {song.artist}
+                            </p>
+                            {stationName && (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 bg-accent/30 text-accent-foreground/70 border-accent/40 shrink-0">
+                                <Radio className="w-2.5 h-2.5 mr-0.5" />
+                                {stationName}
+                              </Badge>
+                            )}
+                          </div>
                         </>
                       )}
                     </div>
