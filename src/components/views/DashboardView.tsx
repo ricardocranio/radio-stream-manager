@@ -45,7 +45,8 @@ export function DashboardView() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
-  
+  const [realtimeCollapsed, setRealtimeCollapsed] = useState(false);
+
   // Reset options
   const [resetOptions, setResetOptions] = useState({
     clearSupabase: true,
