@@ -86,14 +86,14 @@ export function GradePreviewCard() {
 
   const mockStationMap: Record<string, string> = useMemo(() => {
     if (isElectron) return {};
-    // Keys normalized (no accents, lowercase, alphanumeric+spaces) — real station names
+    // Keys normalized via same normalizeKey logic (no accents, & removed, single spaces)
     return {
       'anitta-envolver': 'BH FM',
-      'jorge  mateus-enquanto houver razoes': 'Metropolitana FM',
+      'jorge mateus-enquanto houver razoes': 'Metropolitana FM',
       'marilia mendonca-supera': 'Band FM',
-      'henrique  juliano-vidinha de balada': 'Clube FM',
+      'henrique juliano-vidinha de balada': 'Clube FM',
       'luisa sonza-sentadona': 'Mix FM',
-      'ze neto  cristiano-largado as tracas': '89 rock',
+      'ze neto cristiano-largado as tracas': '89 rock',
     };
   }, []);
 
