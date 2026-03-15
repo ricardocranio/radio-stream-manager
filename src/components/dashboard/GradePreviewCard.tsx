@@ -273,16 +273,11 @@ export function GradePreviewCard() {
         const mockSongsCount = displaySongs.filter(s => !s.isSpecial).length;
         setVhtCount(mockVhts);
         setSongCount(mockSongsCount);
-        // Mock durations between 3:00 and 4:30
-        const mockDurs: Record<string, number> = {};
-        displaySongs.forEach(s => {
-          if (!s.isSpecial) {
-            mockDurs[s.filename.toLowerCase()] = 180 + Math.floor(Math.random() * 90);
-          } else {
-            mockDurs[s.filename.toLowerCase()] = 7;
-          }
-        });
-        setSongDurations(mockDurs);
+        // Use fixed mock durations from durationSec field
+        setSongDurations(mockDurationsMap);
+        // Calculate total from fixed durations
+        const totalSec = displaySongs.reduce((acc, s) => acc + (s.durationSec || (s.isSpecial ? 7 : 210)), 0);
+        setRealBlockDuration(parseFloat((totalSec / 60).toFixed(1)));
       } else {
         setVhtCount(0);
         setSongCount(0);
