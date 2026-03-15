@@ -79,7 +79,7 @@ async function tryDownloadAndWait(
   }
 }
 
-async function finalizeGradeFilename(
+function finalizeGradeFilename(
   currentFilename: string,
   artist: string,
   title: string,
@@ -723,7 +723,7 @@ export async function selectSongForSlot(
     // 2. If yes, rename the physical file on disk FIRST
     // 3. Only AFTER renaming, use the sanitized name in the grade
     const originalFilename = selectedSong.filename || '';
-    const sanitizedFilename = await finalizeGradeFilename(
+    const sanitizedFilename = finalizeGradeFilename(
       originalFilename,
       selectedSong.artist,
       selectedSong.title,
@@ -858,7 +858,7 @@ export async function handleSpecialSequenceType(
           station: 'TOP50', style: rankSong.style,
           reason: `TOP50 posição ${sortedRanking.indexOf(rankSong) + 1}`,
         });
-        const sanitizedFilename = await finalizeGradeFilename(correctFilename, rankSong.artist, rankSong.title, ctx.musicFolders, ctx.filterChars);
+        const sanitizedFilename = finalizeGradeFilename(correctFilename, rankSong.artist, rankSong.title, ctx.musicFolders, ctx.filterChars);
         return `"${sanitizedFilename}"`;
       }
     }
@@ -888,7 +888,7 @@ export async function handleSpecialSequenceType(
         station: result.genre.toUpperCase(),
         reason: `Gênero ${genres.join('/')} (ai_genre)`,
       });
-      const sanitizedFilename = await finalizeGradeFilename(result.filename, result.artist, result.title, ctx.musicFolders, ctx.filterChars);
+      const sanitizedFilename = finalizeGradeFilename(result.filename, result.artist, result.title, ctx.musicFolders, ctx.filterChars);
       return `"${sanitizedFilename}"`;
     }
     logs.push({
@@ -917,7 +917,7 @@ export async function handleSpecialSequenceType(
             station: candidate.station, style: candidate.style,
             reason: 'Aleatório',
           });
-          const sanitizedFilename = await finalizeGradeFilename(correctFilename, candidate.artist, candidate.title, ctx.musicFolders, ctx.filterChars);
+          const sanitizedFilename = finalizeGradeFilename(correctFilename, candidate.artist, candidate.title, ctx.musicFolders, ctx.filterChars);
           return `"${sanitizedFilename}"`;
         }
       }
