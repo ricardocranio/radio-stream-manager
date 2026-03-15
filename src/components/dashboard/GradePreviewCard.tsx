@@ -512,7 +512,7 @@ export function GradePreviewCard() {
             <div className="space-y-1.5">
               {displaySongs.map((song, index) => {
                 const isMissing = libraryStatus[song.filename.toLowerCase()] === 'missing';
-                const stationKey = `${song.artist.toLowerCase().trim()}-${(song.title || '').toLowerCase().trim()}`;
+                const stationKey = `${normalizeKey(song.artist)}-${normalizeKey(song.title || '')}`;
                 const stationName = songStationMap[stationKey];
 
                 return (
