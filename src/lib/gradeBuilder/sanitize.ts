@@ -77,6 +77,9 @@ export function sanitizeGradeFilename(filename: string, filterCharacters?: strin
 /**
  * Rename a physical file on disk to match a specific target grade name.
  * Used when aliases/corrections define the canonical filename that MUST be written to the grade.
+ * 
+ * SAFETY: Before renaming, reads ID3 tags to verify the target artist/title matches
+ * the actual file content. If ID3 doesn't confirm, skip rename to protect library integrity.
  */
 export async function ensureFileMatchesGradeName(
   currentFilename: string,
@@ -91,14 +94,54 @@ export async function ensureFileMatchesGradeName(
     return sanitizedTarget;
   }
 
+  // Names already match — no rename needed
   if (sanitizedCurrent === sanitizedTarget) {
     return sanitizedTarget;
   }
 
   const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
   if (!isElectron || !window.electronAPI?.renameMusicFile) {
-    console.warn('[SANITIZE] Cannot force canonical rename — not in Electron environment');
+    // Not in Electron — just return the canonical name for the grade
     return sanitizedTarget;
+  }
+
+  // === ID3 VALIDATION: Read actual tags before renaming ===
+  // Extract target artist/title from the canonical filename pattern "Artist - Title.mp3"
+  const targetBase = targetFilename.replace(/\.mp3$/i, '');
+  const dashIdx = targetBase.indexOf(' - ');
+  if (dashIdx > 0 && window.electronAPI?.readId3Genre) {
+    const targetArtist = targetBase.substring(0, dashIdx).trim().toLowerCase();
+    const targetTitle = targetBase.substring(dashIdx + 3).trim().toLowerCase()
+      .replace(/\s*\(.*?\)\s*/g, '').replace(/\s*\[.*?\]\s*/g, '').trim(); // strip suffixes for comparison
+
+    try {
+      const id3Result = await window.electronAPI.readId3Genre({
+        filePath: currentFilename,
+        musicFolders,
+      });
+
+      if (id3Result.success && (id3Result.artist || id3Result.title)) {
+        const id3Artist = (id3Result.artist || '').toLowerCase().trim();
+        const id3Title = (id3Result.title || '').toLowerCase().trim()
+          .replace(/\s*\(.*?\)\s*/g, '').replace(/\s*\[.*?\]\s*/g, '').trim();
+
+        // Check if ID3 tags confirm the target identity (fuzzy: at least title or artist must match)
+        const artistMatch = id3Artist.includes(targetArtist) || targetArtist.includes(id3Artist);
+        const titleMatch = id3Title.includes(targetTitle) || targetTitle.includes(id3Title);
+
+        if (!artistMatch && !titleMatch) {
+          // ID3 tags don't confirm — this file is NOT the song the alias says it is
+          // Don't rename, use the CURRENT filename in the grade to preserve library integrity
+          console.warn(`[SANITIZE] ⛔ ID3 não confirma alias: arquivo="${currentFilename}" ID3="${id3Result.artist} - ${id3Result.title}" alvo="${targetBase}". Mantendo nome original.`);
+          return sanitizedCurrent;
+        }
+
+        console.log(`[SANITIZE] ✅ ID3 confirma: "${id3Result.artist} - ${id3Result.title}" ≈ "${targetBase}"`);
+      }
+    } catch (err) {
+      console.warn(`[SANITIZE] ⚠️ Não foi possível ler ID3 de "${currentFilename}":`, err);
+      // Can't read ID3 — proceed with rename (alias takes precedence as configured by user)
+    }
   }
 
   try {
