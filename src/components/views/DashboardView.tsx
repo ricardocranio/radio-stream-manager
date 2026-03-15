@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Shield, Download, XCircle, ChevronDown, ChevronUp, Eye } from 'lucide-react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Shield, Download, XCircle, ChevronDown, ChevronUp, Eye, Tags } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
@@ -244,12 +244,13 @@ export function DashboardView() {
   return (
     <div className="p-4 md:p-6 space-y-5 animate-fade-in">
       {/* === METRICS — Compact Strip === */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {[
           { label: 'Faltando', value: missingSongs.filter(s => s.status === 'missing').length, icon: AlertTriangle, glow: '0 80% 55%' },
           { label: 'Banco Musical', value: libraryStats.isLoading ? '...' : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%' },
           { label: 'Ranking TOP25', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%' },
           { label: 'Downloads Hoje', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%' },
+          { label: 'ID3 Processados', value: useAutoDownloadStore.getState().dailyStats.downloaded + useAutoDownloadStore.getState().dailyStats.skipped, icon: Tags, glow: '160 70% 45%' },
         ].map((stat, i) => {
           const Icon = stat.icon;
           return (
@@ -867,23 +868,6 @@ export function DashboardView() {
         </CardContent>
       </Card>
 
-      {/* Footer: Secondary info cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-80">
-        {/* Ranking Integration Banner */}
-        <Card className="glass-card border-primary/20">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-3">
-              <TrendingUp className="w-4 h-4 text-primary shrink-0" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-foreground">Ranking TOP25</p>
-                <p className="text-[10px] text-muted-foreground">Sincronizado automaticamente</p>
-              </div>
-              <p className="text-lg font-bold text-primary">{localStats.rankingTotal}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Id3ActivityCard />
-      </div>
 
       {/* Phase 5: Service Health Dashboard */}
       <ServiceHealthCard />
