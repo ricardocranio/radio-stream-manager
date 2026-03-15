@@ -9,8 +9,6 @@ import { useGlobalServices } from '@/contexts/GlobalServicesContext';
 import { useGradeLogStore } from '@/store/gradeLogStore';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
