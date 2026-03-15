@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Shield, Download, XCircle, ChevronDown, ChevronUp, Eye, Tags } from 'lucide-react';
+  import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Shield, Download, XCircle, ChevronDown, Eye, Tags } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
@@ -247,22 +247,26 @@ export function DashboardView() {
       <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
         {[
           { label: 'Faltando', value: missingSongs.filter(s => s.status === 'missing').length, icon: AlertTriangle, glow: '0 80% 55%' },
-          { label: 'Banco Musical', value: libraryStats.isLoading ? '...' : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%' },
+          { label: 'Banco Musical', value: libraryStats.isLoading ? null : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%' },
           { label: 'Ranking TOP25', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%' },
           { label: 'Downloads Hoje', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%' },
           { label: 'ID3 Processados', value: useAutoDownloadStore.getState().dailyStats.downloaded + useAutoDownloadStore.getState().dailyStats.skipped, icon: Tags, glow: '160 70% 45%' },
         ].map((stat, i) => {
           const Icon = stat.icon;
           return (
-            <div key={i} className="glass-card p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+            <div key={i} className="metric-card p-3 flex items-center gap-3">
+              <div className="metric-icon w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
                 style={{ background: `hsl(${stat.glow} / 0.1)` }}
               >
                 <Icon className="w-4 h-4" style={{ color: `hsl(${stat.glow})` }} />
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{stat.label}</p>
-                <p className="text-lg font-bold text-foreground font-mono tabular-nums">{stat.value}</p>
+                {stat.value === null ? (
+                  <div className="h-6 w-12 rounded bg-muted/60 animate-pulse mt-0.5" />
+                ) : (
+                  <p className="text-lg font-bold text-foreground font-mono tabular-nums">{stat.value}</p>
+                )}
               </div>
             </div>
           );
@@ -562,14 +566,16 @@ export function DashboardView() {
           <CardTitle className="text-sm md:text-base flex items-center gap-2">
             <Eye className="w-4 h-4 text-amber-500" />
             Preview da Próxima Grade
-            {previewCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground ml-auto" /> : <ChevronUp className="w-4 h-4 text-muted-foreground ml-auto" />}
+            <ChevronDown className={`w-4 h-4 text-muted-foreground ml-auto transition-transform duration-300 ${!previewCollapsed ? 'rotate-180' : ''}`} />
           </CardTitle>
         </CardHeader>
-        {!previewCollapsed && (
-          <CardContent className="pt-0">
-            <GradePreviewCard />
-          </CardContent>
-        )}
+        <div className="collapsible-content" data-open={!previewCollapsed}>
+          <div>
+            <CardContent className="pt-0">
+              <GradePreviewCard />
+            </CardContent>
+          </div>
+        </div>
       </Card>
 
       {/* Grades Montadas — Collapsible */}
@@ -578,14 +584,16 @@ export function DashboardView() {
           <CardTitle className="text-sm md:text-base flex items-center gap-2">
             <FileText className="w-4 h-4 text-emerald-500" />
             Grades Montadas
-            {scheduleCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground ml-auto" /> : <ChevronUp className="w-4 h-4 text-muted-foreground ml-auto" />}
+            <ChevronDown className={`w-4 h-4 text-muted-foreground ml-auto transition-transform duration-300 ${!scheduleCollapsed ? 'rotate-180' : ''}`} />
           </CardTitle>
         </CardHeader>
-        {!scheduleCollapsed && (
-          <CardContent className="pt-0">
-            <GradeScheduleCard />
-          </CardContent>
-        )}
+        <div className="collapsible-content" data-open={!scheduleCollapsed}>
+          <div>
+            <CardContent className="pt-0">
+              <GradeScheduleCard />
+            </CardContent>
+          </div>
+        </div>
       </Card>
 
       {/* Ranking and ID3 moved to footer area below */}
@@ -600,7 +608,7 @@ export function DashboardView() {
               <Badge variant="secondary" className="text-[10px]">
                 {stations.filter(s => s.enabled).length} emissoras
               </Badge>
-              {realtimeCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
+              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${!realtimeCollapsed ? 'rotate-180' : ''}`} />
             </CardTitle>
             {!realtimeCollapsed && (
             <div className="flex items-center gap-2 flex-wrap" onClick={e => e.stopPropagation()}>
@@ -660,7 +668,9 @@ export function DashboardView() {
             )}
           </div>
         </CardHeader>
-        {!realtimeCollapsed && <CardContent className="pt-0">
+        <div className="collapsible-content" data-open={!realtimeCollapsed}>
+          <div>
+            <CardContent className="pt-0">
         
         {stations.filter(s => s.enabled).length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -724,7 +734,9 @@ export function DashboardView() {
             </CardContent>
           </Card>
         )}
-        </CardContent>}
+            </CardContent>
+          </div>
+        </div>
 
       </Card>
 
@@ -739,10 +751,10 @@ export function DashboardView() {
                 {isRunning ? 'Ativo' : 'Parado'}
               </Badge>
             </div>
-            {statusCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
+            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${!statusCollapsed ? 'rotate-180' : ''}`} />
           </CardTitle>
         </CardHeader>
-        {!statusCollapsed && (
+        <div className="collapsible-content" data-open={!statusCollapsed}><div>
         <CardContent className="p-3 md:p-4 space-y-3 md:space-y-4">
           <div className="space-y-2 md:space-y-3">
             <div className="flex items-center justify-between p-2 md:p-3 rounded-lg bg-secondary/50">
@@ -809,7 +821,7 @@ export function DashboardView() {
             </div>
           </div>
         </CardContent>
-        )}
+        </div></div>
       </Card>
 
 
