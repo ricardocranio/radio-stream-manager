@@ -129,20 +129,43 @@ export function GradePreviewCard() {
     return [];
   }, [gradeBuilder.pendingGradeLines, nextBlockTime, mockSongs]);
 
+  // Normalize string: lowercase, strip accents, collapse whitespace
+  const normalizeKey = useCallback((str: string) => {
+    return str
+      .toLowerCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // remove accents
+      .replace(/[^a-z0-9 ]/g, '')     // remove special chars
+      .replace(/\s+/g, ' ');
+  }, []);
+
   // Build a map of song key -> station from block logs
   const songStationMap = useMemo(() => {
     if (!isElectron) return mockStationMap;
     const map: Record<string, string> = {};
     if (nextBlockTime === '--:--') return map;
+    
+    // Try current block and also look at all recent logs for this block time
     const logs = getLogsByBlock(nextBlockTime);
+    
+    // If no logs for nextBlock, try current block time too
+    if (logs.length === 0) {
+      const now = new Date();
+      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${(now.getMinutes() < 30 ? '00' : '30')}`;
+      if (currentTime !== nextBlockTime) {
+        logs.push(...getLogsByBlock(currentTime));
+      }
+    }
+    
     for (const log of logs) {
       if (log.station && log.title && log.artist) {
-        const key = `${log.artist.toLowerCase().trim()}-${(log.title || '').toLowerCase().trim()}`;
+        const key = `${normalizeKey(log.artist)}-${normalizeKey(log.title || '')}`;
         map[key] = log.station;
       }
     }
     return map;
-  }, [nextBlockTime, getLogsByBlock, mockStationMap]);
+  }, [nextBlockTime, getLogsByBlock, mockStationMap, normalizeKey]);
 
   // Get the raw grade line from builder
   const nextBlockLine = useMemo(() => {
