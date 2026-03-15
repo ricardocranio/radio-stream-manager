@@ -232,17 +232,6 @@ export function Sidebar({ activeTab, onTabChange, onTabHover, collapsed = false,
           </div>
         )}
 
-        {/* System status - minimal */}
-        {!collapsed && (
-          <div className="px-3 pb-2">
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-success"
-                style={{ boxShadow: '0 0 4px hsl(155 85% 42% / 0.5)' }}
-              />
-              <span className="text-[10px] text-success/70 font-medium">Ativo</span>
-            </div>
-          </div>
-        )}
       </div>
     </aside>
   );
