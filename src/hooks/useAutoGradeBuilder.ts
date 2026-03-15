@@ -1948,6 +1948,27 @@ export function useAutoGradeBuilder() {
         }
       }
 
+      if (shouldBuildThird) {
+        const thirdResult = await generateBlockLine(blocks.third.hour, blocks.third.minute, fullPool, stats, false, targetDay);
+        const resolvedThirdLine = await resolveVinhetasInLine(thirdResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
+        const forceReplaceThird = forceRegenerate || thirdSaturdayMismatch || thirdSundayMismatch || thirdCoveredBySchedule;
+        const mergedThirdLine = thirdExistingLine && !forceReplaceThird
+          ? mergeGradeLinePreservingResolved(thirdExistingLine, resolvedThirdLine, coringaCode)
+          : resolvedThirdLine;
+        lineMap.set(thirdTimeKey, mergedThirdLine);
+        if (thirdResult.durationMinutes) durationMap.set(thirdTimeKey, thirdResult.durationMinutes);
+        allLogs.push(...thirdResult.logs);
+
+        const thirdResolvedAfterBuild = isBlockFullyResolved(mergedThirdLine, coringaCode);
+        if (thirdResolvedAfterBuild && !thirdCoveredBySchedule) {
+          builtBlocksRef.current.add(thirdTimeKey);
+          console.log(`[AUTO-GRADE] 🔒 Bloco ${thirdTimeKey} COMPLETO após atualização — travado`);
+        } else {
+          builtBlocksRef.current.delete(thirdTimeKey);
+          console.log(`[AUTO-GRADE] 🔄 Bloco ${thirdTimeKey} ${thirdCoveredBySchedule ? '(seq. agendada - sem lock)' : 'ainda incompleto'}`);
+        }
+      }
+
       if (allLogs.length > 0) {
         addBlockLogs(allLogs);
         
@@ -1967,7 +1988,7 @@ export function useAutoGradeBuilder() {
       }
 
       // Store in memory buffer
-      pendingGradeRef.current = { lineMap, filename, blockKey: nextTimeKey };
+      pendingGradeRef.current = { lineMap, filename, blockKey: thirdTimeKey };
 
       // Persist to localStorage for refresh survival
       saveGradeToStorage(lineMap, builtBlocksRef.current, dayCode);
@@ -1976,7 +1997,7 @@ export function useAutoGradeBuilder() {
       setState(prev => ({
         ...prev, isBuilding: false, lastBuildTime: new Date(),
         currentBlock: currentTimeKey, nextBlock: nextTimeKey,
-        blocksGenerated: prev.blocksGenerated + (shouldBuildCurrent ? 1 : 0) + (shouldBuildNext ? 1 : 0),
+        blocksGenerated: prev.blocksGenerated + (shouldBuildCurrent ? 1 : 0) + (shouldBuildNext ? 1 : 0) + (shouldBuildThird ? 1 : 0),
         skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
         pendingGradeLines: new Map(lineMap),
         pendingBlockDurations: new Map(durationMap),
