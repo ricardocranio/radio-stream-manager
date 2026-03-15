@@ -20,7 +20,7 @@
  */
 
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
-import { ensureFileRenamedOnDisk, sanitizeGradeFilename } from './sanitize';
+import { ensureFileMatchesGradeName } from './sanitize';
 import type { SongEntry, BlockLogItem, BlockStats, GradeContext, CarryOverSong } from './types';
 import { STATION_ID_TO_DB_NAME } from './constants';
 import type { WeekDay, SequenceConfig } from '@/types/radio';
@@ -77,6 +77,17 @@ async function tryDownloadAndWait(
     console.error(`[SONG-SELECT] ❌ Erro no download imediato: ${artist} - ${title}`, error);
     return false;
   }
+}
+
+async function finalizeGradeFilename(
+  currentFilename: string,
+  artist: string,
+  title: string,
+  musicFolders: string[],
+  filterChars?: string[]
+) {
+  const canonicalFilename = sanitizeFilename(`${artist} - ${title}.mp3`);
+  return ensureFileMatchesGradeName(currentFilename || canonicalFilename, canonicalFilename, musicFolders, filterChars);
 }
 
 interface SelectionContext {
@@ -712,8 +723,10 @@ export async function selectSongForSlot(
     // 2. If yes, rename the physical file on disk FIRST
     // 3. Only AFTER renaming, use the sanitized name in the grade
     const originalFilename = selectedSong.filename || '';
-    const sanitizedFilename = await ensureFileRenamedOnDisk(
+    const sanitizedFilename = await finalizeGradeFilename(
       originalFilename,
+      selectedSong.artist,
+      selectedSong.title,
       ctx.musicFolders,
       ctx.filterChars
     );
@@ -845,7 +858,7 @@ export async function handleSpecialSequenceType(
           station: 'TOP50', style: rankSong.style,
           reason: `TOP50 posição ${sortedRanking.indexOf(rankSong) + 1}`,
         });
-        const sanitizedFilename = await ensureFileRenamedOnDisk(correctFilename, ctx.musicFolders, ctx.filterChars);
+        const sanitizedFilename = await finalizeGradeFilename(correctFilename, rankSong.artist, rankSong.title, ctx.musicFolders, ctx.filterChars);
         return `"${sanitizedFilename}"`;
       }
     }
@@ -875,7 +888,7 @@ export async function handleSpecialSequenceType(
         station: result.genre.toUpperCase(),
         reason: `Gênero ${genres.join('/')} (ai_genre)`,
       });
-      const sanitizedFilename = await ensureFileRenamedOnDisk(result.filename, ctx.musicFolders, ctx.filterChars);
+      const sanitizedFilename = await finalizeGradeFilename(result.filename, result.artist, result.title, ctx.musicFolders, ctx.filterChars);
       return `"${sanitizedFilename}"`;
     }
     logs.push({
@@ -904,7 +917,7 @@ export async function handleSpecialSequenceType(
             station: candidate.station, style: candidate.style,
             reason: 'Aleatório',
           });
-          const sanitizedFilename = await ensureFileRenamedOnDisk(correctFilename, ctx.musicFolders, ctx.filterChars);
+          const sanitizedFilename = await finalizeGradeFilename(correctFilename, candidate.artist, candidate.title, ctx.musicFolders, ctx.filterChars);
           return `"${sanitizedFilename}"`;
         }
       }

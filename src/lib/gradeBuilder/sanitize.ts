@@ -75,6 +75,56 @@ export function sanitizeGradeFilename(filename: string, filterCharacters?: strin
 }
 
 /**
+ * Rename a physical file on disk to match a specific target grade name.
+ * Used when aliases/corrections define the canonical filename that MUST be written to the grade.
+ */
+export async function ensureFileMatchesGradeName(
+  currentFilename: string,
+  targetFilename: string,
+  musicFolders: string[],
+  filterCharacters?: string[]
+): Promise<string> {
+  const sanitizedTarget = sanitizeGradeFilename(targetFilename, filterCharacters);
+  const sanitizedCurrent = sanitizeGradeFilename(currentFilename || '', filterCharacters);
+
+  if (!currentFilename) {
+    return sanitizedTarget;
+  }
+
+  if (sanitizedCurrent === sanitizedTarget) {
+    return sanitizedTarget;
+  }
+
+  const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+  if (!isElectron || !window.electronAPI?.renameMusicFile) {
+    console.warn('[SANITIZE] Cannot force canonical rename — not in Electron environment');
+    return sanitizedTarget;
+  }
+
+  try {
+    const result = await window.electronAPI.renameMusicFile({
+      musicFolders,
+      currentFilename,
+      newFilename: sanitizedTarget,
+    });
+
+    if (result.success) {
+      if (result.renamed) {
+        console.log(`[SANITIZE] ✅ Canonical rename on disk: "${currentFilename}" → "${sanitizedTarget}"`);
+      } else {
+        console.log(`[SANITIZE] ℹ️ Canonical rename not needed: ${result.reason}`);
+      }
+    } else {
+      console.warn(`[SANITIZE] ⚠️ Could not force canonical name "${sanitizedTarget}": ${result.reason || result.error}`);
+    }
+  } catch (err) {
+    console.error(`[SANITIZE] ❌ Error forcing canonical name "${sanitizedTarget}":`, err);
+  }
+
+  return sanitizedTarget;
+}
+
+/**
  * Rename a physical file on disk to match the sanitized grade name.
  * MUST be called BEFORE writing the clean name to the grade .TXT.
  * Returns the sanitized filename (whether rename happened or not).
