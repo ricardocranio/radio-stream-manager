@@ -558,7 +558,24 @@ export function useAutoGradeBuilder() {
             }
           }
         }
-        if (aliasCount > 0) console.log(`[AUTO-GRADE] 🔄 ${aliasCount} aliases aplicados`);
+        if (aliasCount > 0) {
+          console.log(`[AUTO-GRADE] 🔄 ${aliasCount} aliases aplicados`);
+          // Re-deduplicate after aliases to merge entries that now have the same artist+title
+          const postAliasSeen = new Map<string, typeof deduplicated[0]>();
+          for (const song of deduplicated) {
+            const key = `${song.title.toLowerCase().trim()}-${song.artist.toLowerCase().trim()}`;
+            const existing = postAliasSeen.get(key);
+            if (!existing || new Date(song.scraped_at) > new Date(existing.scraped_at)) {
+              postAliasSeen.set(key, song);
+            }
+          }
+          const beforeCount = deduplicated.length;
+          deduplicated.length = 0;
+          deduplicated.push(...postAliasSeen.values());
+          if (deduplicated.length < beforeCount) {
+            console.log(`[AUTO-GRADE] 🔄 Re-dedup pós-alias: ${beforeCount} → ${deduplicated.length} (${beforeCount - deduplicated.length} duplicatas removidas)`);
+          }
+        }
       }
 
       console.log(`[AUTO-GRADE] Pool ampliado: ${scrapedData.length} scraped + ${historicoData.length} histórico = ${deduplicated.length} únicas`);
