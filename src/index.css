@@ -119,7 +119,7 @@
 @layer components {
   /* === GLASS CARDS — studio panel aesthetic === */
   .glass-card {
-    @apply relative overflow-hidden rounded-xl border;
+    @apply relative overflow-hidden rounded-xl border transition-all duration-300;
     background: linear-gradient(
       145deg,
       hsl(225 22% 10%) 0%,
@@ -129,6 +129,13 @@
     box-shadow:
       0 1px 0 0 hsl(225 18% 18%) inset,
       0 8px 32px -8px hsl(0 0% 0% / 0.5);
+  }
+
+  .glass-card:hover {
+    border-color: hsl(225 18% 20%);
+    box-shadow:
+      0 1px 0 0 hsl(225 18% 18%) inset,
+      0 12px 40px -8px hsl(0 0% 0% / 0.6);
   }
 
   .glass-card::before {
@@ -146,6 +153,42 @@
       hsl(185 100% 48% / 0.12) 70%,
       transparent 100%
     );
+  }
+
+  /* Metric card — interactive hover with glow */
+  .metric-card {
+    @apply glass-card cursor-default;
+    transition: transform 0.2s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  }
+  .metric-card:hover {
+    transform: scale(1.03);
+    border-color: hsl(185 100% 48% / 0.25);
+    box-shadow:
+      0 1px 0 0 hsl(225 18% 18%) inset,
+      0 0 20px hsl(185 100% 48% / 0.06),
+      0 12px 40px -8px hsl(0 0% 0% / 0.6);
+  }
+  .metric-card:hover .metric-icon {
+    transform: scale(1.15);
+    filter: brightness(1.3);
+  }
+  .metric-icon {
+    transition: transform 0.2s ease, filter 0.2s ease;
+  }
+
+  /* Collapsible panel smooth animation */
+  .collapsible-content {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition: grid-template-rows 0.35s ease, opacity 0.25s ease;
+  }
+  .collapsible-content[data-open="true"] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+  .collapsible-content > div {
+    overflow: hidden;
   }
 
   /* Neon glow effects */
