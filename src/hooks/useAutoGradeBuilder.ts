@@ -1660,13 +1660,13 @@ export function useAutoGradeBuilder() {
       const blocks = getBlockTimes();
       const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       let nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
+      let thirdTimeKey = `${blocks.third.hour.toString().padStart(2, '0')}:${blocks.third.minute.toString().padStart(2, '0')}`;
       const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
       const targetDay = dayMap[new Date().getDay()];
       const dayCode = getDayCode(targetDay);
       const filename = `${dayCode.toUpperCase()}.txt`;
 
       // Day rollover guard: at midnight, clear stale locks/buffer from previous day
-      // to prevent Saturday lines from being kept in Sunday preview/build.
       if (activeDayCodeRef.current !== dayCode) {
         console.log(`[AUTO-GRADE] 🌅 Virada de dia: ${activeDayCodeRef.current} → ${dayCode}. Limpando buffers da grade.`);
         activeDayCodeRef.current = dayCode;
@@ -1683,21 +1683,24 @@ export function useAutoGradeBuilder() {
       }
 
       // Skip 21:30 on weekdays — Voz do Brasil occupies 21:00-22:00 (60 min)
-      // If current block is 21:30 on a weekday, shift to 22:00/22:30
       if (blocks.current.hour === 21 && blocks.current.minute === 30 && isWeekday(targetDay)) {
         console.log('[AUTO-GRADE] ⏭️ Bloco atual 21:30 pulado (Voz do Brasil) — avançando para 22:00/22:30');
         blocks.current = { hour: 22, minute: 0 };
         blocks.next = { hour: 22, minute: 30 };
-        const newCurrentKey = '22:00';
-        const newNextKey = '22:30';
-        // Re-run with corrected blocks
+        blocks.third = { hour: 23, minute: 0 };
         return buildGrade(forceWrite, forceRegenerate);
       }
-      // If next block would be 21:30 on a weekday, advance to 22:00
       if (blocks.next.hour === 21 && blocks.next.minute === 30 && isWeekday(targetDay)) {
         nextTimeKey = '22:00';
         blocks.next = { hour: 22, minute: 0 };
+        thirdTimeKey = '22:30';
+        blocks.third = { hour: 22, minute: 30 };
         console.log('[AUTO-GRADE] ⏭️ Pulando 21:30 (Voz do Brasil) — próximo bloco: 22:00');
+      }
+      if (blocks.third.hour === 21 && blocks.third.minute === 30 && isWeekday(targetDay)) {
+        thirdTimeKey = '22:00';
+        blocks.third = { hour: 22, minute: 0 };
+        console.log('[AUTO-GRADE] ⏭️ Pulando 21:30 (Voz do Brasil) — terceiro bloco: 22:00');
       }
 
       // === SEQUÊNCIA AGENDADA: forçar rebuild de blocos cobertos ===
