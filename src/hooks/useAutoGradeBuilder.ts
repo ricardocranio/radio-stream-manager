@@ -1721,6 +1721,7 @@ export function useAutoGradeBuilder() {
 
       const currentCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.current.hour, blocks.current.minute);
       const nextCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.next.hour, blocks.next.minute);
+      const thirdCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.third.hour, blocks.third.minute);
 
       if (currentCoveredBySchedule) {
         builtBlocksRef.current.delete(currentTimeKey);
@@ -1730,12 +1731,17 @@ export function useAutoGradeBuilder() {
         builtBlocksRef.current.delete(nextTimeKey);
         console.log(`[AUTO-GRADE] 📅 Sequência agendada cobre ${nextTimeKey} — forçando rebuild`);
       }
+      if (thirdCoveredBySchedule) {
+        builtBlocksRef.current.delete(thirdTimeKey);
+        console.log(`[AUTO-GRADE] 📅 Sequência agendada cobre ${thirdTimeKey} — forçando rebuild`);
+      }
 
       // If forceRegenerate (manual refresh), clear locks so blocks are rebuilt
       if (forceRegenerate) {
         builtBlocksRef.current.delete(currentTimeKey);
         builtBlocksRef.current.delete(nextTimeKey);
-        console.log(`[AUTO-GRADE] 🔓 Force regenerate: locks limpos para ${currentTimeKey} e ${nextTimeKey}`);
+        builtBlocksRef.current.delete(thirdTimeKey);
+        console.log(`[AUTO-GRADE] 🔓 Force regenerate: locks limpos para ${currentTimeKey}, ${nextTimeKey} e ${thirdTimeKey}`);
       }
 
       // Check lock state first (in-memory cycle lock)
