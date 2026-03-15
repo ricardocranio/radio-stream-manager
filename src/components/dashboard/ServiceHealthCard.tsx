@@ -68,7 +68,8 @@ export function ServiceHealthCard() {
             ))}
           </div>
         </CardContent>
-      )}
+        </div>
+      </div>
     </Card>
   );
 }
