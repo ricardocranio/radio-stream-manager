@@ -141,10 +141,15 @@ export function GradePreviewCard() {
     if (nextBlockTime === '--:--') return map;
     const logs = getLogsByBlock(nextBlockTime);
     for (const log of logs) {
-      if (log.station && log.title && log.artist) {
-        // Use accent-normalized key so "Arranhão" matches "ARRANHAO" from filename
-        const key = `${normalizeKey(log.artist)}-${normalizeKey(log.title)}`;
+      if (log.station && log.artist) {
+        // Primary key: accent-normalized artist-title
+        const key = `${normalizeKey(log.artist)}-${normalizeKey(log.title || '')}`;
         map[key] = log.station;
+        // Secondary key: also store by normalized title only (for filename-only matches)
+        if (log.title) {
+          const titleKey = normalizeKey(log.title);
+          if (!map[titleKey]) map[titleKey] = log.station;
+        }
       }
     }
     return map;
