@@ -29,6 +29,11 @@ interface PreviewSong {
  */
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
 
+/** Remove accents/diacritics for fuzzy key matching */
+function normalizeKey(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
 /**
  * Parse a builder grade line into PreviewSong entries.
  * This is the ONLY source of truth — matches the TXT file exactly.
