@@ -106,9 +106,11 @@ export function GradePreviewCard() {
   const blockDuration = realBlockDuration ?? gradeBuilder.pendingBlockDurations?.get(nextBlockTime) ?? (!isElectron ? 30.2 : undefined);
 
   // === SINGLE SOURCE: Builder output (exact match with TXT) ===
+  // In web preview (non-Electron), use mock data to demonstrate the radio badges
   const displaySongs = useMemo(() => {
+    if (!isElectron) return mockSongs;
     const lines = gradeBuilder.pendingGradeLines;
-    if (!lines || lines.size === 0) return isElectron ? [] : mockSongs;
+    if (!lines || lines.size === 0) return [];
     // Try next block first
     const nextLine = lines.get(nextBlockTime);
     if (nextLine) return parseGradeLine(nextLine);
@@ -123,7 +125,7 @@ export function GradePreviewCard() {
       const lastKey = sortedKeys[sortedKeys.length - 1];
       return parseGradeLine(lines.get(lastKey)!);
     }
-    return isElectron ? [] : mockSongs;
+    return [];
   }, [gradeBuilder.pendingGradeLines, nextBlockTime, mockSongs]);
 
   // Build a map of song key -> station from block logs
