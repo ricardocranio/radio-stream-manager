@@ -64,6 +64,7 @@ export function GradePreviewCard() {
   const [libraryStatus, setLibraryStatus] = useState<Record<string, LibraryStatus>>({});
   const [isCheckingLibrary, setIsCheckingLibrary] = useState(false);
   const [realBlockDuration, setRealBlockDuration] = useState<number | null>(null);
+  const [songDurations, setSongDurations] = useState<Record<string, number>>({});
   const [vhtCount, setVhtCount] = useState(0);
   const [songCount, setSongCount] = useState(0);
 
