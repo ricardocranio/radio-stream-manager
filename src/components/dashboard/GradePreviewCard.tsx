@@ -67,14 +67,48 @@ export function GradePreviewCard() {
   const [vhtCount, setVhtCount] = useState(0);
   const [songCount, setSongCount] = useState(0);
 
+  // === MOCK DATA for web preview (non-Electron) ===
+  const mockSongs: PreviewSong[] = useMemo(() => {
+    if (isElectron) return [];
+    return [
+      { position: 1, filename: 'Anitta - Envolver.mp3', artist: 'Anitta', title: 'Envolver', isSpecial: false },
+      { position: 2, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true },
+      { position: 3, filename: 'Jorge & Mateus - Enquanto Houver Razões.mp3', artist: 'Jorge & Mateus', title: 'Enquanto Houver Razões', isSpecial: false },
+      { position: 4, filename: 'Marília Mendonça - Supera.mp3', artist: 'Marília Mendonça', title: 'Supera', isSpecial: false },
+      { position: 5, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true },
+      { position: 6, filename: 'Henrique & Juliano - Vidinha de Balada.mp3', artist: 'Henrique & Juliano', title: 'Vidinha de Balada', isSpecial: false },
+      { position: 7, filename: 'Luísa Sonza - Sentadona.mp3', artist: 'Luísa Sonza', title: 'Sentadona', isSpecial: false },
+      { position: 8, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true },
+      { position: 9, filename: 'Zé Neto & Cristiano - Largado Às Traças.mp3', artist: 'Zé Neto & Cristiano', title: 'Largado Às Traças', isSpecial: false },
+    ];
+  }, []);
+
+  const mockStationMap: Record<string, string> = useMemo(() => {
+    if (isElectron) return {};
+    return {
+      'anitta-envolver': 'BH FM',
+      'jorge & mateus-enquanto houver razões': 'Metropolitana FM',
+      'marília mendonça-supera': 'Disney FM',
+      'henrique & juliano-vidinha de balada': 'BH FM',
+      'luísa sonza-sentadona': 'Jovem Pan',
+      'zé neto & cristiano-largado às traças': 'Metropolitana FM',
+    };
+  }, []);
+
   // Use builder's nextBlock directly as single source of truth
-  const nextBlockTime = gradeBuilder.nextBlock || '--:--';
-  const blockDuration = realBlockDuration ?? gradeBuilder.pendingBlockDurations?.get(nextBlockTime);
+  const nextBlockTime = gradeBuilder.nextBlock || (isElectron ? '--:--' : (() => {
+    const now = new Date();
+    const h = now.getHours();
+    const m = now.getMinutes() < 30 ? '30' : '00';
+    const nextH = m === '00' ? (h + 1) % 24 : h;
+    return `${nextH.toString().padStart(2, '0')}:${m}`;
+  })());
+  const blockDuration = realBlockDuration ?? gradeBuilder.pendingBlockDurations?.get(nextBlockTime) ?? (!isElectron ? 30.2 : undefined);
 
   // === SINGLE SOURCE: Builder output (exact match with TXT) ===
   const displaySongs = useMemo(() => {
     const lines = gradeBuilder.pendingGradeLines;
-    if (!lines || lines.size === 0) return [];
+    if (!lines || lines.size === 0) return isElectron ? [] : mockSongs;
     // Try next block first
     const nextLine = lines.get(nextBlockTime);
     if (nextLine) return parseGradeLine(nextLine);
@@ -89,11 +123,12 @@ export function GradePreviewCard() {
       const lastKey = sortedKeys[sortedKeys.length - 1];
       return parseGradeLine(lines.get(lastKey)!);
     }
-    return [];
-  }, [gradeBuilder.pendingGradeLines, nextBlockTime]);
+    return isElectron ? [] : mockSongs;
+  }, [gradeBuilder.pendingGradeLines, nextBlockTime, mockSongs]);
 
   // Build a map of song key -> station from block logs
   const songStationMap = useMemo(() => {
+    if (!isElectron) return mockStationMap;
     const map: Record<string, string> = {};
     if (nextBlockTime === '--:--') return map;
     const logs = getLogsByBlock(nextBlockTime);
@@ -104,7 +139,7 @@ export function GradePreviewCard() {
       }
     }
     return map;
-  }, [nextBlockTime, getLogsByBlock]);
+  }, [nextBlockTime, getLogsByBlock, mockStationMap]);
 
   // Get the raw grade line from builder
   const nextBlockLine = useMemo(() => {
@@ -191,9 +226,17 @@ export function GradePreviewCard() {
   // === REAL DURATION CALCULATION from actual files ===
   useEffect(() => {
     if (!nextBlockLine) {
+      // For mock mode, set counts from displaySongs
+      if (!isElectron && displaySongs.length > 0) {
+        const mockVhts = displaySongs.filter(s => s.isSpecial).length;
+        const mockSongsCount = displaySongs.filter(s => !s.isSpecial).length;
+        setVhtCount(mockVhts);
+        setSongCount(mockSongsCount);
+      } else {
+        setVhtCount(0);
+        setSongCount(0);
+      }
       setRealBlockDuration(null);
-      setVhtCount(0);
-      setSongCount(0);
       return;
     }
 
