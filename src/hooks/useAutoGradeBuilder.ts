@@ -1223,6 +1223,7 @@ export function useAutoGradeBuilder() {
           const key = `${candidate.title.toLowerCase().trim()}-${candidate.artist.toLowerCase().trim()}`;
           if (usedInBlock.has(key)) continue;
           if (usedArtistsInBlock.has(candidate.artist.toLowerCase().trim())) continue;
+          if (isRecentlyUsed(candidate.title, candidate.artist, timeStr)) continue;
           
           // Check if exists in library
           const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
