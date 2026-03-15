@@ -1879,7 +1879,7 @@ export function useAutoGradeBuilder() {
       if (shouldBuildCurrent) {
         const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats, false, targetDay);
         const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
-        const forceReplaceCurrent = forceRegenerate || currentSaturdayMismatch;
+        const forceReplaceCurrent = forceRegenerate || currentSaturdayMismatch || currentSundayMismatch || currentCoveredBySchedule;
         const mergedCurrentLine = currentExistingLine && !forceReplaceCurrent
           ? mergeGradeLinePreservingResolved(currentExistingLine, resolvedCurrentLine, coringaCode)
           : resolvedCurrentLine;
@@ -1888,12 +1888,12 @@ export function useAutoGradeBuilder() {
         allLogs.push(...currentResult.logs);
 
         const currentResolvedAfterBuild = isBlockFullyResolved(mergedCurrentLine, coringaCode);
-        if (currentResolvedAfterBuild) {
+        if (currentResolvedAfterBuild && !currentCoveredBySchedule) {
           builtBlocksRef.current.add(currentTimeKey);
           console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} COMPLETO após atualização — travado`);
         } else {
           builtBlocksRef.current.delete(currentTimeKey);
-          console.log(`[AUTO-GRADE] 🔄 Bloco ${currentTimeKey} ainda incompleto — continuará em atualização realtime`);
+          console.log(`[AUTO-GRADE] 🔄 Bloco ${currentTimeKey} ${currentCoveredBySchedule ? '(seq. agendada - sem lock)' : 'ainda incompleto'}`);
         }
       }
 
