@@ -226,9 +226,17 @@ export function GradePreviewCard() {
   // === REAL DURATION CALCULATION from actual files ===
   useEffect(() => {
     if (!nextBlockLine) {
+      // For mock mode, set counts from displaySongs
+      if (!isElectron && displaySongs.length > 0) {
+        const mockVhts = displaySongs.filter(s => s.isSpecial).length;
+        const mockSongsCount = displaySongs.filter(s => !s.isSpecial).length;
+        setVhtCount(mockVhts);
+        setSongCount(mockSongsCount);
+      } else {
+        setVhtCount(0);
+        setSongCount(0);
+      }
       setRealBlockDuration(null);
-      setVhtCount(0);
-      setSongCount(0);
       return;
     }
 
