@@ -717,10 +717,10 @@ export async function selectSongForSlot(
     // 2. If yes, rename the physical file on disk FIRST
     // 3. Only AFTER renaming, use the sanitized name in the grade
     const originalFilename = selectedSong.filename || '';
-    const sanitizedFilename = await ensureFileRenamedOnDisk(
+    const sanitizedFilename = await finalizeGradeFilename(
       originalFilename,
-      ctx.musicFolders,
-      ctx.filterChars
+      selectedSong.artist,
+      selectedSong.title
     );
 
     return `"${sanitizedFilename}"`;
