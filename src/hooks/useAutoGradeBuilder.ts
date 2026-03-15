@@ -1796,17 +1796,25 @@ export function useAutoGradeBuilder() {
         return /(VOZ[_\s]?BRASIL|\(ID=TOP10\)|\(ID=TOP50\)|\(ID=MISTURADAO\)|\(ID=ROMANCE\)|\bROMANCE\b|HAPPY\s*HOUR)/i.test(line);
       };
 
+      // Detect weekday-only program lines that should NEVER persist on Sunday
+      const hasSundayMismatch = (line?: string | null) => {
+        if (targetDay !== 'dom' || !line) return false;
+        return /(VOZ[_\s]?BRASIL|\(ID=TOP10\)|\(ID=TOP50\)|\(ID=MISTURADAO\)|\(ID=ROMANCE\)|\(ID=ROCK\s*METAL\)|\(ID=RARIDADES\)|\bROMANCE\b|HAPPY\s*HOUR|SERTANEJO)/i.test(line);
+      };
+
       const currentSaturdayMismatch = hasSaturdayMismatch(currentExistingLine);
       const nextSaturdayMismatch = hasSaturdayMismatch(nextExistingLine);
+      const currentSundayMismatch = hasSundayMismatch(currentExistingLine);
+      const nextSundayMismatch = hasSundayMismatch(nextExistingLine);
 
       // Manual refresh should force regeneration of current/next blocks
       // Fully resolved blocks are LOCKED and skip rebuild (unless force refresh or scheduled sequence)
       const shouldBuildCurrent = forceRegenerate || currentCoveredBySchedule
         ? true
-        : (!currentLocked && !currentFullyResolved) || currentSaturdayMismatch;
+        : (!currentLocked && !currentFullyResolved) || currentSaturdayMismatch || currentSundayMismatch;
       const shouldBuildNext = forceRegenerate || nextCoveredBySchedule
         ? true
-        : (!nextLocked && !nextFullyResolved) || nextSaturdayMismatch;
+        : (!nextLocked && !nextFullyResolved) || nextSaturdayMismatch || nextSundayMismatch;
 
       if (!shouldBuildCurrent && !shouldBuildNext) {
         console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já resolvidos, pulando`);
@@ -1871,7 +1879,7 @@ export function useAutoGradeBuilder() {
       if (shouldBuildCurrent) {
         const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats, false, targetDay);
         const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
-        const forceReplaceCurrent = forceRegenerate || currentSaturdayMismatch;
+        const forceReplaceCurrent = forceRegenerate || currentSaturdayMismatch || currentSundayMismatch || currentCoveredBySchedule;
         const mergedCurrentLine = currentExistingLine && !forceReplaceCurrent
           ? mergeGradeLinePreservingResolved(currentExistingLine, resolvedCurrentLine, coringaCode)
           : resolvedCurrentLine;
@@ -1880,19 +1888,19 @@ export function useAutoGradeBuilder() {
         allLogs.push(...currentResult.logs);
 
         const currentResolvedAfterBuild = isBlockFullyResolved(mergedCurrentLine, coringaCode);
-        if (currentResolvedAfterBuild) {
+        if (currentResolvedAfterBuild && !currentCoveredBySchedule) {
           builtBlocksRef.current.add(currentTimeKey);
           console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} COMPLETO após atualização — travado`);
         } else {
           builtBlocksRef.current.delete(currentTimeKey);
-          console.log(`[AUTO-GRADE] 🔄 Bloco ${currentTimeKey} ainda incompleto — continuará em atualização realtime`);
+          console.log(`[AUTO-GRADE] 🔄 Bloco ${currentTimeKey} ${currentCoveredBySchedule ? '(seq. agendada - sem lock)' : 'ainda incompleto'}`);
         }
       }
 
       if (shouldBuildNext) {
         const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats, false, targetDay);
         const resolvedNextLine = await resolveVinhetasInLine(nextResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
-        const forceReplaceNext = forceRegenerate || nextSaturdayMismatch;
+        const forceReplaceNext = forceRegenerate || nextSaturdayMismatch || nextSundayMismatch || nextCoveredBySchedule;
         const mergedNextLine = nextExistingLine && !forceReplaceNext
           ? mergeGradeLinePreservingResolved(nextExistingLine, resolvedNextLine, coringaCode)
           : resolvedNextLine;
@@ -1901,12 +1909,12 @@ export function useAutoGradeBuilder() {
         allLogs.push(...nextResult.logs);
 
         const nextResolvedAfterBuild = isBlockFullyResolved(mergedNextLine, coringaCode);
-        if (nextResolvedAfterBuild) {
+        if (nextResolvedAfterBuild && !nextCoveredBySchedule) {
           builtBlocksRef.current.add(nextTimeKey);
           console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} COMPLETO após atualização — travado`);
         } else {
           builtBlocksRef.current.delete(nextTimeKey);
-          console.log(`[AUTO-GRADE] 🔄 Bloco ${nextTimeKey} ainda incompleto — continuará em atualização realtime`);
+          console.log(`[AUTO-GRADE] 🔄 Bloco ${nextTimeKey} ${nextCoveredBySchedule ? '(seq. agendada - sem lock)' : 'ainda incompleto'}`);
         }
       }
 
