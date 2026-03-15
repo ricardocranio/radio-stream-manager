@@ -823,6 +823,35 @@ export async function handleSpecialSequenceType(
     return ctx.coringaCode;
   }
 
+  // Handle genre_* (e.g. genre_SERTANEJO, genre_PAGODE, genre_ROCK,METAL)
+  if (seq.radioSource.startsWith('genre_')) {
+    const genreStr = seq.radioSource.replace('genre_', '');
+    const genres = genreStr.split(',').map(g => g.trim());
+    const { findSongByGenre } = await import('./specialPrograms');
+    
+    const result = await findSongByGenre(genres, timeStr, usedInBlock, usedArtistsInBlock, ctx, isFullDay);
+    if (result) {
+      const key = `${result.title.toLowerCase()}-${result.artist.toLowerCase()}`;
+      usedInBlock.add(key);
+      usedArtistsInBlock.add(result.artist.toLowerCase().trim());
+      ctx.markSongAsUsed(result.title, result.artist, timeStr);
+      logs.push({
+        blockTime: timeStr, type: 'used',
+        title: result.title, artist: result.artist,
+        station: result.genre.toUpperCase(),
+        reason: `Gênero ${genres.join('/')} (ai_genre)`,
+      });
+      const sanitizedFilename = await ensureFileRenamedOnDisk(result.filename, ctx.musicFolders, ctx.filterChars);
+      return `"${sanitizedFilename}"`;
+    }
+    logs.push({
+      blockTime: timeStr, type: 'substituted',
+      title: genres.join('/'), artist: 'CORINGA', station: 'FALLBACK',
+      reason: `Nenhuma música do gênero ${genres.join('/')} disponível`,
+    });
+    return ctx.coringaCode;
+  }
+
   // Handle random_pop
   if (seq.radioSource === 'random_pop') {
     for (const candidate of allSongsPool) {

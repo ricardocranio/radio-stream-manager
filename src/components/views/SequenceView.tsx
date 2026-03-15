@@ -87,10 +87,23 @@ export function SequenceView() {
       isFixo: true 
     }));
   
+  // Genre-based options for sequence building
+  const genreOptions = [
+    { value: 'genre_SERTANEJO', label: '🎸 Sertanejo', isFixo: false },
+    { value: 'genre_PAGODE', label: '🥁 Pagode', isFixo: false },
+    { value: 'genre_FUNK', label: '🎵 Funk', isFixo: false },
+    { value: 'genre_POP', label: '🎤 Pop', isFixo: false },
+    { value: 'genre_MPB', label: '🎶 MPB', isFixo: false },
+    { value: 'genre_ROCK,METAL', label: '🤘 Rock & Metal', isFixo: false },
+    { value: 'genre_ROMANTICO', label: '💕 Romântico', isFixo: false },
+    { value: 'genre_FORRO', label: '🪗 Forró', isFixo: false },
+  ];
+
   const radioOptions = [
     ...stationOptions,
     { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)', isFixo: false },
     { value: 'top50', label: '🏆 TOP25 (Curadoria)', isFixo: false },
+    ...genreOptions,
     ...fixedContentOptions,
   ];
 
