@@ -343,9 +343,11 @@ export function SequenceView() {
   };
 
   const getStationColor = (source: string) => {
-    // Check if it's a fixed content item
     if (source.startsWith('fixo_')) {
       return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+    }
+    if (source.startsWith('genre_')) {
+      return 'bg-violet-500/20 text-violet-400 border-violet-500/30';
     }
     
     const colors: Record<string, string> = {
