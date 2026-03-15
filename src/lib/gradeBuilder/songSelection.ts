@@ -238,6 +238,41 @@ export async function selectSongForSlot(
 
   const toLibKey = (artist: string, title: string) => `${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`;
 
+  // Build reverse alias map: corrected name → original name (for library fallback)
+  const { useRadioStore } = await import('@/store/radioStore');
+  const songAliases = useRadioStore.getState().songAliases || [];
+  const reverseAliasMap = new Map<string, { fromArtist: string; fromTitle: string }>();
+  for (const alias of songAliases) {
+    reverseAliasMap.set(toLibKey(alias.toArtist, alias.toTitle), { fromArtist: alias.fromArtist, fromTitle: alias.fromTitle });
+  }
+
+  /**
+   * Enhanced library lookup: tries corrected name first, then original alias name.
+   * This handles cases where the file was downloaded before the alias was created.
+   */
+  const findWithAliasFallback = async (artist: string, title: string, batchMap?: Map<string, any>): Promise<{ exists: boolean; filename?: string }> => {
+    const key = toLibKey(artist, title);
+    // Try corrected name first (from batch or individual)
+    if (batchMap) {
+      const result = batchMap.get(key) as { exists: boolean; filename?: string } | undefined;
+      if (result?.exists) return result;
+    } else {
+      const result = await ctx.findSongInLibrary(artist, title);
+      if (result.exists) return result;
+    }
+    // Fallback: try original (pre-alias) name on disk
+    const reverseAlias = reverseAliasMap.get(key);
+    if (reverseAlias) {
+      console.log(`[SONG-SELECT] 🔄 Alias fallback: "${artist} - ${title}" → tentando "${reverseAlias.fromArtist} - ${reverseAlias.fromTitle}" no disco`);
+      const fallbackResult = await ctx.findSongInLibrary(reverseAlias.fromArtist, reverseAlias.fromTitle);
+      if (fallbackResult.exists) {
+        console.log(`[SONG-SELECT] ✅ Encontrado via alias reverso: ${fallbackResult.filename}`);
+        return fallbackResult;
+      }
+    }
+    return { exists: false };
+  };
+
   // Prevent long "rodando..." when JIT download is slow/unavailable in incremental builds
   const downloadTimeoutMs = isFullDay ? 30000 : 120000;
 
@@ -267,8 +302,7 @@ export async function selectSongForSlot(
     // PHASE 1: Pick the first candidate that ALREADY exists in library (instant, no download)
     const missingFromStation: SongEntry[] = [];
     for (const candidate of p1Candidates) {
-      const key = toLibKey(candidate.artist, candidate.title);
-      const libraryResult = (p1Map as Map<string, any>).get(key) as { exists: boolean; filename?: string } | undefined;
+      const libraryResult = await findWithAliasFallback(candidate.artist, candidate.title, p1Map as Map<string, any>);
 
       if (libraryResult?.exists) {
         const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
