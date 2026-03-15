@@ -46,6 +46,7 @@ export function DashboardView() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [realtimeCollapsed, setRealtimeCollapsed] = useState(false);
+  const [statusCollapsed, setStatusCollapsed] = useState(true);
 
   // Reset options
   const [resetOptions, setResetOptions] = useState({
