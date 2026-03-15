@@ -79,6 +79,17 @@ async function tryDownloadAndWait(
   }
 }
 
+async function finalizeGradeFilename(
+  currentFilename: string,
+  artist: string,
+  title: string,
+  musicFolders: string[],
+  filterChars?: string[]
+) {
+  const canonicalFilename = sanitizeFilename(`${artist} - ${title}.mp3`);
+  return ensureFileMatchesGradeName(currentFilename || canonicalFilename, canonicalFilename, musicFolders, filterChars);
+}
+
 interface SelectionContext {
   timeStr: string;
   isFullDay: boolean;
