@@ -116,14 +116,17 @@ export function useGlobalScrapingService(
     let missingCount = 0;
     const failedStations: string[] = [];
 
+    // Build O(1) lookup sets from missingSongs and downloadQueue (avoids O(n) scans per song)
+    const currentMissing = useRadioStore.getState().missingSongs;
+    const missingSongsSet = new Set(
+      currentMissing.map(s => `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`)
+    );
+    const downloadQueueSet = new Set(
+      downloadQueueRef.current.map(item => `${item.song.artist.toLowerCase().trim()}|${item.song.title.toLowerCase().trim()}`)
+    );
+
     const isSongAlreadyMissing = (artist: string, title: string): boolean => {
-      const normalizedArtist = artist.toLowerCase().trim();
-      const normalizedTitle = title.toLowerCase().trim();
-      const currentMissing = useRadioStore.getState().missingSongs;
-      return currentMissing.some(
-        s => s.artist.toLowerCase().trim() === normalizedArtist && 
-             s.title.toLowerCase().trim() === normalizedTitle
-      );
+      return missingSongsSet.has(`${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`);
     };
     
     const isSongAlreadyProcessedForStation = (artist: string, title: string, stationName: string): boolean => {
@@ -132,12 +135,7 @@ export function useGlobalScrapingService(
     };
     
     const isSongContentAlreadyQueued = (artist: string, title: string): boolean => {
-      const normalizedArtist = artist.toLowerCase().trim();
-      const normalizedTitle = title.toLowerCase().trim();
-      return downloadQueueRef.current.some(
-        item => item.song.artist.toLowerCase().trim() === normalizedArtist &&
-                item.song.title.toLowerCase().trim() === normalizedTitle
-      );
+      return downloadQueueSet.has(`${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`);
     };
 
     const processSong = async (
@@ -157,10 +155,15 @@ export function useGlobalScrapingService(
       processedSongsRef.current.add(processKey);
       
       // Cap processedSongs to prevent unbounded memory growth in 24/7 operation
+      // Use iterator-based trimming instead of Array.from (avoids temporary array allocation)
       if (processedSongsRef.current.size > 5000) {
-        const entries = Array.from(processedSongsRef.current);
-        processedSongsRef.current = new Set(entries.slice(-3000));
-        console.log(`[SCRAPE-SVC] 🧹 processedSongs trimmed: 5000 → 3000`);
+        const iter = processedSongsRef.current.values();
+        const deleteCount = processedSongsRef.current.size - 3000;
+        for (let d = 0; d < deleteCount; d++) {
+          const val = iter.next().value;
+          if (val) processedSongsRef.current.delete(val);
+        }
+        console.log(`[SCRAPE-SVC] 🧹 processedSongs trimmed: 5000 → ${processedSongsRef.current.size}`);
       }
       
       let existsInLibrary = false;
