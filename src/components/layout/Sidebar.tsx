@@ -229,18 +229,15 @@ export function Sidebar({ activeTab, onTabChange, onTabHover, collapsed = false,
           </div>
         )}
 
-        {/* System status */}
+        {/* System status - minimal */}
         {!collapsed && (
-          <div className="p-2.5 rounded-lg border border-border/50 bg-muted/30">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-success"
-                style={{ boxShadow: '0 0 6px hsl(155 85% 42% / 0.5)' }}
+          <div className="px-3 pb-2">
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-success"
+                style={{ boxShadow: '0 0 4px hsl(155 85% 42% / 0.5)' }}
               />
-              <span className="text-[11px] font-medium text-success/80">Sistema Ativo</span>
+              <span className="text-[10px] text-success/70 font-medium">Ativo</span>
             </div>
-            <p className="text-[10px] text-muted-foreground/60 mt-1 font-mono">
-              v5.1 • PGM-FM
-            </p>
           </div>
         )}
       </div>
