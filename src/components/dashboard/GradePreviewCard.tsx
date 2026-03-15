@@ -229,15 +229,26 @@ export function GradePreviewCard() {
   // === REAL DURATION CALCULATION from actual files ===
   useEffect(() => {
     if (!nextBlockLine) {
-      // For mock mode, set counts from displaySongs
+      // For mock mode, set counts and mock durations from displaySongs
       if (!isElectron && displaySongs.length > 0) {
         const mockVhts = displaySongs.filter(s => s.isSpecial).length;
         const mockSongsCount = displaySongs.filter(s => !s.isSpecial).length;
         setVhtCount(mockVhts);
         setSongCount(mockSongsCount);
+        // Mock durations between 3:00 and 4:30
+        const mockDurs: Record<string, number> = {};
+        displaySongs.forEach(s => {
+          if (!s.isSpecial) {
+            mockDurs[s.filename.toLowerCase()] = 180 + Math.floor(Math.random() * 90);
+          } else {
+            mockDurs[s.filename.toLowerCase()] = 7;
+          }
+        });
+        setSongDurations(mockDurs);
       } else {
         setVhtCount(0);
         setSongCount(0);
+        setSongDurations({});
       }
       setRealBlockDuration(null);
       return;
@@ -257,6 +268,12 @@ export function GradePreviewCard() {
       // Estimate: 3:30 per song, 7s per VHT
       const estimated = (songs.length * 210 + vhts.length * 7) / 60;
       setRealBlockDuration(parseFloat(estimated.toFixed(1)));
+      // Set estimated per-song durations
+      const estDurs: Record<string, number> = {};
+      displaySongs.forEach(s => {
+        estDurs[s.filename.toLowerCase()] = s.isSpecial ? 7 : 210;
+      });
+      setSongDurations(estDurs);
       return;
     }
 
@@ -276,6 +293,7 @@ export function GradePreviewCard() {
         let totalSec = 0;
         const DEFAULT_SONG = 210;
         const DEFAULT_VHT = 7;
+        const perSongDurs: Record<string, number> = {};
 
         if (filenames.length > 0) {
           const result = await window.electronAPI!.getFileDurationsBatch({
@@ -290,18 +308,27 @@ export function GradePreviewCard() {
               } else if (token.startsWith('"')) {
                 const name = token.replace(/^"|"$/g, '');
                 const dur = result.durations[name];
-                totalSec += (dur && dur > 0) ? dur : DEFAULT_SONG;
+                const finalDur = (dur && dur > 0) ? dur : DEFAULT_SONG;
+                totalSec += finalDur;
+                perSongDurs[name.toLowerCase()] = finalDur;
               } else {
                 totalSec += DEFAULT_SONG;
               }
             }
           } else {
             totalSec = songs.length * DEFAULT_SONG + vhts.length * DEFAULT_VHT;
+            displaySongs.forEach(s => {
+              perSongDurs[s.filename.toLowerCase()] = s.isSpecial ? DEFAULT_VHT : DEFAULT_SONG;
+            });
           }
         } else {
           totalSec = songs.length * DEFAULT_SONG + vhts.length * DEFAULT_VHT;
+          displaySongs.forEach(s => {
+            perSongDurs[s.filename.toLowerCase()] = s.isSpecial ? DEFAULT_VHT : DEFAULT_SONG;
+          });
         }
 
+        setSongDurations(perSongDurs);
         setRealBlockDuration(parseFloat((totalSec / 60).toFixed(1)));
       } catch (e) {
         console.warn('[PREVIEW] Failed to calculate real duration:', e);
@@ -310,7 +337,7 @@ export function GradePreviewCard() {
     };
 
     calculateDuration();
-  }, [nextBlockLine, config.musicFolders, config.contentFolder, config.vinhetasFolder]);
+  }, [nextBlockLine, config.musicFolders, config.contentFolder, config.vinhetasFolder, displaySongs]);
 
   const getLibraryIcon = (song: PreviewSong) => {
     if (song.isSpecial) return null;
