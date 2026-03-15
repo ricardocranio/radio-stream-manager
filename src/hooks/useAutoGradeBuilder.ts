@@ -142,6 +142,7 @@ export function useAutoGradeBuilder() {
       return p?.lockedBlocks || new Set<string>();
     })()
   );
+  const activeDayCodeRef = useRef<string>(DAY_CODES_BY_INDEX[new Date().getDay()]);
 
   // Restore pendingGradeRef from localStorage on mount
   const pendingGradeRestored = useRef(false);
