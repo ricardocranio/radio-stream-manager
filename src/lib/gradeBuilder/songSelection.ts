@@ -284,11 +284,6 @@ export async function selectSongForSlot(
     return { exists: false };
   };
 
-  const finalizeGradeFilename = async (currentFilename: string, artist: string, title: string) => {
-    const canonicalFilename = sanitizeFilename(`${artist} - ${title}.mp3`);
-    return ensureFileMatchesGradeName(currentFilename || canonicalFilename, canonicalFilename, ctx.musicFolders, ctx.filterChars);
-  };
-
   // Prevent long "rodando..." when JIT download is slow/unavailable in incremental builds
   const downloadTimeoutMs = isFullDay ? 30000 : 120000;
 
