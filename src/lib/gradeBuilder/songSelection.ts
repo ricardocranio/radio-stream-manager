@@ -880,7 +880,7 @@ export async function handleSpecialSequenceType(
         station: result.genre.toUpperCase(),
         reason: `Gênero ${genres.join('/')} (ai_genre)`,
       });
-      const sanitizedFilename = await ensureFileRenamedOnDisk(result.filename, ctx.musicFolders, ctx.filterChars);
+      const sanitizedFilename = await finalizeGradeFilename(result.filename, result.artist, result.title);
       return `"${sanitizedFilename}"`;
     }
     logs.push({
