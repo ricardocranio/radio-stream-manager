@@ -537,6 +537,19 @@ export function GradePreviewCard() {
                       )}
                     </div>
 
+                    {/* Duration badge */}
+                    {(() => {
+                      const dur = songDurations[song.filename.toLowerCase()];
+                      if (!dur) return null;
+                      const mins = Math.floor(dur / 60);
+                      const secs = Math.floor(dur % 60);
+                      return (
+                        <span className="text-[10px] font-mono text-muted-foreground shrink-0 tabular-nums">
+                          {mins}:{secs.toString().padStart(2, '0')}
+                        </span>
+                      );
+                    })()}
+
                     {/* Missing badge */}
                     {isMissing && (
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-red-500/20 text-red-400 border-red-500/30 shrink-0">
