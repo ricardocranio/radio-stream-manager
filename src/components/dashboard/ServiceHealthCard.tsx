@@ -1,4 +1,4 @@
-import { Activity, CheckCircle2, AlertTriangle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Activity, CheckCircle2, AlertTriangle, XCircle, ChevronDown } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
