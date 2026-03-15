@@ -233,11 +233,11 @@ export function useRealtimeStats() {
 
     scheduleNextRefresh();
 
-    // Update countdown display every 40 seconds
+    // Update countdown display every 120 seconds (reduced from 40s to save re-renders)
     countdownIntervalId = setInterval(() => {
-      countdownRef.current = Math.max(0, countdownRef.current - 40);
+      countdownRef.current = Math.max(0, countdownRef.current - 120);
       setNextRefreshIn(countdownRef.current);
-    }, 40000);
+    }, 120000);
 
     return () => {
       clearTimeout(refreshTimeoutId);
