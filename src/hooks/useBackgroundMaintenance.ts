@@ -304,6 +304,37 @@ export function useBackgroundMaintenance() {
         }
       }
 
+      // === SECOND PASS: Aggressively populate year for songs that have genre but no year ===
+      try {
+        const { data: yearMissing } = await supabase
+          .from('scraped_songs')
+          .select('id, artist, title')
+          .not('ai_genre', 'is', null)
+          .is('year', null)
+          .limit(3000);
+
+        if (yearMissing?.length) {
+          let yearCount = 0;
+          for (let i = 0; i < yearMissing.length; i += BATCH_SIZE) {
+            const batch = yearMissing.slice(i, i + BATCH_SIZE);
+            for (const dbSong of batch) {
+              const key = `${dbSong.artist.toLowerCase().trim()}|${dbSong.title.toLowerCase().trim()}`;
+              const libData = libraryMap.get(key);
+              if (libData?.year) {
+                await supabase.from('scraped_songs').update({ year: libData.year }).eq('id', dbSong.id);
+                yearCount++;
+              }
+            }
+            if (i + BATCH_SIZE < yearMissing.length) await new Promise(r => setTimeout(r, 100));
+          }
+          if (yearCount > 0) {
+            console.log(`[MAINTENANCE] 📅 Year em massa: ${yearCount}/${yearMissing.length} músicas atualizadas com ano`);
+          }
+        }
+      } catch (e) {
+        console.warn('[MAINTENANCE] Year bulk population failed (non-critical):', e);
+      }
+
       // Also update BPM cache from library scan
       try {
         const { updateBpmCacheEntry } = await import('@/lib/bpmCacheBridge');
