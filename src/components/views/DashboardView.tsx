@@ -533,7 +533,7 @@ export function DashboardView() {
 
       {/* Radio Stations Windows */}
       <Card className="glass-card">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 cursor-pointer select-none" onClick={() => setRealtimeCollapsed(!realtimeCollapsed)}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <CardTitle className="text-sm md:text-base flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-success animate-pulse shrink-0" />
@@ -541,8 +541,10 @@ export function DashboardView() {
               <Badge variant="secondary" className="text-[10px]">
                 {stations.filter(s => s.enabled).length} emissoras
               </Badge>
+              {realtimeCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
             </CardTitle>
-            <div className="flex items-center gap-2 flex-wrap">
+            {!realtimeCollapsed && (
+            <div className="flex items-center gap-2 flex-wrap" onClick={e => e.stopPropagation()}>
               {/* Auto-refresh countdown */}
               <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-secondary/50 border border-border">
                 <div className="relative w-4 h-4">
@@ -596,6 +598,7 @@ export function DashboardView() {
                 Atualizar
               </Button>
             </div>
+            )}
           </div>
         </CardHeader>
         <CardContent className="pt-0">
