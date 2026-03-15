@@ -738,6 +738,7 @@ export function GradeBuilderView() {
                     {getActiveSequenceForBlock(selectedHour, selectedMinute).map((seq, idx) => {
                       const station = stations.find(s => s.id === seq.radioSource);
                       const name = seq.radioSource.startsWith('fixo_') ? '📌 FIXO' :
+                        seq.radioSource.startsWith('genre_') ? `🎵 ${seq.radioSource.replace('genre_', '')}` :
                         seq.radioSource === 'top50' ? '🏆 TOP25' :
                         seq.radioSource === 'random_pop' ? '🎲 RAND' :
                         station?.name || seq.radioSource;
