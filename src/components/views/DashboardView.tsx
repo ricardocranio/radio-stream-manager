@@ -666,7 +666,8 @@ export function DashboardView() {
             </CardContent>
           </Card>
         )}
-        </CardContent>
+        </CardContent>}
+
       </Card>
 
       {/* Status Panel */}
