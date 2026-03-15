@@ -1844,12 +1844,14 @@ export function useAutoGradeBuilder() {
         ? true
         : (!thirdLocked && !thirdFullyResolved) || thirdSaturdayMismatch || thirdSundayMismatch;
 
-      if (!shouldBuildCurrent && !shouldBuildNext) {
-        console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já resolvidos, pulando`);
+      if (!shouldBuildCurrent && !shouldBuildNext && !shouldBuildThird) {
+        console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey}, ${nextTimeKey} e ${thirdTimeKey} já resolvidos, pulando`);
         if (currentFullyResolved) builtBlocksRef.current.add(currentTimeKey);
         else builtBlocksRef.current.delete(currentTimeKey);
         if (nextFullyResolved) builtBlocksRef.current.add(nextTimeKey);
         else builtBlocksRef.current.delete(nextTimeKey);
+        if (thirdFullyResolved) builtBlocksRef.current.add(thirdTimeKey);
+        else builtBlocksRef.current.delete(thirdTimeKey);
         setState(prev => ({
           ...prev,
           isBuilding: false,
