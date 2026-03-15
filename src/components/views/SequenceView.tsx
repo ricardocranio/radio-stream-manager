@@ -384,29 +384,37 @@ export function SequenceView() {
 
   // Get display name for a sequence item source
   const getSourceDisplayName = (source: string): string => {
-    // Check if it's a fixed content item
     if (source.startsWith('fixo_')) {
       const contentId = source.replace('fixo_', '');
       const content = fixedContent.find(c => c.id === contentId);
       return content?.name || 'FIXO';
     }
+    if (source.startsWith('genre_')) {
+      const genreLabel: Record<string, string> = {
+        'genre_SERTANEJO': 'Sertanejo',
+        'genre_PAGODE': 'Pagode',
+        'genre_FUNK': 'Funk',
+        'genre_POP': 'Pop',
+        'genre_MPB': 'MPB',
+        'genre_ROCK,METAL': 'Rock & Metal',
+        'genre_ROMANTICO': 'Romântico',
+        'genre_FORRO': 'Forró',
+      };
+      return genreLabel[source] || source.replace('genre_', '');
+    }
     
-    // Check if it's a station
     const station = stations.find(s => s.id === source);
     if (station) return station.name;
     
-    // Special options
     if (source === 'random_pop') return 'Aleatório';
     if (source === 'top50') return 'TOP25';
     
     return source;
   };
 
-  // Get short label for badge
   const getSourceBadgeLabel = (source: string): string => {
-    if (source.startsWith('fixo_')) {
-      return '📌';
-    }
+    if (source.startsWith('fixo_')) return '📌';
+    if (source.startsWith('genre_')) return '🎵';
     return source.toUpperCase().slice(0, 4);
   };
 
