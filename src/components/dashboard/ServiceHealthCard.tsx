@@ -37,11 +37,11 @@ export function ServiceHealthCard() {
           }`}>
             {allAlive ? 'Todos OK' : 'Atenção'}
           </Badge>
-          {collapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground ml-auto" /> : <ChevronUp className="w-4 h-4 text-muted-foreground ml-auto" />}
+          <ChevronDown className={`w-4 h-4 text-muted-foreground ml-auto transition-transform duration-300 ${!collapsed ? 'rotate-180' : ''}`} />
         </CardTitle>
       </CardHeader>
-      {!collapsed && (
-        <CardContent className="pt-0">
+      <div className="collapsible-content" data-open={!collapsed}>
+        <div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {Object.entries(statuses).map(([name, status]) => (
               <div key={name} className="flex items-center gap-2 p-2 rounded-lg bg-muted/20 border border-border/30">
