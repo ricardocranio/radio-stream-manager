@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Shield, Download, XCircle } from 'lucide-react';
+import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Shield, Download, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
