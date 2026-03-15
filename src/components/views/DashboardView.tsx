@@ -747,10 +747,10 @@ export function DashboardView() {
                 {isRunning ? 'Ativo' : 'Parado'}
               </Badge>
             </div>
-            {statusCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
+            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${!statusCollapsed ? 'rotate-180' : ''}`} />
           </CardTitle>
         </CardHeader>
-        {!statusCollapsed && (
+        <div className="collapsible-content" data-open={!statusCollapsed}><div>
         <CardContent className="p-3 md:p-4 space-y-3 md:space-y-4">
           <div className="space-y-2 md:space-y-3">
             <div className="flex items-center justify-between p-2 md:p-3 rounded-lg bg-secondary/50">
