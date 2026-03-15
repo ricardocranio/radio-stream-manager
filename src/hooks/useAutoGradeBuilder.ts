@@ -1747,6 +1747,7 @@ export function useAutoGradeBuilder() {
       // Check lock state first (in-memory cycle lock)
       let currentLocked = builtBlocksRef.current.has(currentTimeKey);
       let nextLocked = builtBlocksRef.current.has(nextTimeKey);
+      let thirdLocked = builtBlocksRef.current.has(thirdTimeKey);
 
       // Start from pending in-memory map to preserve already assembled lines (web + desktop)
       const lineMap = new Map<string, string>(pendingGradeRef.current?.lineMap || []);
@@ -1774,11 +1775,13 @@ export function useAutoGradeBuilder() {
       const coringaCode = (config.coringaCode || 'mus').replace('.mp3', '');
       const currentExistingLine = lineMap.get(currentTimeKey);
       const nextExistingLine = lineMap.get(nextTimeKey);
+      const thirdExistingLine = lineMap.get(thirdTimeKey);
 
       // Check if blocks are fully resolved (all song slots filled — no fallbacks)
       const { isBlockFullyResolved } = await import('@/lib/gradeBuilder/lineMerge');
       const currentFullyResolved = currentExistingLine ? isBlockFullyResolved(currentExistingLine, coringaCode) : false;
       const nextFullyResolved = nextExistingLine ? isBlockFullyResolved(nextExistingLine, coringaCode) : false;
+      const thirdFullyResolved = thirdExistingLine ? isBlockFullyResolved(thirdExistingLine, coringaCode) : false;
 
       // Heal stale locks persisted from previous cycles/sessions
       if (currentLocked && !currentFullyResolved) {
@@ -1791,6 +1794,11 @@ export function useAutoGradeBuilder() {
         nextLocked = false;
         console.log(`[AUTO-GRADE] 🔓 Lock antigo removido de ${nextTimeKey} (bloco ainda incompleto)`);
       }
+      if (thirdLocked && !thirdFullyResolved) {
+        builtBlocksRef.current.delete(thirdTimeKey);
+        thirdLocked = false;
+        console.log(`[AUTO-GRADE] 🔓 Lock antigo removido de ${thirdTimeKey} (bloco ainda incompleto)`);
+      }
 
       // Blocks covered by scheduled sequences should NOT be locked — they must always rebuild
       if (currentFullyResolved && !forceRegenerate && !currentCoveredBySchedule) {
@@ -1800,6 +1808,10 @@ export function useAutoGradeBuilder() {
       if (nextFullyResolved && !forceRegenerate && !nextCoveredBySchedule) {
         builtBlocksRef.current.add(nextTimeKey);
         console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} COMPLETO (todas as músicas resolvidas) — travado`);
+      }
+      if (thirdFullyResolved && !forceRegenerate && !thirdCoveredBySchedule) {
+        builtBlocksRef.current.add(thirdTimeKey);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${thirdTimeKey} COMPLETO (todas as músicas resolvidas) — travado`);
       }
 
       // Detect legacy weekday lines that should never persist on Saturday
@@ -1816,10 +1828,11 @@ export function useAutoGradeBuilder() {
 
       const currentSaturdayMismatch = hasSaturdayMismatch(currentExistingLine);
       const nextSaturdayMismatch = hasSaturdayMismatch(nextExistingLine);
+      const thirdSaturdayMismatch = hasSaturdayMismatch(thirdExistingLine);
       const currentSundayMismatch = hasSundayMismatch(currentExistingLine);
       const nextSundayMismatch = hasSundayMismatch(nextExistingLine);
+      const thirdSundayMismatch = hasSundayMismatch(thirdExistingLine);
 
-      // Manual refresh should force regeneration of current/next blocks
       // Fully resolved blocks are LOCKED and skip rebuild (unless force refresh or scheduled sequence)
       const shouldBuildCurrent = forceRegenerate || currentCoveredBySchedule
         ? true
@@ -1827,6 +1840,9 @@ export function useAutoGradeBuilder() {
       const shouldBuildNext = forceRegenerate || nextCoveredBySchedule
         ? true
         : (!nextLocked && !nextFullyResolved) || nextSaturdayMismatch || nextSundayMismatch;
+      const shouldBuildThird = forceRegenerate || thirdCoveredBySchedule
+        ? true
+        : (!thirdLocked && !thirdFullyResolved) || thirdSaturdayMismatch || thirdSundayMismatch;
 
       if (!shouldBuildCurrent && !shouldBuildNext) {
         console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey} e ${nextTimeKey} já resolvidos, pulando`);
