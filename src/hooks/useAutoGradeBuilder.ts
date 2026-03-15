@@ -1697,6 +1697,34 @@ export function useAutoGradeBuilder() {
         console.log('[AUTO-GRADE] ⏭️ Pulando 21:30 (Voz do Brasil) — próximo bloco: 22:00');
       }
 
+      // === SEQUÊNCIA AGENDADA: forçar rebuild de blocos cobertos ===
+      // Sequências programadas têm prioridade absoluta (exceto Voz do Brasil)
+      // e devem SEMPRE reescrever blocos, mesmo que já estejam travados/completos.
+      const isBlockCoveredByScheduledSequence = (blockHour: number, blockMinute: number): boolean => {
+        return scheduledSequences
+          .filter(s => s.enabled)
+          .some(s => {
+            if (s.weekDays.length > 0 && !s.weekDays.includes(targetDay)) return false;
+            const timeMinutes = blockHour * 60 + blockMinute;
+            const startMin = s.startHour * 60 + s.startMinute;
+            const endMin = s.endHour * 60 + s.endMinute;
+            if (endMin <= startMin) return timeMinutes >= startMin || timeMinutes < endMin;
+            return timeMinutes >= startMin && timeMinutes < endMin;
+          });
+      };
+
+      const currentCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.current.hour, blocks.current.minute);
+      const nextCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.next.hour, blocks.next.minute);
+
+      if (currentCoveredBySchedule) {
+        builtBlocksRef.current.delete(currentTimeKey);
+        console.log(`[AUTO-GRADE] 📅 Sequência agendada cobre ${currentTimeKey} — forçando rebuild`);
+      }
+      if (nextCoveredBySchedule) {
+        builtBlocksRef.current.delete(nextTimeKey);
+        console.log(`[AUTO-GRADE] 📅 Sequência agendada cobre ${nextTimeKey} — forçando rebuild`);
+      }
+
       // If forceRegenerate (manual refresh), clear locks so blocks are rebuilt
       if (forceRegenerate) {
         builtBlocksRef.current.delete(currentTimeKey);
@@ -1752,11 +1780,12 @@ export function useAutoGradeBuilder() {
         console.log(`[AUTO-GRADE] 🔓 Lock antigo removido de ${nextTimeKey} (bloco ainda incompleto)`);
       }
 
-      if (currentFullyResolved && !forceRegenerate) {
+      // Blocks covered by scheduled sequences should NOT be locked — they must always rebuild
+      if (currentFullyResolved && !forceRegenerate && !currentCoveredBySchedule) {
         builtBlocksRef.current.add(currentTimeKey);
         console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} COMPLETO (todas as músicas resolvidas) — travado`);
       }
-      if (nextFullyResolved && !forceRegenerate) {
+      if (nextFullyResolved && !forceRegenerate && !nextCoveredBySchedule) {
         builtBlocksRef.current.add(nextTimeKey);
         console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} COMPLETO (todas as músicas resolvidas) — travado`);
       }
@@ -1771,11 +1800,11 @@ export function useAutoGradeBuilder() {
       const nextSaturdayMismatch = hasSaturdayMismatch(nextExistingLine);
 
       // Manual refresh should force regeneration of current/next blocks
-      // Fully resolved blocks are LOCKED and skip rebuild (unless force refresh)
-      const shouldBuildCurrent = forceRegenerate
+      // Fully resolved blocks are LOCKED and skip rebuild (unless force refresh or scheduled sequence)
+      const shouldBuildCurrent = forceRegenerate || currentCoveredBySchedule
         ? true
         : (!currentLocked && !currentFullyResolved) || currentSaturdayMismatch;
-      const shouldBuildNext = forceRegenerate
+      const shouldBuildNext = forceRegenerate || nextCoveredBySchedule
         ? true
         : (!nextLocked && !nextFullyResolved) || nextSaturdayMismatch;
 
