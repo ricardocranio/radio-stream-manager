@@ -732,8 +732,15 @@ export async function handleSpecialSequenceType(
 ): Promise<string | null> {
   const { timeStr, isFullDay, usedInBlock, usedArtistsInBlock, allSongsPool, logs, stats } = selCtx;
 
+  // Skip ALL fixed content on Sunday (DOM = 100% monitoring, no fixed programs)
+  const isSunday = targetDay === 'dom';
+
   // Handle fixo_ID
   if (seq.radioSource.startsWith('fixo_')) {
+    if (isSunday) {
+      console.log(`[SONG-SELECT] 🌞 Domingo: conteúdo fixo "${seq.radioSource}" ignorado às ${timeStr}`);
+      return null; // Skip — will be filled with music from monitoring
+    }
     const contentId = seq.radioSource.replace('fixo_', '');
     const specificContent = ctx.fixedContent.find(fc => fc.id === contentId && fc.enabled);
     if (specificContent) {
@@ -759,6 +766,10 @@ export async function handleSpecialSequenceType(
 
   // Handle generic fixo
   if (seq.radioSource === 'fixo') {
+    if (isSunday) {
+      console.log(`[SONG-SELECT] 🌞 Domingo: conteúdo fixo genérico ignorado às ${timeStr}`);
+      return null;
+    }
     // Simplified: pick round-robin from available fixed content
     const availableFixed = ctx.fixedContent.filter(fc => fc.enabled && fc.type !== 'top50' && fc.type !== 'vozbrasil');
     if (availableFixed.length > 0) {
