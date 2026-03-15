@@ -868,23 +868,6 @@ export function DashboardView() {
         </CardContent>
       </Card>
 
-      {/* Footer: Secondary info cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-80">
-        {/* Ranking Integration Banner */}
-        <Card className="glass-card border-primary/20">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-3">
-              <TrendingUp className="w-4 h-4 text-primary shrink-0" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-foreground">Ranking TOP25</p>
-                <p className="text-[10px] text-muted-foreground">Sincronizado automaticamente</p>
-              </div>
-              <p className="text-lg font-bold text-primary">{localStats.rankingTotal}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Id3ActivityCard />
-      </div>
 
       {/* Phase 5: Service Health Dashboard */}
       <ServiceHealthCard />
