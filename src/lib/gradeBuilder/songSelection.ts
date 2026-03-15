@@ -302,8 +302,7 @@ export async function selectSongForSlot(
     // PHASE 1: Pick the first candidate that ALREADY exists in library (instant, no download)
     const missingFromStation: SongEntry[] = [];
     for (const candidate of p1Candidates) {
-      const key = toLibKey(candidate.artist, candidate.title);
-      const libraryResult = (p1Map as Map<string, any>).get(key) as { exists: boolean; filename?: string } | undefined;
+      const libraryResult = await findWithAliasFallback(candidate.artist, candidate.title, p1Map as Map<string, any>);
 
       if (libraryResult?.exists) {
         const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
