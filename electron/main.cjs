@@ -395,10 +395,11 @@ safeHandle('open-folder', async (event, folderPath) => {
 
 safeHandle('ensure-folder', async (event, folderPath) => {
   try {
-    if (!fs.existsSync(folderPath)) {
+    const existed = fs.existsSync(folderPath);
+    if (!existed) {
       fs.mkdirSync(folderPath, { recursive: true });
     }
-    return { success: true };
+    return { success: true, created: !existed };
   } catch (error) {
     return { success: false, error: error.message };
   }
