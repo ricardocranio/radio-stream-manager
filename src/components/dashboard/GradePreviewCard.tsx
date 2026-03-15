@@ -97,19 +97,21 @@ export function GradePreviewCard() {
     return map;
   }, [mockSongs]);
 
+  // Mock station map: distribute mock songs across user's configured stations
   const mockStationMap: Record<string, string> = useMemo(() => {
     if (isElectron) return {};
-    return {
-      'anitta-envolver': 'BH FM',
-      'jorge mateus-enquanto houver razoes': 'Metropolitana FM',
-      'marilia mendonca-supera': 'Band FM',
-      'henrique juliano-vidinha de balada': 'Clube FM',
-      'luisa sonza-sentadona': 'Mix FM',
-      'ze neto cristiano-largado as tracas': '89 Rock',
-      'gusttavo lima-balada': 'Globo FM',
-      'luan santana-acordando o predio': 'Disney FM',
-    };
-  }, []);
+    const { stations } = useRadioStore.getState();
+    const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
+    if (enabledStations.length === 0) return {};
+    // Assign each non-special mock song to a user station (round-robin)
+    const map: Record<string, string> = {};
+    const nonSpecial = mockSongs.filter(s => !s.isSpecial);
+    nonSpecial.forEach((song, i) => {
+      const key = `${song.artist.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')}-${(song.title || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')}`;
+      map[key] = enabledStations[i % enabledStations.length];
+    });
+    return map;
+  }, [mockSongs]);
 
   // Use builder's nextBlock directly as single source of truth
   const nextBlockTime = gradeBuilder.nextBlock || (isElectron ? '--:--' : (() => {
