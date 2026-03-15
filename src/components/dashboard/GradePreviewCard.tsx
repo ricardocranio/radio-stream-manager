@@ -318,7 +318,7 @@ export function GradePreviewCard() {
                 totalSec += DEFAULT_VHT;
               } else if (token.startsWith('"')) {
                 const name = token.replace(/^"|"$/g, '');
-                const dur = result.durations[name];
+                const dur = result.durations[name] ?? result.durations[name.toLowerCase()];
                 const finalDur = (dur && dur > 0) ? dur : DEFAULT_SONG;
                 totalSec += finalDur;
                 perSongDurs[name.toLowerCase()] = finalDur;
