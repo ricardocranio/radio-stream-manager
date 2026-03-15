@@ -858,7 +858,7 @@ export async function handleSpecialSequenceType(
           station: 'TOP50', style: rankSong.style,
           reason: `TOP50 posição ${sortedRanking.indexOf(rankSong) + 1}`,
         });
-        const sanitizedFilename = await finalizeGradeFilename(correctFilename, rankSong.artist, rankSong.title, ctx.musicFolders, ctx.filterChars);
+        const sanitizedFilename = finalizeGradeFilename(correctFilename, rankSong.artist, rankSong.title, ctx.musicFolders, ctx.filterChars);
         return `"${sanitizedFilename}"`;
       }
     }
