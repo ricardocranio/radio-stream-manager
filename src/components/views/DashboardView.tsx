@@ -494,11 +494,37 @@ export function DashboardView() {
         </Card>
       )}
 
-      {/* Preview da Próxima Grade & Grades Montadas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        <GradePreviewCard />
-        <GradeScheduleCard />
-      </div>
+      {/* Preview da Próxima Grade — Collapsible */}
+      <Card className="glass-card">
+        <CardHeader className="pb-2 cursor-pointer select-none" onClick={() => setPreviewCollapsed(!previewCollapsed)}>
+          <CardTitle className="text-sm md:text-base flex items-center gap-2">
+            <Eye className="w-4 h-4 text-amber-500" />
+            Preview da Próxima Grade
+            {previewCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground ml-auto" /> : <ChevronUp className="w-4 h-4 text-muted-foreground ml-auto" />}
+          </CardTitle>
+        </CardHeader>
+        {!previewCollapsed && (
+          <CardContent className="pt-0">
+            <GradePreviewCard />
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Grades Montadas — Collapsible */}
+      <Card className="glass-card">
+        <CardHeader className="pb-2 cursor-pointer select-none" onClick={() => setScheduleCollapsed(!scheduleCollapsed)}>
+          <CardTitle className="text-sm md:text-base flex items-center gap-2">
+            <FileText className="w-4 h-4 text-emerald-500" />
+            Grades Montadas
+            {scheduleCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground ml-auto" /> : <ChevronUp className="w-4 h-4 text-muted-foreground ml-auto" />}
+          </CardTitle>
+        </CardHeader>
+        {!scheduleCollapsed && (
+          <CardContent className="pt-0">
+            <GradeScheduleCard />
+          </CardContent>
+        )}
+      </Card>
 
       {/* Ranking and ID3 moved to footer area below */}
 
