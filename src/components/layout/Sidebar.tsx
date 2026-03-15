@@ -141,8 +141,8 @@ export function Sidebar({ activeTab, onTabChange, onTabHover, collapsed = false,
           </div>
           {!collapsed && (
             <div>
-              <h1 className="font-bold text-base tracking-tight text-foreground">MAKER</h1>
-              <p className="text-[10px] tracking-[0.2em] text-primary font-semibold animate-neon">PROGRAMAÇÃO</p>
+              <h1 className="font-bold text-base tracking-tight bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-pulse">PROGRAMADOR</h1>
+              <p className="text-[10px] tracking-[0.2em] font-semibold bg-gradient-to-r from-muted-foreground via-primary to-muted-foreground bg-clip-text text-transparent animate-pulse">AUDIOSOLUTIONS</p>
             </div>
           )}
         </div>
