@@ -119,7 +119,7 @@ export function GradePreviewCard() {
     const nextH = m === '00' ? (h + 1) % 24 : h;
     return `${nextH.toString().padStart(2, '0')}:${m}`;
   })());
-  const blockDuration = realBlockDuration ?? gradeBuilder.pendingBlockDurations?.get(nextBlockTime) ?? (!isElectron ? 30.2 : undefined);
+  const blockDuration = realBlockDuration ?? gradeBuilder.pendingBlockDurations?.get(nextBlockTime) ?? undefined;
 
   // === SINGLE SOURCE: Builder output (exact match with TXT) ===
   // In web preview (non-Electron), use mock data to demonstrate the radio badges
