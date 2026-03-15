@@ -732,7 +732,7 @@ export function DashboardView() {
             </CardContent>
           </Card>
         )}
-        </CardContent>}
+        </CardContent></div></div>
 
       </Card>
 
