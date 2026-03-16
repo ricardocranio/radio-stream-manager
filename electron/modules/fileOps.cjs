@@ -64,6 +64,8 @@ function register({ getMainWindow, safeHandle }) {
       return false;
     };
     
+    const EXCLUDED_PURGE_DIRS = ['_temp', 'grade', 'grades', 'gradefiles', 'grade_output', 'conteudo', 'content', 'vinhetas', 'voz_brasil', 'vozbrasil'];
+
     const scanFolder = (folder) => {
       try {
         if (!fs.existsSync(folder)) return;
@@ -71,6 +73,7 @@ function register({ getMainWindow, safeHandle }) {
         for (const item of items) {
           const fullPath = path.join(folder, item.name);
           if (item.isDirectory()) {
+            if (EXCLUDED_PURGE_DIRS.includes(item.name.toLowerCase())) continue;
             scanFolder(fullPath);
           } else if (/\.(mp3|flac|wav|ogg|m4a)$/i.test(item.name)) {
             if (isBlockedFile(item.name)) {
