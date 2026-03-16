@@ -313,8 +313,11 @@ function showMainWindow() {
 // =============== SYSTEM TRAY ===============
 function createTray() {
   if (tray && !tray.isDestroyed()) return;
-  const iconPath = path.join(__dirname, '../public/favicon.ico');
-  tray = new Tray(iconPath);
+  // Use .ico on Windows for tray, .png on other platforms
+  const trayIconFile = process.platform === 'win32' ? 'favicon.ico' : 'icon.png';
+  const trayIconPath = path.join(__dirname, '../public', trayIconFile);
+  const resolvedTrayIcon = fs.existsSync(trayIconPath) ? trayIconPath : path.join(__dirname, '../public/favicon.png');
+  tray = new Tray(resolvedTrayIcon);
   
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Abrir Programador', click: () => showMainWindow() },
