@@ -438,11 +438,11 @@ export function SequenceView() {
   const getSourceBadgeLabel = (source: string): string => {
     if (source.startsWith('fixo_')) return '📌';
     if (source.startsWith('genre_')) return '🎵';
+    if (source.startsWith('year_')) return '📅';
     if (source === 'random_pop') return 'ALEAT';
     if (source === 'top50') return 'TOP25';
     const station = stations.find(s => s.id === source);
     if (station) {
-      // Abbreviate: take first word or up to 8 chars
       const name = station.name.replace(/\s*(FM|AM)\s*[\d.]*$/i, '').trim();
       return name.length > 8 ? name.slice(0, 7) + '…' : name.toUpperCase();
     }
