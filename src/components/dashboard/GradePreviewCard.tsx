@@ -303,7 +303,7 @@ export function GradePreviewCard() {
 
   // Build a map of song key -> station from block logs
   const songStationMap = useMemo(() => {
-    if (!isElectron) return mockStationMap;
+    if (!isElectron) return dynamicStationMap;
     const map: Record<string, string> = {};
     if (nextBlockTime === '--:--') return map;
     
@@ -326,7 +326,7 @@ export function GradePreviewCard() {
       }
     }
     return map;
-  }, [nextBlockTime, getLogsByBlock, mockStationMap, normalizeKey]);
+  }, [nextBlockTime, getLogsByBlock, dynamicStationMap, normalizeKey]);
 
   // Get the raw grade line from builder
   const nextBlockLine = useMemo(() => {
