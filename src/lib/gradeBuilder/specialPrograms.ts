@@ -541,7 +541,8 @@ export async function findSongByYear(
   return null;
 }
 
-
+/**
+ * Pulls 10 songs from years 2000-2010, intercalated with vhtn.
  */
 export async function generateTop10Decada(
   hour: number,
