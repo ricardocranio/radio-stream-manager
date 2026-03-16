@@ -267,7 +267,8 @@ export function DashboardView() {
           { label: 'Banco Musical', value: libraryStats.isLoading ? null : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%' },
           { label: 'Ranking TOP25', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%' },
           { label: 'Downloads Hoje', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%' },
-          { label: 'ID3 Processados', value: useAutoDownloadStore.getState().dailyStats.downloaded + useAutoDownloadStore.getState().dailyStats.skipped, icon: Tags, glow: '160 70% 45%' },
+          { label: 'Substituições', value: gradeQuality.substituted, icon: ArrowRightLeft, glow: '45 100% 55%' },
+          { label: 'Coringas', value: gradeQuality.coringas, icon: AlertTriangle, glow: gradeQuality.coringas > 0 ? '0 80% 55%' : '160 70% 45%' },
         ].map((stat, i) => {
           const Icon = stat.icon;
           return (
