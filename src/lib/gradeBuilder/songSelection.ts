@@ -899,7 +899,41 @@ export async function handleSpecialSequenceType(
     return ctx.coringaCode;
   }
 
-  // Handle random_pop
+  // Handle year_* (e.g. year_80s, year_90s, year_2000s, year_2010s, year_2020s)
+  if (seq.radioSource.startsWith('year_')) {
+    const yearKey = seq.radioSource.replace('year_', '');
+    const yearRanges: Record<string, [number, number]> = {
+      '80s': [1980, 1989],
+      '90s': [1990, 1999],
+      '2000s': [2000, 2009],
+      '2010s': [2010, 2019],
+      '2020s': [2020, 2030],
+    };
+    const range = yearRanges[yearKey] || [2000, 2030];
+    const { findSongByYear } = await import('./specialPrograms');
+    
+    const result = await findSongByYear(range[0], range[1], timeStr, usedInBlock, usedArtistsInBlock, ctx, isFullDay);
+    if (result) {
+      const key = `${result.title.toLowerCase()}-${result.artist.toLowerCase()}`;
+      usedInBlock.add(key);
+      usedArtistsInBlock.add(result.artist.toLowerCase().trim());
+      ctx.markSongAsUsed(result.title, result.artist, timeStr);
+      logs.push({
+        blockTime: timeStr, type: 'used',
+        title: result.title, artist: result.artist,
+        station: `ANOS ${yearKey.toUpperCase()}`,
+        reason: `Ano ${range[0]}-${range[1]}`,
+      });
+      const sanitizedFilename = finalizeGradeFilename(result.filename, result.artist, result.title, ctx.musicFolders, ctx.filterChars);
+      return `"${sanitizedFilename}"`;
+    }
+    logs.push({
+      blockTime: timeStr, type: 'substituted',
+      title: yearKey, artist: 'CORINGA', station: 'FALLBACK',
+      reason: `Nenhuma música dos anos ${yearKey} disponível`,
+    });
+    return ctx.coringaCode;
+  }
   if (seq.radioSource === 'random_pop') {
     for (const candidate of allSongsPool) {
       const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;

@@ -486,6 +486,62 @@ export async function findSongByGenre(
 }
 
 /**
+ * Generic year-based song finder for sequence positions.
+ * Pulls a single song from the database filtered by year range.
+ * Used by sequence positions with source "year_80s", "year_90s", etc.
+ */
+export async function findSongByYear(
+  yearMin: number,
+  yearMax: number,
+  timeStr: string,
+  usedInBlock: Set<string>,
+  usedArtistsInBlock: Set<string>,
+  ctx: GradeContext,
+  isFullDay: boolean = false,
+): Promise<{ filename: string; artist: string; title: string; yearRange: string } | null> {
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    
+    const { data, error } = await supabase
+      .from('scraped_songs')
+      .select('artist, title, station_name, year')
+      .not('year', 'is', null)
+      .gte('year', String(yearMin))
+      .lte('year', String(yearMax))
+      .order('scraped_at', { ascending: false })
+      .limit(300);
+
+    if (error || !data || data.length === 0) return null;
+
+    const seen = new Set<string>();
+    const candidates: Array<{ artist: string; title: string; station: string }> = [];
+    for (const s of data) {
+      const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      candidates.push({ artist: s.artist, title: s.title, station: s.station_name });
+    }
+    candidates.sort(() => Math.random() - 0.5);
+
+    for (const candidate of candidates) {
+      const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+      const normalizedArtist = candidate.artist.toLowerCase().trim();
+      if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+      if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
+
+      const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+      if (libraryResult.exists) {
+        const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+        return { filename, artist: candidate.artist, title: candidate.title, yearRange: `${yearMin}-${yearMax}` };
+      }
+    }
+  } catch (e) {
+    console.warn(`[YEAR-BLOCK] Falha ao buscar por ano ${yearMin}-${yearMax}:`, e);
+  }
+  return null;
+}
+
+/**
  * Pulls 10 songs from years 2000-2010, intercalated with vhtn.
  */
 export async function generateTop10Decada(

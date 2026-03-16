@@ -99,11 +99,21 @@ export function SequenceView() {
     { value: 'genre_FORRO', label: '🪗 Forró', isFixo: false },
   ];
 
+  // Year/decade-based options
+  const yearOptions = [
+    { value: 'year_80s', label: '📅 Anos 80 (1980-1989)', isFixo: false },
+    { value: 'year_90s', label: '📅 Anos 90 (1990-1999)', isFixo: false },
+    { value: 'year_2000s', label: '📅 Anos 2000 (2000-2009)', isFixo: false },
+    { value: 'year_2010s', label: '📅 Anos 2010 (2010-2019)', isFixo: false },
+    { value: 'year_2020s', label: '📅 Anos 2020 (2020+)', isFixo: false },
+  ];
+
   const radioOptions = [
     ...stationOptions,
     { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)', isFixo: false },
     { value: 'top50', label: '🏆 TOP25 (Curadoria)', isFixo: false },
     ...genreOptions,
+    ...yearOptions,
     ...fixedContentOptions,
   ];
 
@@ -349,6 +359,9 @@ export function SequenceView() {
     if (source.startsWith('genre_')) {
       return 'bg-violet-500/20 text-violet-400 border-violet-500/30';
     }
+    if (source.startsWith('year_')) {
+      return 'bg-teal-500/20 text-teal-400 border-teal-500/30';
+    }
     
     const colors: Record<string, string> = {
       bh: 'bg-primary/20 text-primary border-primary/30',
@@ -402,6 +415,16 @@ export function SequenceView() {
       };
       return genreLabel[source] || source.replace('genre_', '');
     }
+    if (source.startsWith('year_')) {
+      const yearLabel: Record<string, string> = {
+        'year_80s': 'Anos 80',
+        'year_90s': 'Anos 90',
+        'year_2000s': 'Anos 2000',
+        'year_2010s': 'Anos 2010',
+        'year_2020s': 'Anos 2020',
+      };
+      return yearLabel[source] || source.replace('year_', '');
+    }
     
     const station = stations.find(s => s.id === source);
     if (station) return station.name;
@@ -415,11 +438,11 @@ export function SequenceView() {
   const getSourceBadgeLabel = (source: string): string => {
     if (source.startsWith('fixo_')) return '📌';
     if (source.startsWith('genre_')) return '🎵';
+    if (source.startsWith('year_')) return '📅';
     if (source === 'random_pop') return 'ALEAT';
     if (source === 'top50') return 'TOP25';
     const station = stations.find(s => s.id === source);
     if (station) {
-      // Abbreviate: take first word or up to 8 chars
       const name = station.name.replace(/\s*(FM|AM)\s*[\d.]*$/i, '').trim();
       return name.length > 8 ? name.slice(0, 7) + '…' : name.toUpperCase();
     }
