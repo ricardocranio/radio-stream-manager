@@ -85,10 +85,10 @@ async function findSongMatchWithFallback(
       }
     }
     console.log(`[BATCH-LIBRARY] ❌ Não encontrado: "${artist} - ${title}"`);
-    return { exists: result.exists };
+    return { exists: false };
   } catch (error) {
     console.error(`[BATCH-LIBRARY] Error matching ${artist} - ${title}:`, error);
-    return { exists: true }; // On error, assume exists to avoid blocking
+    return { exists: false }; // On error, treat as missing — never write unverified songs
   }
 }
 
