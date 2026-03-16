@@ -359,6 +359,9 @@ export function SequenceView() {
     if (source.startsWith('genre_')) {
       return 'bg-violet-500/20 text-violet-400 border-violet-500/30';
     }
+    if (source.startsWith('year_')) {
+      return 'bg-teal-500/20 text-teal-400 border-teal-500/30';
+    }
     
     const colors: Record<string, string> = {
       bh: 'bg-primary/20 text-primary border-primary/30',
