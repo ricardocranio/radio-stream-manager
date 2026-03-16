@@ -419,8 +419,10 @@ export function GradePreviewCard() {
         const mockSongsCount = displaySongs.filter(s => !s.isSpecial).length;
         setVhtCount(mockVhts);
         setSongCount(mockSongsCount);
-        // Use fixed mock durations from durationSec field
-        setSongDurations(mockDurationsMap);
+        // Use durations from durationSec field
+        const durMap: Record<string, number> = {};
+        displaySongs.forEach(s => { if (s.durationSec) durMap[s.filename.toLowerCase()] = s.durationSec; });
+        setSongDurations(durMap);
         // Calculate total from fixed durations
         const totalSec = displaySongs.reduce((acc, s) => acc + (s.durationSec || (s.isSpecial ? 7 : 210)), 0);
         setRealBlockDuration(parseFloat((totalSec / 60).toFixed(1)));
