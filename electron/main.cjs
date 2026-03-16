@@ -99,12 +99,18 @@ function ensureDefaultFolders() {
 
 // =============== WINDOW CREATION ===============
 function createWindow() {
+  // Use .ico on Windows, .png on other platforms for taskbar/dock icon
+  const iconFile = process.platform === 'win32' ? 'favicon.ico' : 'icon.png';
+  const iconPath = path.join(__dirname, '../public', iconFile);
+  // Fallback to favicon.png if primary icon not found
+  const resolvedIcon = fs.existsSync(iconPath) ? iconPath : path.join(__dirname, '../public/favicon.png');
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    icon: path.join(__dirname, '../public/favicon.ico'),
+    icon: resolvedIcon,
     backgroundColor: '#0d1117',
     titleBarStyle: 'default',
     autoHideMenuBar: true,
@@ -307,8 +313,11 @@ function showMainWindow() {
 // =============== SYSTEM TRAY ===============
 function createTray() {
   if (tray && !tray.isDestroyed()) return;
-  const iconPath = path.join(__dirname, '../public/favicon.ico');
-  tray = new Tray(iconPath);
+  // Use .ico on Windows for tray, .png on other platforms
+  const trayIconFile = process.platform === 'win32' ? 'favicon.ico' : 'icon.png';
+  const trayIconPath = path.join(__dirname, '../public', trayIconFile);
+  const resolvedTrayIcon = fs.existsSync(trayIconPath) ? trayIconPath : path.join(__dirname, '../public/favicon.png');
+  tray = new Tray(resolvedTrayIcon);
   
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Abrir Programador', click: () => showMainWindow() },
