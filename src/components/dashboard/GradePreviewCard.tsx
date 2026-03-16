@@ -178,8 +178,65 @@ export function GradePreviewCard() {
               durationSec: 7,
             });
           }
+        } else if (seqItem.radioSource.startsWith('year_')) {
+          // Year/decade-based: fetch songs by year range
+          const yearKey = seqItem.radioSource.replace('year_', '');
+          const yearRanges: Record<string, [number, number]> = {
+            '80s': [1980, 1989], '90s': [1990, 1999], '2000s': [2000, 2009],
+            '2010s': [2010, 2019], '2020s': [2020, 2030],
+          };
+          const range = yearRanges[yearKey] || [2000, 2030];
+
+          try {
+            const { data } = await supabase
+              .from('scraped_songs')
+              .select('artist, title, station_name, year')
+              .not('year', 'is', null)
+              .gte('year', String(range[0]))
+              .lte('year', String(range[1]))
+              .order('scraped_at', { ascending: false })
+              .limit(50);
+
+            if (data && data.length > 0) {
+              for (const s of data) {
+                const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+                if (usedKeys.has(key)) continue;
+                usedKeys.add(key);
+                
+                const filename = `${s.artist} - ${s.title}.mp3`;
+                songs.push({
+                  position: pos++,
+                  filename,
+                  artist: s.artist,
+                  title: s.title,
+                  isSpecial: false,
+                  durationSec: 210,
+                });
+                
+                const normalizedKey = `${s.artist.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')}-${s.title.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')}`;
+                stationMap[normalizedKey] = `ANOS ${yearKey.toUpperCase()}`;
+                break;
+              }
+            } else {
+              pos++;
+            }
+          } catch {
+            pos++;
+          }
+
+          if (seqItem.position < activeSeq.length) {
+            songs.push({
+              position: pos++,
+              filename: 'VHT_RADIO.mp3',
+              artist: 'VHT_RADIO',
+              title: '',
+              isSpecial: true,
+              durationSec: 7,
+            });
+          }
         } else if (
           !seqItem.radioSource.startsWith('fixo_') && 
+          !seqItem.radioSource.startsWith('year_') &&
           seqItem.radioSource !== 'fixo' &&
           seqItem.radioSource !== 'top50' &&
           seqItem.radioSource !== 'random_pop'
