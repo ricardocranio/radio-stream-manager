@@ -90,14 +90,26 @@ export function GradePreviewCard() {
       // Also get station-based positions
       const stationPositions = activeSeq.filter(s => 
         !s.radioSource.startsWith('genre_') && 
+        !s.radioSource.startsWith('year_') &&
         !s.radioSource.startsWith('fixo_') && 
         s.radioSource !== 'fixo' &&
         s.radioSource !== 'top50' &&
         s.radioSource !== 'random_pop'
       );
 
-      if (genrePositions.length === 0 && stationPositions.length === 0) {
-        // No genres or stations in sequence — use fallback mock
+      const yearPositions = activeSeq
+        .filter(s => s.radioSource.startsWith('year_'))
+        .map(s => {
+          const yearKey = s.radioSource.replace('year_', '');
+          const yearRanges: Record<string, [number, number]> = {
+            '80s': [1980, 1989], '90s': [1990, 1999], '2000s': [2000, 2009],
+            '2010s': [2010, 2019], '2020s': [2020, 2030],
+          };
+          return { position: s.position, yearKey, range: yearRanges[yearKey] || [2000, 2030] };
+        });
+
+      if (genrePositions.length === 0 && stationPositions.length === 0 && yearPositions.length === 0) {
+        // No genres, years or stations in sequence — use fallback mock
         setDynamicMockSongs(getDefaultMockSongs());
         return;
       }
