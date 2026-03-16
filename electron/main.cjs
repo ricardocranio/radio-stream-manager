@@ -99,12 +99,18 @@ function ensureDefaultFolders() {
 
 // =============== WINDOW CREATION ===============
 function createWindow() {
+  // Use .ico on Windows, .png on other platforms for taskbar/dock icon
+  const iconFile = process.platform === 'win32' ? 'favicon.ico' : 'icon.png';
+  const iconPath = path.join(__dirname, '../public', iconFile);
+  // Fallback to favicon.png if primary icon not found
+  const resolvedIcon = fs.existsSync(iconPath) ? iconPath : path.join(__dirname, '../public/favicon.png');
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    icon: path.join(__dirname, '../public/favicon.ico'),
+    icon: resolvedIcon,
     backgroundColor: '#0d1117',
     titleBarStyle: 'default',
     autoHideMenuBar: true,
