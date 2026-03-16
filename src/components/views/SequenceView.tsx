@@ -415,6 +415,16 @@ export function SequenceView() {
       };
       return genreLabel[source] || source.replace('genre_', '');
     }
+    if (source.startsWith('year_')) {
+      const yearLabel: Record<string, string> = {
+        'year_80s': 'Anos 80',
+        'year_90s': 'Anos 90',
+        'year_2000s': 'Anos 2000',
+        'year_2010s': 'Anos 2010',
+        'year_2020s': 'Anos 2020',
+      };
+      return yearLabel[source] || source.replace('year_', '');
+    }
     
     const station = stations.find(s => s.id === source);
     if (station) return station.name;
