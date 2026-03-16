@@ -36,13 +36,37 @@ if (!gotTheLock) {
   process.exit(0);
 }
 
+// =============== ICON RESOLVER ===============
+function resolveIcon() {
+  const candidates = [];
+  if (app.isPackaged) {
+    const appPath = app.getAppPath();
+    candidates.push(
+      path.join(appPath, 'dist', 'favicon.ico'),
+      path.join(appPath, 'dist', 'icon.png'),
+      path.join(appPath, 'dist', 'favicon.png'),
+    );
+  }
+  // Dev mode or fallback
+  candidates.push(
+    path.join(__dirname, '../public/favicon.ico'),
+    path.join(__dirname, '../public/icon.png'),
+    path.join(__dirname, '../public/favicon.png'),
+  );
+  
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return candidates[candidates.length - 1]; // last resort
+}
+
 // =============== SHARED NOTIFICATION HELPER ===============
 function showNotification(title, body, onClick) {
   if (Notification.isSupported()) {
     const notification = new Notification({
       title,
       body,
-      icon: path.join(__dirname, '../public/favicon.ico'),
+      icon: resolveIcon(),
       silent: false,
     });
     if (onClick) notification.on('click', onClick);
