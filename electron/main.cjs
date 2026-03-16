@@ -36,13 +36,37 @@ if (!gotTheLock) {
   process.exit(0);
 }
 
+// =============== ICON RESOLVER ===============
+function resolveIcon() {
+  const candidates = [];
+  if (app.isPackaged) {
+    const appPath = app.getAppPath();
+    candidates.push(
+      path.join(appPath, 'dist', 'favicon.ico'),
+      path.join(appPath, 'dist', 'icon.png'),
+      path.join(appPath, 'dist', 'favicon.png'),
+    );
+  }
+  // Dev mode or fallback
+  candidates.push(
+    path.join(__dirname, '../public/favicon.ico'),
+    path.join(__dirname, '../public/icon.png'),
+    path.join(__dirname, '../public/favicon.png'),
+  );
+  
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return candidates[candidates.length - 1]; // last resort
+}
+
 // =============== SHARED NOTIFICATION HELPER ===============
 function showNotification(title, body, onClick) {
   if (Notification.isSupported()) {
     const notification = new Notification({
       title,
       body,
-      icon: path.join(__dirname, '../public/favicon.ico'),
+      icon: resolveIcon(),
       silent: false,
     });
     if (onClick) notification.on('click', onClick);
@@ -99,18 +123,12 @@ function ensureDefaultFolders() {
 
 // =============== WINDOW CREATION ===============
 function createWindow() {
-  // Use .ico on Windows, .png on other platforms for taskbar/dock icon
-  const iconFile = process.platform === 'win32' ? 'favicon.ico' : 'icon.png';
-  const iconPath = path.join(__dirname, '../public', iconFile);
-  // Fallback to favicon.png if primary icon not found
-  const resolvedIcon = fs.existsSync(iconPath) ? iconPath : path.join(__dirname, '../public/favicon.png');
-
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    icon: resolvedIcon,
+    icon: resolveIcon(),
     backgroundColor: '#0d1117',
     titleBarStyle: 'default',
     autoHideMenuBar: true,
@@ -313,11 +331,7 @@ function showMainWindow() {
 // =============== SYSTEM TRAY ===============
 function createTray() {
   if (tray && !tray.isDestroyed()) return;
-  // Use .ico on Windows for tray, .png on other platforms
-  const trayIconFile = process.platform === 'win32' ? 'favicon.ico' : 'icon.png';
-  const trayIconPath = path.join(__dirname, '../public', trayIconFile);
-  const resolvedTrayIcon = fs.existsSync(trayIconPath) ? trayIconPath : path.join(__dirname, '../public/favicon.png');
-  tray = new Tray(resolvedTrayIcon);
+  tray = new Tray(resolveIcon());
   
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Abrir Programador', click: () => showMainWindow() },
