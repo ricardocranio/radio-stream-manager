@@ -1,8 +1,9 @@
-import { useState } from 'react';
-  import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Shield, Download, XCircle, ChevronDown, Eye, Tags } from 'lucide-react';
+import { useState, useMemo } from 'react';
+  import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Shield, Download, XCircle, ChevronDown, Eye, Tags, ArrowRightLeft } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
+import { useGradeLogStore } from '@/store/gradeLogStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
 import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
@@ -35,7 +36,23 @@ export function DashboardView() {
   } = useRadioStore();
   const { resetQueue } = useAutoDownloadStore();
   const resetSimilarityStats = useSimilarityLogStore((state) => state.resetStats);
+  const blockLogs = useGradeLogStore((state) => state.blockLogs);
   const { toast } = useToast();
+
+  // Compute last grade quality stats from block logs
+  const gradeQuality = useMemo(() => {
+    if (blockLogs.length === 0) return { substituted: 0, coringas: 0, used: 0, total: 0 };
+    // Find the most recent timestamp and get all logs from that batch (within 2 min window)
+    const latestTime = new Date(blockLogs[0]?.timestamp || 0).getTime();
+    const recentLogs = blockLogs.filter(l => {
+      const t = new Date(l.timestamp).getTime();
+      return latestTime - t < 120_000; // 2 min window = same build
+    });
+    const substituted = recentLogs.filter(l => l.type === 'substituted' && l.station !== 'FALLBACK').length;
+    const coringas = recentLogs.filter(l => l.type === 'substituted' && l.station === 'FALLBACK').length;
+    const used = recentLogs.filter(l => l.type === 'used').length;
+    return { substituted, coringas, used, total: used + substituted + coringas };
+  }, [blockLogs]);
   
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
   const { stats: realtimeStats, refresh: refreshStats } = useRealtimeStats();
@@ -250,7 +267,8 @@ export function DashboardView() {
           { label: 'Banco Musical', value: libraryStats.isLoading ? null : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%' },
           { label: 'Ranking TOP25', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%' },
           { label: 'Downloads Hoje', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%' },
-          { label: 'ID3 Processados', value: useAutoDownloadStore.getState().dailyStats.downloaded + useAutoDownloadStore.getState().dailyStats.skipped, icon: Tags, glow: '160 70% 45%' },
+          { label: 'Substituições', value: gradeQuality.substituted, icon: ArrowRightLeft, glow: '45 100% 55%' },
+          { label: 'Coringas', value: gradeQuality.coringas, icon: AlertTriangle, glow: gradeQuality.coringas > 0 ? '0 80% 55%' : '160 70% 45%' },
         ].map((stat, i) => {
           const Icon = stat.icon;
           return (
