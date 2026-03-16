@@ -99,11 +99,21 @@ export function SequenceView() {
     { value: 'genre_FORRO', label: '🪗 Forró', isFixo: false },
   ];
 
+  // Year/decade-based options
+  const yearOptions = [
+    { value: 'year_80s', label: '📅 Anos 80 (1980-1989)', isFixo: false },
+    { value: 'year_90s', label: '📅 Anos 90 (1990-1999)', isFixo: false },
+    { value: 'year_2000s', label: '📅 Anos 2000 (2000-2009)', isFixo: false },
+    { value: 'year_2010s', label: '📅 Anos 2010 (2010-2019)', isFixo: false },
+    { value: 'year_2020s', label: '📅 Anos 2020 (2020+)', isFixo: false },
+  ];
+
   const radioOptions = [
     ...stationOptions,
     { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)', isFixo: false },
     { value: 'top50', label: '🏆 TOP25 (Curadoria)', isFixo: false },
     ...genreOptions,
+    ...yearOptions,
     ...fixedContentOptions,
   ];
 
