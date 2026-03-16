@@ -59,7 +59,7 @@ function parseGradeLine(line: string): PreviewSong[] {
 }
 
 export function GradePreviewCard() {
-  const { config } = useRadioStore();
+  const { config, stations, scheduledSequences } = useRadioStore();
   const { gradeBuilder } = useGlobalServices();
   const { getLogsByBlock } = useGradeLogStore();
   const [libraryStatus, setLibraryStatus] = useState<Record<string, LibraryStatus>>({});
@@ -68,51 +68,194 @@ export function GradePreviewCard() {
   const [songDurations, setSongDurations] = useState<Record<string, number>>({});
   const [vhtCount, setVhtCount] = useState(0);
   const [songCount, setSongCount] = useState(0);
+  const [dynamicMockSongs, setDynamicMockSongs] = useState<PreviewSong[]>([]);
+  const [dynamicStationMap, setDynamicStationMap] = useState<Record<string, string>>({});
 
-  // === MOCK DATA for web preview (non-Electron) ===
+  // === DYNAMIC MOCK DATA: Fetch real songs from DB based on active sequence ===
+  useEffect(() => {
+    if (isElectron) return;
+
+    const fetchRealSongsForPreview = async () => {
+      // Get active sequence for the next block time
+      const activeSeq = getActiveSequence();
+      
+      // Extract genres from the sequence
+      const genrePositions = activeSeq
+        .filter(s => s.radioSource.startsWith('genre_'))
+        .map(s => {
+          const genreStr = s.radioSource.replace('genre_', '');
+          return { position: s.position, genres: genreStr.split(',').map(g => g.trim()) };
+        });
+      
+      // Also get station-based positions
+      const stationPositions = activeSeq.filter(s => 
+        !s.radioSource.startsWith('genre_') && 
+        !s.radioSource.startsWith('fixo_') && 
+        s.radioSource !== 'fixo' &&
+        s.radioSource !== 'top50' &&
+        s.radioSource !== 'random_pop'
+      );
+
+      if (genrePositions.length === 0 && stationPositions.length === 0) {
+        // No genres or stations in sequence — use fallback mock
+        setDynamicMockSongs(getDefaultMockSongs());
+        return;
+      }
+
+      const songs: PreviewSong[] = [];
+      const stationMap: Record<string, string> = {};
+      const usedKeys = new Set<string>();
+      let pos = 1;
+
+      // For each position in the sequence, fetch matching songs
+      for (const seqItem of activeSeq) {
+        if (seqItem.radioSource.startsWith('genre_')) {
+          const genreStr = seqItem.radioSource.replace('genre_', '');
+          const genres = genreStr.split(',').map(g => g.trim());
+          const genreVariants = genres.flatMap(g => [
+            g.toUpperCase(), g, g.charAt(0).toUpperCase() + g.slice(1).toLowerCase()
+          ]);
+          const uniqueVariants = [...new Set(genreVariants)];
+
+          try {
+            const { data } = await supabase
+              .from('scraped_songs')
+              .select('artist, title, station_name, ai_genre')
+              .in('ai_genre', uniqueVariants)
+              .order('scraped_at', { ascending: false })
+              .limit(50);
+
+            if (data && data.length > 0) {
+              // Find first unused song
+              for (const s of data) {
+                const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+                if (usedKeys.has(key)) continue;
+                usedKeys.add(key);
+                
+                const filename = `${s.artist} - ${s.title}.mp3`;
+                songs.push({
+                  position: pos++,
+                  filename,
+                  artist: s.artist,
+                  title: s.title,
+                  isSpecial: false,
+                  durationSec: 210,
+                });
+                
+                // Map to genre label as station
+                const normalizedKey = `${s.artist.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')}-${s.title.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')}`;
+                stationMap[normalizedKey] = (s.ai_genre || genres[0]).toUpperCase();
+                break;
+              }
+            } else {
+              // No data for this genre — skip
+              pos++;
+            }
+          } catch {
+            pos++;
+          }
+
+          // Add VHT between songs (not after last)
+          if (seqItem.position < activeSeq.length) {
+            songs.push({
+              position: pos++,
+              filename: 'VHT_RADIO.mp3',
+              artist: 'VHT_RADIO',
+              title: '',
+              isSpecial: true,
+              durationSec: 7,
+            });
+          }
+        } else if (
+          !seqItem.radioSource.startsWith('fixo_') && 
+          seqItem.radioSource !== 'fixo' &&
+          seqItem.radioSource !== 'top50' &&
+          seqItem.radioSource !== 'random_pop'
+        ) {
+          // Station-based: try to find matching songs from that station
+          const station = stations.find(s => s.id === seqItem.radioSource);
+          const stationName = station?.name || seqItem.radioSource;
+
+          try {
+            const { data } = await supabase
+              .from('scraped_songs')
+              .select('artist, title, station_name')
+              .eq('station_name', stationName)
+              .order('scraped_at', { ascending: false })
+              .limit(30);
+
+            if (data && data.length > 0) {
+              for (const s of data) {
+                const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+                if (usedKeys.has(key)) continue;
+                usedKeys.add(key);
+                
+                const filename = `${s.artist} - ${s.title}.mp3`;
+                songs.push({
+                  position: pos++,
+                  filename,
+                  artist: s.artist,
+                  title: s.title,
+                  isSpecial: false,
+                  durationSec: 210,
+                });
+                
+                const normalizedKey = `${s.artist.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')}-${s.title.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')}`;
+                stationMap[normalizedKey] = stationName;
+                break;
+              }
+            } else {
+              pos++;
+            }
+          } catch {
+            pos++;
+          }
+
+          if (seqItem.position < activeSeq.length) {
+            songs.push({
+              position: pos++,
+              filename: 'VHT_RADIO.mp3',
+              artist: 'VHT_RADIO',
+              title: '',
+              isSpecial: true,
+              durationSec: 7,
+            });
+          }
+        }
+      }
+
+      if (songs.filter(s => !s.isSpecial).length > 0) {
+        setDynamicMockSongs(songs);
+        setDynamicStationMap(stationMap);
+      } else {
+        setDynamicMockSongs(getDefaultMockSongs());
+      }
+    };
+
+    fetchRealSongsForPreview();
+  }, [scheduledSequences, stations]);
+
+  // Default fallback mock songs
+  const getDefaultMockSongs = (): PreviewSong[] => [
+    { position: 1, filename: 'Anitta - Envolver.mp3', artist: 'Anitta', title: 'Envolver', isSpecial: false, durationSec: 197 },
+    { position: 2, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true, durationSec: 7 },
+    { position: 3, filename: 'Jorge & Mateus - Enquanto Houver Razões.mp3', artist: 'Jorge & Mateus', title: 'Enquanto Houver Razões', isSpecial: false, durationSec: 223 },
+    { position: 4, filename: 'Marília Mendonça - Supera.mp3', artist: 'Marília Mendonça', title: 'Supera', isSpecial: false, durationSec: 185 },
+    { position: 5, filename: 'VHTN_NOSSA.mp3', artist: 'VHTN_NOSSA', title: '', isSpecial: true, durationSec: 8 },
+    { position: 6, filename: 'Henrique & Juliano - Vidinha de Balada.mp3', artist: 'Henrique & Juliano', title: 'Vidinha de Balada', isSpecial: false, durationSec: 241 },
+    { position: 7, filename: 'Luísa Sonza - Sentadona.mp3', artist: 'Luísa Sonza', title: 'Sentadona', isSpecial: false, durationSec: 178 },
+    { position: 8, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true, durationSec: 7 },
+    { position: 9, filename: 'Zé Neto & Cristiano - Largado Às Traças.mp3', artist: 'Zé Neto & Cristiano', title: 'Largado Às Traças', isSpecial: false, durationSec: 215 },
+    { position: 10, filename: 'Gusttavo Lima - Balada.mp3', artist: 'Gusttavo Lima', title: 'Balada', isSpecial: false, durationSec: 202 },
+    { position: 11, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true, durationSec: 7 },
+    { position: 12, filename: 'Luan Santana - Acordando o Prédio.mp3', artist: 'Luan Santana', title: 'Acordando o Prédio', isSpecial: false, durationSec: 193 },
+  ];
+
+  // Use dynamic songs or default
   const mockSongs: PreviewSong[] = useMemo(() => {
     if (isElectron) return [];
-    return [
-      { position: 1, filename: 'Anitta - Envolver.mp3', artist: 'Anitta', title: 'Envolver', isSpecial: false, durationSec: 197 },
-      { position: 2, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true, durationSec: 7 },
-      { position: 3, filename: 'Jorge & Mateus - Enquanto Houver Razões.mp3', artist: 'Jorge & Mateus', title: 'Enquanto Houver Razões', isSpecial: false, durationSec: 223 },
-      { position: 4, filename: 'Marília Mendonça - Supera.mp3', artist: 'Marília Mendonça', title: 'Supera', isSpecial: false, durationSec: 185 },
-      { position: 5, filename: 'VHTN_NOSSA.mp3', artist: 'VHTN_NOSSA', title: '', isSpecial: true, durationSec: 8 },
-      { position: 6, filename: 'Henrique & Juliano - Vidinha de Balada.mp3', artist: 'Henrique & Juliano', title: 'Vidinha de Balada', isSpecial: false, durationSec: 241 },
-      { position: 7, filename: 'Luísa Sonza - Sentadona.mp3', artist: 'Luísa Sonza', title: 'Sentadona', isSpecial: false, durationSec: 178 },
-      { position: 8, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true, durationSec: 7 },
-      { position: 9, filename: 'Zé Neto & Cristiano - Largado Às Traças.mp3', artist: 'Zé Neto & Cristiano', title: 'Largado Às Traças', isSpecial: false, durationSec: 215 },
-      { position: 10, filename: 'Gusttavo Lima - Balada.mp3', artist: 'Gusttavo Lima', title: 'Balada', isSpecial: false, durationSec: 202 },
-      { position: 11, filename: 'VHT_RADIO.mp3', artist: 'VHT_RADIO', title: '', isSpecial: true, durationSec: 7 },
-      { position: 12, filename: 'Luan Santana - Acordando o Prédio.mp3', artist: 'Luan Santana', title: 'Acordando o Prédio', isSpecial: false, durationSec: 193 },
-    ];
-  }, []);
-
-  // Fixed mock durations keyed by filename (realistic values)
-  const mockDurationsMap: Record<string, number> = useMemo(() => {
-    if (isElectron) return {};
-    const map: Record<string, number> = {};
-    for (const s of mockSongs) {
-      if (s.durationSec) map[s.filename.toLowerCase()] = s.durationSec;
-    }
-    return map;
-  }, [mockSongs]);
-
-  // Mock station map: distribute mock songs across user's configured stations
-  const mockStationMap: Record<string, string> = useMemo(() => {
-    if (isElectron) return {};
-    const { stations } = useRadioStore.getState();
-    const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
-    if (enabledStations.length === 0) return {};
-    // Assign each non-special mock song to a user station (round-robin)
-    const map: Record<string, string> = {};
-    const nonSpecial = mockSongs.filter(s => !s.isSpecial);
-    nonSpecial.forEach((song, i) => {
-      const key = `${song.artist.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')}-${(song.title || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')}`;
-      map[key] = enabledStations[i % enabledStations.length];
-    });
-    return map;
-  }, [mockSongs]);
+    return dynamicMockSongs.length > 0 ? dynamicMockSongs : getDefaultMockSongs();
+  }, [dynamicMockSongs]);
 
   // Use builder's nextBlock directly as single source of truth
   const nextBlockTime = gradeBuilder.nextBlock || (isElectron ? '--:--' : (() => {
