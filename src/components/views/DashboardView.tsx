@@ -34,7 +34,8 @@ export function DashboardView() {
     clearCapturedSongs, clearMissingSongs, clearDownloadHistory, clearRanking,
     setBatchDownloadProgress
   } = useRadioStore();
-  const { resetQueue } = useAutoDownloadStore();
+  const { resetQueue, vozBrasilDownloading, vozBrasilProgress } = useAutoDownloadStore();
+  const capturedDownloads = useCapturedDownloadStore();
   const resetSimilarityStats = useSimilarityLogStore((state) => state.resetStats);
   const blockLogs = useGradeLogStore((state) => state.blockLogs);
   const { toast } = useToast();
