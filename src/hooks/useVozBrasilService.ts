@@ -104,6 +104,7 @@ export function useVozBrasilService() {
 
     console.log('[VOZ-SVC] ❌ Todas as URLs falharam');
     useAutoDownloadStore.getState().setVozBrasilFailed(true, 'Download falhou — verifique a conexão e tente manualmente');
+    useAutoDownloadStore.getState().setVozBrasilDownloading(false);
     return false;
   }, [cleanupOldFiles]);
 
