@@ -57,7 +57,9 @@ export const useAutoDownloadStore = create<AutoDownloadState>((set, get) => ({
   setIsProcessing: (processing) => set({ isProcessing: processing }),
   setActiveDownload: (download) => set({ activeDownload: download }),
   setArlStatus: (valid) => set({ arlValid: valid, arlLastCheck: Date.now() }),
-  setVozBrasilFailed: (failed, error) => set({ vozBrasilFailed: failed, vozBrasilLastError: error || null }),
+  setVozBrasilFailed: (failed, error) => set({ vozBrasilFailed: failed, vozBrasilLastError: error || null, ...(failed ? { vozBrasilDownloading: false, vozBrasilProgress: 0 } : {}) }),
+  setVozBrasilDownloading: (downloading) => set({ vozBrasilDownloading: downloading, ...(downloading ? { vozBrasilProgress: 0 } : {}) }),
+  setVozBrasilProgress: (progress) => set({ vozBrasilProgress: progress }),
   incrementDailyStat: (type) => set((state) => {
     const today = getTodayStr();
     const stats = state.dailyStats.date === today ? { ...state.dailyStats } : { date: today, downloaded: 0, failed: 0, skipped: 0 };
