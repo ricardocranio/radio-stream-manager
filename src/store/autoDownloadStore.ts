@@ -31,6 +31,8 @@ interface AutoDownloadState {
   setActiveDownload: (download: ActiveDownload | null) => void;
   setArlStatus: (valid: boolean) => void;
   setVozBrasilFailed: (failed: boolean, error?: string) => void;
+  setVozBrasilDownloading: (downloading: boolean) => void;
+  setVozBrasilProgress: (progress: number) => void;
   incrementDailyStat: (type: 'downloaded' | 'failed' | 'skipped') => void;
   setTempRetryCount: (count: number) => void;
   resetQueue: () => void;
