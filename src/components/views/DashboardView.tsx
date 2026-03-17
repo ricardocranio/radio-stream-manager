@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
+import { useCapturedDownloadStore } from '@/store/capturedDownloadStore';
 import { useGradeLogStore } from '@/store/gradeLogStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
