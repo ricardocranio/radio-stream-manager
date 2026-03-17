@@ -49,6 +49,8 @@ export const useAutoDownloadStore = create<AutoDownloadState>((set, get) => ({
   arlLastCheck: null,
   vozBrasilFailed: false,
   vozBrasilLastError: null,
+  vozBrasilDownloading: false,
+  vozBrasilProgress: 0,
   dailyStats: { date: getTodayStr(), downloaded: 0, failed: 0, skipped: 0 },
   tempRetryCount: 0,
   setQueueLength: (length) => set({ queueLength: length }),
