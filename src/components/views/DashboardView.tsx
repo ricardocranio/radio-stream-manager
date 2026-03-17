@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
+import { useCapturedDownloadStore } from '@/store/capturedDownloadStore';
 import { useGradeLogStore } from '@/store/gradeLogStore';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
@@ -34,7 +35,8 @@ export function DashboardView() {
     clearCapturedSongs, clearMissingSongs, clearDownloadHistory, clearRanking,
     setBatchDownloadProgress
   } = useRadioStore();
-  const { resetQueue } = useAutoDownloadStore();
+  const { resetQueue, vozBrasilDownloading, vozBrasilProgress } = useAutoDownloadStore();
+  const capturedDownloads = useCapturedDownloadStore();
   const resetSimilarityStats = useSimilarityLogStore((state) => state.resetStats);
   const blockLogs = useGradeLogStore((state) => state.blockLogs);
   const { toast } = useToast();
@@ -373,7 +375,60 @@ export function DashboardView() {
         </Card>
       )}
 
-      {/* SmartNotifications and Id3Activity moved to footer */}
+      {/* === ACTIVE PROGRESS BARS === */}
+      {(vozBrasilDownloading || capturedDownloads.isProcessing) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* Voz do Brasil Download Progress */}
+          {vozBrasilDownloading && (
+            <Card className="glass-card border-cyan-500/20 bg-gradient-to-r from-cyan-500/5 to-transparent">
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Radio className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    <span className="text-sm font-medium text-foreground">Voz do Brasil</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs border-cyan-500/30 text-cyan-400">
+                    <Download className="w-3 h-3 mr-1" />
+                    Baixando...
+                  </Badge>
+                </div>
+                <Progress value={vozBrasilProgress} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  {vozBrasilProgress > 0 ? `${vozBrasilProgress}%` : 'Conectando ao servidor EBC...'}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Captured Downloads Progress */}
+          {capturedDownloads.isProcessing && (
+            <Card className="glass-card border-purple-500/20 bg-gradient-to-r from-purple-500/5 to-transparent">
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Music className="w-4 h-4 text-purple-400 animate-pulse" />
+                    <span className="text-sm font-medium text-foreground">Downloads Capturadas</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs border-purple-500/30 text-purple-400">
+                    {capturedDownloads.processedCount}/{capturedDownloads.queueLength}
+                  </Badge>
+                </div>
+                <Progress 
+                  value={capturedDownloads.queueLength > 0 
+                    ? (capturedDownloads.processedCount / capturedDownloads.queueLength) * 100 
+                    : 0} 
+                  className="h-2" 
+                />
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="text-emerald-400">✓ {capturedDownloads.processedCount}</span>
+                  {capturedDownloads.existsCount > 0 && <span className="text-amber-400">⊘ {capturedDownloads.existsCount} já existe</span>}
+                  {capturedDownloads.errorCount > 0 && <span className="text-destructive">✗ {capturedDownloads.errorCount}</span>}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Station Distribution removed for cleaner UI */}
 

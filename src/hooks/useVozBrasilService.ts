@@ -72,7 +72,7 @@ export function useVozBrasilService() {
     const filename = `Voz do Brasil.mp3`;
 
     console.log('[VOZ-SVC] 📻 Iniciando download...');
-
+    useAutoDownloadStore.getState().setVozBrasilDownloading(true);
     for (let i = 0; i < uniqueUrls.length; i++) {
       const url = uniqueUrls[i];
       console.log(`[VOZ-SVC] Tentativa ${i + 1}/${uniqueUrls.length}`);
@@ -91,6 +91,8 @@ export function useVozBrasilService() {
           }
           console.log(`[VOZ-SVC] ✅ Download concluído: ${filename} (${result.fileSize ? (result.fileSize / 1024 / 1024).toFixed(1) + 'MB' : '?'})`);
           useAutoDownloadStore.getState().setVozBrasilFailed(false);
+          useAutoDownloadStore.getState().setVozBrasilDownloading(false);
+          useAutoDownloadStore.getState().setVozBrasilProgress(100);
           return true;
         } else {
           console.log(`[VOZ-SVC] URL ${i + 1} falhou: ${result.error}`);
@@ -102,6 +104,7 @@ export function useVozBrasilService() {
 
     console.log('[VOZ-SVC] ❌ Todas as URLs falharam');
     useAutoDownloadStore.getState().setVozBrasilFailed(true, 'Download falhou — verifique a conexão e tente manualmente');
+    useAutoDownloadStore.getState().setVozBrasilDownloading(false);
     return false;
   }, [cleanupOldFiles]);
 
