@@ -22,6 +22,8 @@ interface AutoDownloadState {
   arlLastCheck: number | null;
   vozBrasilFailed: boolean;
   vozBrasilLastError: string | null;
+  vozBrasilDownloading: boolean;
+  vozBrasilProgress: number; // 0-100
   dailyStats: DownloadDailyStats;
   tempRetryCount: number;
   setQueueLength: (length: number) => void;
