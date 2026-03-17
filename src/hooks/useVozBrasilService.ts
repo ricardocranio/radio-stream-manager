@@ -91,6 +91,8 @@ export function useVozBrasilService() {
           }
           console.log(`[VOZ-SVC] ✅ Download concluído: ${filename} (${result.fileSize ? (result.fileSize / 1024 / 1024).toFixed(1) + 'MB' : '?'})`);
           useAutoDownloadStore.getState().setVozBrasilFailed(false);
+          useAutoDownloadStore.getState().setVozBrasilDownloading(false);
+          useAutoDownloadStore.getState().setVozBrasilProgress(100);
           return true;
         } else {
           console.log(`[VOZ-SVC] URL ${i + 1} falhou: ${result.error}`);
