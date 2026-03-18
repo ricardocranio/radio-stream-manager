@@ -305,16 +305,9 @@ function register({ getMainWindow, safeHandle }) {
             fs.mkdirSync(targetFolder, { recursive: true });
           }
           
-          // Apply sanitizeForDisk to the filename before moving
-          let finalFileName = file;
-          if (tags.artist && tags.title) {
-            const sanitizedArtist = sanitizeForDisk(tags.artist, 'artist');
-            const sanitizedTitle = sanitizeForDisk(tags.title, 'title');
-            if (sanitizedArtist && sanitizedTitle) {
-              const ext = path.extname(file).toLowerCase() || '.mp3';
-              finalFileName = `${sanitizedArtist} - ${sanitizedTitle}${ext}`;
-            }
-          }
+          // PRESERVE user-modified filename — never rename files already in the final library.
+          // Only _temp → final moves apply sanitization. Files in main folders keep their names.
+          const finalFileName = file;
           
           const targetPath = path.join(targetFolder, finalFileName);
           if (fs.existsSync(targetPath)) {
