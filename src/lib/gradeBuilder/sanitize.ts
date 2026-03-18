@@ -53,6 +53,10 @@ export function sanitizeGradeFilename(filename: string, filterCharacters?: strin
   // Replace & with "e" (Jorge & Mateus → Jorge e Mateus)
   result = result.replace(/&/g, 'e');
   
+  // Replace "feat.", "ft." variations with " e "
+  result = result.replace(/\s*feat\.?\s*/gi, ' e ');
+  result = result.replace(/\s*ft\.?\s*/gi, ' e ');
+  
   // Remove accents (ação → acao, canção → cancao)
   result = removeAccents(result);
   
