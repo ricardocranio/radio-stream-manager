@@ -86,8 +86,14 @@ function finalizeGradeFilename(
   musicFolders: string[],
   filterChars?: string[]
 ) {
+  // CRITICAL: Use the REAL filename from library lookup (currentFilename) when available.
+  // Only fall back to canonical name if no real filename was found.
+  // This preserves suffixes like "(LIVE 1990 2019 REMASTER)" that exist on disk.
+  if (currentFilename) {
+    return ensureFileMatchesGradeName(currentFilename, currentFilename, musicFolders, filterChars);
+  }
   const canonicalFilename = sanitizeFilename(`${artist} - ${title}.mp3`);
-  return ensureFileMatchesGradeName(currentFilename || canonicalFilename, canonicalFilename, musicFolders, filterChars);
+  return ensureFileMatchesGradeName(canonicalFilename, canonicalFilename, musicFolders, filterChars);
 }
 
 interface SelectionContext {
