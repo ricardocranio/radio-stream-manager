@@ -129,9 +129,10 @@ function register({ getMainWindow, safeHandle }) {
     }
   });
 
-  // IPC: Scan library and rename files based on ID3 tags (NO deletion — corrections only in _temp)
+  // IPC: Scan library — READ-ONLY audit, never renames files in the final library.
+  // User-modified filenames must be preserved. Renaming only happens in _temp → final move.
   handle('scan-fix-library', async (event, { musicFolders }) => {
-    console.log('[LIB-FIX] Starting library scan & fix (rename only, NO purge)...');
+    console.log('[LIB-FIX] Starting library scan (audit only, NO rename to preserve user changes)...');
     const results = { scanned: 0, renamed: 0, skipped: 0, errors: 0, purged: 0, details: [] };
     const mainWindow = _getMainWindow();
     
@@ -142,47 +143,13 @@ function register({ getMainWindow, safeHandle }) {
         for (const item of items) {
           const fullPath = path.join(folder, item.name);
           if (item.isDirectory()) {
-            // Skip _temp folders — those are handled by process-temp-files
             if (item.name === '_temp') continue;
             scanFolder(fullPath);
           } else if (/\.mp3$/i.test(item.name)) {
             results.scanned++;
-            try {
-              const tags = parseID3TagsFromFile(fullPath);
-
-              // No tags → just skip (NEVER delete from main library)
-              if (!tags.artist || !tags.title) {
-                results.skipped++;
-                results.details.push({ old: item.name, new: '', status: 'skip-incomplete-id3' });
-                continue;
-              }
-
-              const sanitizedArtist = sanitizeForDisk(tags.artist, 'artist');
-              const sanitizedTitle = sanitizeForDisk(tags.title, 'title');
-
-              if (!sanitizedArtist || !sanitizedTitle) {
-                results.skipped++;
-                results.details.push({ old: item.name, new: '', status: 'skip-invalid-id3' });
-                continue;
-              }
-
-              const correctName = `${sanitizedArtist} - ${sanitizedTitle}.mp3`;
-              if (item.name === correctName) { results.skipped++; continue; }
-              const newPath = path.join(folder, correctName);
-              if (fs.existsSync(newPath) && newPath !== fullPath) {
-                results.skipped++;
-                results.details.push({ old: item.name, new: correctName, status: 'skip-exists' });
-                continue;
-              }
-              fs.renameSync(fullPath, newPath);
-              results.renamed++;
-              results.details.push({ old: item.name, new: correctName, status: 'renamed' });
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('lib-fix-progress', { scanned: results.scanned, renamed: results.renamed, purged: 0, current: item.name });
-              }
-            } catch (fileErr) {
-              results.errors++;
-              results.details.push({ old: item.name, new: '', status: 'error', error: fileErr.message });
+            results.skipped++;
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('lib-fix-progress', { scanned: results.scanned, renamed: 0, purged: 0, current: item.name });
             }
           }
         }
@@ -192,7 +159,7 @@ function register({ getMainWindow, safeHandle }) {
     };
     
     for (const folder of (musicFolders || [])) { scanFolder(folder); }
-    console.log(`[LIB-FIX] Done: ${results.scanned} scanned, ${results.renamed} renamed, ${results.skipped} skipped, ${results.errors} errors`);
+    console.log(`[LIB-FIX] Done: ${results.scanned} scanned (audit only, 0 renamed to preserve user changes)`);
     return results;
   });
 
