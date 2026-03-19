@@ -147,6 +147,7 @@ export function Sidebar({ activeTab, onTabChange, onTabHover, collapsed = false,
                 <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" style={{ boxShadow: '0 0 4px hsl(155 85% 42% / 0.6)' }} />
                 <span className="text-[9px] font-mono text-muted-foreground/70">v10.0.0 • <span className="text-success/80">Ativo</span></span>
               </div>
+              <p className="text-[8px] text-muted-foreground/50 mt-0.5">por Ricardo Amaral</p>
             </div>
           )}
         </div>
