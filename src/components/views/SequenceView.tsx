@@ -414,7 +414,7 @@ export function SequenceView() {
 
   const applyCombo = () => {
     if (comboGenres.length === 0 || !comboTarget) return;
-    const value = `genreyear_${comboGenres.join(',')}_ ${comboDecade}`.replace(' ', '');
+    const value = `genreyear_${comboGenres.join(',')}_${comboDecade}`;
     if (comboTarget.type === 'default') {
       handleChange(comboTarget.position, value);
     } else {
