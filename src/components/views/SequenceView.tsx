@@ -428,6 +428,17 @@ export function SequenceView() {
       const content = fixedContent.find(c => c.id === contentId);
       return content?.name || 'FIXO';
     }
+    if (source.startsWith('genreyear_')) {
+      // Find matching option label
+      const opt = genreYearOptions.find(o => o.value === source);
+      if (opt) return opt.label.replace(/^[^\w]+/, '').trim();
+      // Fallback: parse it
+      const parts = source.replace('genreyear_', '');
+      const lastUnderscore = parts.lastIndexOf('_');
+      const genre = parts.substring(0, lastUnderscore);
+      const year = parts.substring(lastUnderscore + 1);
+      return `${genre} ${year}`;
+    }
     if (source.startsWith('genre_')) {
       const genreLabel: Record<string, string> = {
         'genre_SERTANEJO': 'Sertanejo',
@@ -463,6 +474,7 @@ export function SequenceView() {
 
   const getSourceBadgeLabel = (source: string): string => {
     if (source.startsWith('fixo_')) return '📌';
+    if (source.startsWith('genreyear_')) return '🎵📅';
     if (source.startsWith('genre_')) return '🎵';
     if (source.startsWith('year_')) return '📅';
     if (source === 'random_pop') return 'ALEAT';
