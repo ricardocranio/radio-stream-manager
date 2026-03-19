@@ -186,16 +186,15 @@ serve(async (req) => {
         }
       }
 
-      let classified = 0;
-      let method = "station-based";
+      let classified = cacheHits;
+      let method = cacheHits > 0 ? "cache" : "station-based";
 
-      // === Strategy 1: AI classification (preferred) ===
-      if (LOVABLE_API_KEY) {
-        method = "ai";
-        // Process in batches of 30 for AI
+      // === Strategy 1: AI classification for uncached songs ===
+      if (LOVABLE_API_KEY && uncachedSongs.length > 0) {
+        method = cacheHits > 0 ? "cache+ai" : "ai";
         const BATCH_SIZE = 30;
-        for (let i = 0; i < songs.length; i += BATCH_SIZE) {
-          const batch = songs.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < uncachedSongs.length; i += BATCH_SIZE) {
+          const batch = uncachedSongs.slice(i, i + BATCH_SIZE);
           const aiResults = await classifyWithAI(
             batch.map(s => ({ artist: s.artist, title: s.title })),
             LOVABLE_API_KEY
@@ -214,18 +213,13 @@ serve(async (req) => {
             }
           }
 
-          // Rate limit protection
-          if (i + BATCH_SIZE < songs.length) {
+          if (i + BATCH_SIZE < uncachedSongs.length) {
             await new Promise(r => setTimeout(r, 1000));
           }
         }
-
-        // Fallback: any songs AI missed, use station-based
-        const missedSongs = songs.filter(s => {
-          const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
-          return !classified; // simplified check
-        });
       }
+
+      console.log(`[CLASSIFY] Cache hits: ${cacheHits}, AI classified: ${classified - cacheHits}, uncached: ${uncachedSongs.length}`);
 
       // === Strategy 2: Station-based fallback for remaining ===
       const { data: stillUnclassified } = await supabase
