@@ -116,6 +116,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       cleanupCapturedDl();
       cleanupScraping();
       cleanupVozBrasil();
+      cleanupRadioagencia();
       cleanupMaintenance();
       isGlobalServicesRunning = false;
       isInitializedRef.current = false;
