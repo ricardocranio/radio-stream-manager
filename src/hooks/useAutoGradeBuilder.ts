@@ -325,7 +325,9 @@ export function useAutoGradeBuilder() {
     for (const s of songs) {
       const cached = getCachedVerification(s.artist, s.title);
       const key = toLibKey(s.artist, s.title);
-      if (cached) {
+      // CRITICAL: Only use cache if it has a real filename (matchedFile).
+      // Without the real filename the grade writes scraped metadata instead of the disk name.
+      if (cached && (!cached.exists || cached.matchedFile)) {
         results.set(key, { exists: cached.exists, filename: cached.matchedFile });
       } else {
         toCheck.push(s);
