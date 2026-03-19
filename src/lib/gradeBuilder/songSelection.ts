@@ -234,8 +234,14 @@ export async function selectSongForSlot(
   // Helper: check candidate validity (includes blackout + blocked songs check)
   const [blockHour] = timeStr.split(':').map(Number);
 
+  const toLibKey = (artist: string, title: string) => `${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`;
+
+  // Import store once (used for blocked songs, aliases, reverse alias map)
+  const { useRadioStore } = await import('@/store/radioStore');
+  const _storeState = useRadioStore.getState();
+
   // Pre-compute blocked songs sets (read once, reuse for all candidates)
-  const storeConfig = useRadioStore.getState().config;
+  const storeConfig = _storeState.config;
   const _blockedList = (storeConfig.blockedSongs || []).map(s => s.toLowerCase().trim());
   const _blockedExact = new Set<string>(_blockedList.filter(s => !s.endsWith(' - *')));
   const _blockedWildcardArtists = _blockedList
@@ -244,7 +250,7 @@ export async function selectSongForSlot(
   const _forbiddenLower = (storeConfig.forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
 
   // Also build alias map so we can check BOTH original and corrected names against the block list
-  const _allAliases = useRadioStore.getState().songAliases || [];
+  const _allAliases = _storeState.songAliases || [];
 
   const isBlockedSong = (artist: string, title: string): boolean => {
     const artistL = artist.trim().toLowerCase();
@@ -291,11 +297,8 @@ export async function selectSongForSlot(
     return true;
   };
 
-  const toLibKey = (artist: string, title: string) => `${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`;
-
   // Build reverse alias map: corrected name → original name (for library fallback)
-  const { useRadioStore } = await import('@/store/radioStore');
-  const songAliases = useRadioStore.getState().songAliases || [];
+  const songAliases = _allAliases;
   const reverseAliasMap = new Map<string, { fromArtist: string; fromTitle: string }>();
   for (const alias of songAliases) {
     reverseAliasMap.set(toLibKey(alias.toArtist, alias.toTitle), { fromArtist: alias.fromArtist, fromTitle: alias.fromTitle });
