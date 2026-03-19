@@ -64,6 +64,7 @@ export function DashboardView() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [isCatalogingTop, setIsCatalogingTop] = useState(false);
   const [realtimeCollapsed, setRealtimeCollapsed] = useState(false);
   const [statusCollapsed, setStatusCollapsed] = useState(true);
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
