@@ -500,6 +500,8 @@ export function SequenceView() {
         'genre_ROCK,METAL': 'Rock & Metal',
         'genre_ROMANTICO': 'Romântico',
         'genre_FORRO': 'Forró',
+        'genre_DANCE,ELETRONICA': 'Dance/Eletrônica',
+        'genre_ELETRONICA': 'Eletrônica',
       };
       return genreLabel[source] || source.replace('genre_', '');
     }
