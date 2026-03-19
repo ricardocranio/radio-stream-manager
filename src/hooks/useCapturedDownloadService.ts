@@ -39,19 +39,46 @@ export function useCapturedDownloadService() {
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const downloadOne = useCallback(async (song: CapturedQueueItem): Promise<'success' | 'exists' | 'error'> => {
-    const { deezerConfig, config, addDownloadHistory } = useRadioStore.getState();
+    const { deezerConfig, config, addDownloadHistory, songAliases } = useRadioStore.getState();
 
-    // Check library first
+    // === Apply alias correction: use "Para" (correct) name, block "De" (wrong) ===
+    let dlArtist = song.artist;
+    let dlTitle = song.title;
+    if (songAliases?.length) {
+      for (const alias of songAliases) {
+        if (song.artist.trim().toLowerCase() === alias.fromArtist.toLowerCase().trim() &&
+            song.title.trim().toLowerCase() === alias.fromTitle.toLowerCase().trim()) {
+          console.log(`[CAP-DL] 🔄 Alias: "${song.artist} - ${song.title}" → "${alias.toArtist} - ${alias.toTitle}"`);
+          dlArtist = alias.toArtist;
+          dlTitle = alias.toTitle;
+          break;
+        }
+      }
+    }
+
+    // Check library first (using corrected name)
     if (config.musicFolders?.length > 0) {
       try {
         const result = await checkSongInLibrary(
-          song.artist,
-          song.title,
+          dlArtist,
+          dlTitle,
           config.musicFolders,
           config.similarityThreshold || 0.75
         );
         if (result.exists) {
           return 'exists';
+        }
+        // Also check original name (file might exist under old name)
+        if (dlArtist !== song.artist || dlTitle !== song.title) {
+          const origResult = await checkSongInLibrary(
+            song.artist,
+            song.title,
+            config.musicFolders,
+            config.similarityThreshold || 0.75
+          );
+          if (origResult.exists) {
+            return 'exists';
+          }
         }
       } catch {
         // continue
