@@ -108,12 +108,35 @@ export function SequenceView() {
     { value: 'year_2020s', label: '📅 Anos 2020 (2020+)', isFixo: false },
   ];
 
+  // Combined genre + year options
+  const genreYearOptions = [
+    { value: 'genreyear_POP_80s', label: '🎤📅 Pop Anos 80', isFixo: false },
+    { value: 'genreyear_POP_90s', label: '🎤📅 Pop Anos 90', isFixo: false },
+    { value: 'genreyear_POP_2000s', label: '🎤📅 Pop Anos 2000', isFixo: false },
+    { value: 'genreyear_ROCK,METAL_80s', label: '🤘📅 Rock Anos 80', isFixo: false },
+    { value: 'genreyear_ROCK,METAL_90s', label: '🤘📅 Rock Anos 90', isFixo: false },
+    { value: 'genreyear_ROCK,METAL_2000s', label: '🤘📅 Rock Anos 2000', isFixo: false },
+    { value: 'genreyear_SERTANEJO_90s', label: '🎸📅 Sertanejo Anos 90', isFixo: false },
+    { value: 'genreyear_SERTANEJO_2000s', label: '🎸📅 Sertanejo Anos 2000', isFixo: false },
+    { value: 'genreyear_SERTANEJO_2010s', label: '🎸📅 Sertanejo Anos 2010', isFixo: false },
+    { value: 'genreyear_MPB_80s', label: '🎶📅 MPB Anos 80', isFixo: false },
+    { value: 'genreyear_MPB_90s', label: '🎶📅 MPB Anos 90', isFixo: false },
+    { value: 'genreyear_PAGODE_90s', label: '🥁📅 Pagode Anos 90', isFixo: false },
+    { value: 'genreyear_PAGODE_2000s', label: '🥁📅 Pagode Anos 2000', isFixo: false },
+    { value: 'genreyear_ROMANTICO_80s', label: '💕📅 Romântico Anos 80', isFixo: false },
+    { value: 'genreyear_ROMANTICO_90s', label: '💕📅 Romântico Anos 90', isFixo: false },
+    { value: 'genreyear_FORRO_2000s', label: '🪗📅 Forró Anos 2000', isFixo: false },
+    { value: 'genreyear_FUNK_2010s', label: '🎵📅 Funk Anos 2010', isFixo: false },
+    { value: 'genreyear_FUNK_2020s', label: '🎵📅 Funk Anos 2020', isFixo: false },
+  ];
+
   const radioOptions = [
     ...stationOptions,
     { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)', isFixo: false },
     { value: 'top50', label: '🏆 TOP25 (Curadoria)', isFixo: false },
     ...genreOptions,
     ...yearOptions,
+    ...genreYearOptions,
     ...fixedContentOptions,
   ];
 

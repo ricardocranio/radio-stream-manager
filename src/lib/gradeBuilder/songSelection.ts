@@ -946,6 +946,43 @@ export async function handleSpecialSequenceType(
     return ctx.coringaCode;
   }
 
+  // Handle genreyear_* combined (e.g. genreyear_POP_90s, genreyear_ROCK,METAL_80s)
+  if (seq.radioSource.startsWith('genreyear_')) {
+    const parts = seq.radioSource.replace('genreyear_', '');
+    const lastUnderscore = parts.lastIndexOf('_');
+    const genreStr = parts.substring(0, lastUnderscore);
+    const yearKey = parts.substring(lastUnderscore + 1);
+    const genres = genreStr.split(',').map(g => g.trim());
+    const yearRanges: Record<string, [number, number]> = {
+      '80s': [1980, 1989], '90s': [1990, 1999],
+      '2000s': [2000, 2009], '2010s': [2010, 2019], '2020s': [2020, 2030],
+    };
+    const range = yearRanges[yearKey] || [2000, 2030];
+    const { findSongByGenreAndYear } = await import('./specialPrograms');
+
+    const result = await findSongByGenreAndYear(genres, range[0], range[1], timeStr, usedInBlock, usedArtistsInBlock, ctx, isFullDay);
+    if (result) {
+      const key = `${result.title.toLowerCase()}-${result.artist.toLowerCase()}`;
+      usedInBlock.add(key);
+      usedArtistsInBlock.add(result.artist.toLowerCase().trim());
+      ctx.markSongAsUsed(result.title, result.artist, timeStr);
+      logs.push({
+        blockTime: timeStr, type: 'used',
+        title: result.title, artist: result.artist,
+        station: `${result.genre} ${yearKey.toUpperCase()}`,
+        reason: `Gênero ${genres.join('/')} + Anos ${range[0]}-${range[1]}`,
+      });
+      const sanitizedFilename = finalizeGradeFilename(result.filename, result.artist, result.title, ctx.musicFolders, ctx.filterChars);
+      return `"${sanitizedFilename}"`;
+    }
+    logs.push({
+      blockTime: timeStr, type: 'substituted',
+      title: `${genres.join('/')} ${yearKey}`, artist: 'CORINGA', station: 'FALLBACK',
+      reason: `Nenhuma música ${genres.join('/')} dos anos ${yearKey} disponível`,
+    });
+    return ctx.coringaCode;
+  }
+
   // Handle year_* (e.g. year_80s, year_90s, year_2000s, year_2010s, year_2020s)
   if (seq.radioSource.startsWith('year_')) {
     const yearKey = seq.radioSource.replace('year_', '');
