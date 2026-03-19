@@ -288,6 +288,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         }
       }
 
+      setCatalogCount(enriched);
       toast({ title: '✅ Catalogação Completa', description: `${result.songs.length} lidos · ${enriched} atualizados` });
     } catch (err) {
       toast({ title: '❌ Erro', description: String(err), variant: 'destructive' });
