@@ -21,6 +21,7 @@ import { useGlobalDownloadService, DownloadServiceState } from '@/hooks/useGloba
 import { useGlobalScrapingService, ScrapeStats } from '@/hooks/useGlobalScrapingService';
 import { useCapturedDownloadService } from '@/hooks/useCapturedDownloadService';
 import { useVozBrasilService } from '@/hooks/useVozBrasilService';
+import { useRadioagenciaService } from '@/hooks/useRadioagenciaService';
 import { useBackgroundMaintenance } from '@/hooks/useBackgroundMaintenance';
 import { useServiceWatchdog } from '@/hooks/useServiceWatchdog';
 import { useDailyReport } from '@/hooks/useDailyReport';
@@ -58,6 +59,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   );
   const capturedDownloadService = useCapturedDownloadService();
   const vozBrasilService = useVozBrasilService();
+  const radioagenciaService = useRadioagenciaService();
   const maintenanceService = useBackgroundMaintenance();
   const watchdogService = useServiceWatchdog();
   const dailyReportService = useDailyReport();
@@ -87,6 +89,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log(`║ 🔄 Sync Cloud:    ✅ ATIVO (Realtime)`.padEnd(65) + '║');
     console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
     console.log(`║ 📻 Voz do Brasil: ✅ ATIVO (Seg-Sex 20:35)`.padEnd(65) + '║');
+    console.log(`║ 📰 Radioagência:  ✅ ATIVO (15 min polling)`.padEnd(65) + '║');
     console.log(`║ 📥 Capturadas DL: ✅ AUTOMÁTICO (2 min polling)`.padEnd(65) + '║');
     console.log(`║ 🎯 IA Classify:   ✅ ATIVO (30 min batches)`.padEnd(65) + '║');
     console.log(`║ 🗜️ Compressão:    ✅ ATIVO (diário 4:00)`.padEnd(65) + '║');
@@ -102,6 +105,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     const cleanupCapturedDl = capturedDownloadService.start();
     const cleanupScraping = scrapingService.start();
     const cleanupVozBrasil = vozBrasilService.start();
+    const cleanupRadioagencia = radioagenciaService.start();
     const cleanupMaintenance = maintenanceService.start();
 
     console.log('[GLOBAL-SVC] ✅ Todos os serviços iniciados!');
@@ -112,6 +116,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       cleanupCapturedDl();
       cleanupScraping();
       cleanupVozBrasil();
+      cleanupRadioagencia();
       cleanupMaintenance();
       isGlobalServicesRunning = false;
       isInitializedRef.current = false;

@@ -89,6 +89,7 @@ const scrapingModule = require('./modules/scraping.cjs');
 const libraryModule = require('./modules/library.cjs');
 const deezerDownloadModule = require('./modules/deezerDownload.cjs');
 const vozBrasilModule = require('./modules/vozBrasil.cjs');
+const radioagenciaModule = require('./modules/radioagencia.cjs');
 const fileOpsModule = require('./modules/fileOps.cjs');
 
 pythonMonitor.register(ctx);
@@ -97,6 +98,7 @@ scrapingModule.register(ctx);
 libraryModule.register(ctx);
 deezerDownloadModule.register(ctx);
 vozBrasilModule.register(ctx);
+radioagenciaModule.register(ctx);
 fileOpsModule.register(ctx);
 
 // =============== DEFAULT FOLDERS ===============
@@ -105,6 +107,7 @@ const DEFAULT_FOLDERS = [
   'C:\\Playlist\\Downloads',
   'C:\\Playlist\\A Voz do Brasil',
   'C:\\Playlist\\Músicas',
+  'C:\\Playlist\\Locucoes',
 ];
 
 function ensureDefaultFolders() {

@@ -61,6 +61,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('voz-download-progress', (_, progress) => callback(progress));
   },
   
+  // Radioagência Nacional
+  radioagenciaCheck: () => ipcRenderer.invoke('radioagencia-check'),
+  radioagenciaDownload: (params) => ipcRenderer.invoke('radioagencia-download', params),
+  radioagenciaCleanup: (params) => ipcRenderer.invoke('radioagencia-cleanup', params),
+  onRadioagenciaProgress: (callback) => {
+    ipcRenderer.removeAllListeners('radioagencia-download-progress');
+    ipcRenderer.on('radioagencia-download-progress', (_, progress) => callback(progress));
+  },
+  
   // Grade file operations
   saveGradeFile: (params) => ipcRenderer.invoke('save-grade-file', params),
   readGradeFile: (params) => ipcRenderer.invoke('read-grade-file', params),

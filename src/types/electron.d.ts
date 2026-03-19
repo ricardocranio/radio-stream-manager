@@ -290,6 +290,12 @@ interface ElectronAPI {
   onVozDownloadProgress: (callback: (progress: VozDownloadProgress) => void) => void;
   recoverTempFiles: (params: { baseFolder: string }) => Promise<{ success: boolean; recovered: number; error?: string }>;
   
+  // Radioagência Nacional
+  radioagenciaCheck: () => Promise<{ success: boolean; entries: Array<{ title: string; url: string; cleanUrl: string; editoria: string; isNew: boolean }>; totalFound: number; newCount: number; error?: string }>;
+  radioagenciaDownload: (params: { url: string; cleanUrl: string; title: string; outputFolder: string }) => Promise<{ success: boolean; filename?: string; fileSize?: number; skipped?: boolean; error?: string }>;
+  radioagenciaCleanup: (params: { folder: string; maxAgeDays: number }) => Promise<{ success: boolean; deletedCount?: number; error?: string }>;
+  onRadioagenciaProgress: (callback: (progress: { progress: number; filename: string }) => void) => void;
+  
   // Grade file operations
   saveGradeFile: (params: GradeFileParams) => Promise<GradeFileResult>;
   readGradeFile: (params: Omit<GradeFileParams, 'content'>) => Promise<GradeFileResult>;
