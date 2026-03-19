@@ -107,6 +107,7 @@ const DEFAULT_FOLDERS = [
   'C:\\Playlist\\Downloads',
   'C:\\Playlist\\A Voz do Brasil',
   'C:\\Playlist\\Músicas',
+  'C:\\Playlist\\Locucoes',
 ];
 
 function ensureDefaultFolders() {
