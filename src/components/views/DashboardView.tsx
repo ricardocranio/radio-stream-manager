@@ -29,7 +29,11 @@ import { SmartNotificationsCard } from '@/components/dashboard/SmartNotification
 import { ServiceHealthCard } from '@/components/dashboard/ServiceHealthCard';
 import { Id3ActivityCard } from '@/components/dashboard/Id3ActivityCard';
 
-export function DashboardView() {
+interface DashboardViewProps {
+  onNavigate?: (tab: string) => void;
+}
+
+export function DashboardView({ onNavigate }: DashboardViewProps) {
   const { 
     stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs,
     clearCapturedSongs, clearMissingSongs, clearDownloadHistory, clearRanking,
