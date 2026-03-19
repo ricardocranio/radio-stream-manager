@@ -442,7 +442,9 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
           </div>
           <div>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Catalogar</p>
-            <p className="text-xs font-bold" style={{ color: 'hsl(42 100% 50%)' }}>Acervo</p>
+            <p className="text-lg font-bold font-mono tabular-nums" style={{ color: 'hsl(42 100% 50%)' }}>
+              {isCatalogingTop ? '...' : catalogCount !== null ? catalogCount : '—'}
+            </p>
           </div>
         </div>
       </div>
