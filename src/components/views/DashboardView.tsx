@@ -69,6 +69,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isCatalogingTop, setIsCatalogingTop] = useState(false);
+  const [catalogCount, setCatalogCount] = useState<number | null>(null);
   const [realtimeCollapsed, setRealtimeCollapsed] = useState(false);
   const [statusCollapsed, setStatusCollapsed] = useState(true);
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
@@ -287,6 +288,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         }
       }
 
+      setCatalogCount(enriched);
       toast({ title: '✅ Catalogação Completa', description: `${result.songs.length} lidos · ${enriched} atualizados` });
     } catch (err) {
       toast({ title: '❌ Erro', description: String(err), variant: 'destructive' });
@@ -340,7 +342,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
           { label: 'Faltando', value: missingSongs.filter(s => s.status === 'missing').length, icon: AlertTriangle, glow: '0 80% 55%', nav: 'missing' },
           { label: 'Banco Musical', value: libraryStats.isLoading ? null : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%', nav: 'folders' },
           { label: 'Ranking TOP25', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%', nav: 'ranking' },
-          { label: 'Downloads Hoje', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%', nav: 'export' },
+          { label: 'Downloads Hoje', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%', nav: 'missing' },
           { label: 'Substituições', value: gradeQuality.substituted, icon: ArrowRightLeft, glow: '45 100% 55%', nav: 'logs' },
           { label: 'Coringas', value: gradeQuality.coringas, icon: AlertTriangle, glow: gradeQuality.coringas > 0 ? '0 80% 55%' : '160 70% 45%', nav: 'logs' },
         ].map((stat, i) => {
@@ -440,7 +442,9 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
           </div>
           <div>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Catalogar</p>
-            <p className="text-xs font-bold" style={{ color: 'hsl(42 100% 50%)' }}>Acervo</p>
+            <p className="text-lg font-bold font-mono tabular-nums" style={{ color: 'hsl(42 100% 50%)' }}>
+              {isCatalogingTop ? '...' : catalogCount !== null ? catalogCount : '—'}
+            </p>
           </div>
         </div>
       </div>
