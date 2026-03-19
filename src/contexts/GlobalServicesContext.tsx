@@ -59,6 +59,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   );
   const capturedDownloadService = useCapturedDownloadService();
   const vozBrasilService = useVozBrasilService();
+  const radioagenciaService = useRadioagenciaService();
   const maintenanceService = useBackgroundMaintenance();
   const watchdogService = useServiceWatchdog();
   const dailyReportService = useDailyReport();
