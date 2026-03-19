@@ -144,24 +144,24 @@ export function useCapturedDownloadService() {
         }
 
         // === Genre-based folder routing (passes pre-read genre directly) ===
-        const isVozDoBrasil = song.title?.toLowerCase().includes('voz do brasil') || 
-                              song.artist?.toLowerCase().includes('voz do brasil');
+        const isVozDoBrasil = dlTitle?.toLowerCase().includes('voz do brasil') || 
+                              dlArtist?.toLowerCase().includes('voz do brasil');
         if (!isVozDoBrasil && deezerConfig.genreRoutingEnabled) {
-          const fileForRoute = result.verifiedFile || `${song.artist} - ${song.title}.mp3`;
+          const fileForRoute = result.verifiedFile || `${dlArtist} - ${dlTitle}.mp3`;
           await routeFileByGenre(fileForRoute, deezerConfig.downloadFolder, config.musicFolders || [], '[CAP-DL]', downloadedGenre);
         }
 
         const entry: DownloadHistoryEntry = {
           id: crypto.randomUUID(),
           songId: song.id,
-          title: song.title,
-          artist: song.artist,
+          title: dlTitle,
+          artist: dlArtist,
           timestamp: new Date(),
           status: 'success',
           duration,
         };
         addDownloadHistory(entry);
-        console.log(`[CAP-DL] ✅ ${song.artist} - ${song.title}`);
+        console.log(`[CAP-DL] ✅ ${dlArtist} - ${dlTitle}`);
         return 'success';
       }
       throw new Error(result?.error || 'Download failed');
