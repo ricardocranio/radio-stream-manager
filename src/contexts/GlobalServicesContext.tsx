@@ -105,6 +105,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     const cleanupCapturedDl = capturedDownloadService.start();
     const cleanupScraping = scrapingService.start();
     const cleanupVozBrasil = vozBrasilService.start();
+    const cleanupRadioagencia = radioagenciaService.start();
     const cleanupMaintenance = maintenanceService.start();
 
     console.log('[GLOBAL-SVC] ✅ Todos os serviços iniciados!');
