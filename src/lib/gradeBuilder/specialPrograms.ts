@@ -499,6 +499,7 @@ export async function findSongByYear(
   ctx: GradeContext,
   isFullDay: boolean = false,
 ): Promise<{ filename: string; artist: string; title: string; yearRange: string } | null> {
+  // === Strategy 1: Query DB for year-tagged songs ===
   try {
     const { supabase } = await import('@/integrations/supabase/client');
     
@@ -511,33 +512,100 @@ export async function findSongByYear(
       .order('scraped_at', { ascending: false })
       .limit(300);
 
-    if (error || !data || data.length === 0) return null;
+    if (!error && data && data.length > 0) {
+      const seen = new Set<string>();
+      const candidates: Array<{ artist: string; title: string; station: string }> = [];
+      for (const s of data) {
+        const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        candidates.push({ artist: s.artist, title: s.title, station: s.station_name });
+      }
+      candidates.sort(() => Math.random() - 0.5);
 
-    const seen = new Set<string>();
-    const candidates: Array<{ artist: string; title: string; station: string }> = [];
-    for (const s of data) {
-      const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      candidates.push({ artist: s.artist, title: s.title, station: s.station_name });
-    }
-    candidates.sort(() => Math.random() - 0.5);
+      for (const candidate of candidates) {
+        const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+        const normalizedArtist = candidate.artist.toLowerCase().trim();
+        if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+        if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
 
-    for (const candidate of candidates) {
-      const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
-      const normalizedArtist = candidate.artist.toLowerCase().trim();
-      if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
-      if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
-
-      const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
-      if (libraryResult.exists) {
-        const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-        return { filename, artist: candidate.artist, title: candidate.title, yearRange: `${yearMin}-${yearMax}` };
+        const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+        if (libraryResult.exists) {
+          const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+          return { filename, artist: candidate.artist, title: candidate.title, yearRange: `${yearMin}-${yearMax}` };
+        }
       }
     }
   } catch (e) {
-    console.warn(`[YEAR-BLOCK] Falha ao buscar por ano ${yearMin}-${yearMax}:`, e);
+    console.warn(`[YEAR-BLOCK] Falha ao buscar por ano ${yearMin}-${yearMax} no DB:`, e);
   }
+
+  // === Strategy 2: Fallback — scan local library ID3 tags for year ===
+  const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
+  if (isElectron && (window as any).electronAPI?.scanLibraryMetadata) {
+    try {
+      console.log(`[YEAR-BLOCK] 📂 DB sem resultados para ${yearMin}-${yearMax}, buscando na biblioteca local...`);
+      const { useRadioStore } = await import('@/store/radioStore');
+      const { config } = useRadioStore.getState();
+      const allFolders = config.musicFolders?.filter(Boolean) || [];
+      if (allFolders.length > 0) {
+        const scanResult = await (window as any).electronAPI.scanLibraryMetadata({ musicFolders: allFolders });
+        if (scanResult?.success && scanResult.songs?.length) {
+          // Filter songs by year range from ID3 tags
+          const yearFiltered = scanResult.songs
+            .filter((s: any) => {
+              if (!s.year) return false;
+              const yr = parseInt(s.year, 10);
+              return !isNaN(yr) && yr >= yearMin && yr <= yearMax && s.artist && s.artist !== 'Desconhecido';
+            })
+            .sort(() => Math.random() - 0.5);
+
+          console.log(`[YEAR-BLOCK] 📂 Encontradas ${yearFiltered.length} músicas dos anos ${yearMin}-${yearMax} na biblioteca`);
+
+          // Also batch-update DB with discovered years (async, non-blocking)
+          if (yearFiltered.length > 0) {
+            const { supabase } = await import('@/integrations/supabase/client');
+            // Fire and forget — update DB so next time it's available from DB directly
+            Promise.resolve().then(async () => {
+              let updated = 0;
+              for (const song of yearFiltered.slice(0, 100)) {
+                try {
+                  const { data: matchedSongs } = await supabase
+                    .from('scraped_songs')
+                    .select('id')
+                    .ilike('artist', song.artist.trim())
+                    .ilike('title', song.title.trim())
+                    .is('year', null)
+                    .limit(5);
+                  if (matchedSongs?.length) {
+                    for (const ms of matchedSongs) {
+                      await supabase.from('scraped_songs').update({ year: String(song.year) }).eq('id', ms.id);
+                      updated++;
+                    }
+                  }
+                } catch { /* non-critical */ }
+              }
+              if (updated > 0) console.log(`[YEAR-BLOCK] 📅 Atualizadas ${updated} músicas no DB com ano do ID3`);
+            });
+          }
+
+          for (const song of yearFiltered) {
+            const key = `${song.title.toLowerCase().trim()}-${song.artist.toLowerCase().trim()}`;
+            const normalizedArtist = song.artist.toLowerCase().trim();
+            if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+            if (ctx.isRecentlyUsed(song.title, song.artist, timeStr, isFullDay)) continue;
+
+            // The file exists in library (we scanned it from there)
+            const filename = song.filename || sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
+            return { filename, artist: song.artist, title: song.title, yearRange: `${yearMin}-${yearMax}` };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`[YEAR-BLOCK] Fallback local falhou:`, e);
+    }
+  }
+
   return null;
 }
 
