@@ -110,6 +110,7 @@ export function SequenceView() {
 
   // Combined genre + year options
   const genreYearOptions = [
+    // Single genre + decade
     { value: 'genreyear_POP_80s', label: '🎤📅 Pop Anos 80', isFixo: false },
     { value: 'genreyear_POP_90s', label: '🎤📅 Pop Anos 90', isFixo: false },
     { value: 'genreyear_POP_2000s', label: '🎤📅 Pop Anos 2000', isFixo: false },
@@ -128,6 +129,15 @@ export function SequenceView() {
     { value: 'genreyear_FORRO_2000s', label: '🪗📅 Forró Anos 2000', isFixo: false },
     { value: 'genreyear_FUNK_2010s', label: '🎵📅 Funk Anos 2010', isFixo: false },
     { value: 'genreyear_FUNK_2020s', label: '🎵📅 Funk Anos 2020', isFixo: false },
+    // Multi-genre combos
+    { value: 'genreyear_POP,ROCK,DANCE_90s', label: '🎧📅 Pop/Rock/Dance Anos 90', isFixo: false },
+    { value: 'genreyear_POP,ROCK,DANCE_2000s', label: '🎧📅 Pop/Rock/Dance Anos 2000', isFixo: false },
+    { value: 'genreyear_POP,ROCK_80s', label: '🎧📅 Pop/Rock Anos 80', isFixo: false },
+    { value: 'genreyear_POP,ROCK_90s', label: '🎧📅 Pop/Rock Anos 90', isFixo: false },
+    { value: 'genreyear_POP,DANCE_2000s', label: '🎧📅 Pop/Dance Anos 2000', isFixo: false },
+    { value: 'genreyear_POP,DANCE_2010s', label: '🎧📅 Pop/Dance Anos 2010', isFixo: false },
+    { value: 'genreyear_SERTANEJO,PAGODE_90s', label: '🎸🥁📅 Sertanejo/Pagode Anos 90', isFixo: false },
+    { value: 'genreyear_SERTANEJO,PAGODE_2000s', label: '🎸🥁📅 Sertanejo/Pagode Anos 2000', isFixo: false },
   ];
 
   const radioOptions = [
