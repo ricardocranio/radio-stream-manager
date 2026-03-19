@@ -5,7 +5,8 @@ import { RadioStation } from '@/types/radio';
 
 /**
  * Hook that syncs stations from Supabase database to local store on mount.
- * Merges DB stations with local stations, prioritizing DB data.
+ * LOCAL stations take priority (user customizations are preserved).
+ * DB only provides: new stations not yet in local, and scrapeUrl/streamUrl updates.
  */
 export function useSyncStationsFromDb() {
   const { stations, setStations } = useRadioStore();
@@ -28,42 +29,38 @@ export function useSyncStationsFromDb() {
           return;
         }
 
-        // Create a map of existing local stations by name (normalized)
-        const localStationsByName = new Map<string, RadioStation>();
-        stations.forEach(s => {
-          localStationsByName.set(s.name.trim().toLowerCase(), s);
+        // Start with ALL local stations (preserving user order, enabled, styles, etc.)
+        const mergedStations: RadioStation[] = stations.map(localStation => {
+          const normalizedName = localStation.name.trim().toLowerCase();
+          const dbStation = dbStations.find(db => db.name.trim().toLowerCase() === normalizedName);
+          
+          if (dbStation) {
+            // Local station exists in DB — only update scrapeUrl/streamUrl from DB
+            return {
+              ...localStation,
+              scrapeUrl: dbStation.scrape_url || localStation.scrapeUrl,
+              streamUrl: dbStation.stream_url || localStation.streamUrl,
+            };
+          }
+          return localStation;
         });
 
-        // Merge: DB stations take priority, add new ones
-        const mergedStations: RadioStation[] = [];
-        const seenNames = new Set<string>();
+        const seenNames = new Set(stations.map(s => s.name.trim().toLowerCase()));
 
+        // Add DB-only stations that don't exist locally (genuinely new)
         for (const dbStation of dbStations) {
           const normalizedName = dbStation.name.trim().toLowerCase();
-          
-          if (seenNames.has(normalizedName)) continue;
-          seenNames.add(normalizedName);
-
-          const localStation = localStationsByName.get(normalizedName);
-          
-          mergedStations.push({
-            id: localStation?.id || dbStation.id,
-            name: dbStation.name.trim(),
-            urls: localStation?.urls || [],
-            scrapeUrl: dbStation.scrape_url,
-            streamUrl: dbStation.stream_url || undefined,
-            styles: dbStation.styles || localStation?.styles || [],
-            enabled: dbStation.enabled ?? true,
-            monitoringSchedules: localStation?.monitoringSchedules,
-          });
-        }
-
-        // Add local-only stations that aren't in DB
-        for (const localStation of stations) {
-          const normalizedName = localStation.name.trim().toLowerCase();
           if (!seenNames.has(normalizedName)) {
             seenNames.add(normalizedName);
-            mergedStations.push(localStation);
+            mergedStations.push({
+              id: dbStation.id,
+              name: dbStation.name.trim(),
+              urls: [],
+              scrapeUrl: dbStation.scrape_url,
+              streamUrl: dbStation.stream_url || undefined,
+              styles: dbStation.styles || [],
+              enabled: dbStation.enabled ?? true,
+            });
           }
         }
 
