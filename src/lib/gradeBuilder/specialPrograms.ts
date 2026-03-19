@@ -1141,7 +1141,7 @@ export async function findSongByGenreAndYear(
       if (allFolders.length > 0) {
         const scanResult = await (window as any).electronAPI.scanLibraryMetadata({ musicFolders: allFolders });
         if (scanResult?.success && scanResult.songs?.length) {
-          const { normalizeGenre } = await import('@/lib/id3GenreUtils');
+          const { normalizeId3Genre } = await import('@/lib/id3GenreUtils');
           const genresNorm = genres.map(g => g.toUpperCase());
           
           const filtered = scanResult.songs
@@ -1149,7 +1149,7 @@ export async function findSongByGenreAndYear(
               if (!s.year || !s.genre) return false;
               const yr = parseInt(s.year, 10);
               if (isNaN(yr) || yr < yearMin || yr > yearMax) return false;
-              const norm = normalizeGenre(s.genre)?.toUpperCase();
+              const norm = normalizeId3Genre(s.genre)?.toUpperCase();
               return norm && genresNorm.some(g => norm.includes(g));
             })
             .sort(() => Math.random() - 0.5);
