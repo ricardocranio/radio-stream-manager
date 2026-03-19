@@ -69,6 +69,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isCatalogingTop, setIsCatalogingTop] = useState(false);
+  const [catalogCount, setCatalogCount] = useState<number | null>(null);
   const [realtimeCollapsed, setRealtimeCollapsed] = useState(false);
   const [statusCollapsed, setStatusCollapsed] = useState(true);
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
