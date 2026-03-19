@@ -28,6 +28,10 @@ import { GradeScheduleCard } from '@/components/dashboard/GradeScheduleCard';
 import { SmartNotificationsCard } from '@/components/dashboard/SmartNotificationsCard';
 import { ServiceHealthCard } from '@/components/dashboard/ServiceHealthCard';
 import { Id3ActivityCard } from '@/components/dashboard/Id3ActivityCard';
+import { HourlyCapturesCard } from '@/components/dashboard/HourlyCapturesCard';
+import { OfflineAlertsCard } from '@/components/dashboard/OfflineAlertsCard';
+import { DuplicateDetectorCard } from '@/components/dashboard/DuplicateDetectorCard';
+import { WeeklyReportCard } from '@/components/dashboard/WeeklyReportCard';
 
 interface DashboardViewProps {
   onNavigate?: (tab: string) => void;
