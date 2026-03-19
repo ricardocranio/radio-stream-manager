@@ -98,6 +98,7 @@ scrapingModule.register(ctx);
 libraryModule.register(ctx);
 deezerDownloadModule.register(ctx);
 vozBrasilModule.register(ctx);
+radioagenciaModule.register(ctx);
 fileOpsModule.register(ctx);
 
 // =============== DEFAULT FOLDERS ===============
