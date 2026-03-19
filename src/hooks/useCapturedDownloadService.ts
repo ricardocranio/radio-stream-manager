@@ -107,13 +107,13 @@ export function useCapturedDownloadService() {
       const duration = Date.now() - startTime;
 
       if (result?.success) {
-        markSongAsDownloaded(song.artist, song.title, result.verifiedFile);
+        markSongAsDownloaded(dlArtist, dlTitle, result.verifiedFile);
 
         // Read ID3 genre from downloaded file and update DB
         let downloadedGenre: string | null = null;
         try {
           const { config } = useRadioStore.getState();
-          const verifiedFile = result.verifiedFile || `${song.artist} - ${song.title}.mp3`;
+          const verifiedFile = result.verifiedFile || `${dlArtist} - ${dlTitle}.mp3`;
           const id3Result = await window.electronAPI?.readId3Genre?.({
             filePath: verifiedFile,
             musicFolders: config.musicFolders,
