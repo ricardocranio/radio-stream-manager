@@ -89,6 +89,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log(`║ 🔄 Sync Cloud:    ✅ ATIVO (Realtime)`.padEnd(65) + '║');
     console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
     console.log(`║ 📻 Voz do Brasil: ✅ ATIVO (Seg-Sex 20:35)`.padEnd(65) + '║');
+    console.log(`║ 📰 Radioagência:  ✅ ATIVO (15 min polling)`.padEnd(65) + '║');
     console.log(`║ 📥 Capturadas DL: ✅ AUTOMÁTICO (2 min polling)`.padEnd(65) + '║');
     console.log(`║ 🎯 IA Classify:   ✅ ATIVO (30 min batches)`.padEnd(65) + '║');
     console.log(`║ 🗜️ Compressão:    ✅ ATIVO (diário 4:00)`.padEnd(65) + '║');
