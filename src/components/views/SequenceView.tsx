@@ -63,6 +63,12 @@ export function SequenceView() {
   const [editingFormPosition, setEditingFormPosition] = useState<number | null>(null);
   const [editingFormFileName, setEditingFormFileName] = useState('');
 
+  // Custom combo manual state
+  const [comboDialogOpen, setComboDialogOpen] = useState(false);
+  const [comboTarget, setComboTarget] = useState<{ type: 'default' | 'form'; position: number } | null>(null);
+  const [comboGenres, setComboGenres] = useState<string[]>([]);
+  const [comboDecade, setComboDecade] = useState('90s');
+
   // Form state for new/edit scheduled sequence
   const [formName, setFormName] = useState('');
   const [formStartHour, setFormStartHour] = useState(18);
@@ -383,6 +389,39 @@ export function SequenceView() {
     setFormWeekDays((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
     );
+  };
+
+  // Combo manual handlers
+  const AVAILABLE_GENRES = ['POP', 'ROCK', 'DANCE', 'SERTANEJO', 'PAGODE', 'FUNK', 'MPB', 'ROMANTICO', 'FORRO', 'METAL', 'ELETRONICA', 'RAP'];
+  const AVAILABLE_DECADES = [
+    { value: '80s', label: 'Anos 80' },
+    { value: '90s', label: 'Anos 90' },
+    { value: '2000s', label: 'Anos 2000' },
+    { value: '2010s', label: 'Anos 2010' },
+    { value: '2020s', label: 'Anos 2020' },
+  ];
+
+  const openComboDialog = (type: 'default' | 'form', position: number) => {
+    setComboTarget({ type, position });
+    setComboGenres([]);
+    setComboDecade('90s');
+    setComboDialogOpen(true);
+  };
+
+  const toggleComboGenre = (genre: string) => {
+    setComboGenres(prev => prev.includes(genre) ? prev.filter(g => g !== genre) : [...prev, genre]);
+  };
+
+  const applyCombo = () => {
+    if (comboGenres.length === 0 || !comboTarget) return;
+    const value = `genreyear_${comboGenres.join(',')}_${comboDecade}`;
+    if (comboTarget.type === 'default') {
+      handleChange(comboTarget.position, value);
+    } else {
+      handleFormSequenceChange(comboTarget.position, value);
+    }
+    setComboDialogOpen(false);
+    toast({ title: 'Combo aplicado', description: `${comboGenres.join('/')} ${AVAILABLE_DECADES.find(d => d.value === comboDecade)?.label}` });
   };
 
   const getStationColor = (source: string) => {
@@ -706,6 +745,12 @@ export function SequenceView() {
                                 {option.label}
                               </SelectItem>
                             ))}
+                            <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Gênero + Década</div>
+                            {genreYearOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
                             <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Especiais</div>
                             <SelectItem value="random_pop">🎲 Aleatório (Disney/Metro)</SelectItem>
                             <SelectItem value="top50">🏆 TOP25 (Curadoria)</SelectItem>
@@ -725,6 +770,15 @@ export function SequenceView() {
                         <Badge variant="outline" className={`${getStationColor(item.radioSource)} text-[9px] px-1`}>
                           {getSourceBadgeLabel(item.radioSource)}
                         </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                          onClick={() => openComboDialog('default', item.position)}
+                          title="Combo Manual (Gênero + Década)"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </Button>
                         {isFixoItem && !isEditing && (
                           <Button
                             variant="ghost"
@@ -1119,6 +1173,12 @@ export function SequenceView() {
                                 {option.label}
                               </SelectItem>
                             ))}
+                            <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Gênero + Década</div>
+                            {genreYearOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
                             <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Especiais</div>
                             <SelectItem value="random_pop">🎲 Aleatório (Disney/Metro)</SelectItem>
                             <SelectItem value="top50">🏆 TOP25 (Curadoria)</SelectItem>
@@ -1218,6 +1278,72 @@ export function SequenceView() {
             <Button onClick={handleSaveSchedule}>
               <Save className="w-4 h-4 mr-2" />
               Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Combo Manual Dialog */}
+      <Dialog open={comboDialogOpen} onOpenChange={setComboDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>🎧 Combo Manual — Gênero + Década</DialogTitle>
+            <DialogDescription>
+              Selecione os gêneros e a década para criar uma combinação personalizada.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Gêneros (selecione 1 ou mais)</Label>
+              <div className="flex flex-wrap gap-2">
+                {AVAILABLE_GENRES.map(genre => (
+                  <Badge
+                    key={genre}
+                    variant={comboGenres.includes(genre) ? 'default' : 'outline'}
+                    className={`cursor-pointer transition-colors ${
+                      comboGenres.includes(genre)
+                        ? 'bg-amber-500 text-amber-950 hover:bg-amber-400'
+                        : 'hover:bg-amber-500/20 hover:text-amber-400'
+                    }`}
+                    onClick={() => toggleComboGenre(genre)}
+                  >
+                    {genre}
+                  </Badge>
+                ))}
+              </div>
+              {comboGenres.length > 0 && (
+                <p className="text-xs text-amber-400">Selecionados: {comboGenres.join(' / ')}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Década</Label>
+              <Select value={comboDecade} onValueChange={setComboDecade}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AVAILABLE_DECADES.map(d => (
+                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {comboGenres.length > 0 && (
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <p className="text-xs text-amber-400 font-mono">
+                  Resultado: genreyear_{comboGenres.join(',')}_{ comboDecade}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {comboGenres.join('/')} — {AVAILABLE_DECADES.find(d => d.value === comboDecade)?.label}
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setComboDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={applyCombo} disabled={comboGenres.length === 0}>
+              <Check className="w-4 h-4 mr-2" />
+              Aplicar Combo
             </Button>
           </DialogFooter>
         </DialogContent>
