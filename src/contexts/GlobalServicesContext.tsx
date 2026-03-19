@@ -21,6 +21,7 @@ import { useGlobalDownloadService, DownloadServiceState } from '@/hooks/useGloba
 import { useGlobalScrapingService, ScrapeStats } from '@/hooks/useGlobalScrapingService';
 import { useCapturedDownloadService } from '@/hooks/useCapturedDownloadService';
 import { useVozBrasilService } from '@/hooks/useVozBrasilService';
+import { useRadioagenciaService } from '@/hooks/useRadioagenciaService';
 import { useBackgroundMaintenance } from '@/hooks/useBackgroundMaintenance';
 import { useServiceWatchdog } from '@/hooks/useServiceWatchdog';
 import { useDailyReport } from '@/hooks/useDailyReport';
