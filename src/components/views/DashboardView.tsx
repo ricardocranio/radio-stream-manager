@@ -331,7 +331,7 @@ export function DashboardView() {
   return (
     <div className="p-4 md:p-6 space-y-5 animate-fade-in">
       {/* === METRICS — Compact Strip === */}
-      <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-4 lg:grid-cols-8 gap-3">
         {[
           { label: 'Faltando', value: missingSongs.filter(s => s.status === 'missing').length, icon: AlertTriangle, glow: '0 80% 55%' },
           { label: 'Banco Musical', value: libraryStats.isLoading ? null : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%' },
