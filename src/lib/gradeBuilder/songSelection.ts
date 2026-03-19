@@ -231,13 +231,57 @@ export async function selectSongForSlot(
 
   let selectedSong: SongEntry | null = null;
 
-  // Helper: check candidate validity (includes blackout check)
+  // Helper: check candidate validity (includes blackout + blocked songs check)
   const [blockHour] = timeStr.split(':').map(Number);
+
+  const toLibKey = (artist: string, title: string) => `${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`;
+
+  // Import store once (used for blocked songs, aliases, reverse alias map)
+  const { useRadioStore } = await import('@/store/radioStore');
+  const _storeState = useRadioStore.getState();
+
+  // Pre-compute blocked songs sets (read once, reuse for all candidates)
+  const storeConfig = _storeState.config;
+  const _blockedList = (storeConfig.blockedSongs || []).map(s => s.toLowerCase().trim());
+  const _blockedExact = new Set<string>(_blockedList.filter(s => !s.endsWith(' - *')));
+  const _blockedWildcardArtists = _blockedList
+    .filter(s => s.endsWith(' - *'))
+    .map(s => s.replace(/ - \*$/, ''));
+  const _forbiddenLower = (storeConfig.forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
+
+  // Also build alias map so we can check BOTH original and corrected names against the block list
+  const _allAliases = _storeState.songAliases || [];
+
+  const isBlockedSong = (artist: string, title: string): boolean => {
+    const artistL = artist.trim().toLowerCase();
+    const titleL = title.trim().toLowerCase();
+    const songKey = `${artistL} - ${titleL}`;
+    if (_blockedExact.has(songKey)) return true;
+    if (_blockedWildcardArtists.some(b => artistL === b || artistL.includes(b))) return true;
+    if (_forbiddenLower.some(w => artistL.includes(w) || titleL.includes(w))) return true;
+
+    // Also check the ALIASED (corrected) name against the block list
+    for (const alias of _allAliases) {
+      if (artistL === alias.fromArtist.toLowerCase().trim() && titleL === alias.fromTitle.toLowerCase().trim()) {
+        const aliasArtistL = alias.toArtist.toLowerCase().trim();
+        const aliasTitleL = alias.toTitle.toLowerCase().trim();
+        const aliasKey = `${aliasArtistL} - ${aliasTitleL}`;
+        if (_blockedExact.has(aliasKey)) return true;
+        if (_blockedWildcardArtists.some(b => aliasArtistL === b || aliasArtistL.includes(b))) return true;
+        if (_forbiddenLower.some(w => aliasArtistL.includes(w) || aliasTitleL.includes(w))) return true;
+        break;
+      }
+    }
+    return false;
+  };
+
   const isValidCandidate = (title: string, artist: string) => {
     const key = `${title.toLowerCase()}-${artist.toLowerCase()}`;
     const normalizedArtist = artist.toLowerCase().trim();
     if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) return false;
     if (ctx.isRecentlyUsed(title, artist, timeStr, isFullDay)) return false;
+    // 🚫 Blocked songs NEVER enter the grade
+    if (isBlockedSong(artist, title)) return false;
     // Artist blackout by time range
     if (ctx.artistBlackouts?.length) {
       for (const bo of ctx.artistBlackouts) {
@@ -253,11 +297,8 @@ export async function selectSongForSlot(
     return true;
   };
 
-  const toLibKey = (artist: string, title: string) => `${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`;
-
   // Build reverse alias map: corrected name → original name (for library fallback)
-  const { useRadioStore } = await import('@/store/radioStore');
-  const songAliases = useRadioStore.getState().songAliases || [];
+  const songAliases = _allAliases;
   const reverseAliasMap = new Map<string, { fromArtist: string; fromTitle: string }>();
   for (const alias of songAliases) {
     reverseAliasMap.set(toLibKey(alias.toArtist, alias.toTitle), { fromArtist: alias.fromArtist, fromTitle: alias.fromTitle });
