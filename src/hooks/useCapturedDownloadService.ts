@@ -170,15 +170,15 @@ export function useCapturedDownloadService() {
       const entry: DownloadHistoryEntry = {
         id: crypto.randomUUID(),
         songId: song.id,
-        title: song.title,
-        artist: song.artist,
+        title: dlTitle,
+        artist: dlArtist,
         timestamp: new Date(),
         status: 'error',
         errorMessage: error instanceof Error ? error.message : 'Erro desconhecido',
         duration,
       };
       addDownloadHistory(entry);
-      console.error(`[CAP-DL] ❌ ${song.artist} - ${song.title}`, error);
+      console.error(`[CAP-DL] ❌ ${dlArtist} - ${dlTitle}`, error);
       return 'error';
     }
   }, []);
