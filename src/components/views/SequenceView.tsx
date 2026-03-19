@@ -770,6 +770,15 @@ export function SequenceView() {
                         <Badge variant="outline" className={`${getStationColor(item.radioSource)} text-[9px] px-1`}>
                           {getSourceBadgeLabel(item.radioSource)}
                         </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                          onClick={() => openComboDialog('default', item.position)}
+                          title="Combo Manual (Gênero + Década)"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </Button>
                         {isFixoItem && !isEditing && (
                           <Button
                             variant="ghost"
