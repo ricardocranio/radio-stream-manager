@@ -29,7 +29,11 @@ import { SmartNotificationsCard } from '@/components/dashboard/SmartNotification
 import { ServiceHealthCard } from '@/components/dashboard/ServiceHealthCard';
 import { Id3ActivityCard } from '@/components/dashboard/Id3ActivityCard';
 
-export function DashboardView() {
+interface DashboardViewProps {
+  onNavigate?: (tab: string) => void;
+}
+
+export function DashboardView({ onNavigate }: DashboardViewProps) {
   const { 
     stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs,
     clearCapturedSongs, clearMissingSongs, clearDownloadHistory, clearRanking,
@@ -333,16 +337,20 @@ export function DashboardView() {
       {/* === METRICS — Compact Strip === */}
       <div className="grid grid-cols-4 lg:grid-cols-8 gap-3">
         {[
-          { label: 'Faltando', value: missingSongs.filter(s => s.status === 'missing').length, icon: AlertTriangle, glow: '0 80% 55%' },
-          { label: 'Banco Musical', value: libraryStats.isLoading ? null : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%' },
-          { label: 'Ranking TOP25', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%' },
-          { label: 'Downloads Hoje', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%' },
-          { label: 'Substituições', value: gradeQuality.substituted, icon: ArrowRightLeft, glow: '45 100% 55%' },
-          { label: 'Coringas', value: gradeQuality.coringas, icon: AlertTriangle, glow: gradeQuality.coringas > 0 ? '0 80% 55%' : '160 70% 45%' },
+          { label: 'Faltando', value: missingSongs.filter(s => s.status === 'missing').length, icon: AlertTriangle, glow: '0 80% 55%', nav: 'missing' },
+          { label: 'Banco Musical', value: libraryStats.isLoading ? null : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%', nav: 'folders' },
+          { label: 'Ranking TOP25', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%', nav: 'ranking' },
+          { label: 'Downloads Hoje', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%', nav: 'export' },
+          { label: 'Substituições', value: gradeQuality.substituted, icon: ArrowRightLeft, glow: '45 100% 55%', nav: 'logs' },
+          { label: 'Coringas', value: gradeQuality.coringas, icon: AlertTriangle, glow: gradeQuality.coringas > 0 ? '0 80% 55%' : '160 70% 45%', nav: 'logs' },
         ].map((stat, i) => {
           const Icon = stat.icon;
           return (
-            <div key={i} className="metric-card p-3 flex items-center gap-3">
+            <div
+              key={i}
+              className="metric-card p-3 flex items-center gap-3 cursor-pointer hover:border-muted-foreground/30 transition-colors border border-transparent"
+              onClick={() => onNavigate?.(stat.nav)}
+            >
               <div className="metric-icon w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
                 style={{ background: `hsl(${stat.glow} / 0.1)` }}
               >

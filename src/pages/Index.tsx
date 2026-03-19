@@ -159,7 +159,7 @@ const Index = () => {
         >
           {/* Dashboard is always mounted (eagerly loaded) */}
           <PersistentTabPanel tabId="dashboard" activeTab={activeTab}>
-            <DashboardView />
+            <DashboardView onNavigate={setActiveTab} />
           </PersistentTabPanel>
 
           {/* Lazy views: only mount when first visited, then keep alive */}
