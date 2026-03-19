@@ -64,6 +64,7 @@ export function DashboardView() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [isCatalogingTop, setIsCatalogingTop] = useState(false);
   const [realtimeCollapsed, setRealtimeCollapsed] = useState(false);
   const [statusCollapsed, setStatusCollapsed] = useState(true);
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
@@ -223,6 +224,73 @@ export function DashboardView() {
     }
   };
 
+  // Quick catalog from top strip
+  const handleQuickCatalog = async () => {
+    if (!window.electronAPI?.scanLibraryMetadata) {
+      toast({ title: '⚠️ Disponível apenas no desktop', variant: 'destructive' });
+      return;
+    }
+    setIsCatalogingTop(true);
+    try {
+      const allFolders = [
+        ...(config.musicFolders || []),
+        (config as any).deezerDownloadFolder,
+      ].filter(Boolean) as string[];
+
+      if (allFolders.length === 0) {
+        toast({ title: '⚠️ Nenhuma pasta configurada', variant: 'destructive' });
+        return;
+      }
+
+      toast({ title: '🔍 Catalogando acervo...' });
+      const result = await window.electronAPI.scanLibraryMetadata({ musicFolders: allFolders });
+      if (!result?.success || !result.songs?.length) {
+        toast({ title: '⚠️ Nenhum arquivo encontrado', variant: 'destructive' });
+        return;
+      }
+
+      const libraryMap = new Map<string, { genre: string | null; year: string | null }>();
+      for (const song of result.songs as any[]) {
+        const key = `${(song.artist || '').toLowerCase().trim()}|${(song.title || '').toLowerCase().trim()}`;
+        if (key === '|' || key.startsWith('desconhecido|')) continue;
+        const { normalizeId3Genre } = await import('@/lib/id3GenreUtils');
+        libraryMap.set(key, { genre: song.genre ? normalizeId3Genre(song.genre) : null, year: song.year || null });
+      }
+
+      const { data: dbSongs } = await supabase
+        .from('scraped_songs')
+        .select('id, artist, title, ai_genre, year')
+        .or('ai_genre.is.null,year.is.null')
+        .limit(5000);
+
+      let enriched = 0;
+      if (dbSongs?.length) {
+        const { genreToEnergy } = await import('@/lib/id3GenreUtils');
+        for (const dbSong of dbSongs) {
+          const key = `${dbSong.artist.toLowerCase().trim()}|${dbSong.title.toLowerCase().trim()}`;
+          const libData = libraryMap.get(key);
+          if (!libData) continue;
+          const updates: Record<string, string> = {};
+          if (!dbSong.ai_genre && libData.genre && libData.genre !== 'OUTRO') {
+            updates.ai_genre = libData.genre;
+            updates.ai_energy = genreToEnergy(libData.genre);
+          }
+          if (!dbSong.year && libData.year) updates.year = libData.year;
+          if (Object.keys(updates).length > 0) {
+            await supabase.from('scraped_songs').update(updates).eq('id', dbSong.id);
+            enriched++;
+          }
+        }
+      }
+
+      toast({ title: '✅ Catalogação Completa', description: `${result.songs.length} lidos · ${enriched} atualizados` });
+    } catch (err) {
+      toast({ title: '❌ Erro', description: String(err), variant: 'destructive' });
+    } finally {
+      setIsCatalogingTop(false);
+    }
+  };
+
   const localStats = {
     activeStations: stations.filter((s) => s.enabled).length,
     rankingTotal: rankingSongs.length,
@@ -263,7 +331,7 @@ export function DashboardView() {
   return (
     <div className="p-4 md:p-6 space-y-5 animate-fade-in">
       {/* === METRICS — Compact Strip === */}
-      <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-4 lg:grid-cols-8 gap-3">
         {[
           { label: 'Faltando', value: missingSongs.filter(s => s.status === 'missing').length, icon: AlertTriangle, glow: '0 80% 55%' },
           { label: 'Banco Musical', value: libraryStats.isLoading ? null : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%' },
@@ -350,6 +418,23 @@ export function DashboardView() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        {/* Catalogar — compact card */}
+        <div
+          onClick={isCatalogingTop ? undefined : handleQuickCatalog}
+          className={`glass-card p-3 flex items-center gap-3 cursor-pointer hover:border-amber-500/40 transition-colors border border-transparent ${isCatalogingTop ? 'opacity-70 pointer-events-none' : ''}`}
+        >
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'hsl(42 100% 50% / 0.1)' }}>
+            {isCatalogingTop ? (
+              <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'hsl(42 100% 50%)' }} />
+            ) : (
+              <Database className="w-4 h-4" style={{ color: 'hsl(42 100% 50%)' }} />
+            )}
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Catalogar</p>
+            <p className="text-xs font-bold" style={{ color: 'hsl(42 100% 50%)' }}>Acervo</p>
+          </div>
+        </div>
       </div>
 
       {/* Voz do Brasil Alert */}
