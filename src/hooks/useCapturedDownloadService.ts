@@ -279,22 +279,37 @@ export function useCapturedDownloadService() {
 
       if (error || !data) return;
 
-      // Deduplicate by artist+title and filter blocked songs
-      const blockedList = (useRadioStore.getState().config.blockedSongs || []).map(s => s.toLowerCase().trim());
+      // Deduplicate by artist+title and filter blocked songs (checking BOTH original and aliased names)
+      const storeState = useRadioStore.getState();
+      const blockedList = (storeState.config.blockedSongs || []).map(s => s.toLowerCase().trim());
       const blockedExact = new Set<string>(blockedList.filter(s => !s.endsWith(' - *')));
       const blockedWildcardArtists = blockedList
         .filter(s => s.endsWith(' - *'))
         .map(s => s.replace(/ - \*$/, ''));
+      const forbiddenLower = (storeState.config.forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
+      const songAliases = storeState.songAliases || [];
       
-      const isBlocked = (artist: string, title: string): boolean => {
-        const key = `${artist.trim()} - ${title.trim()}`.toLowerCase();
-        if (blockedExact.has(key)) return true;
+      const isBlockedCheck = (artist: string, title: string): boolean => {
         const artistLower = artist.trim().toLowerCase();
         const titleLower = title.trim().toLowerCase();
+        const key = `${artistLower} - ${titleLower}`;
+        if (blockedExact.has(key)) return true;
         if (blockedWildcardArtists.some(blocked => artistLower === blocked || artistLower.includes(blocked))) return true;
-        // Also check forbiddenWords
-        const forbiddenLower = (useRadioStore.getState().config.forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
         if (forbiddenLower.some(word => artistLower.includes(word) || titleLower.includes(word))) return true;
+        return false;
+      };
+      
+      const isBlocked = (artist: string, title: string): boolean => {
+        // Check original name
+        if (isBlockedCheck(artist, title)) return true;
+        // Check aliased (corrected) name too
+        for (const alias of songAliases) {
+          if (artist.trim().toLowerCase() === alias.fromArtist.toLowerCase().trim() &&
+              title.trim().toLowerCase() === alias.fromTitle.toLowerCase().trim()) {
+            if (isBlockedCheck(alias.toArtist, alias.toTitle)) return true;
+            break;
+          }
+        }
         return false;
       };
       
