@@ -63,6 +63,12 @@ export function SequenceView() {
   const [editingFormPosition, setEditingFormPosition] = useState<number | null>(null);
   const [editingFormFileName, setEditingFormFileName] = useState('');
 
+  // Custom combo manual state
+  const [comboDialogOpen, setComboDialogOpen] = useState(false);
+  const [comboTarget, setComboTarget] = useState<{ type: 'default' | 'form'; position: number } | null>(null);
+  const [comboGenres, setComboGenres] = useState<string[]>([]);
+  const [comboDecade, setComboDecade] = useState('90s');
+
   // Form state for new/edit scheduled sequence
   const [formName, setFormName] = useState('');
   const [formStartHour, setFormStartHour] = useState(18);
