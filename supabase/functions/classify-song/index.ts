@@ -248,7 +248,7 @@ serve(async (req) => {
         if (method === "ai") method = "ai+station-fallback";
       }
 
-      return new Response(JSON.stringify({ classified, total: songs.length, method }), {
+      return new Response(JSON.stringify({ classified, total: songs.length, method, cacheHits }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

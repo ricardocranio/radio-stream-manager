@@ -1002,6 +1002,14 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
 
       {/* Phase 5: Service Health Dashboard */}
       <ServiceHealthCard />
+
+      {/* Phase 6: Intelligence Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <HourlyCapturesCard />
+        <OfflineAlertsCard />
+        <WeeklyReportCard />
+        <DuplicateDetectorCard />
+      </div>
     </div>
   );
 }
