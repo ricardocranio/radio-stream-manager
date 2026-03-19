@@ -391,6 +391,39 @@ export function SequenceView() {
     );
   };
 
+  // Combo manual handlers
+  const AVAILABLE_GENRES = ['POP', 'ROCK', 'DANCE', 'SERTANEJO', 'PAGODE', 'FUNK', 'MPB', 'ROMANTICO', 'FORRO', 'METAL', 'ELETRONICA', 'RAP'];
+  const AVAILABLE_DECADES = [
+    { value: '80s', label: 'Anos 80' },
+    { value: '90s', label: 'Anos 90' },
+    { value: '2000s', label: 'Anos 2000' },
+    { value: '2010s', label: 'Anos 2010' },
+    { value: '2020s', label: 'Anos 2020' },
+  ];
+
+  const openComboDialog = (type: 'default' | 'form', position: number) => {
+    setComboTarget({ type, position });
+    setComboGenres([]);
+    setComboDecade('90s');
+    setComboDialogOpen(true);
+  };
+
+  const toggleComboGenre = (genre: string) => {
+    setComboGenres(prev => prev.includes(genre) ? prev.filter(g => g !== genre) : [...prev, genre]);
+  };
+
+  const applyCombo = () => {
+    if (comboGenres.length === 0 || !comboTarget) return;
+    const value = `genreyear_${comboGenres.join(',')}_ ${comboDecade}`.replace(' ', '');
+    if (comboTarget.type === 'default') {
+      handleChange(comboTarget.position, value);
+    } else {
+      handleFormSequenceChange(comboTarget.position, value);
+    }
+    setComboDialogOpen(false);
+    toast({ title: 'Combo aplicado', description: `${comboGenres.join('/')} ${AVAILABLE_DECADES.find(d => d.value === comboDecade)?.label}` });
+  };
+
   const getStationColor = (source: string) => {
     if (source.startsWith('fixo_')) {
       return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
