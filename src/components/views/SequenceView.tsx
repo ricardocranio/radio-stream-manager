@@ -146,6 +146,11 @@ export function SequenceView() {
     { value: 'genreyear_POP,DANCE_2010s', label: '🎧📅 Pop/Dance Anos 2010', isFixo: false },
     { value: 'genreyear_SERTANEJO,PAGODE_90s', label: '🎸🥁📅 Sertanejo/Pagode Anos 90', isFixo: false },
     { value: 'genreyear_SERTANEJO,PAGODE_2000s', label: '🎸🥁📅 Sertanejo/Pagode Anos 2000', isFixo: false },
+    { value: 'genreyear_ELETRONICA_90s', label: '🔊📅 Eletrônica Anos 90', isFixo: false },
+    { value: 'genreyear_ELETRONICA_2000s', label: '🔊📅 Eletrônica Anos 2000', isFixo: false },
+    { value: 'genreyear_ELETRONICA_2010s', label: '🔊📅 Eletrônica Anos 2010', isFixo: false },
+    { value: 'genreyear_ELETRONICA,DANCE_90s', label: '🎧📅 Dance/Eletrônica Anos 90', isFixo: false },
+    { value: 'genreyear_ELETRONICA,DANCE_2000s', label: '🎧📅 Dance/Eletrônica Anos 2000', isFixo: false },
   ];
 
   const radioOptions = [
