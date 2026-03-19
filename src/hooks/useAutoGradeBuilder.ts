@@ -228,8 +228,11 @@ export function useAutoGradeBuilder() {
     for (const used of usedSongsRef.current) {
       const [usedHour, usedMinute] = used.blockTime.split(':').map(Number);
       const usedTotalMinutes = usedHour * 60 + usedMinute;
-      let diffMinutes = currentTotalMinutes - usedTotalMinutes;
-      if (diffMinutes < 0) diffMinutes += 24 * 60;
+      // Calculate the SHORTEST distance between two times on a 24h clock
+      // This fixes the bug where rebuilding an earlier block (e.g., 05:00) after a later one (05:30)
+      // would wrap to ~23.5 hours instead of the correct 30 minutes
+      let diffMinutes = Math.abs(currentTotalMinutes - usedTotalMinutes);
+      if (diffMinutes > 720) diffMinutes = 1440 - diffMinutes; // Use shorter arc on 24h circle
       if (diffMinutes < artistRepMinutes) {
         if (used.title.toLowerCase().trim() === normalizedTitle || used.artist.toLowerCase().trim() === normalizedArtist) {
           return true;

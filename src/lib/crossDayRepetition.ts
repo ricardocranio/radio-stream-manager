@@ -7,8 +7,8 @@
  */
 
 const STORAGE_KEY = 'pgmr_crossday_used';
-const BUFFER_HOURS = 4;
-const MAX_ENTRIES = 60;
+const BUFFER_HOURS = 6;
+const MAX_ENTRIES = 500;
 
 interface PersistedUsedSong {
   title: string;
