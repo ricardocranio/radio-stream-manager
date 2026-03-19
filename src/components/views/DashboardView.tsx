@@ -224,6 +224,73 @@ export function DashboardView() {
     }
   };
 
+  // Quick catalog from top strip
+  const handleQuickCatalog = async () => {
+    if (!window.electronAPI?.scanLibraryMetadata) {
+      toast({ title: '⚠️ Disponível apenas no desktop', variant: 'destructive' });
+      return;
+    }
+    setIsCatalogingTop(true);
+    try {
+      const allFolders = [
+        ...(config.musicFolders || []),
+        (config as any).deezerDownloadFolder,
+      ].filter(Boolean) as string[];
+
+      if (allFolders.length === 0) {
+        toast({ title: '⚠️ Nenhuma pasta configurada', variant: 'destructive' });
+        return;
+      }
+
+      toast({ title: '🔍 Catalogando acervo...' });
+      const result = await window.electronAPI.scanLibraryMetadata({ musicFolders: allFolders });
+      if (!result?.success || !result.songs?.length) {
+        toast({ title: '⚠️ Nenhum arquivo encontrado', variant: 'destructive' });
+        return;
+      }
+
+      const libraryMap = new Map<string, { genre: string | null; year: string | null }>();
+      for (const song of result.songs as any[]) {
+        const key = `${(song.artist || '').toLowerCase().trim()}|${(song.title || '').toLowerCase().trim()}`;
+        if (key === '|' || key.startsWith('desconhecido|')) continue;
+        const { normalizeId3Genre } = await import('@/lib/id3GenreUtils');
+        libraryMap.set(key, { genre: song.genre ? normalizeId3Genre(song.genre) : null, year: song.year || null });
+      }
+
+      const { data: dbSongs } = await supabase
+        .from('scraped_songs')
+        .select('id, artist, title, ai_genre, year')
+        .or('ai_genre.is.null,year.is.null')
+        .limit(5000);
+
+      let enriched = 0;
+      if (dbSongs?.length) {
+        const { genreToEnergy } = await import('@/lib/id3GenreUtils');
+        for (const dbSong of dbSongs) {
+          const key = `${dbSong.artist.toLowerCase().trim()}|${dbSong.title.toLowerCase().trim()}`;
+          const libData = libraryMap.get(key);
+          if (!libData) continue;
+          const updates: Record<string, string> = {};
+          if (!dbSong.ai_genre && libData.genre && libData.genre !== 'OUTRO') {
+            updates.ai_genre = libData.genre;
+            updates.ai_energy = genreToEnergy(libData.genre);
+          }
+          if (!dbSong.year && libData.year) updates.year = libData.year;
+          if (Object.keys(updates).length > 0) {
+            await supabase.from('scraped_songs').update(updates).eq('id', dbSong.id);
+            enriched++;
+          }
+        }
+      }
+
+      toast({ title: '✅ Catalogação Completa', description: `${result.songs.length} lidos · ${enriched} atualizados` });
+    } catch (err) {
+      toast({ title: '❌ Erro', description: String(err), variant: 'destructive' });
+    } finally {
+      setIsCatalogingTop(false);
+    }
+  };
+
   const localStats = {
     activeStations: stations.filter((s) => s.enabled).length,
     rankingTotal: rankingSongs.length,
