@@ -89,6 +89,7 @@ const scrapingModule = require('./modules/scraping.cjs');
 const libraryModule = require('./modules/library.cjs');
 const deezerDownloadModule = require('./modules/deezerDownload.cjs');
 const vozBrasilModule = require('./modules/vozBrasil.cjs');
+const radioagenciaModule = require('./modules/radioagencia.cjs');
 const fileOpsModule = require('./modules/fileOps.cjs');
 
 pythonMonitor.register(ctx);
