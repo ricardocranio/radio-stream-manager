@@ -39,19 +39,46 @@ export function useCapturedDownloadService() {
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const downloadOne = useCallback(async (song: CapturedQueueItem): Promise<'success' | 'exists' | 'error'> => {
-    const { deezerConfig, config, addDownloadHistory } = useRadioStore.getState();
+    const { deezerConfig, config, addDownloadHistory, songAliases } = useRadioStore.getState();
 
-    // Check library first
+    // === Apply alias correction: use "Para" (correct) name, block "De" (wrong) ===
+    let dlArtist = song.artist;
+    let dlTitle = song.title;
+    if (songAliases?.length) {
+      for (const alias of songAliases) {
+        if (song.artist.trim().toLowerCase() === alias.fromArtist.toLowerCase().trim() &&
+            song.title.trim().toLowerCase() === alias.fromTitle.toLowerCase().trim()) {
+          console.log(`[CAP-DL] 🔄 Alias: "${song.artist} - ${song.title}" → "${alias.toArtist} - ${alias.toTitle}"`);
+          dlArtist = alias.toArtist;
+          dlTitle = alias.toTitle;
+          break;
+        }
+      }
+    }
+
+    // Check library first (using corrected name)
     if (config.musicFolders?.length > 0) {
       try {
         const result = await checkSongInLibrary(
-          song.artist,
-          song.title,
+          dlArtist,
+          dlTitle,
           config.musicFolders,
           config.similarityThreshold || 0.75
         );
         if (result.exists) {
           return 'exists';
+        }
+        // Also check original name (file might exist under old name)
+        if (dlArtist !== song.artist || dlTitle !== song.title) {
+          const origResult = await checkSongInLibrary(
+            song.artist,
+            song.title,
+            config.musicFolders,
+            config.similarityThreshold || 0.75
+          );
+          if (origResult.exists) {
+            return 'exists';
+          }
         }
       } catch {
         // continue
@@ -70,8 +97,8 @@ export function useCapturedDownloadService() {
     const startTime = Date.now();
     try {
       const result = await window.electronAPI.downloadFromDeezer({
-        artist: song.artist,
-        title: song.title,
+        artist: dlArtist,
+        title: dlTitle,
         arl: deezerConfig.arl,
         outputFolder: deezerConfig.downloadFolder,
         quality: deezerConfig.quality,
@@ -80,13 +107,13 @@ export function useCapturedDownloadService() {
       const duration = Date.now() - startTime;
 
       if (result?.success) {
-        markSongAsDownloaded(song.artist, song.title, result.verifiedFile);
+        markSongAsDownloaded(dlArtist, dlTitle, result.verifiedFile);
 
         // Read ID3 genre from downloaded file and update DB
         let downloadedGenre: string | null = null;
         try {
           const { config } = useRadioStore.getState();
-          const verifiedFile = result.verifiedFile || `${song.artist} - ${song.title}.mp3`;
+          const verifiedFile = result.verifiedFile || `${dlArtist} - ${dlTitle}.mp3`;
           const id3Result = await window.electronAPI?.readId3Genre?.({
             filePath: verifiedFile,
             musicFolders: config.musicFolders,
@@ -117,24 +144,24 @@ export function useCapturedDownloadService() {
         }
 
         // === Genre-based folder routing (passes pre-read genre directly) ===
-        const isVozDoBrasil = song.title?.toLowerCase().includes('voz do brasil') || 
-                              song.artist?.toLowerCase().includes('voz do brasil');
+        const isVozDoBrasil = dlTitle?.toLowerCase().includes('voz do brasil') || 
+                              dlArtist?.toLowerCase().includes('voz do brasil');
         if (!isVozDoBrasil && deezerConfig.genreRoutingEnabled) {
-          const fileForRoute = result.verifiedFile || `${song.artist} - ${song.title}.mp3`;
+          const fileForRoute = result.verifiedFile || `${dlArtist} - ${dlTitle}.mp3`;
           await routeFileByGenre(fileForRoute, deezerConfig.downloadFolder, config.musicFolders || [], '[CAP-DL]', downloadedGenre);
         }
 
         const entry: DownloadHistoryEntry = {
           id: crypto.randomUUID(),
           songId: song.id,
-          title: song.title,
-          artist: song.artist,
+          title: dlTitle,
+          artist: dlArtist,
           timestamp: new Date(),
           status: 'success',
           duration,
         };
         addDownloadHistory(entry);
-        console.log(`[CAP-DL] ✅ ${song.artist} - ${song.title}`);
+        console.log(`[CAP-DL] ✅ ${dlArtist} - ${dlTitle}`);
         return 'success';
       }
       throw new Error(result?.error || 'Download failed');
@@ -143,15 +170,15 @@ export function useCapturedDownloadService() {
       const entry: DownloadHistoryEntry = {
         id: crypto.randomUUID(),
         songId: song.id,
-        title: song.title,
-        artist: song.artist,
+        title: dlTitle,
+        artist: dlArtist,
         timestamp: new Date(),
         status: 'error',
         errorMessage: error instanceof Error ? error.message : 'Erro desconhecido',
         duration,
       };
       addDownloadHistory(entry);
-      console.error(`[CAP-DL] ❌ ${song.artist} - ${song.title}`, error);
+      console.error(`[CAP-DL] ❌ ${dlArtist} - ${dlTitle}`, error);
       return 'error';
     }
   }, []);
