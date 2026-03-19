@@ -243,54 +243,81 @@ function register({ getMainWindow, showNotification, safeHandle }) {
 
   /**
    * Download a specific audio from Radioagência
+   * Uses _temp folder, validates, then moves as "Noticia.mp3" replacing the previous one.
    * Params: { url, cleanUrl, title, outputFolder }
    */
   handle('radioagencia-download', async (event, params) => {
     const { url, cleanUrl, title, outputFolder } = params;
+    const FINAL_FILENAME = 'Noticia.mp3';
+    const tempDir = path.join(outputFolder, '_temp');
+    const tempFilename = `radioagencia_${Date.now()}.mp3`;
 
     try {
-      if (!fs.existsSync(outputFolder)) {
-        fs.mkdirSync(outputFolder, { recursive: true });
-      }
+      if (!fs.existsSync(outputFolder)) fs.mkdirSync(outputFolder, { recursive: true });
+      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-      const safeTitle = sanitizeFilename(title);
-      const filename = `${safeTitle}.mp3`;
-      const outputPath = path.join(outputFolder, filename);
+      const tempPath = path.join(tempDir, tempFilename);
+      const finalPath = path.join(outputFolder, FINAL_FILENAME);
 
-      // Skip if already exists on disk
-      if (fs.existsSync(outputPath)) {
-        console.log(`[RADIOAGENCIA] Already exists: ${filename}`);
-        downloadedUrlsCache.add(cleanUrl);
-        saveCache();
-        return { success: true, skipped: true, filename };
-      }
-
-      console.log(`[RADIOAGENCIA] Downloading: ${filename}`);
+      console.log(`[RADIOAGENCIA] Downloading to _temp: ${title}`);
 
       const mainWindow = _getMainWindow ? _getMainWindow() : null;
-      const result = await downloadFile(url, outputPath, (progress) => {
+      const result = await downloadFile(url, tempPath, (progress) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('radioagencia-download-progress', { progress, filename });
+          mainWindow.webContents.send('radioagencia-download-progress', { progress, filename: FINAL_FILENAME });
         }
       });
 
-      if (result.success) {
-        // Validate minimum size (at least 50KB for a real audio)
-        const stats = fs.statSync(outputPath);
-        if (stats.size < 50 * 1024) {
-          console.log(`[RADIOAGENCIA] File too small (${(stats.size / 1024).toFixed(0)}KB), deleting`);
-          fs.unlinkSync(outputPath);
-          return { success: false, error: 'Arquivo muito pequeno (provavelmente página de erro)' };
-        }
-
-        downloadedUrlsCache.add(cleanUrl);
-        saveCache();
-        console.log(`[RADIOAGENCIA] ✅ Downloaded: ${filename} (${(stats.size / 1024).toFixed(0)}KB)`);
-        return { success: true, filename, fileSize: stats.size };
+      if (!result.success) {
+        try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (e) {}
+        return { success: false, error: 'Download falhou' };
       }
 
-      return { success: false, error: 'Download falhou' };
+      // Validate minimum size (at least 50KB)
+      const stats = fs.statSync(tempPath);
+      if (stats.size < 50 * 1024) {
+        console.log(`[RADIOAGENCIA] File too small (${(stats.size / 1024).toFixed(0)}KB), deleting temp`);
+        fs.unlinkSync(tempPath);
+        return { success: false, error: 'Arquivo muito pequeno (provavelmente página de erro)' };
+      }
+
+      // Delete existing Noticia.mp3 in final folder
+      if (fs.existsSync(finalPath)) {
+        try { fs.unlinkSync(finalPath); } catch (e) {}
+      }
+
+      // Move from _temp to final as "Noticia.mp3"
+      try {
+        fs.renameSync(tempPath, finalPath);
+      } catch (renameErr) {
+        fs.copyFileSync(tempPath, finalPath);
+        fs.unlinkSync(tempPath);
+      }
+
+      // Clean empty _temp folder
+      try {
+        const remaining = fs.readdirSync(tempDir);
+        if (remaining.length === 0) fs.rmdirSync(tempDir);
+      } catch (e) {}
+
+      downloadedUrlsCache.add(cleanUrl);
+      saveCache();
+      console.log(`[RADIOAGENCIA] ✅ Noticia.mp3 atualizada (${(stats.size / 1024).toFixed(0)}KB) — ${title}`);
+      
+      if (_showNotification) {
+        _showNotification('📰 Radioagência Nacional', `Notícia atualizada: ${title}`, () => {
+          const { shell } = require('electron');
+          shell.openPath(outputFolder);
+        });
+      }
+
+      return { success: true, filename: FINAL_FILENAME, fileSize: stats.size };
     } catch (error) {
+      // Clean temp on error
+      try {
+        const tempPath = path.join(tempDir, tempFilename);
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      } catch (e) {}
       console.error(`[RADIOAGENCIA] Download error:`, error.message);
       return { success: false, error: error.message };
     }
