@@ -128,7 +128,7 @@ serve(async (req) => {
     const { action } = await req.json();
 
     if (action === "classify-batch") {
-      // Fetch unclassified songs
+      // === AI CACHE: Check if we already classified these artist+title pairs ===
       const { data: songs, error } = await supabase
         .from("scraped_songs")
         .select("id, artist, title, station_name")
@@ -141,6 +141,49 @@ serve(async (req) => {
         return new Response(JSON.stringify({ classified: 0, message: "No songs to classify" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
+      }
+
+      // Pre-fill from already-classified songs with same artist+title (cache hit)
+      let cacheHits = 0;
+      const uniqueKeys = new Map<string, { artist: string; title: string }>();
+      const songKeyMap = new Map<string, string>(); // song key → genre (from cache)
+
+      for (const song of songs) {
+        const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
+        uniqueKeys.set(key, { artist: song.artist, title: song.title });
+      }
+
+      // Batch lookup: find any previously classified songs with same artist+title
+      for (const [key] of uniqueKeys) {
+        const [artist, title] = key.split("|");
+        const { data: existing } = await supabase
+          .from("scraped_songs")
+          .select("ai_genre, ai_energy")
+          .not("ai_genre", "is", null)
+          .ilike("artist", artist)
+          .ilike("title", title)
+          .limit(1);
+
+        if (existing?.length && existing[0].ai_genre) {
+          songKeyMap.set(key, existing[0].ai_genre);
+        }
+      }
+
+      // Apply cache hits
+      const uncachedSongs: typeof songs = [];
+      for (const song of songs) {
+        const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
+        const cachedGenre = songKeyMap.get(key);
+        if (cachedGenre) {
+          const energy = GENRE_TO_ENERGY[cachedGenre] || "MEDIUM";
+          const { error: updateError } = await supabase
+            .from("scraped_songs")
+            .update({ ai_genre: cachedGenre, ai_energy: energy })
+            .eq("id", song.id);
+          if (!updateError) cacheHits++;
+        } else {
+          uncachedSongs.push(song);
+        }
       }
 
       let classified = 0;
