@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Music, Radio, Calendar, Filter, RefreshCw, Download, TrendingUp, Clock, Search, Loader2, Database, BarChart3, PieChart as PieChartIcon, Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,7 +45,6 @@ interface ScrapedSong {
   ai_energy: string | null;
 }
 
-
 // Colors for charts
 const CHART_COLORS = [
   'hsl(190, 95%, 50%)',
@@ -59,10 +58,12 @@ const CHART_COLORS = [
 ];
 
 const PAGE_SIZE = 50;
+const REFRESH_INTERVAL_MS = 30_000;
+const METADATA_REFRESH_MS = 5 * 60 * 1000;
 
 export function CapturedSongsView() {
   const { toast } = useToast();
-  const { addOrUpdateRankingSong, rankingSongs, deezerConfig, config } = useRadioStore();
+  const { applyRankingBatch, rankingSongs, deezerConfig, config } = useRadioStore();
   const [songs, setSongs] = useState<ScrapedSong[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -80,11 +81,11 @@ export function CapturedSongsView() {
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState('list');
   const [currentPage, setCurrentPage] = useState(1);
+  const lastMetadataLoadRef = useRef(0);
 
-  // Load songs from Supabase
+  // Load songs from backend
   const loadSongs = useCallback(async () => {
     try {
-      // Calculate date threshold
       let dateThreshold: Date;
       switch (dateRange) {
         case '1h':
@@ -106,13 +107,9 @@ export function CapturedSongsView() {
           dateThreshold = subDays(new Date(), 1);
       }
 
-      console.log('[CAPTURED-SONGS] Loading songs with threshold:', dateThreshold.toISOString());
-      console.log('[CAPTURED-SONGS] Selected station:', selectedStation);
-
-      // Build query
       let query = supabase
         .from('scraped_songs')
-        .select('*')
+        .select('id, title, artist, station_name, scraped_at, is_now_playing, source, ai_genre, ai_energy')
         .gte('scraped_at', dateThreshold.toISOString())
         .order('scraped_at', { ascending: false })
         .limit(1000);
@@ -121,109 +118,99 @@ export function CapturedSongsView() {
         query = query.eq('station_name', selectedStation);
       }
 
-      const { data, error, status, statusText } = await query;
+      const { data, error } = await query;
+      if (error) throw error;
 
-      console.log('[CAPTURED-SONGS] Query response:', { 
-        status, 
-        statusText, 
-        dataLength: data?.length || 0, 
-        error: error?.message 
-      });
+      const loadedSongs = data || [];
+      setSongs(loadedSongs);
 
-      if (error) {
-        console.error('[CAPTURED-SONGS] Query error:', error);
-        throw error;
-      }
-
-      setSongs(data || []);
-      console.log('[CAPTURED-SONGS] Songs set:', data?.length || 0);
-
-      // Extract unique genres and energies
-      const uniqueGenres = [...new Set((data || []).map(s => s.ai_genre).filter(Boolean))] as string[];
-      const uniqueEnergies = [...new Set((data || []).map(s => s.ai_energy).filter(Boolean))] as string[];
+      const uniqueGenres = [...new Set(loadedSongs.map((s) => s.ai_genre).filter(Boolean))] as string[];
+      const uniqueEnergies = [...new Set(loadedSongs.map((s) => s.ai_energy).filter(Boolean))] as string[];
       setGenres(uniqueGenres.sort());
       setEnergies(uniqueEnergies.sort());
-      
-      // Get total count
-      const { count: totalCount, error: countError } = await supabase
-        .from('scraped_songs')
-        .select('*', { count: 'exact', head: true });
-      
-      if (countError) {
-        console.error('[CAPTURED-SONGS] Count error:', countError);
-      }
-      
-      setTotalCount(totalCount || 0);
-      console.log('[CAPTURED-SONGS] Total count:', totalCount);
 
-      // Get unique stations
-      const { data: stationsData, error: stationsError } = await supabase
-        .from('radio_stations')
-        .select('name')
-        .order('name');
-      
-      if (stationsError) {
-        console.error('[CAPTURED-SONGS] Stations error:', stationsError);
-      }
-      
-      if (stationsData) {
-        setStations(stationsData.map(s => s.name));
-        console.log('[CAPTURED-SONGS] Stations loaded:', stationsData.length);
-      }
+      const shouldRefreshMetadata =
+        stations.length === 0 || Date.now() - lastMetadataLoadRef.current > METADATA_REFRESH_MS;
 
+      if (shouldRefreshMetadata) {
+        const [{ count, error: countError }, { data: stationsData, error: stationsError }] = await Promise.all([
+          supabase.from('scraped_songs').select('*', { count: 'exact', head: true }),
+          supabase.from('radio_stations').select('name').order('name'),
+        ]);
+
+        if (!countError) {
+          setTotalCount(count || 0);
+        }
+
+        if (!stationsError && stationsData) {
+          setStations(stationsData.map((s) => s.name));
+        }
+
+        lastMetadataLoadRef.current = Date.now();
+      }
     } catch (error) {
       console.error('[CAPTURED-SONGS] Error loading songs:', error);
     }
-  }, [selectedStation, dateRange]);
+  }, [dateRange, selectedStation, stations.length]);
 
-  // Initial load
   useEffect(() => {
     setIsLoading(true);
     loadSongs().finally(() => setIsLoading(false));
   }, [loadSongs]);
 
-  // Refresh every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
+      if (document.hidden) return;
       loadSongs();
-    }, 30000);
+    }, REFRESH_INTERVAL_MS);
+
     return () => clearInterval(interval);
   }, [loadSongs]);
 
-  // Sync captured songs to ranking
   const syncToRanking = useCallback(async (silent = false) => {
     if (songs.length === 0) return;
-    
+
     setIsSyncing(true);
     try {
-      // Build style map from radio_stations table (real styles from DB)
       const { data: stationsData } = await supabase
         .from('radio_stations')
         .select('name, styles');
-      
+
       const stationStyleMap = new Map<string, string>();
       if (stationsData) {
-        for (const s of stationsData) {
-          stationStyleMap.set(s.name.toLowerCase().trim(), s.styles?.[0] || 'POP/VARIADO');
+        for (const station of stationsData) {
+          stationStyleMap.set(station.name.toLowerCase().trim(), station.styles?.[0] || 'POP/VARIADO');
         }
       }
 
-      let synced = 0;
+      const batchMap = new Map<string, { title: string; artist: string; style: string; count: number }>();
+
       for (const song of songs) {
         const style = stationStyleMap.get(song.station_name.toLowerCase().trim()) || 'POP/VARIADO';
-        addOrUpdateRankingSong(song.title, song.artist, style);
-        synced++;
+        const key = `${song.title.toLowerCase().trim()}|${song.artist.toLowerCase().trim()}`;
+        const existing = batchMap.get(key);
+
+        if (existing) {
+          existing.count += 1;
+        } else {
+          batchMap.set(key, {
+            title: song.title,
+            artist: song.artist,
+            style,
+            count: 1,
+          });
+        }
       }
 
+      const batchUpdates = Array.from(batchMap.values());
+      applyRankingBatch(batchUpdates);
       setLastAutoSync(new Date());
 
       if (!silent) {
         toast({
           title: '✓ Sincronizado com Ranking',
-          description: `${synced} músicas adicionadas/atualizadas no TOP25.`,
+          description: `${batchUpdates.length} músicas consolidadas no TOP25.`,
         });
-      } else {
-        console.log(`[AUTO-SYNC] ${synced} músicas sincronizadas com o ranking`);
       }
     } catch (error) {
       if (!silent) {
@@ -236,25 +223,23 @@ export function CapturedSongsView() {
     } finally {
       setIsSyncing(false);
     }
-  }, [songs, addOrUpdateRankingSong, toast]);
+  }, [songs, applyRankingBatch, toast]);
 
-  // Auto-sync every 30 minutes
   useEffect(() => {
     if (!autoSyncEnabled) return;
 
-    // Sync immediately when enabled
     syncToRanking(true);
 
-    // Then sync every 30 minutes
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
+      if (document.hidden) return;
       console.log('[AUTO-SYNC] Executando sincronização automática...');
-      loadSongs().then(() => syncToRanking(true));
-    }, 30 * 60 * 1000); // 30 minutes
+      await loadSongs();
+      await syncToRanking(true);
+    }, 30 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, [autoSyncEnabled, syncToRanking, loadSongs]);
 
-  // Handle manual refresh
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await loadSongs();
@@ -265,14 +250,13 @@ export function CapturedSongsView() {
     });
   };
 
-  // Toggle auto-sync
   const handleToggleAutoSync = () => {
     setAutoSyncEnabled(!autoSyncEnabled);
     toast({
       title: autoSyncEnabled ? 'Sincronização automática desativada' : 'Sincronização automática ativada',
-      description: autoSyncEnabled 
-        ? 'As músicas não serão mais sincronizadas automaticamente.' 
-        : 'Músicas serão sincronizadas com o ranking a cada 5 minutos.',
+      description: autoSyncEnabled
+        ? 'As músicas não serão mais sincronizadas automaticamente.'
+        : 'Músicas serão sincronizadas com o ranking a cada 30 minutos.',
     });
   };
 
