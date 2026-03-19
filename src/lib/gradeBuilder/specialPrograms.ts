@@ -1068,3 +1068,119 @@ export async function generateRaridades(
     logs,
   };
 }
+
+/**
+ * Combined genre + year song finder for sequence positions.
+ * Pulls a single song from the database filtered by BOTH ai_genre AND year range.
+ * Used by sequence positions with source "genreyear_POP_90s", "genreyear_ROCK_80s", etc.
+ */
+export async function findSongByGenreAndYear(
+  genres: string[],
+  yearMin: number,
+  yearMax: number,
+  timeStr: string,
+  usedInBlock: Set<string>,
+  usedArtistsInBlock: Set<string>,
+  ctx: GradeContext,
+  isFullDay: boolean = false,
+): Promise<{ filename: string; artist: string; title: string; genre: string; yearRange: string } | null> {
+  // === Strategy 1: Query DB for genre + year tagged songs ===
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const genreVariants = genres.flatMap(g => [
+      g.toUpperCase(), g, g.charAt(0).toUpperCase() + g.slice(1).toLowerCase()
+    ]);
+    const uniqueVariants = [...new Set(genreVariants)];
+
+    const { data, error } = await supabase
+      .from('scraped_songs')
+      .select('artist, title, station_name, ai_genre, year')
+      .in('ai_genre', uniqueVariants)
+      .not('year', 'is', null)
+      .gte('year', String(yearMin))
+      .lte('year', String(yearMax))
+      .order('scraped_at', { ascending: false })
+      .limit(300);
+
+    if (!error && data && data.length > 0) {
+      const seen = new Set<string>();
+      const candidates: Array<{ artist: string; title: string; station: string; genre: string }> = [];
+      for (const s of data) {
+        const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        candidates.push({ artist: s.artist, title: s.title, station: s.station_name, genre: s.ai_genre || genres[0] });
+      }
+      candidates.sort(() => Math.random() - 0.5);
+
+      for (const candidate of candidates) {
+        const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+        const normalizedArtist = candidate.artist.toLowerCase().trim();
+        if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+        if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
+
+        const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+        if (libraryResult.exists) {
+          const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+          return { filename, artist: candidate.artist, title: candidate.title, genre: candidate.genre, yearRange: `${yearMin}-${yearMax}` };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[GENRE-YEAR] Falha ao buscar ${genres.join('/')} ${yearMin}-${yearMax} no DB:`, e);
+  }
+
+  // === Strategy 2: Fallback — scan local library for genre + year ===
+  const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
+  if (isElectron && (window as any).electronAPI?.scanLibraryMetadata) {
+    try {
+      console.log(`[GENRE-YEAR] 📂 DB sem resultados para ${genres.join('/')} ${yearMin}-${yearMax}, buscando localmente...`);
+      const { useRadioStore } = await import('@/store/radioStore');
+      const { config } = useRadioStore.getState();
+      const allFolders = config.musicFolders?.filter(Boolean) || [];
+      if (allFolders.length > 0) {
+        const scanResult = await (window as any).electronAPI.scanLibraryMetadata({ musicFolders: allFolders });
+        if (scanResult?.success && scanResult.songs?.length) {
+          const { normalizeId3Genre } = await import('@/lib/id3GenreUtils');
+          const genresNorm = genres.map(g => g.toUpperCase());
+          
+          const filtered = scanResult.songs
+            .filter((s: any) => {
+              if (!s.year || !s.genre) return false;
+              const yr = parseInt(s.year, 10);
+              if (isNaN(yr) || yr < yearMin || yr > yearMax) return false;
+              const norm = normalizeId3Genre(s.genre)?.toUpperCase();
+              return norm && genresNorm.some(g => norm.includes(g));
+            })
+            .sort(() => Math.random() - 0.5);
+
+          for (const song of filtered) {
+            const key = `${(song.title || '').toLowerCase()}-${(song.artist || '').toLowerCase()}`;
+            const normalizedArtist = (song.artist || '').toLowerCase().trim();
+            if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+            if (ctx.isRecentlyUsed(song.title || '', song.artist || '', timeStr, isFullDay)) continue;
+            
+            return {
+              filename: song.filename,
+              artist: song.artist || 'Desconhecido',
+              title: song.title || song.filename,
+              genre: genres[0],
+              yearRange: `${yearMin}-${yearMax}`,
+            };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`[GENRE-YEAR] Scan local falhou:`, e);
+    }
+  }
+
+  // === Strategy 3: Try genre-only (ignore year) as last resort ===
+  console.log(`[GENRE-YEAR] Sem resultados para ${genres.join('/')} ${yearMin}-${yearMax}, tentando só gênero...`);
+  const genreResult = await findSongByGenre(genres, timeStr, usedInBlock, usedArtistsInBlock, ctx, isFullDay);
+  if (genreResult) {
+    return { ...genreResult, yearRange: `${yearMin}-${yearMax} (fallback)` };
+  }
+
+  return null;
+}

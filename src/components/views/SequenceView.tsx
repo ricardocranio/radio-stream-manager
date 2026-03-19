@@ -108,12 +108,35 @@ export function SequenceView() {
     { value: 'year_2020s', label: '📅 Anos 2020 (2020+)', isFixo: false },
   ];
 
+  // Combined genre + year options
+  const genreYearOptions = [
+    { value: 'genreyear_POP_80s', label: '🎤📅 Pop Anos 80', isFixo: false },
+    { value: 'genreyear_POP_90s', label: '🎤📅 Pop Anos 90', isFixo: false },
+    { value: 'genreyear_POP_2000s', label: '🎤📅 Pop Anos 2000', isFixo: false },
+    { value: 'genreyear_ROCK,METAL_80s', label: '🤘📅 Rock Anos 80', isFixo: false },
+    { value: 'genreyear_ROCK,METAL_90s', label: '🤘📅 Rock Anos 90', isFixo: false },
+    { value: 'genreyear_ROCK,METAL_2000s', label: '🤘📅 Rock Anos 2000', isFixo: false },
+    { value: 'genreyear_SERTANEJO_90s', label: '🎸📅 Sertanejo Anos 90', isFixo: false },
+    { value: 'genreyear_SERTANEJO_2000s', label: '🎸📅 Sertanejo Anos 2000', isFixo: false },
+    { value: 'genreyear_SERTANEJO_2010s', label: '🎸📅 Sertanejo Anos 2010', isFixo: false },
+    { value: 'genreyear_MPB_80s', label: '🎶📅 MPB Anos 80', isFixo: false },
+    { value: 'genreyear_MPB_90s', label: '🎶📅 MPB Anos 90', isFixo: false },
+    { value: 'genreyear_PAGODE_90s', label: '🥁📅 Pagode Anos 90', isFixo: false },
+    { value: 'genreyear_PAGODE_2000s', label: '🥁📅 Pagode Anos 2000', isFixo: false },
+    { value: 'genreyear_ROMANTICO_80s', label: '💕📅 Romântico Anos 80', isFixo: false },
+    { value: 'genreyear_ROMANTICO_90s', label: '💕📅 Romântico Anos 90', isFixo: false },
+    { value: 'genreyear_FORRO_2000s', label: '🪗📅 Forró Anos 2000', isFixo: false },
+    { value: 'genreyear_FUNK_2010s', label: '🎵📅 Funk Anos 2010', isFixo: false },
+    { value: 'genreyear_FUNK_2020s', label: '🎵📅 Funk Anos 2020', isFixo: false },
+  ];
+
   const radioOptions = [
     ...stationOptions,
     { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)', isFixo: false },
     { value: 'top50', label: '🏆 TOP25 (Curadoria)', isFixo: false },
     ...genreOptions,
     ...yearOptions,
+    ...genreYearOptions,
     ...fixedContentOptions,
   ];
 
@@ -356,6 +379,9 @@ export function SequenceView() {
     if (source.startsWith('fixo_')) {
       return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
     }
+    if (source.startsWith('genreyear_')) {
+      return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+    }
     if (source.startsWith('genre_')) {
       return 'bg-violet-500/20 text-violet-400 border-violet-500/30';
     }
@@ -402,6 +428,17 @@ export function SequenceView() {
       const content = fixedContent.find(c => c.id === contentId);
       return content?.name || 'FIXO';
     }
+    if (source.startsWith('genreyear_')) {
+      // Find matching option label
+      const opt = genreYearOptions.find(o => o.value === source);
+      if (opt) return opt.label.replace(/^[^\w]+/, '').trim();
+      // Fallback: parse it
+      const parts = source.replace('genreyear_', '');
+      const lastUnderscore = parts.lastIndexOf('_');
+      const genre = parts.substring(0, lastUnderscore);
+      const year = parts.substring(lastUnderscore + 1);
+      return `${genre} ${year}`;
+    }
     if (source.startsWith('genre_')) {
       const genreLabel: Record<string, string> = {
         'genre_SERTANEJO': 'Sertanejo',
@@ -437,6 +474,7 @@ export function SequenceView() {
 
   const getSourceBadgeLabel = (source: string): string => {
     if (source.startsWith('fixo_')) return '📌';
+    if (source.startsWith('genreyear_')) return '🎵📅';
     if (source.startsWith('genre_')) return '🎵';
     if (source.startsWith('year_')) return '📅';
     if (source === 'random_pop') return 'ALEAT';
