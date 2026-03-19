@@ -145,7 +145,7 @@ export function Sidebar({ activeTab, onTabChange, onTabHover, collapsed = false,
               <p className="text-[10px] tracking-[0.2em] font-semibold bg-gradient-to-r from-muted-foreground via-primary to-muted-foreground bg-clip-text text-transparent animate-pulse">AUDIOSOLUTIONS</p>
               <div className="flex items-center gap-1.5 mt-1">
                 <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" style={{ boxShadow: '0 0 4px hsl(155 85% 42% / 0.6)' }} />
-                <span className="text-[9px] font-mono text-muted-foreground/70">v9.0.0 • <span className="text-success/80">Ativo</span></span>
+                <span className="text-[9px] font-mono text-muted-foreground/70">v10.0.0 • <span className="text-success/80">Ativo</span></span>
               </div>
             </div>
           )}
