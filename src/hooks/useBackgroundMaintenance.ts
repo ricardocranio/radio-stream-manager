@@ -151,50 +151,60 @@ export function useBackgroundMaintenance() {
       if (result.moved > 0) {
         console.log(`[MAINTENANCE] 📂 _temp ID3: ${result.moved} arquivo(s) processado(s) e movido(s)`);
 
-        // Genre-route newly moved files (Rock/Metal → subfolders)
         const movedFiles = (result as any).movedFiles as Array<{ filename: string; folder: string; genre: string | null; year: string | null; artist: string; title: string }> | undefined;
-        if (deezerConfig.genreRoutingEnabled && movedFiles?.length) {
-          const routes = deezerConfig.genreRoutes || [];
-          let routedCount = 0;
-
+        
+        if (movedFiles?.length) {
+          // === ALWAYS enrich DB with genre/year from ID3 tags ===
           for (const file of movedFiles) {
-            if (!file.genre) continue;
-            const normalized = normalizeId3Genre(file.genre);
-            const matchedRoute = routes.find(r => r.genre.toUpperCase() === normalized.toUpperCase());
-            if (!matchedRoute) continue;
-
-            // Already in correct folder?
-            if (file.folder.replace(/[\\/]+$/, '').endsWith(matchedRoute.folderName)) continue;
-
             try {
-              const moveResult = await (window.electronAPI as any).moveFileToGenreFolder({
-                sourceFolder: file.folder,
-                fileName: file.filename,
-                targetSubfolder: matchedRoute.folderName,
-              });
-              if (moveResult?.success) {
-                routedCount++;
-                console.log(`[MAINTENANCE] 📂 _temp route: ${file.filename} → ${matchedRoute.folderName}/`);
+              const normalized = file.genre ? normalizeId3Genre(file.genre) : null;
+              const updates: Record<string, string> = {};
+              if (normalized && normalized !== 'OUTRO') {
+                updates.ai_genre = normalized;
+                updates.ai_energy = genreToEnergy(normalized);
               }
-            } catch { /* non-critical */ }
-
-            // Also enrich DB
-            try {
-              const updates: Record<string, string> = {
-                ai_genre: normalized,
-                ai_energy: genreToEnergy(normalized),
-              };
               if (file.year) updates.year = file.year;
-              await supabase
-                .from('scraped_songs')
-                .update(updates)
-                .eq('artist', file.artist)
-                .eq('title', file.title);
+              
+              if (Object.keys(updates).length > 0) {
+                await supabase
+                  .from('scraped_songs')
+                  .update(updates)
+                  .ilike('artist', file.artist)
+                  .ilike('title', file.title);
+                console.log(`[MAINTENANCE] 🏷️ _temp DB: ${file.artist} - ${file.title} → ${normalized || '?'}/${file.year || '?'}`);
+              }
             } catch { /* non-critical */ }
           }
 
-          if (routedCount > 0) {
-            console.log(`[MAINTENANCE] 📂 _temp: ${routedCount} arquivo(s) roteado(s) por gênero`);
+          // === Genre routing (optional, only if enabled) ===
+          if (deezerConfig.genreRoutingEnabled) {
+            const routes = deezerConfig.genreRoutes || [];
+            let routedCount = 0;
+
+            for (const file of movedFiles) {
+              if (!file.genre) continue;
+              const normalized = normalizeId3Genre(file.genre);
+              const matchedRoute = routes.find(r => r.genre.toUpperCase() === normalized.toUpperCase());
+              if (!matchedRoute) continue;
+
+              if (file.folder.replace(/[\\/]+$/, '').endsWith(matchedRoute.folderName)) continue;
+
+              try {
+                const moveResult = await (window.electronAPI as any).moveFileToGenreFolder({
+                  sourceFolder: file.folder,
+                  fileName: file.filename,
+                  targetSubfolder: matchedRoute.folderName,
+                });
+                if (moveResult?.success) {
+                  routedCount++;
+                  console.log(`[MAINTENANCE] 📂 _temp route: ${file.filename} → ${matchedRoute.folderName}/`);
+                }
+              } catch { /* non-critical */ }
+            }
+
+            if (routedCount > 0) {
+              console.log(`[MAINTENANCE] 📂 _temp: ${routedCount} arquivo(s) roteado(s) por gênero`);
+            }
           }
         }
       }

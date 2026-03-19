@@ -103,6 +103,8 @@ export function SequenceView() {
     { value: 'genre_ROCK,METAL', label: '🤘 Rock & Metal', isFixo: false },
     { value: 'genre_ROMANTICO', label: '💕 Romântico', isFixo: false },
     { value: 'genre_FORRO', label: '🪗 Forró', isFixo: false },
+    { value: 'genre_DANCE,ELETRONICA', label: '🎧 Dance / Eletrônica', isFixo: false },
+    { value: 'genre_ELETRONICA', label: '🔊 Eletrônica', isFixo: false },
   ];
 
   // Year/decade-based options
@@ -498,6 +500,8 @@ export function SequenceView() {
         'genre_ROCK,METAL': 'Rock & Metal',
         'genre_ROMANTICO': 'Romântico',
         'genre_FORRO': 'Forró',
+        'genre_DANCE,ELETRONICA': 'Dance/Eletrônica',
+        'genre_ELETRONICA': 'Eletrônica',
       };
       return genreLabel[source] || source.replace('genre_', '');
     }
