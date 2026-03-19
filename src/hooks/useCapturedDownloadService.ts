@@ -97,8 +97,8 @@ export function useCapturedDownloadService() {
     const startTime = Date.now();
     try {
       const result = await window.electronAPI.downloadFromDeezer({
-        artist: song.artist,
-        title: song.title,
+        artist: dlArtist,
+        title: dlTitle,
         arl: deezerConfig.arl,
         outputFolder: deezerConfig.downloadFolder,
         quality: deezerConfig.quality,
