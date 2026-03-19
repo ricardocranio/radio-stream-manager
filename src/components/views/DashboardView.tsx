@@ -418,6 +418,23 @@ export function DashboardView() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        {/* Catalogar — compact card */}
+        <div
+          onClick={isCatalogingTop ? undefined : handleQuickCatalog}
+          className={`glass-card p-3 flex items-center gap-3 cursor-pointer hover:border-amber-500/40 transition-colors border border-transparent ${isCatalogingTop ? 'opacity-70 pointer-events-none' : ''}`}
+        >
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'hsl(42 100% 50% / 0.1)' }}>
+            {isCatalogingTop ? (
+              <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'hsl(42 100% 50%)' }} />
+            ) : (
+              <Database className="w-4 h-4" style={{ color: 'hsl(42 100% 50%)' }} />
+            )}
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Catalogar</p>
+            <p className="text-xs font-bold" style={{ color: 'hsl(42 100% 50%)' }}>Acervo</p>
+          </div>
+        </div>
       </div>
 
       {/* Voz do Brasil Alert */}
