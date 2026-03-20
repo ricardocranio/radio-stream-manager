@@ -375,7 +375,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
           { label: 'Faltando', value: missingCount, icon: AlertTriangle, glow: '0 80% 55%', nav: 'missing' },
           { label: 'Banco', value: libraryStats.isLoading ? null : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%', nav: 'folders' },
           { label: 'Ranking', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%', nav: 'ranking' },
-          { label: 'Downloads', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%', nav: 'missing' },
+          { label: 'Downloads', value: dailyDownloaded, icon: Download, glow: '210 100% 60%', nav: 'missing' },
           { label: 'Substit.', value: gradeQuality.substituted, icon: ArrowRightLeft, glow: '45 100% 55%', nav: 'logs' },
           { label: 'Coringas', value: gradeQuality.coringas, icon: AlertTriangle, glow: gradeQuality.coringas > 0 ? '0 80% 55%' : '160 70% 45%', nav: 'logs' },
         ].map((stat, i) => {
