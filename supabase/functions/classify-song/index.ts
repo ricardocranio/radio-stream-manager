@@ -161,14 +161,14 @@ serve(async (req) => {
         const [artist, title] = key.split("|");
         const { data: existing } = await supabase
           .from("scraped_songs")
-          .select("ai_genre, ai_energy")
+          .select("ai_genre, ai_energy, year")
           .not("ai_genre", "is", null)
           .ilike("artist", artist)
           .ilike("title", title)
           .limit(1);
 
         if (existing?.length && existing[0].ai_genre) {
-          songKeyMap.set(key, existing[0].ai_genre);
+          songKeyMap.set(key, { genre: existing[0].ai_genre, year: existing[0].year });
         }
       }
 
