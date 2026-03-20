@@ -106,52 +106,92 @@ export function Id3ActivityCard() {
         });
       }
 
-      // Fetch ALL songs missing genre or year from DB
+      // === Phase 1: Update existing songs missing genre or year ===
       const { data: dbSongs, error } = await supabase
         .from('scraped_songs')
         .select('id, artist, title, ai_genre, year')
         .or('ai_genre.is.null,year.is.null')
         .limit(5000);
 
-      if (error || !dbSongs?.length) {
-        const msg = error ? 'Erro ao buscar músicas no banco' : 'Todas as músicas já estão catalogadas!';
-        toast({ title: error ? '❌' : '✅', description: msg });
-        setCatalogResult({ scanned: result.songs.length, enriched: 0, genres: 0, years: 0 });
-        setIsCataloging(false);
-        return;
-      }
-
       let enriched = 0;
       let genresUpdated = 0;
       let yearsUpdated = 0;
+      let inserted = 0;
       const BATCH_SIZE = 50;
 
-      for (let i = 0; i < dbSongs.length; i += BATCH_SIZE) {
-        const batch = dbSongs.slice(i, i + BATCH_SIZE);
+      if (dbSongs?.length) {
+        for (let i = 0; i < dbSongs.length; i += BATCH_SIZE) {
+          const batch = dbSongs.slice(i, i + BATCH_SIZE);
 
-        for (const dbSong of batch) {
-          const key = `${dbSong.artist.toLowerCase().trim()}|${dbSong.title.toLowerCase().trim()}`;
-          const libData = libraryMap.get(key);
-          if (!libData) continue;
+          for (const dbSong of batch) {
+            const key = `${dbSong.artist.toLowerCase().trim()}|${dbSong.title.toLowerCase().trim()}`;
+            const libData = libraryMap.get(key);
+            if (!libData) continue;
 
-          const updates: Record<string, string> = {};
-          if (!dbSong.ai_genre && libData.genre && libData.genre !== 'OUTRO') {
-            updates.ai_genre = libData.genre;
-            updates.ai_energy = genreToEnergy(libData.genre);
-            genresUpdated++;
+            const updates: Record<string, string> = {};
+            if (!dbSong.ai_genre && libData.genre && libData.genre !== 'OUTRO') {
+              updates.ai_genre = libData.genre;
+              updates.ai_energy = genreToEnergy(libData.genre);
+              genresUpdated++;
+            }
+            if (!dbSong.year && libData.year) {
+              updates.year = libData.year;
+              yearsUpdated++;
+            }
+
+            if (Object.keys(updates).length > 0) {
+              await supabase.from('scraped_songs').update(updates).eq('id', dbSong.id);
+              enriched++;
+            }
           }
-          if (!dbSong.year && libData.year) {
-            updates.year = libData.year;
-            yearsUpdated++;
-          }
 
-          if (Object.keys(updates).length > 0) {
-            await supabase.from('scraped_songs').update(updates).eq('id', dbSong.id);
-            enriched++;
+          if (i + BATCH_SIZE < dbSongs.length) {
+            await new Promise(r => setTimeout(r, 50));
           }
         }
+      }
 
-        if (i + BATCH_SIZE < dbSongs.length) {
+      // === Phase 2: Insert local library songs NOT yet in scraped_songs ===
+      // Build set of existing artist|title in DB
+      const { data: allDbSongs } = await supabase
+        .from('scraped_songs')
+        .select('artist, title')
+        .limit(10000);
+
+      const existingKeys = new Set<string>();
+      if (allDbSongs) {
+        for (const s of allDbSongs) {
+          existingKeys.add(`${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`);
+        }
+      }
+
+      // Find library songs not in DB that have useful metadata
+      const toInsert: Array<{ artist: string; title: string; ai_genre: string; ai_energy: string; year: string | null; station_name: string; source: string }> = [];
+      for (const [key, libData] of libraryMap) {
+        if (existingKeys.has(key)) continue;
+        const [artist, title] = key.split('|');
+        if (!artist || !title || artist === 'desconhecido') continue;
+        
+        const genre = libData.genre || null;
+        if (!genre && !libData.year) continue; // skip if no useful data
+
+        toInsert.push({
+          artist,
+          title,
+          ai_genre: genre || 'OUTRO',
+          ai_energy: genre ? genreToEnergy(genre) : 'MEDIUM',
+          year: libData.year || null,
+          station_name: 'ACERVO_LOCAL',
+          source: 'library_catalog',
+        });
+      }
+
+      // Batch insert
+      for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+        const batch = toInsert.slice(i, i + BATCH_SIZE);
+        const { error: insertError } = await supabase.from('scraped_songs').insert(batch);
+        if (!insertError) inserted += batch.length;
+        if (i + BATCH_SIZE < toInsert.length) {
           await new Promise(r => setTimeout(r, 50));
         }
       }
