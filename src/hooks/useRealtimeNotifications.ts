@@ -134,12 +134,16 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
           );
         }
 
-        // Queue ranking update (batched, not immediate)
-        const { stations } = useRadioStore.getState();
-        const matchedStation = stations.find(
-          s => s.name.toLowerCase().trim() === newSong.station_name.toLowerCase().trim()
-        );
-        const style = matchedStation?.styles?.[0] || 'POP/VARIADO';
+        // Queue ranking update — prefer ai_genre from the song itself over station style
+        const songGenre = newSong.ai_genre;
+        let style = songGenre || '';
+        if (!style) {
+          const { stations } = useRadioStore.getState();
+          const matchedStation = stations.find(
+            s => s.name.toLowerCase().trim() === newSong.station_name.toLowerCase().trim()
+          );
+          style = matchedStation?.styles?.[0] || 'POP/VARIADO';
+        }
 
         // Use batcher instead of direct update
         rankingBatcher.queueUpdate(newSong.title, newSong.artist, style);
