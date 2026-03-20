@@ -112,6 +112,7 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
           artist: string;
           station_name: string;
           is_now_playing: boolean;
+          ai_genre?: string | null;
         };
 
         // Avoid duplicate notifications
