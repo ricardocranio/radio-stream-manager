@@ -28,7 +28,7 @@ export function Id3ActivityCard() {
 
   // Catalog scan state
   const [isCataloging, setIsCataloging] = useState(false);
-  const [catalogResult, setCatalogResult] = useState<{ scanned: number; enriched: number; genres: number; years: number } | null>(null);
+  const [catalogResult, setCatalogResult] = useState<{ scanned: number; enriched: number; genres: number; years: number; inserted: number } | null>(null);
 
   const id3ProcessedToday = dailyStats.downloaded + dailyStats.skipped;
 
