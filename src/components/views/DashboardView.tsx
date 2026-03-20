@@ -803,7 +803,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
               <div className="w-2 h-2 rounded-full bg-success animate-pulse shrink-0" />
               Captura em Tempo Real
               <Badge variant="secondary" className="text-[10px]">
-                {stations.filter(s => s.enabled).length} emissoras
+                {enabledStations.length} emissoras
               </Badge>
               <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${!realtimeCollapsed ? 'rotate-180' : ''}`} />
             </CardTitle>
