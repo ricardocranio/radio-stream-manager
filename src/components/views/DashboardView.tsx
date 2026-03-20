@@ -382,6 +382,70 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
               <p className="text-xs font-bold text-destructive leading-tight">Sistema</p>
             </div>
           </AlertDialogTrigger>
+          <AlertDialogContent className="max-w-md">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                <Shield className="w-5 h-5" />
+                Reset Completo do Sistema
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-3">
+                <p>Esta ação irá limpar <strong>TODOS</strong> os dados do sistema:</p>
+                <div className="space-y-2 p-3 rounded-lg bg-muted/50 text-sm">
+                  <p>✓ Músicas capturadas (local)</p>
+                  <p>✓ Ranking TOP25</p>
+                  <p>✓ Músicas faltando</p>
+                  <p>✓ Histórico de downloads</p>
+                  <p>✓ Histórico de grades</p>
+                  <p>✓ Estatísticas de similaridade</p>
+                </div>
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="clearSupabase" checked={resetOptions.clearSupabase} onCheckedChange={(checked) => setResetOptions(prev => ({ ...prev, clearSupabase: checked === true }))} />
+                    <Label htmlFor="clearSupabase" className="text-sm font-medium cursor-pointer">Limpar banco de dados remoto</Label>
+                  </div>
+                  {resetOptions.clearSupabase && (
+                    <>
+                      <div className="flex items-center space-x-2 ml-6">
+                        <Checkbox id="clearSchedules" checked={resetOptions.clearSchedules} onCheckedChange={(checked) => setResetOptions(prev => ({ ...prev, clearSchedules: checked === true }))} />
+                        <Label htmlFor="clearSchedules" className="text-sm cursor-pointer">Limpar monitoramentos especiais</Label>
+                      </div>
+                      <div className="flex items-center space-x-2 ml-6">
+                        <Checkbox id="resetStations" checked={resetOptions.resetStations} onCheckedChange={(checked) => setResetOptions(prev => ({ ...prev, resetStations: checked === true }))} />
+                        <Label htmlFor="resetStations" className="text-sm cursor-pointer">Desativar todas as emissoras</Label>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <p className="text-destructive text-xs font-medium pt-2">⚠️ Esta ação é irreversível!</p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleFullSystemReset} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                {isResetting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                Confirmar Reset
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        {/* Catalogar — compact card */}
+        <div
+          onClick={isCatalogingTop ? undefined : handleQuickCatalog}
+          className={`glass-card p-2 flex flex-col items-center justify-center text-center cursor-pointer hover:border-amber-500/40 transition-colors border border-transparent min-w-0 ${isCatalogingTop ? 'opacity-70 pointer-events-none' : ''}`}
+        >
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mb-1" style={{ background: 'hsl(42 100% 50% / 0.1)' }}>
+            {isCatalogingTop ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: 'hsl(42 100% 50%)' }} />
+            ) : (
+              <Database className="w-3.5 h-3.5" style={{ color: 'hsl(42 100% 50%)' }} />
+            )}
+          </div>
+          <p className="text-[9px] text-muted-foreground uppercase tracking-wide leading-tight">Catálogo</p>
+          <p className="text-base font-bold font-mono tabular-nums leading-tight" style={{ color: 'hsl(42 100% 50%)' }}>
+            {isCatalogingTop ? '...' : catalogCount !== null ? catalogCount : '—'}
+          </p>
+        </div>
+      </div>
 
       {/* Voz do Brasil Alert */}
       {useAutoDownloadStore.getState().vozBrasilFailed && (
