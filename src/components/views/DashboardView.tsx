@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, memo, useRef } from 'react';
   import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Shield, Download, XCircle, ChevronDown, Eye, Tags, ArrowRightLeft } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
@@ -38,13 +38,31 @@ interface DashboardViewProps {
 }
 
 export function DashboardView({ onNavigate }: DashboardViewProps) {
-  const { 
-    stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs,
-    clearCapturedSongs, clearMissingSongs, clearDownloadHistory, clearRanking,
-    setBatchDownloadProgress
-  } = useRadioStore();
-  const { resetQueue, vozBrasilDownloading, vozBrasilProgress } = useAutoDownloadStore();
-  const capturedDownloads = useCapturedDownloadStore();
+  // Use selectors to avoid re-rendering on unrelated store changes
+  const stations = useRadioStore((s) => s.stations);
+  const isRunning = useRadioStore((s) => s.isRunning);
+  const config = useRadioStore((s) => s.config);
+  const gradeHistory = useRadioStore((s) => s.gradeHistory);
+  const clearGradeHistory = useRadioStore((s) => s.clearGradeHistory);
+  const rankingSongs = useRadioStore((s) => s.rankingSongs);
+  const missingSongs = useRadioStore((s) => s.missingSongs);
+  const clearCapturedSongs = useRadioStore((s) => s.clearCapturedSongs);
+  const clearMissingSongs = useRadioStore((s) => s.clearMissingSongs);
+  const clearDownloadHistory = useRadioStore((s) => s.clearDownloadHistory);
+  const clearRanking = useRadioStore((s) => s.clearRanking);
+  const setBatchDownloadProgress = useRadioStore((s) => s.setBatchDownloadProgress);
+
+  const vozBrasilDownloading = useAutoDownloadStore((s) => s.vozBrasilDownloading);
+  const vozBrasilProgress = useAutoDownloadStore((s) => s.vozBrasilProgress);
+  const resetQueue = useAutoDownloadStore((s) => s.resetQueue);
+  
+  // Only subscribe to the fields we display
+  const capturedIsProcessing = useCapturedDownloadStore((s) => s.isProcessing);
+  const capturedProcessedCount = useCapturedDownloadStore((s) => s.processedCount);
+  const capturedQueueLength = useCapturedDownloadStore((s) => s.queueLength);
+  const capturedExistsCount = useCapturedDownloadStore((s) => s.existsCount);
+  const capturedErrorCount = useCapturedDownloadStore((s) => s.errorCount);
+
   const resetSimilarityStats = useSimilarityLogStore((state) => state.resetStats);
   const blockLogs = useGradeLogStore((state) => state.blockLogs);
   const { toast } = useToast();
@@ -63,7 +81,18 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
     const used = recentLogs.filter(l => l.type === 'used').length;
     return { substituted, coringas, used, total: used + substituted + coringas };
   }, [blockLogs]);
+
+  // Memoize expensive computations
+  const missingCount = useMemo(() => missingSongs.filter(s => s.status === 'missing').length, [missingSongs]);
+  const dailyDownloaded = useAutoDownloadStore((s) => s.dailyStats.downloaded);
+  const vozBrasilFailed = useAutoDownloadStore((s) => s.vozBrasilFailed);
+  const vozBrasilLastError = useAutoDownloadStore((s) => s.vozBrasilLastError);
+  const setVozBrasilFailed = useAutoDownloadStore((s) => s.setVozBrasilFailed);
+  const enabledStations = useMemo(() => stations.filter(s => s.enabled), [stations]);
   
+  // Stable random heights for audio visualizer (avoid Math.random() on every render)
+  const audioBarHeights = useRef(Array.from({ length: 16 }, () => Math.random() * 100));
+
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
   const { stats: realtimeStats, refresh: refreshStats } = useRealtimeStats();
   const { stats: libraryStats, refreshStats: refreshLibraryStats } = useMusicLibraryStats();
@@ -343,10 +372,10 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       {/* === METRICS — Compact Strip === */}
       <div className="grid grid-cols-4 lg:grid-cols-8 gap-2">
         {[
-          { label: 'Faltando', value: missingSongs.filter(s => s.status === 'missing').length, icon: AlertTriangle, glow: '0 80% 55%', nav: 'missing' },
+          { label: 'Faltando', value: missingCount, icon: AlertTriangle, glow: '0 80% 55%', nav: 'missing' },
           { label: 'Banco', value: libraryStats.isLoading ? null : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%', nav: 'folders' },
           { label: 'Ranking', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%', nav: 'ranking' },
-          { label: 'Downloads', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%', nav: 'missing' },
+          { label: 'Downloads', value: dailyDownloaded, icon: Download, glow: '210 100% 60%', nav: 'missing' },
           { label: 'Substit.', value: gradeQuality.substituted, icon: ArrowRightLeft, glow: '45 100% 55%', nav: 'logs' },
           { label: 'Coringas', value: gradeQuality.coringas, icon: AlertTriangle, glow: gradeQuality.coringas > 0 ? '0 80% 55%' : '160 70% 45%', nav: 'logs' },
         ].map((stat, i) => {
@@ -448,7 +477,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       </div>
 
       {/* Voz do Brasil Alert */}
-      {useAutoDownloadStore.getState().vozBrasilFailed && (
+      {vozBrasilFailed && (
         <Card className="glass-card border-destructive/30 bg-destructive/5">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -456,13 +485,13 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
               <span className="text-sm font-bold text-destructive">⚠️ Voz do Brasil — Falha!</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              {useAutoDownloadStore.getState().vozBrasilLastError || 'Download falhou. Verifique a conexão e tente manualmente.'}
+              {vozBrasilLastError || 'Download falhou. Verifique a conexão e tente manualmente.'}
             </p>
             <Button
               size="sm"
               variant="outline"
               className="mt-2 border-destructive/30 text-destructive hover:bg-destructive/10"
-              onClick={() => useAutoDownloadStore.getState().setVozBrasilFailed(false)}
+              onClick={() => setVozBrasilFailed(false)}
             >
               Dispensar
             </Button>
@@ -471,7 +500,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       )}
 
       {/* === ACTIVE PROGRESS BARS === */}
-      {(vozBrasilDownloading || capturedDownloads.isProcessing) && (
+      {(vozBrasilDownloading || capturedIsProcessing) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Voz do Brasil Download Progress */}
           {vozBrasilDownloading && (
@@ -496,7 +525,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
           )}
 
           {/* Captured Downloads Progress */}
-          {capturedDownloads.isProcessing && (
+          {capturedIsProcessing && (
             <Card className="glass-card border-purple-500/20 bg-gradient-to-r from-purple-500/5 to-transparent">
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-center justify-between">
@@ -505,19 +534,19 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
                     <span className="text-sm font-medium text-foreground">Downloads Capturadas</span>
                   </div>
                   <Badge variant="outline" className="text-xs border-purple-500/30 text-purple-400">
-                    {capturedDownloads.processedCount}/{capturedDownloads.queueLength}
+                    {capturedProcessedCount}/{capturedQueueLength}
                   </Badge>
                 </div>
                 <Progress 
-                  value={capturedDownloads.queueLength > 0 
-                    ? (capturedDownloads.processedCount / capturedDownloads.queueLength) * 100 
+                  value={capturedQueueLength > 0 
+                    ? (capturedProcessedCount / capturedQueueLength) * 100 
                     : 0} 
                   className="h-2" 
                 />
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="text-emerald-400">✓ {capturedDownloads.processedCount}</span>
-                  {capturedDownloads.existsCount > 0 && <span className="text-amber-400">⊘ {capturedDownloads.existsCount} já existe</span>}
-                  {capturedDownloads.errorCount > 0 && <span className="text-destructive">✗ {capturedDownloads.errorCount}</span>}
+                  <span className="text-emerald-400">✓ {capturedProcessedCount}</span>
+                  {capturedExistsCount > 0 && <span className="text-amber-400">⊘ {capturedExistsCount} já existe</span>}
+                  {capturedErrorCount > 0 && <span className="text-destructive">✗ {capturedErrorCount}</span>}
                 </div>
               </CardContent>
             </Card>
@@ -774,7 +803,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
               <div className="w-2 h-2 rounded-full bg-success animate-pulse shrink-0" />
               Captura em Tempo Real
               <Badge variant="secondary" className="text-[10px]">
-                {stations.filter(s => s.enabled).length} emissoras
+                {enabledStations.length} emissoras
               </Badge>
               <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${!realtimeCollapsed ? 'rotate-180' : ''}`} />
             </CardTitle>
@@ -840,9 +869,9 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
           <div>
             <CardContent className="pt-0">
         
-        {stations.filter(s => s.enabled).length > 0 ? (
+        {enabledStations.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-            {stations.filter(s => s.enabled).map((station, stationIndex) => {
+            {enabledStations.map((station, stationIndex) => {
               const colors = colorPalette[stationIndex % colorPalette.length];
               const songs = realtimeStats.recentSongsByStation[station.name] || [];
               const count24h = realtimeStats.stationCounts[station.name] || 0;
@@ -980,7 +1009,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
                   key={i}
                   className="w-1.5 md:w-2 bg-primary rounded-full animate-wave"
                   style={{
-                    height: `${Math.random() * 100}%`,
+                    height: `${audioBarHeights.current[i]}%`,
                     animationDelay: `${i * 0.1}s`,
                     opacity: isRunning ? 1 : 0.3,
                   }}
