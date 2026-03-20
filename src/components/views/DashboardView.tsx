@@ -341,49 +341,45 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
   return (
     <div className="p-4 md:p-6 space-y-5 animate-fade-in">
       {/* === METRICS — Compact Strip === */}
-      <div className="grid grid-cols-4 lg:grid-cols-8 gap-3">
+      <div className="grid grid-cols-4 lg:grid-cols-8 gap-2">
         {[
           { label: 'Faltando', value: missingSongs.filter(s => s.status === 'missing').length, icon: AlertTriangle, glow: '0 80% 55%', nav: 'missing' },
-          { label: 'Banco Musical', value: libraryStats.isLoading ? null : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%', nav: 'folders' },
-          { label: 'Ranking TOP25', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%', nav: 'ranking' },
-          { label: 'Downloads Hoje', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%', nav: 'missing' },
-          { label: 'Substituições', value: gradeQuality.substituted, icon: ArrowRightLeft, glow: '45 100% 55%', nav: 'logs' },
+          { label: 'Banco', value: libraryStats.isLoading ? null : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%', nav: 'folders' },
+          { label: 'Ranking', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%', nav: 'ranking' },
+          { label: 'Downloads', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%', nav: 'missing' },
+          { label: 'Substit.', value: gradeQuality.substituted, icon: ArrowRightLeft, glow: '45 100% 55%', nav: 'logs' },
           { label: 'Coringas', value: gradeQuality.coringas, icon: AlertTriangle, glow: gradeQuality.coringas > 0 ? '0 80% 55%' : '160 70% 45%', nav: 'logs' },
         ].map((stat, i) => {
           const Icon = stat.icon;
           return (
             <div
               key={i}
-              className="metric-card p-3 flex items-center gap-3 cursor-pointer hover:border-muted-foreground/30 transition-colors border border-transparent"
+              className="metric-card p-2 flex flex-col items-center justify-center text-center cursor-pointer hover:border-muted-foreground/30 transition-colors border border-transparent min-w-0"
               onClick={() => onNavigate?.(stat.nav)}
             >
-              <div className="metric-icon w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+              <div className="metric-icon w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mb-1"
                 style={{ background: `hsl(${stat.glow} / 0.1)` }}
               >
-                <Icon className="w-4 h-4" style={{ color: `hsl(${stat.glow})` }} />
+                <Icon className="w-3.5 h-3.5" style={{ color: `hsl(${stat.glow})` }} />
               </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{stat.label}</p>
-                {stat.value === null ? (
-                  <div className="h-6 w-12 rounded bg-muted/60 animate-pulse mt-0.5" />
-                ) : (
-                  <p className="text-lg font-bold text-foreground font-mono tabular-nums">{stat.value}</p>
-                )}
-              </div>
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wide leading-tight truncate w-full">{stat.label}</p>
+              {stat.value === null ? (
+                <div className="h-5 w-10 rounded bg-muted/60 animate-pulse mt-0.5" />
+              ) : (
+                <p className="text-base font-bold text-foreground font-mono tabular-nums leading-tight">{stat.value}</p>
+              )}
             </div>
           );
         })}
         {/* Zerar Sistema — compact card with AlertDialog */}
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <div className="glass-card p-3 flex items-center gap-3 cursor-pointer hover:border-destructive/40 transition-colors border border-transparent">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'hsl(0 70% 50% / 0.1)' }}>
-                <RotateCcw className="w-4 h-4" style={{ color: 'hsl(0 70% 50%)' }} />
+            <div className="glass-card p-2 flex flex-col items-center justify-center text-center cursor-pointer hover:border-destructive/40 transition-colors border border-transparent min-w-0">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mb-1" style={{ background: 'hsl(0 70% 50% / 0.1)' }}>
+                <RotateCcw className="w-3.5 h-3.5" style={{ color: 'hsl(0 70% 50%)' }} />
               </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Zerar</p>
-                <p className="text-xs font-bold text-destructive">Sistema</p>
-              </div>
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wide leading-tight">Zerar</p>
+              <p className="text-xs font-bold text-destructive leading-tight">Sistema</p>
             </div>
           </AlertDialogTrigger>
           <AlertDialogContent className="max-w-md">
@@ -405,7 +401,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
                 <div className="space-y-3 pt-2">
                   <div className="flex items-center space-x-2">
                     <Checkbox id="clearSupabase" checked={resetOptions.clearSupabase} onCheckedChange={(checked) => setResetOptions(prev => ({ ...prev, clearSupabase: checked === true }))} />
-                    <Label htmlFor="clearSupabase" className="text-sm font-medium cursor-pointer">Limpar banco de dados remoto (Supabase)</Label>
+                    <Label htmlFor="clearSupabase" className="text-sm font-medium cursor-pointer">Limpar banco de dados remoto</Label>
                   </div>
                   {resetOptions.clearSupabase && (
                     <>
@@ -435,21 +431,19 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         {/* Catalogar — compact card */}
         <div
           onClick={isCatalogingTop ? undefined : handleQuickCatalog}
-          className={`glass-card p-3 flex items-center gap-3 cursor-pointer hover:border-amber-500/40 transition-colors border border-transparent ${isCatalogingTop ? 'opacity-70 pointer-events-none' : ''}`}
+          className={`glass-card p-2 flex flex-col items-center justify-center text-center cursor-pointer hover:border-amber-500/40 transition-colors border border-transparent min-w-0 ${isCatalogingTop ? 'opacity-70 pointer-events-none' : ''}`}
         >
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'hsl(42 100% 50% / 0.1)' }}>
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mb-1" style={{ background: 'hsl(42 100% 50% / 0.1)' }}>
             {isCatalogingTop ? (
-              <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'hsl(42 100% 50%)' }} />
+              <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: 'hsl(42 100% 50%)' }} />
             ) : (
-              <Database className="w-4 h-4" style={{ color: 'hsl(42 100% 50%)' }} />
+              <Database className="w-3.5 h-3.5" style={{ color: 'hsl(42 100% 50%)' }} />
             )}
           </div>
-          <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Catalogar</p>
-            <p className="text-lg font-bold font-mono tabular-nums" style={{ color: 'hsl(42 100% 50%)' }}>
-              {isCatalogingTop ? '...' : catalogCount !== null ? catalogCount : '—'}
-            </p>
-          </div>
+          <p className="text-[9px] text-muted-foreground uppercase tracking-wide leading-tight">Catálogo</p>
+          <p className="text-base font-bold font-mono tabular-nums leading-tight" style={{ color: 'hsl(42 100% 50%)' }}>
+            {isCatalogingTop ? '...' : catalogCount !== null ? catalogCount : '—'}
+          </p>
         </div>
       </div>
 
