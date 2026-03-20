@@ -477,7 +477,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       </div>
 
       {/* Voz do Brasil Alert */}
-      {useAutoDownloadStore.getState().vozBrasilFailed && (
+      {vozBrasilFailed && (
         <Card className="glass-card border-destructive/30 bg-destructive/5">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">
