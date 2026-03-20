@@ -39,8 +39,8 @@ const STYLE_TO_GENRE: Record<string, string> = {
 async function classifyWithAI(
   songs: Array<{ artist: string; title: string }>,
   apiKey: string
-): Promise<Map<string, string>> {
-  const results = new Map<string, string>();
+): Promise<Map<string, { genre: string; year: number | null }>> {
+  const results = new Map<string, { genre: string; year: number | null }>();
 
   // Build prompt with all songs
   const songList = songs.map((s, i) => `${i + 1}. ${s.artist} - ${s.title}`).join("\n");
