@@ -96,7 +96,7 @@ No explanations, no markdown, just the JSON array.`;
       jsonStr = jsonStr.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
     }
 
-    const parsed = JSON.parse(jsonStr) as Array<{ index: number; genre: string }>;
+    const parsed = JSON.parse(jsonStr) as Array<{ index: number; genre: string; year?: number | null }>;
 
     for (const item of parsed) {
       const idx = item.index - 1;
@@ -104,10 +104,10 @@ No explanations, no markdown, just the JSON array.`;
         const genre = VALID_GENRES.includes(item.genre?.toUpperCase())
           ? item.genre.toUpperCase()
           : "OUTRO";
-        // Normalize DANCE → ELETRONICA
         const normalizedGenre = genre === "DANCE" ? "ELETRONICA" : genre;
         const key = `${songs[idx].artist.toLowerCase().trim()}|${songs[idx].title.toLowerCase().trim()}`;
-        results.set(key, normalizedGenre);
+        const year = (item.year && item.year >= 1950 && item.year <= 2030) ? item.year : null;
+        results.set(key, { genre: normalizedGenre, year });
       }
     }
 
