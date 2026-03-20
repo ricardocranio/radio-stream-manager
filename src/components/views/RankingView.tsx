@@ -252,7 +252,12 @@ export function RankingView() {
     });
   };
 
-  const allStyles = ['SERTANEJO', 'PAGODE', 'POP/VARIADO', 'DANCE', 'AGRONEJO'];
+  const allStyles = useMemo(() => {
+    const defaultStyles = ['SERTANEJO', 'PAGODE', 'POP', 'POP/VARIADO', 'DANCE', 'ELETRONICA', 'ROCK', 'FUNK', 'RAP/HIP-HOP', 'MPB', 'GOSPEL', 'FORRO'];
+    const fromData = new Set(currentRankingData.map(s => s.style));
+    const merged = new Set([...defaultStyles, ...fromData]);
+    return Array.from(merged).filter(Boolean).sort();
+  }, [currentRankingData]);
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">
