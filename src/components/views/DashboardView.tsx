@@ -262,7 +262,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
     }
   };
 
-  // Quick catalog from top strip
+  // Quick catalog from top strip — full 2-phase: update + insert
   const handleQuickCatalog = async () => {
     if (!window.electronAPI?.scanLibraryMetadata) {
       toast({ title: '⚠️ Disponível apenas no desktop', variant: 'destructive' });
@@ -287,14 +287,15 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         return;
       }
 
+      const { normalizeId3Genre, genreToEnergy } = await import('@/lib/id3GenreUtils');
       const libraryMap = new Map<string, { genre: string | null; year: string | null }>();
       for (const song of result.songs as any[]) {
         const key = `${(song.artist || '').toLowerCase().trim()}|${(song.title || '').toLowerCase().trim()}`;
         if (key === '|' || key.startsWith('desconhecido|')) continue;
-        const { normalizeId3Genre } = await import('@/lib/id3GenreUtils');
         libraryMap.set(key, { genre: song.genre ? normalizeId3Genre(song.genre) : null, year: song.year || null });
       }
 
+      // Phase 1: Update existing songs missing genre/year
       const { data: dbSongs } = await supabase
         .from('scraped_songs')
         .select('id, artist, title, ai_genre, year')
@@ -303,7 +304,6 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
 
       let enriched = 0;
       if (dbSongs?.length) {
-        const { genreToEnergy } = await import('@/lib/id3GenreUtils');
         for (const dbSong of dbSongs) {
           const key = `${dbSong.artist.toLowerCase().trim()}|${dbSong.title.toLowerCase().trim()}`;
           const libData = libraryMap.get(key);
@@ -321,8 +321,46 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         }
       }
 
-      setCatalogCount(enriched);
-      toast({ title: '✅ Catalogação Completa', description: `${result.songs.length} lidos · ${enriched} atualizados` });
+      // Phase 2: Insert library songs not yet in DB
+      const { data: allDbSongs } = await supabase
+        .from('scraped_songs')
+        .select('artist, title')
+        .limit(10000);
+
+      const existingKeys = new Set<string>();
+      if (allDbSongs) {
+        for (const s of allDbSongs) {
+          existingKeys.add(`${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`);
+        }
+      }
+
+      const toInsert: Array<any> = [];
+      for (const [key, libData] of libraryMap) {
+        if (existingKeys.has(key)) continue;
+        const [artist, title] = key.split('|');
+        if (!artist || !title || artist === 'desconhecido') continue;
+        const genre = libData.genre || null;
+        if (!genre && !libData.year) continue;
+        toInsert.push({
+          artist, title,
+          ai_genre: genre || 'OUTRO',
+          ai_energy: genre ? genreToEnergy(genre) : 'medium',
+          year: libData.year || null,
+          station_name: 'ACERVO_LOCAL',
+          source: 'library_catalog',
+        });
+      }
+
+      let inserted = 0;
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+        const batch = toInsert.slice(i, i + BATCH_SIZE);
+        const { error } = await supabase.from('scraped_songs').insert(batch);
+        if (!error) inserted += batch.length;
+      }
+
+      setCatalogCount(enriched + inserted);
+      toast({ title: '✅ Catalogação Completa', description: `${result.songs.length} lidos · ${enriched} atualizados · ${inserted} inseridos` });
     } catch (err) {
       toast({ title: '❌ Erro', description: String(err), variant: 'destructive' });
     } finally {
