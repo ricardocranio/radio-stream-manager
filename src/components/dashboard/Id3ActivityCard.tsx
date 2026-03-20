@@ -196,10 +196,11 @@ export function Id3ActivityCard() {
         }
       }
 
-      setCatalogResult({ scanned: result.songs.length, enriched, genres: genresUpdated, years: yearsUpdated });
+      setCatalogResult({ scanned: result.songs.length, enriched, genres: genresUpdated, years: yearsUpdated, inserted });
+      const insertMsg = inserted > 0 ? ` · ${inserted} novas inseridas` : '';
       toast({
         title: '✅ Catalogação Completa',
-        description: `${result.songs.length} arquivos lidos · ${enriched} atualizados (${genresUpdated} gêneros, ${yearsUpdated} anos)`,
+        description: `${result.songs.length} arquivos lidos · ${enriched} atualizados (${genresUpdated} gêneros, ${yearsUpdated} anos)${insertMsg}`,
       });
     } catch (err) {
       console.error('[CATALOG] Erro:', err);
