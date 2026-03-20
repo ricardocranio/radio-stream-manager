@@ -14,10 +14,8 @@ const NOTIFICATIONS_SUBSCRIBER_ID = 'realtime_notifications_global';
 
 export function useRealtimeNotifications(options: NotificationOptions = {}) {
   const { toast } = useToast();
-  const { applyRankingBatch } = useRadioStore();
   const lastSongIdRef = useRef<string | null>(null);
   const notificationPermissionRef = useRef<NotificationPermission>('default');
-  const batcherInitializedRef = useRef(false);
 
   const {
     enableBrowserNotifications = true,
@@ -25,23 +23,6 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
     onNewSong,
     onRankingUpdate,
   } = options;
-
-  // Initialize ranking batcher once
-  useEffect(() => {
-    if (batcherInitializedRef.current) return;
-    batcherInitializedRef.current = true;
-    
-    rankingBatcher.init((updates) => {
-      if (updates.length > 0) {
-        applyRankingBatch(updates);
-      }
-    });
-
-    return () => {
-      // Flush on unmount
-      rankingBatcher.forceFlush();
-    };
-  }, [applyRankingBatch]);
 
   // Request browser notification permission
   useEffect(() => {
