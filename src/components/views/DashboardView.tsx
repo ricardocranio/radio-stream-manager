@@ -372,7 +372,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       {/* === METRICS — Compact Strip === */}
       <div className="grid grid-cols-4 lg:grid-cols-8 gap-2">
         {[
-          { label: 'Faltando', value: missingSongs.filter(s => s.status === 'missing').length, icon: AlertTriangle, glow: '0 80% 55%', nav: 'missing' },
+          { label: 'Faltando', value: missingCount, icon: AlertTriangle, glow: '0 80% 55%', nav: 'missing' },
           { label: 'Banco', value: libraryStats.isLoading ? null : libraryStats.count.toLocaleString(), icon: HardDrive, glow: '42 100% 50%', nav: 'folders' },
           { label: 'Ranking', value: localStats.rankingTotal, icon: TrendingUp, glow: '280 80% 60%', nav: 'ranking' },
           { label: 'Downloads', value: useAutoDownloadStore.getState().dailyStats.downloaded, icon: Download, glow: '210 100% 60%', nav: 'missing' },
