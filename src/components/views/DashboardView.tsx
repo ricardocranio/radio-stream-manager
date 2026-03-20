@@ -38,13 +38,31 @@ interface DashboardViewProps {
 }
 
 export function DashboardView({ onNavigate }: DashboardViewProps) {
-  const { 
-    stations, isRunning, config, gradeHistory, clearGradeHistory, rankingSongs, missingSongs,
-    clearCapturedSongs, clearMissingSongs, clearDownloadHistory, clearRanking,
-    setBatchDownloadProgress
-  } = useRadioStore();
-  const { resetQueue, vozBrasilDownloading, vozBrasilProgress } = useAutoDownloadStore();
-  const capturedDownloads = useCapturedDownloadStore();
+  // Use selectors to avoid re-rendering on unrelated store changes
+  const stations = useRadioStore((s) => s.stations);
+  const isRunning = useRadioStore((s) => s.isRunning);
+  const config = useRadioStore((s) => s.config);
+  const gradeHistory = useRadioStore((s) => s.gradeHistory);
+  const clearGradeHistory = useRadioStore((s) => s.clearGradeHistory);
+  const rankingSongs = useRadioStore((s) => s.rankingSongs);
+  const missingSongs = useRadioStore((s) => s.missingSongs);
+  const clearCapturedSongs = useRadioStore((s) => s.clearCapturedSongs);
+  const clearMissingSongs = useRadioStore((s) => s.clearMissingSongs);
+  const clearDownloadHistory = useRadioStore((s) => s.clearDownloadHistory);
+  const clearRanking = useRadioStore((s) => s.clearRanking);
+  const setBatchDownloadProgress = useRadioStore((s) => s.setBatchDownloadProgress);
+
+  const vozBrasilDownloading = useAutoDownloadStore((s) => s.vozBrasilDownloading);
+  const vozBrasilProgress = useAutoDownloadStore((s) => s.vozBrasilProgress);
+  const resetQueue = useAutoDownloadStore((s) => s.resetQueue);
+  
+  // Only subscribe to the fields we display
+  const capturedIsProcessing = useCapturedDownloadStore((s) => s.isProcessing);
+  const capturedProcessedCount = useCapturedDownloadStore((s) => s.processedCount);
+  const capturedQueueLength = useCapturedDownloadStore((s) => s.queueLength);
+  const capturedExistsCount = useCapturedDownloadStore((s) => s.existsCount);
+  const capturedErrorCount = useCapturedDownloadStore((s) => s.errorCount);
+
   const resetSimilarityStats = useSimilarityLogStore((state) => state.resetStats);
   const blockLogs = useGradeLogStore((state) => state.blockLogs);
   const { toast } = useToast();
