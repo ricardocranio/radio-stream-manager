@@ -45,8 +45,9 @@ async function classifyWithAI(
   // Build prompt with all songs
   const songList = songs.map((s, i) => `${i + 1}. ${s.artist} - ${s.title}`).join("\n");
 
-  const systemPrompt = `You are a music genre classifier. Given a list of songs (artist - title), classify each into EXACTLY ONE of these genres:
-${VALID_GENRES.join(", ")}
+  const systemPrompt = `You are a music genre and year classifier. Given a list of songs (artist - title), classify each into EXACTLY ONE genre and estimate the release year.
+
+Valid genres: ${VALID_GENRES.join(", ")}
 
 Rules:
 - Use the REAL genre of the artist/song, NOT the radio station context
@@ -57,9 +58,11 @@ Rules:
 - Marília Mendonça, Gusttavo Lima = SERTANEJO
 - Alexandre Pires, Ferrugem = PAGODE
 - Filipe Ret, Emicida = RAP/HIP-HOP
-- If unsure, use POP as default
+- For year: estimate the original release year of the song. If unsure, estimate based on the artist's active period.
+- If completely unknown, use null for year
+- If genre is unsure, use POP as default
 
-Respond with ONLY a JSON array of objects: [{"index": 1, "genre": "POP"}, ...]
+Respond with ONLY a JSON array of objects: [{"index": 1, "genre": "POP", "year": 2019}, ...]
 No explanations, no markdown, just the JSON array.`;
 
   try {
