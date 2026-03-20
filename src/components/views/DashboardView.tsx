@@ -485,7 +485,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
               <span className="text-sm font-bold text-destructive">⚠️ Voz do Brasil — Falha!</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              {useAutoDownloadStore.getState().vozBrasilLastError || 'Download falhou. Verifique a conexão e tente manualmente.'}
+              {vozBrasilLastError || 'Download falhou. Verifique a conexão e tente manualmente.'}
             </p>
             <Button
               size="sm"
