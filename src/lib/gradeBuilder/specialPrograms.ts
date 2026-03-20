@@ -516,6 +516,39 @@ export async function findSongByGenre(
   } catch (e) {
     console.warn(`[GENRE-BLOCK] Falha ao buscar por gênero ${genres.join('/')}:`, e);
   }
+
+  // === Strategy 2: Fallback — local library ID3 tags (CACHED) ===
+  const librarySongs = await getCachedLibraryMetadata();
+  if (librarySongs && librarySongs.length > 0) {
+    console.log(`[GENRE-BLOCK] 📂 DB sem resultados para ${genres.join('/')}, usando cache local (${librarySongs.length} músicas)...`);
+    const { normalizeId3Genre } = await import('@/lib/id3GenreUtils');
+    const genresNorm = genres.map(g => g.toUpperCase());
+    
+    const filtered = librarySongs
+      .filter((s: any) => {
+        if (!s.genre || !s.artist || s.artist === 'Desconhecido') return false;
+        const norm = normalizeId3Genre(s.genre)?.toUpperCase();
+        return norm && genresNorm.some(g => norm === g || norm.includes(g));
+      })
+      .sort(() => Math.random() - 0.5);
+
+    console.log(`[GENRE-BLOCK] 📂 Encontradas ${filtered.length} músicas ${genres.join('/')} na biblioteca`);
+
+    for (const song of filtered) {
+      const key = `${(song.title || '').toLowerCase()}-${(song.artist || '').toLowerCase()}`;
+      const normalizedArtist = (song.artist || '').toLowerCase().trim();
+      if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+      if (ctx.isRecentlyUsed(song.title || '', song.artist || '', timeStr, isFullDay)) continue;
+      
+      return {
+        filename: song.filename,
+        artist: song.artist || 'Desconhecido',
+        title: song.title || song.filename,
+        genre: genres[0],
+      };
+    }
+  }
+
   return null;
 }
 
