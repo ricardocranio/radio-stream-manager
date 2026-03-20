@@ -135,20 +135,9 @@ export function useRealtimeNotifications(options: NotificationOptions = {}) {
           );
         }
 
-        // Queue ranking update — prefer ai_genre from the song itself over station style
-        const songGenre = newSong.ai_genre;
-        let style = songGenre || '';
-        if (!style) {
-          const { stations } = useRadioStore.getState();
-          const matchedStation = stations.find(
-            s => s.name.toLowerCase().trim() === newSong.station_name.toLowerCase().trim()
-          );
-          style = matchedStation?.styles?.[0] || 'POP/VARIADO';
-        }
-
-        // Use batcher instead of direct update
-        rankingBatcher.queueUpdate(newSong.title, newSong.artist, style);
-        onRankingUpdateRef.current?.(1);
+        // Ranking is now fed exclusively from grade builder (useAutoGradeBuilder)
+        // to ensure TOP 25 reflects songs actually played in the grade, not just monitored.
+        // See useAutoGradeBuilder lines ~1600 and ~1980 for grade-based ranking updates.
       }
     );
 
