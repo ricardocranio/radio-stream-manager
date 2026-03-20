@@ -346,7 +346,8 @@ export function Id3ActivityCard() {
             <span className="text-muted-foreground">
               <span className="text-foreground font-medium">{catalogResult.scanned}</span> arquivos lidos ·{' '}
               <span className="text-amber-400 font-medium">{catalogResult.genres}</span> gêneros ·{' '}
-              <span className="text-amber-400 font-medium">{catalogResult.years}</span> anos atualizados
+              <span className="text-amber-400 font-medium">{catalogResult.years}</span> anos ·{' '}
+              <span className="text-emerald-400 font-medium">{catalogResult.inserted}</span> inseridas no banco
             </span>
           </div>
         )}
