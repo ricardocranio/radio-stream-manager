@@ -1009,7 +1009,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
                   key={i}
                   className="w-1.5 md:w-2 bg-primary rounded-full animate-wave"
                   style={{
-                    height: `${Math.random() * 100}%`,
+                    height: `${audioBarHeights.current[i]}%`,
                     animationDelay: `${i * 0.1}s`,
                     opacity: isRunning ? 1 : 0.3,
                   }}
