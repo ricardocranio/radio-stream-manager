@@ -1151,48 +1151,38 @@ export async function findSongByGenreAndYear(
     console.warn(`[GENRE-YEAR] Falha ao buscar ${genres.join('/')} ${yearMin}-${yearMax} no DB:`, e);
   }
 
-  // === Strategy 2: Fallback — scan local library for genre + year ===
-  const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
-  if (isElectron && (window as any).electronAPI?.scanLibraryMetadata) {
-    try {
-      console.log(`[GENRE-YEAR] 📂 DB sem resultados para ${genres.join('/')} ${yearMin}-${yearMax}, buscando localmente...`);
-      const { useRadioStore } = await import('@/store/radioStore');
-      const { config } = useRadioStore.getState();
-      const allFolders = config.musicFolders?.filter(Boolean) || [];
-      if (allFolders.length > 0) {
-        const scanResult = await (window as any).electronAPI.scanLibraryMetadata({ musicFolders: allFolders });
-        if (scanResult?.success && scanResult.songs?.length) {
-          const { normalizeId3Genre } = await import('@/lib/id3GenreUtils');
-          const genresNorm = genres.map(g => g.toUpperCase());
-          
-          const filtered = scanResult.songs
-            .filter((s: any) => {
-              if (!s.year || !s.genre) return false;
-              const yr = parseInt(s.year, 10);
-              if (isNaN(yr) || yr < yearMin || yr > yearMax) return false;
-              const norm = normalizeId3Genre(s.genre)?.toUpperCase();
-              return norm && genresNorm.some(g => norm.includes(g));
-            })
-            .sort(() => Math.random() - 0.5);
+  // === Strategy 2: Fallback — scan local library for genre + year (CACHED) ===
+  const librarySongs = await getCachedLibraryMetadata();
+  if (librarySongs && librarySongs.length > 0) {
+    console.log(`[GENRE-YEAR] 📂 DB sem resultados para ${genres.join('/')} ${yearMin}-${yearMax}, usando cache local (${librarySongs.length} músicas)...`);
+    const { normalizeId3Genre } = await import('@/lib/id3GenreUtils');
+    const genresNorm = genres.map(g => g.toUpperCase());
+    
+    const filtered = librarySongs
+      .filter((s: any) => {
+        if (!s.year || !s.genre) return false;
+        const yr = parseInt(s.year, 10);
+        if (isNaN(yr) || yr < yearMin || yr > yearMax) return false;
+        const norm = normalizeId3Genre(s.genre)?.toUpperCase();
+        return norm && genresNorm.some(g => norm.includes(g));
+      })
+      .sort(() => Math.random() - 0.5);
 
-          for (const song of filtered) {
-            const key = `${(song.title || '').toLowerCase()}-${(song.artist || '').toLowerCase()}`;
-            const normalizedArtist = (song.artist || '').toLowerCase().trim();
-            if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
-            if (ctx.isRecentlyUsed(song.title || '', song.artist || '', timeStr, isFullDay)) continue;
-            
-            return {
-              filename: song.filename,
-              artist: song.artist || 'Desconhecido',
-              title: song.title || song.filename,
-              genre: genres[0],
-              yearRange: `${yearMin}-${yearMax}`,
-            };
-          }
-        }
-      }
-    } catch (e) {
-      console.warn(`[GENRE-YEAR] Scan local falhou:`, e);
+    console.log(`[GENRE-YEAR] 📂 Encontradas ${filtered.length} músicas ${genres.join('/')} dos anos ${yearMin}-${yearMax}`);
+
+    for (const song of filtered) {
+      const key = `${(song.title || '').toLowerCase()}-${(song.artist || '').toLowerCase()}`;
+      const normalizedArtist = (song.artist || '').toLowerCase().trim();
+      if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+      if (ctx.isRecentlyUsed(song.title || '', song.artist || '', timeStr, isFullDay)) continue;
+      
+      return {
+        filename: song.filename,
+        artist: song.artist || 'Desconhecido',
+        title: song.title || song.filename,
+        genre: genres[0],
+        yearRange: `${yearMin}-${yearMax}`,
+      };
     }
   }
 
