@@ -81,7 +81,18 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
     const used = recentLogs.filter(l => l.type === 'used').length;
     return { substituted, coringas, used, total: used + substituted + coringas };
   }, [blockLogs]);
+
+  // Memoize expensive computations
+  const missingCount = useMemo(() => missingSongs.filter(s => s.status === 'missing').length, [missingSongs]);
+  const dailyDownloaded = useAutoDownloadStore((s) => s.dailyStats.downloaded);
+  const vozBrasilFailed = useAutoDownloadStore((s) => s.vozBrasilFailed);
+  const vozBrasilLastError = useAutoDownloadStore((s) => s.vozBrasilLastError);
+  const setVozBrasilFailed = useAutoDownloadStore((s) => s.setVozBrasilFailed);
+  const enabledStations = useMemo(() => stations.filter(s => s.enabled), [stations]);
   
+  // Stable random heights for audio visualizer (avoid Math.random() on every render)
+  const audioBarHeights = useRef(Array.from({ length: 16 }, () => Math.random() * 100));
+
   const { nextGradeCountdown, autoCleanCountdown, nextGradeSeconds, autoCleanSeconds, nextBlockTime, buildTime } = useCountdown();
   const { stats: realtimeStats, refresh: refreshStats } = useRealtimeStats();
   const { stats: libraryStats, refreshStats: refreshLibraryStats } = useMusicLibraryStats();
