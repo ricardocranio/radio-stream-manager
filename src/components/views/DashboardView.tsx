@@ -491,7 +491,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
               size="sm"
               variant="outline"
               className="mt-2 border-destructive/30 text-destructive hover:bg-destructive/10"
-              onClick={() => useAutoDownloadStore.getState().setVozBrasilFailed(false)}
+              onClick={() => setVozBrasilFailed(false)}
             >
               Dispensar
             </Button>
