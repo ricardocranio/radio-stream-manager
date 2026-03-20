@@ -869,9 +869,9 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
           <div>
             <CardContent className="pt-0">
         
-        {stations.filter(s => s.enabled).length > 0 ? (
+        {enabledStations.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-            {stations.filter(s => s.enabled).map((station, stationIndex) => {
+            {enabledStations.map((station, stationIndex) => {
               const colors = colorPalette[stationIndex % colorPalette.length];
               const songs = realtimeStats.recentSongsByStation[station.name] || [];
               const count24h = realtimeStats.stationCounts[station.name] || 0;
