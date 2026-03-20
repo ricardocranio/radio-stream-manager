@@ -186,7 +186,7 @@ export function CapturedSongsView() {
       const batchMap = new Map<string, { title: string; artist: string; style: string; count: number }>();
 
       for (const song of songs) {
-        const style = stationStyleMap.get(song.station_name.toLowerCase().trim()) || 'POP/VARIADO';
+        const style = song.ai_genre || stationStyleMap.get(song.station_name.toLowerCase().trim()) || 'POP/VARIADO';
         const key = `${song.title.toLowerCase().trim()}|${song.artist.toLowerCase().trim()}`;
         const existing = batchMap.get(key);
 

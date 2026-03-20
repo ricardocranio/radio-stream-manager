@@ -91,7 +91,21 @@ const getStyleColor = (style: string) => {
     'SERTANEJO': 'bg-primary/20 text-primary border-primary/30',
     'PAGODE': 'bg-accent/20 text-accent border-accent/30',
     'POP/VARIADO': 'bg-success/20 text-success border-success/30',
+    'POP': 'bg-success/20 text-success border-success/30',
     'DANCE': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    'ELETRONICA': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    'ROCK': 'bg-red-500/20 text-red-400 border-red-500/30',
+    'METAL': 'bg-red-700/20 text-red-300 border-red-700/30',
+    'FUNK': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+    'RAP/HIP-HOP': 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    'MPB': 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+    'GOSPEL': 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    'FORRO': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    'R&B': 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
+    'REGGAE': 'bg-green-500/20 text-green-400 border-green-500/30',
+    'COUNTRY': 'bg-amber-600/20 text-amber-300 border-amber-600/30',
+    'JAZZ': 'bg-violet-500/20 text-violet-400 border-violet-500/30',
+    'INDIE': 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
     'AGRONEJO': 'bg-warning/20 text-warning border-warning/30',
   };
   return colors[style] || 'bg-muted text-muted-foreground';
@@ -163,7 +177,21 @@ export function RankingView() {
       'SERTANEJO': 'hsl(190, 95%, 50%)',
       'PAGODE': 'hsl(25, 95%, 55%)',
       'POP/VARIADO': 'hsl(150, 80%, 45%)',
+      'POP': 'hsl(150, 80%, 45%)',
       'DANCE': 'hsl(280, 70%, 55%)',
+      'ELETRONICA': 'hsl(210, 80%, 55%)',
+      'ROCK': 'hsl(0, 75%, 50%)',
+      'METAL': 'hsl(0, 60%, 40%)',
+      'FUNK': 'hsl(330, 80%, 55%)',
+      'RAP/HIP-HOP': 'hsl(40, 95%, 55%)',
+      'MPB': 'hsl(170, 70%, 45%)',
+      'GOSPEL': 'hsl(50, 90%, 50%)',
+      'FORRO': 'hsl(20, 90%, 50%)',
+      'R&B': 'hsl(240, 60%, 55%)',
+      'REGGAE': 'hsl(120, 60%, 45%)',
+      'COUNTRY': 'hsl(35, 80%, 45%)',
+      'JAZZ': 'hsl(270, 50%, 55%)',
+      'INDIE': 'hsl(185, 70%, 50%)',
       'AGRONEJO': 'hsl(40, 95%, 55%)',
     };
     
@@ -252,7 +280,12 @@ export function RankingView() {
     });
   };
 
-  const allStyles = ['SERTANEJO', 'PAGODE', 'POP/VARIADO', 'DANCE', 'AGRONEJO'];
+  const allStyles = useMemo(() => {
+    const defaultStyles = ['SERTANEJO', 'PAGODE', 'POP', 'POP/VARIADO', 'DANCE', 'ELETRONICA', 'ROCK', 'FUNK', 'RAP/HIP-HOP', 'MPB', 'GOSPEL', 'FORRO'];
+    const fromData = new Set(currentRankingData.map(s => s.style));
+    const merged = new Set([...defaultStyles, ...fromData]);
+    return Array.from(merged).filter(Boolean).sort();
+  }, [currentRankingData]);
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">
