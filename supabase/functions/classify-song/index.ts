@@ -39,14 +39,15 @@ const STYLE_TO_GENRE: Record<string, string> = {
 async function classifyWithAI(
   songs: Array<{ artist: string; title: string }>,
   apiKey: string
-): Promise<Map<string, string>> {
-  const results = new Map<string, string>();
+): Promise<Map<string, { genre: string; year: number | null }>> {
+  const results = new Map<string, { genre: string; year: number | null }>();
 
   // Build prompt with all songs
   const songList = songs.map((s, i) => `${i + 1}. ${s.artist} - ${s.title}`).join("\n");
 
-  const systemPrompt = `You are a music genre classifier. Given a list of songs (artist - title), classify each into EXACTLY ONE of these genres:
-${VALID_GENRES.join(", ")}
+  const systemPrompt = `You are a music genre and year classifier. Given a list of songs (artist - title), classify each into EXACTLY ONE genre and estimate the release year.
+
+Valid genres: ${VALID_GENRES.join(", ")}
 
 Rules:
 - Use the REAL genre of the artist/song, NOT the radio station context
@@ -57,9 +58,11 @@ Rules:
 - Marília Mendonça, Gusttavo Lima = SERTANEJO
 - Alexandre Pires, Ferrugem = PAGODE
 - Filipe Ret, Emicida = RAP/HIP-HOP
-- If unsure, use POP as default
+- For year: estimate the original release year of the song. If unsure, estimate based on the artist's active period.
+- If completely unknown, use null for year
+- If genre is unsure, use POP as default
 
-Respond with ONLY a JSON array of objects: [{"index": 1, "genre": "POP"}, ...]
+Respond with ONLY a JSON array of objects: [{"index": 1, "genre": "POP", "year": 2019}, ...]
 No explanations, no markdown, just the JSON array.`;
 
   try {
@@ -93,7 +96,7 @@ No explanations, no markdown, just the JSON array.`;
       jsonStr = jsonStr.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
     }
 
-    const parsed = JSON.parse(jsonStr) as Array<{ index: number; genre: string }>;
+    const parsed = JSON.parse(jsonStr) as Array<{ index: number; genre: string; year?: number | null }>;
 
     for (const item of parsed) {
       const idx = item.index - 1;
@@ -101,10 +104,10 @@ No explanations, no markdown, just the JSON array.`;
         const genre = VALID_GENRES.includes(item.genre?.toUpperCase())
           ? item.genre.toUpperCase()
           : "OUTRO";
-        // Normalize DANCE → ELETRONICA
         const normalizedGenre = genre === "DANCE" ? "ELETRONICA" : genre;
         const key = `${songs[idx].artist.toLowerCase().trim()}|${songs[idx].title.toLowerCase().trim()}`;
-        results.set(key, normalizedGenre);
+        const year = (item.year && item.year >= 1950 && item.year <= 2030) ? item.year : null;
+        results.set(key, { genre: normalizedGenre, year });
       }
     }
 
@@ -146,7 +149,7 @@ serve(async (req) => {
       // Pre-fill from already-classified songs with same artist+title (cache hit)
       let cacheHits = 0;
       const uniqueKeys = new Map<string, { artist: string; title: string }>();
-      const songKeyMap = new Map<string, string>(); // song key → genre (from cache)
+      const songKeyMap = new Map<string, { genre: string; year: string | null }>(); // song key → genre+year (from cache)
 
       for (const song of songs) {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
@@ -158,14 +161,14 @@ serve(async (req) => {
         const [artist, title] = key.split("|");
         const { data: existing } = await supabase
           .from("scraped_songs")
-          .select("ai_genre, ai_energy")
+          .select("ai_genre, ai_energy, year")
           .not("ai_genre", "is", null)
           .ilike("artist", artist)
           .ilike("title", title)
           .limit(1);
 
         if (existing?.length && existing[0].ai_genre) {
-          songKeyMap.set(key, existing[0].ai_genre);
+          songKeyMap.set(key, { genre: existing[0].ai_genre, year: existing[0].year });
         }
       }
 
@@ -173,12 +176,14 @@ serve(async (req) => {
       const uncachedSongs: typeof songs = [];
       for (const song of songs) {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
-        const cachedGenre = songKeyMap.get(key);
-        if (cachedGenre) {
-          const energy = GENRE_TO_ENERGY[cachedGenre] || "MEDIUM";
+        const cached = songKeyMap.get(key);
+        if (cached) {
+          const energy = GENRE_TO_ENERGY[cached.genre] || "MEDIUM";
+          const updateObj: Record<string, string> = { ai_genre: cached.genre, ai_energy: energy };
+          if (cached.year) updateObj.year = cached.year;
           const { error: updateError } = await supabase
             .from("scraped_songs")
-            .update({ ai_genre: cachedGenre, ai_energy: energy })
+            .update(updateObj)
             .eq("id", song.id);
           if (!updateError) cacheHits++;
         } else {
@@ -202,12 +207,14 @@ serve(async (req) => {
 
           for (const song of batch) {
             const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
-            const genre = aiResults.get(key);
-            if (genre) {
-              const energy = GENRE_TO_ENERGY[genre] || "MEDIUM";
+            const result = aiResults.get(key);
+            if (result) {
+              const energy = GENRE_TO_ENERGY[result.genre] || "MEDIUM";
+              const updateObj: Record<string, string> = { ai_genre: result.genre, ai_energy: energy };
+              if (result.year) updateObj.year = String(result.year);
               const { error: updateError } = await supabase
                 .from("scraped_songs")
-                .update({ ai_genre: genre, ai_energy: energy })
+                .update(updateObj)
                 .eq("id", song.id);
               if (!updateError) classified++;
             }
