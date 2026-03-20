@@ -207,12 +207,14 @@ serve(async (req) => {
 
           for (const song of batch) {
             const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
-            const genre = aiResults.get(key);
-            if (genre) {
-              const energy = GENRE_TO_ENERGY[genre] || "MEDIUM";
+            const result = aiResults.get(key);
+            if (result) {
+              const energy = GENRE_TO_ENERGY[result.genre] || "MEDIUM";
+              const updateObj: Record<string, string> = { ai_genre: result.genre, ai_energy: energy };
+              if (result.year) updateObj.year = String(result.year);
               const { error: updateError } = await supabase
                 .from("scraped_songs")
-                .update({ ai_genre: genre, ai_energy: energy })
+                .update(updateObj)
                 .eq("id", song.id);
               if (!updateError) classified++;
             }
