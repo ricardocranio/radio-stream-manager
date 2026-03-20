@@ -573,11 +573,14 @@ export const useRadioStore = create<RadioState>()(
             const existing = state.rankingSongs[existingIndex];
             const newPlays = existing.plays + 1;
             const updatedSongs = [...state.rankingSongs];
+            const shouldUpdateStyle = style && style !== 'POP/VARIADO' && 
+              (existing.style === 'POP/VARIADO' || existing.style !== style);
             updatedSongs[existingIndex] = {
               ...existing,
               plays: newPlays,
               lastPlayed: new Date(),
               trend: newPlays > 5 ? 'up' : existing.trend,
+              ...(shouldUpdateStyle ? { style } : {}),
             };
             
             // Sort only every 50 updates (increased from 20)
