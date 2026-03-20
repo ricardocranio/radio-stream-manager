@@ -14,6 +14,40 @@ import type { SongEntry, BlockResult, BlockLogItem, BlockStats, GradeContext } f
 import type { WeekDay } from '@/types/radio';
 import { applyTemporalDecay } from '@/lib/rankingDecay';
 
+// === Session cache for scanLibraryMetadata to avoid re-scanning 3000+ files per position ===
+let _metadataCacheResult: any = null;
+let _metadataCacheTime = 0;
+const METADATA_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getCachedLibraryMetadata(): Promise<any[] | null> {
+  const now = Date.now();
+  if (_metadataCacheResult && (now - _metadataCacheTime) < METADATA_CACHE_TTL) {
+    return _metadataCacheResult;
+  }
+  
+  const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
+  if (!isElectron || !(window as any).electronAPI?.scanLibraryMetadata) return null;
+  
+  try {
+    const { useRadioStore } = await import('@/store/radioStore');
+    const { config } = useRadioStore.getState();
+    const allFolders = config.musicFolders?.filter(Boolean) || [];
+    if (allFolders.length === 0) return null;
+    
+    console.log('[META-CACHE] 📂 Escaneando biblioteca para cache de metadados...');
+    const scanResult = await (window as any).electronAPI.scanLibraryMetadata({ musicFolders: allFolders });
+    if (scanResult?.success && scanResult.songs?.length) {
+      _metadataCacheResult = scanResult.songs;
+      _metadataCacheTime = now;
+      console.log(`[META-CACHE] ✅ Cache criado: ${scanResult.songs.length} músicas`);
+      return _metadataCacheResult;
+    }
+  } catch (e) {
+    console.warn('[META-CACHE] Erro ao escanear:', e);
+  }
+  return null;
+}
+
 /**
  * Generate the Voz do Brasil block (21:00 weekdays).
  * Hardcoded format - never goes through sanitization.
