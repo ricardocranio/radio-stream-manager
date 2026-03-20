@@ -1,8 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { useRadioStore } from '@/store/radioStore';
 import { realtimeManager } from '@/lib/realtimeManager';
-import { rankingBatcher } from '@/lib/rankingBatcher';
 
 interface NotificationOptions {
   enableBrowserNotifications?: boolean;
