@@ -149,7 +149,7 @@ serve(async (req) => {
       // Pre-fill from already-classified songs with same artist+title (cache hit)
       let cacheHits = 0;
       const uniqueKeys = new Map<string, { artist: string; title: string }>();
-      const songKeyMap = new Map<string, string>(); // song key → genre (from cache)
+      const songKeyMap = new Map<string, { genre: string; year: string | null }>(); // song key → genre+year (from cache)
 
       for (const song of songs) {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
