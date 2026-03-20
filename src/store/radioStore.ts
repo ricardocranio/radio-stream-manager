@@ -629,11 +629,15 @@ export const useRadioStore = create<RadioState>()(
             
             if (existingIndex >= 0) {
               const existing = updatedSongs[existingIndex];
+              // Update style if new value is more specific (from AI) than generic station style
+              const shouldUpdateStyle = update.style && update.style !== 'POP/VARIADO' && 
+                (existing.style === 'POP/VARIADO' || existing.style !== update.style);
               updatedSongs[existingIndex] = {
                 ...existing,
                 plays: existing.plays + update.count,
                 lastPlayed: new Date(),
                 trend: existing.plays + update.count > 5 ? 'up' : existing.trend,
+                ...(shouldUpdateStyle ? { style: update.style } : {}),
               };
             } else {
               updatedSongs.push({
