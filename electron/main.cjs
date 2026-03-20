@@ -293,7 +293,7 @@ function createWindow() {
           click: () => {
             dialog.showMessageBox(mainWindow, {
               type: 'info', title: 'Sobre', message: 'Programador Rádio',
-              detail: `Versão ${app.getVersion()}\n\nSistema de geração automática de grades de programação para rádios FM.\n\nTransições BPM-aware | Match de DNA ID3 | Downloads inteligentes\n\n© 2025 PGM-FM`,
+              detail: `Versão ${app.getVersion()}\n\nSistema de geração automática de grades de programação para rádios FM.\n\nTransições BPM-aware | Match de DNA ID3 | Downloads inteligentes\n\nAutor: Ricardo Amaral\n© 2025 PGM-FM`,
             });
           },
         },
