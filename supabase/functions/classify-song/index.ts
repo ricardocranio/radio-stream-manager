@@ -176,12 +176,14 @@ serve(async (req) => {
       const uncachedSongs: typeof songs = [];
       for (const song of songs) {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
-        const cachedGenre = songKeyMap.get(key);
-        if (cachedGenre) {
-          const energy = GENRE_TO_ENERGY[cachedGenre] || "MEDIUM";
+        const cached = songKeyMap.get(key);
+        if (cached) {
+          const energy = GENRE_TO_ENERGY[cached.genre] || "MEDIUM";
+          const updateObj: Record<string, string> = { ai_genre: cached.genre, ai_energy: energy };
+          if (cached.year) updateObj.year = cached.year;
           const { error: updateError } = await supabase
             .from("scraped_songs")
-            .update({ ai_genre: cachedGenre, ai_energy: energy })
+            .update(updateObj)
             .eq("id", song.id);
           if (!updateError) cacheHits++;
         } else {
