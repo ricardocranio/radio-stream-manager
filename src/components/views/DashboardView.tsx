@@ -489,7 +489,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       )}
 
       {/* === ACTIVE PROGRESS BARS === */}
-      {(vozBrasilDownloading || capturedDownloads.isProcessing) && (
+      {(vozBrasilDownloading || capturedIsProcessing) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Voz do Brasil Download Progress */}
           {vozBrasilDownloading && (
@@ -514,7 +514,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
           )}
 
           {/* Captured Downloads Progress */}
-          {capturedDownloads.isProcessing && (
+          {capturedIsProcessing && (
             <Card className="glass-card border-purple-500/20 bg-gradient-to-r from-purple-500/5 to-transparent">
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-center justify-between">
@@ -523,19 +523,19 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
                     <span className="text-sm font-medium text-foreground">Downloads Capturadas</span>
                   </div>
                   <Badge variant="outline" className="text-xs border-purple-500/30 text-purple-400">
-                    {capturedDownloads.processedCount}/{capturedDownloads.queueLength}
+                    {capturedProcessedCount}/{capturedQueueLength}
                   </Badge>
                 </div>
                 <Progress 
-                  value={capturedDownloads.queueLength > 0 
-                    ? (capturedDownloads.processedCount / capturedDownloads.queueLength) * 100 
+                  value={capturedQueueLength > 0 
+                    ? (capturedProcessedCount / capturedQueueLength) * 100 
                     : 0} 
                   className="h-2" 
                 />
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="text-emerald-400">✓ {capturedDownloads.processedCount}</span>
-                  {capturedDownloads.existsCount > 0 && <span className="text-amber-400">⊘ {capturedDownloads.existsCount} já existe</span>}
-                  {capturedDownloads.errorCount > 0 && <span className="text-destructive">✗ {capturedDownloads.errorCount}</span>}
+                  <span className="text-emerald-400">✓ {capturedProcessedCount}</span>
+                  {capturedExistsCount > 0 && <span className="text-amber-400">⊘ {capturedExistsCount} já existe</span>}
+                  {capturedErrorCount > 0 && <span className="text-destructive">✗ {capturedErrorCount}</span>}
                 </div>
               </CardContent>
             </Card>
