@@ -64,6 +64,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   const maintenanceService = useBackgroundMaintenance();
   const watchdogService = useServiceWatchdog();
   const dailyReportService = useDailyReport();
+  const mapaBuilder = useAutoMapaBuilder();
 
   // ============= INITIALIZATION (runs once) =============
   useEffect(() => {
