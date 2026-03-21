@@ -240,30 +240,28 @@ async function resolveCode(
       
     case 'genre': {
       const genres = codeConfig.genreFilter || [];
-      // If a station source is also set, combine station + genre filter
+      const decade = codeConfig.decadeFilter;
       const stationKey = codeConfig.stationSource ? `:${codeConfig.stationSource}` : '';
-      const cacheKey = `genre:${genres.join(',')}${stationKey}`;
+      const decadeKey = decade ? `:${decade}` : '';
+      const cacheKey = `genre:${genres.join(',')}${stationKey}${decadeKey}`;
       
       if (!cache.has(cacheKey)) {
         let songs: string[] = [];
         if (codeConfig.stationSource) {
-          // Load from station first, then filter by genre
           const stationSongs = await loadMonitoredSongs(codeConfig.stationSource, musicFolders);
-          if (stationSongs.length > 0 && genres.length > 0) {
-            // Need to re-check genre from library metadata
-            const genreSongs = await loadGenreSongs(genres, musicFolders);
+          if (stationSongs.length > 0 && (genres.length > 0 || decade)) {
+            const genreSongs = await loadGenreSongs(genres, musicFolders, decade);
             const genreSet = new Set(genreSongs.map(f => f.toLowerCase()));
             songs = stationSongs.filter(f => genreSet.has(f.toLowerCase()));
-            // Fallback: if combined filter yields too few, use station songs
             if (songs.length < 5) songs = stationSongs;
           } else {
             songs = stationSongs;
           }
         } else {
-          songs = await loadGenreSongs(genres, musicFolders);
+          songs = await loadGenreSongs(genres, musicFolders, decade);
         }
         cache.set(cacheKey, songs);
-        console.log(`[MAPAS] 🎵 ${songs.length} músicas gênero ${genres.join(',')}${stationKey}`);
+        console.log(`[MAPAS] 🎵 ${songs.length} músicas gênero ${genres.join(',')}${decadeKey}${stationKey}`);
       }
       
       const files = cache.get(cacheKey)!;
