@@ -323,7 +323,7 @@ function SortableCodePill({ cc, stations, updateMapaCodeConfig, removeMapaCodeCo
 export function MapasView() {
   const { mapasConfig, setMapasConfig, updateMapaCodeConfig, addMapaCodeConfig, removeMapaCodeConfig, resetMapaCodeConfigs, reorderMapaCodeConfigs, resetMapaTemplates, updateMapaTemplateLine, removeMapaTemplateLine, addMapaTemplateLine, config, stations } = useRadioStore();
   const [isBuilding, setIsBuilding] = useState(false);
-  const [activeDay, setActiveDay] = useState(0);
+  const [activeDay, setActiveDay] = useState(() => { const d = new Date().getDay(); return [0,1,2,3,4,5,6][d]; }); // 0=dom,1=seg...6=sab
   const [editingSlot, setEditingSlot] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editTime, setEditTime] = useState('');
