@@ -8,7 +8,8 @@ import { useRadioStore } from '@/store/radioStore';
 import { parseTemplateText, detectDayMapping, getTemplateForDay } from '@/lib/mapasBuilder/parser';
 import { resolveTemplateLine, formatResolvedLine, resetMapasPools } from '@/lib/mapasBuilder/resolver';
 import type { MapaTemplate, MapaResolvedLine, MapaCodeConfig } from '@/lib/mapasBuilder/types';
-import { MapIcon, FileText, Play, Settings2, Radio, Music, Mic2, Clock, RefreshCw, FolderOpen, Eye } from 'lucide-react';
+import { DEFAULT_CODE_CONFIGS } from '@/lib/mapasBuilder/types';
+import { MapIcon, FileText, Play, Settings2, Radio, Music, Mic2, Clock, RefreshCw, FolderOpen, Eye, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -28,12 +29,14 @@ const CODE_ICONS: Record<string, React.ReactNode> = {
 };
 
 export function MapasView() {
-  const { mapasConfig, setMapasConfig, updateMapaCodeConfig, config, stations } = useRadioStore();
+  const { mapasConfig, setMapasConfig, updateMapaCodeConfig, addMapaCodeConfig, removeMapaCodeConfig, resetMapaCodeConfigs, config, stations } = useRadioStore();
   const [templates, setTemplates] = useState<MapaTemplate[]>([]);
   const [preview, setPreview] = useState<MapaResolvedLine[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [showNewCode, setShowNewCode] = useState(false);
+  const [newCode, setNewCode] = useState({ code: '', label: '', type: 'literal' as MapaCodeConfig['type'], stationSource: '', genreFilter: '', vinhetaFolder: '' });
 
   // Load templates from folder
   const loadTemplates = useCallback(async () => {
@@ -212,12 +215,78 @@ export function MapasView() {
         {/* Config dos Códigos */}
         <Card className="lg:col-span-1">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Settings2 className="w-4 h-4" />
-              Códigos
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Settings2 className="w-4 h-4" />
+                Códigos
+                <Badge variant="secondary" className="text-[10px]">{mapasConfig.codeConfigs.length}</Badge>
+              </CardTitle>
+              <div className="flex gap-1">
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowNewCode(!showNewCode)} title="Novo código">
+                  <Plus className="w-3.5 h-3.5" />
+                </Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { resetMapaCodeConfigs(); toast.success('Códigos restaurados ao padrão'); }} title="Restaurar padrão">
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
+            {/* New code form */}
+            {showNewCode && (
+              <div className="border border-primary/30 rounded-lg p-3 space-y-2 bg-primary/5">
+                <p className="text-xs font-semibold text-primary">Novo Código</p>
+                <Input className="h-8 text-xs font-mono" placeholder="Código (ex: jov)" value={newCode.code} onChange={(e) => setNewCode(p => ({ ...p, code: e.target.value }))} />
+                <Input className="h-8 text-xs" placeholder="Descrição (ex: Jovem/Pop)" value={newCode.label} onChange={(e) => setNewCode(p => ({ ...p, label: e.target.value }))} />
+                <Select value={newCode.type} onValueChange={(v: any) => setNewCode(p => ({ ...p, type: v }))}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="literal">Literal (comando)</SelectItem>
+                    <SelectItem value="vinheta">Vinheta (arquivo)</SelectItem>
+                    <SelectItem value="monitored">Monitoramento</SelectItem>
+                    <SelectItem value="genre">Gênero ID3</SelectItem>
+                  </SelectContent>
+                </Select>
+                {newCode.type === 'monitored' && (
+                  <Select value={newCode.stationSource} onValueChange={(v) => setNewCode(p => ({ ...p, stationSource: v }))}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Estação fonte" /></SelectTrigger>
+                    <SelectContent>
+                      {stations.filter(s => s.enabled).map(s => (
+                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {newCode.type === 'genre' && (
+                  <Input className="h-8 text-xs" placeholder="Gêneros (ex: POP, DANCE)" value={newCode.genreFilter} onChange={(e) => setNewCode(p => ({ ...p, genreFilter: e.target.value }))} />
+                )}
+                {newCode.type === 'vinheta' && (
+                  <Input className="h-8 text-xs font-mono" placeholder="Pasta (ex: C:\Playlist\Vht)" value={newCode.vinhetaFolder} onChange={(e) => setNewCode(p => ({ ...p, vinhetaFolder: e.target.value }))} />
+                )}
+                <div className="flex gap-2">
+                  <Button size="sm" className="text-xs flex-1" disabled={!newCode.code.trim() || !newCode.label.trim()} onClick={() => {
+                    if (mapasConfig.codeConfigs.some(c => c.code.toLowerCase() === newCode.code.toLowerCase())) {
+                      toast.error('Código já existe'); return;
+                    }
+                    addMapaCodeConfig({
+                      code: newCode.code.trim(),
+                      label: newCode.label.trim(),
+                      type: newCode.type,
+                      ...(newCode.type === 'monitored' ? { stationSource: newCode.stationSource } : {}),
+                      ...(newCode.type === 'genre' ? { genreFilter: newCode.genreFilter.split(',').map(g => g.trim().toUpperCase()).filter(Boolean) } : {}),
+                      ...(newCode.type === 'vinheta' ? { vinhetaFolder: newCode.vinhetaFolder } : {}),
+                    });
+                    setNewCode({ code: '', label: '', type: 'literal', stationSource: '', genreFilter: '', vinhetaFolder: '' });
+                    setShowNewCode(false);
+                    toast.success('Código adicionado!');
+                  }}>
+                    <Plus className="w-3 h-3 mr-1" /> Adicionar
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-xs" onClick={() => setShowNewCode(false)}>Cancelar</Button>
+                </div>
+              </div>
+            )}
+
             {mapasConfig.codeConfigs.map((cc) => (
               <div key={cc.code} className="border border-border/50 rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between">
@@ -225,9 +294,14 @@ export function MapasView() {
                     {CODE_ICONS[cc.type]}
                     <span className="font-mono text-sm font-bold text-primary">{cc.code}</span>
                   </div>
-                  <Badge variant="outline" className="text-[10px]">
-                    {CODE_TYPE_LABELS[cc.type]}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    <Badge variant="outline" className="text-[10px]">
+                      {CODE_TYPE_LABELS[cc.type]}
+                    </Badge>
+                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive/60 hover:text-destructive" onClick={() => { removeMapaCodeConfig(cc.code); toast.info(`Código "${cc.code}" removido`); }}>
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
                 </div>
                 <p className="text-xs text-muted-foreground">{cc.label}</p>
 
@@ -259,10 +333,12 @@ export function MapasView() {
                 )}
 
                 {cc.type === 'vinheta' && (
-                  <div className="flex items-center gap-1">
-                    <FolderOpen className="w-3 h-3 text-muted-foreground" />
-                    <span className="text-[10px] text-muted-foreground truncate">{cc.vinhetaFolder}</span>
-                  </div>
+                  <Input
+                    className="h-8 text-xs font-mono"
+                    value={cc.vinhetaFolder || ''}
+                    onChange={(e) => updateMapaCodeConfig(cc.code, { vinhetaFolder: e.target.value })}
+                    placeholder="Pasta das vinhetas"
+                  />
                 )}
               </div>
             ))}

@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule, ScheduledSequence } from '@/types/radio';
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
 import type { MapasConfig, MapaCodeConfig } from '@/lib/mapasBuilder/types';
-import { DEFAULT_MAPAS_CONFIG } from '@/lib/mapasBuilder/types';
+import { DEFAULT_MAPAS_CONFIG, DEFAULT_CODE_CONFIGS } from '@/lib/mapasBuilder/types';
 
 export interface GenreRouteRule {
   genre: string;      // normalized genre key e.g. "ROCK", "METAL"
@@ -206,6 +206,9 @@ interface RadioState {
   mapasConfig: MapasConfig;
   setMapasConfig: (config: Partial<MapasConfig>) => void;
   updateMapaCodeConfig: (code: string, updates: Partial<MapaCodeConfig>) => void;
+  addMapaCodeConfig: (config: MapaCodeConfig) => void;
+  removeMapaCodeConfig: (code: string) => void;
+  resetMapaCodeConfigs: () => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
@@ -715,6 +718,21 @@ export const useRadioStore = create<RadioState>()(
             c.code === code ? { ...c, ...updates } : c
           ),
         },
+      })),
+      addMapaCodeConfig: (config) => set((state) => ({
+        mapasConfig: {
+          ...state.mapasConfig,
+          codeConfigs: [...state.mapasConfig.codeConfigs, config],
+        },
+      })),
+      removeMapaCodeConfig: (code) => set((state) => ({
+        mapasConfig: {
+          ...state.mapasConfig,
+          codeConfigs: state.mapasConfig.codeConfigs.filter(c => c.code !== code),
+        },
+      })),
+      resetMapaCodeConfigs: () => set((state) => ({
+        mapasConfig: { ...state.mapasConfig, codeConfigs: DEFAULT_CODE_CONFIGS },
       })),
     }),
     {
