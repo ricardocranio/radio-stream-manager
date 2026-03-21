@@ -43,6 +43,7 @@ const PREFETCH_MAP: Record<string, () => void> = {
   trends: () => import('@/components/views/TrendsView'),
   analytics: () => import('@/components/views/AnalyticsView'),
   competitor: () => import('@/components/views/CompetitorView'),
+  mapas: () => import('@/components/views/MapasView'),
   vozbrasil: () => import('@/components/views/VozBrasilView'),
   specialmonitoring: () => import('@/components/views/SpecialMonitoringView'),
   logs: () => import('@/components/views/LogsView'),
