@@ -190,7 +190,7 @@ export function MapasView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Map className="w-6 h-6 text-primary" />
+          <MapIcon className="w-6 h-6 text-primary" />
           <div>
             <h1 className="text-xl font-bold text-foreground">Mapas Comerciais</h1>
             <p className="text-xs text-muted-foreground">Templates de programação comercial/institucional</p>
