@@ -38,12 +38,16 @@ function markSlotBuilt(key: string) {
   }));
 }
 
-function getTodayTemplateIndex(): number {
-  const dow = new Date().getDay(); // 0=Sun
-  if (dow === 0) return 2; // DOM
-  if (dow === 6) return 1; // SAB
-  return 0; // Seg-Sex
-}
+// Map JS day-of-week to template index and output filename
+const DAY_CONFIG: Array<{ tmplIdx: number; filename: string }> = [
+  { tmplIdx: 2, filename: 'dom.txt' },   // 0 = Sunday
+  { tmplIdx: 0, filename: 'seg.txt' },   // 1 = Monday
+  { tmplIdx: 0, filename: 'ter.txt' },   // 2 = Tuesday
+  { tmplIdx: 0, filename: 'qua.txt' },   // 3 = Wednesday
+  { tmplIdx: 0, filename: 'qui.txt' },   // 4 = Thursday
+  { tmplIdx: 0, filename: 'sex.txt' },   // 5 = Friday
+  { tmplIdx: 1, filename: 'sab.txt' },   // 6 = Saturday
+];
 
 function timeToMinutes(time: string): number {
   const [h, m] = time.split(':').map(Number);
@@ -62,11 +66,13 @@ export function useAutoMapaBuilder() {
     
     if (!mapasConfig.enabled || !mapasConfig.templates?.length) return;
     
-    const tmplIdx = getTodayTemplateIndex();
-    const template = mapasConfig.templates[tmplIdx];
+    const now = new Date();
+    const dow = now.getDay();
+    const dayConfig = DAY_CONFIG[dow];
+    const template = mapasConfig.templates[dayConfig.tmplIdx];
+    const outputFilename = dayConfig.filename;
     if (!template?.lines?.length) return;
     
-    const now = new Date();
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
     const built = getBuiltSlots();
 
@@ -80,7 +86,7 @@ export function useAutoMapaBuilder() {
       // We want to build it if it's 20 min away in either direction
       const normalizedDiff = diff < -720 ? diff + 1440 : diff > 720 ? diff - 1440 : diff;
       
-      const slotKey = `${template.filename}:${line.time}:${now.toDateString()}`;
+      const slotKey = `${outputFilename}:${line.time}:${now.toDateString()}`;
       if (normalizedDiff > 0 && normalizedDiff <= MINUTES_BEFORE && !built.has(slotKey)) {
         dueSlots.push({ lineIdx: i, time: line.time });
       }
@@ -109,19 +115,19 @@ export function useAutoMapaBuilder() {
         allLines.push(formatResolvedLine(resolved));
       }
 
-      // Save to disk
+      // Save to disk with day-specific filename
       const result = await window.electronAPI!.saveGradeFile({
         folder: mapasConfig.outputFolder,
-        filename: template.filename,
+        filename: outputFilename,
         content: allLines.join('\n'),
       });
 
       if (result.success) {
         for (const slot of dueSlots) {
-          const slotKey = `${template.filename}:${slot.time}:${now.toDateString()}`;
+          const slotKey = `${outputFilename}:${slot.time}:${now.toDateString()}`;
           markSlotBuilt(slotKey);
         }
-        console.log(`[MAPA-JIT] ✅ ${template.filename} salvo com ${allLines.length} linhas`);
+        console.log(`[MAPA-JIT] ✅ ${outputFilename} salvo com ${allLines.length} linhas (${['dom','seg','ter','qua','qui','sex','sáb'][dow]})`);
         reportServiceHeartbeat('mapa-jit');
       }
     } catch (err) {
