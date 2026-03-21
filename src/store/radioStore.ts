@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule, ScheduledSequence } from '@/types/radio';
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
+import type { MapasConfig, MapaCodeConfig } from '@/lib/mapasBuilder/types';
+import { DEFAULT_MAPAS_CONFIG } from '@/lib/mapasBuilder/types';
 
 export interface GenreRouteRule {
   genre: string;      // normalized genre key e.g. "ROCK", "METAL"
@@ -199,6 +201,11 @@ interface RadioState {
   addSongAlias: (alias: SongAlias) => void;
   removeSongAlias: (id: string) => void;
   updateSongAlias: (id: string, updates: Partial<SongAlias>) => void;
+
+  // Mapas Config (commercial programming templates)
+  mapasConfig: MapasConfig;
+  setMapasConfig: (config: Partial<MapasConfig>) => void;
+  updateMapaCodeConfig: (code: string, updates: Partial<MapaCodeConfig>) => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
@@ -697,6 +704,18 @@ export const useRadioStore = create<RadioState>()(
       updateSongAlias: (id, updates) => set((state) => ({
         songAliases: state.songAliases.map(a => a.id === id ? { ...a, ...updates } : a),
       })),
+
+      // Mapas Config
+      mapasConfig: DEFAULT_MAPAS_CONFIG,
+      setMapasConfig: (config) => set((state) => ({ mapasConfig: { ...state.mapasConfig, ...config } })),
+      updateMapaCodeConfig: (code, updates) => set((state) => ({
+        mapasConfig: {
+          ...state.mapasConfig,
+          codeConfigs: state.mapasConfig.codeConfigs.map(c =>
+            c.code === code ? { ...c, ...updates } : c
+          ),
+        },
+      })),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
@@ -717,6 +736,7 @@ export const useRadioStore = create<RadioState>()(
         rankingSongs: state.rankingSongs,
         autoScrapeEnabled: state.autoScrapeEnabled,
         songAliases: state.songAliases,
+        mapasConfig: state.mapasConfig,
       }),
       // Handle Date objects that get serialized as strings
       onRehydrateStorage: () => (state) => {
