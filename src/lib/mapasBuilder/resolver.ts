@@ -83,29 +83,42 @@ async function loadFolderFiles(folder: string): Promise<string[]> {
 }
 
 /**
- * Load songs from a station's captures (via scraped_songs DB).
+ * Load songs from station captures (via scraped_songs DB).
+ * If stationName is empty/undefined, loads from ALL stations.
  */
 async function loadMonitoredSongs(
-  stationName: string,
+  stationName: string | undefined,
   musicFolders: string[]
 ): Promise<string[]> {
   if (!isElectron || !window.electronAPI?.checkSongExists) return [];
   
-  // Import supabase to query
   try {
     const { supabase } = await import('@/integrations/supabase/client');
-    const { data } = await supabase
+    let query = supabase
       .from('scraped_songs')
-      .select('artist, title')
-      .eq('station_name', stationName)
+      .select('artist, title, station_name')
       .order('scraped_at', { ascending: false })
-      .limit(200);
+      .limit(300);
     
+    if (stationName) {
+      query = query.eq('station_name', stationName);
+    }
+    
+    const { data } = await query;
     if (!data || data.length === 0) return [];
+    
+    // Deduplicate by artist+title
+    const seen = new Set<string>();
+    const unique = data.filter(s => {
+      const key = `${s.artist.toLowerCase()}|${s.title.toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     
     // Check which exist in library
     const found: string[] = [];
-    for (const song of data) {
+    for (const song of unique) {
       try {
         const result = await window.electronAPI!.checkSongExists({
           artist: song.artist,
@@ -116,12 +129,104 @@ async function loadMonitoredSongs(
           found.push(result.filename);
         }
       } catch { /* skip */ }
-      if (found.length >= 50) break; // enough
+      if (found.length >= 80) break;
     }
     
+    console.log(`[MAPAS] 📡 ${found.length}/${unique.length} músicas reais encontradas${stationName ? ` de ${stationName}` : ' (todas)'}`);
     return found;
   } catch (err) {
-    console.warn(`[MAPAS] Erro ao carregar monitoramento ${stationName}:`, err);
+    console.warn(`[MAPAS] Erro ao carregar monitoramento:`, err);
+    return [];
+  }
+}
+
+/**
+ * Load songs from DB (ai_genre) + library check, with genre/decade filters.
+ * This uses REAL monitored data from scraped_songs, not just local ID3.
+ */
+async function loadMonitoredGenreSongs(
+  genreFilter: string[],
+  musicFolders: string[],
+  decadeFilter?: string,
+  stationName?: string
+): Promise<string[]> {
+  if (!isElectron || !window.electronAPI?.checkSongExists) return [];
+  
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    
+    // Query scraped songs with ai_genre filter
+    let query = supabase
+      .from('scraped_songs')
+      .select('artist, title, ai_genre, year')
+      .order('scraped_at', { ascending: false })
+      .limit(500);
+    
+    if (stationName) {
+      query = query.eq('station_name', stationName);
+    }
+    
+    const { data } = await query;
+    if (!data || data.length === 0) return [];
+    
+    // Parse decade range
+    let yearStart = 0, yearEnd = 9999;
+    if (decadeFilter) {
+      const decadeMap: Record<string, [number, number]> = {
+        '80s': [1980, 1989], '90s': [1990, 1999], '2000s': [2000, 2009],
+        '2010s': [2010, 2019], '2020s': [2020, 2029],
+      };
+      const range = decadeMap[decadeFilter];
+      if (range) { yearStart = range[0]; yearEnd = range[1]; }
+    }
+    
+    const genreUpper = genreFilter.map(g => g.toUpperCase());
+    
+    // Filter by genre and decade
+    const filtered = data.filter(s => {
+      // Genre check via ai_genre field
+      if (genreUpper.length > 0) {
+        if (!s.ai_genre) return false;
+        const songGenre = s.ai_genre.toUpperCase();
+        if (!genreUpper.some(g => songGenre.includes(g))) return false;
+      }
+      // Decade check
+      if (decadeFilter && s.year) {
+        const y = parseInt(s.year, 10);
+        if (isNaN(y) || y < yearStart || y > yearEnd) return false;
+      }
+      return true;
+    });
+    
+    // Deduplicate
+    const seen = new Set<string>();
+    const unique = filtered.filter(s => {
+      const key = `${s.artist.toLowerCase()}|${s.title.toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    
+    // Check which exist in library
+    const found: string[] = [];
+    for (const song of unique) {
+      try {
+        const result = await window.electronAPI!.checkSongExists({
+          artist: song.artist,
+          title: song.title,
+          musicFolders,
+        });
+        if (result.exists && result.filename) {
+          found.push(result.filename);
+        }
+      } catch { /* skip */ }
+      if (found.length >= 60) break;
+    }
+    
+    console.log(`[MAPAS] 🎵📡 ${found.length} músicas reais gênero ${genreUpper.join(',')}${decadeFilter ? ` (${decadeFilter})` : ''}`);
+    return found;
+  } catch (err) {
+    console.warn(`[MAPAS] Erro ao carregar gênero monitorado:`, err);
     return [];
   }
 }
