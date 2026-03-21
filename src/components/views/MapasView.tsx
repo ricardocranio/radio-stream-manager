@@ -15,6 +15,129 @@ import { CSS } from '@dnd-kit/utilities';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
+// Mock file contents for preview when Electron is not available
+const MOCK_FILES: Record<string, string> = {
+  'MAPA.txt': `00:55 SINAL,SINAL,HC,VHTENT,mus,vht,mus
+01:55 SINAL,HC,VHTENT,mus,vht,mus
+02:55 SINAL,HC,VHTENT,mus,vht,mus
+03:55 SINAL,HC,VHTENT,mus,vht,mus
+04:55 SINAL,HC,VHTENT,mus,vht,mus
+05:55 RESTART,SINAL,HC,VHTENT
+06:55 SINAL,HC,VHTENT,mus,vht,mus
+07:27 SINAL,HC,VHTENT,mus,vht,mus
+07:55 SINAL,HC,VHTENT,mus,vht,mus
+08:27 SINAL,HC,NOT,VHTENT,mus,vht,mus
+08:55 SINAL,HC,VHTENT,mus,vht,mus
+09:27 SINAL,HC,NOT,VHTENT,mus,vht,mus
+09:55 SINAL,HC,VHTENT,mus,vht,mus
+10:27 SINAL,HC,NOT,VHTENT,mus,vht,mus
+10:55 SINAL,HC,VHTENT,mus,vht,mus
+11:27 SINAL,HC,NOT,VHTENT,mus,vht,mus
+11:55 SINAL,HC,VHTENT,mus,vht,mus
+12:27 SINAL,HC,NOT,VHTENT,mus,vht,mus
+12:55 SINAL,HC,VHTENT,mus,vht,mus
+13:27 SINAL,HC,NOT,VHTENT,mus,vht,mus
+13:55 SINAL,HC,VHTENT,mus,vht,mus
+14:27 SINAL,HC,NOT,VHTENT,mus,vht,mus
+14:55 SINAL,HC,VHTENT,mus,vht,mus
+15:27 SINAL,HC,NOT,VHTENT,mus,vht,mus
+15:55 SINAL,HC,VHTENT,mus,vht,mus
+16:27 SINAL,HC,NOT,VHTENT,mus,vht,mus
+16:55 SINAL,HC,VHTENT,mus,vht,mus
+17:27 SINAL,HC,NOT,VHTENT,mus,vht,mus
+17:55 SINAL,HC,VHTENT,mus,vht,mus
+18:27 SINAL,HC,VHTENT,mus,vht,mus
+18:55 SINAL,HC,VHTENT,mus,vht,mus
+19:27 SINAL,HC,VHTENT,mus,vht,mus
+19:55 SINAL,HC,VHTENT,mus,vht,mus
+20:59 VHTENT
+22:00 SINAL,HC,VHTENT,
+22:27 SINAL,HC,VHTENT,rom,vht
+22:55 SINAL,HC,VHTENT,rom,vht
+23:27 SINAL,HC,VHTENT,rom,vht
+23:55 SINAL,HC,VHTENT,rom,vht`,
+  'S_B.txt': `00:55 SINAL,SINAL,HC,VHTENT,mus,vht,mus
+01:55 SINAL,HC,VHTENT,mus,vht,mus
+02:55 SINAL,HC,VHTENT,mus,vht,mus
+03:55 SINAL,HC,VHTENT,mus,vht,mus
+04:55 SINAL,HC,VHTENT,mus,vht,mus
+05:55 RESTART,SINAL,HC,VHTENT
+06:55 SINAL,HC,VHTENT,mus,vht,mus
+07:27 SINAL,HC,VHTENT,mus,vht,mus
+07:55 SINAL,HC,VHTENT,mus,vht,mus
+08:27 SINAL,HC,VHTENT,mus,vht,mus
+08:55 SINAL,HC,VHTENT,mus,vht,mus
+09:27 SINAL,HC,VHTENT,mus,vht,mus
+09:55 SINAL,HC,VHTENT,mus,vht,mus
+10:27 SINAL,HC,VHTENT,mus,vht,mus
+10:55 SINAL,HC,VHTENT,mus,vht,mus
+11:27 SINAL,HC,VHTENT,mus,vht,mus
+11:55 SINAL,HC,VHTENT,mus,vht,mus
+12:27 SINAL,HC,VHTENT,mus,vht,mus
+12:55 SINAL,HC,VHTENT,mus,vht,mus
+13:27 SINAL,HC,VHTENT,mus,vht,mus
+13:55 SINAL,HC,VHTENT,mus,vht,mus
+14:27 SINAL,HC,VHTENT,mus,vht,mus
+14:55 SINAL,HC,VHTENT,mus,vht,mus
+15:27 SINAL,HC,VHTENT,mus,vht,mus
+15:55 SINAL,HC,VHTENT,mus,vht,mus
+16:27 SINAL,HC,VHTENT,mus,vht,mus
+16:55 SINAL,HC,VHTENT,mus,vht,mus
+17:27 SINAL,HC,VHTENT,mus,vht,mus
+17:55 SINAL,HC,VHTENT,fun,vht,fun
+18:27 SINAL,HC,VHTENT,fun,vht,fun
+18:55 SINAL,HC,VHTENT,mus,vht,mus
+19:27 SINAL,HC,VHTENT,mus,vht,mus
+19:55 SINAL,HC,VHTENT,mus,vht,mus
+20:27 SINAL,HC,VHTENT,mus,vht,mus
+20:59 SINAL,HC,VHTENT,mus,vht,mus
+22:00 SINAL,HC,VHTENT,mus,vht,mus
+22:27 SINAL,HC,VHTENT,mus,vht,mus
+22:55 SINAL,HC,VHTENT,mus,vht,mus
+23:27 SINAL,HC,VHTENT,mus,vht,mus
+23:55 SINAL,HC,VHTENT,mus,vht,mus`,
+  'DOM-4.txt': `00:55 SINAL,SINAL,HC,VHTENT,mus,vht,mus
+01:55 SINAL,HC,VHTENT,mus,vht,mus
+02:55 SINAL,HC,VHTENT,mus,vht,mus
+03:55 SINAL,HC,VHTENT,mus,vht,mus
+04:55 SINAL,HC,VHTENT,mus,vht,mus
+05:55 RESTART,SINAL,HC,VHTENT
+06:55 SINAL,HC,VHTENT,mus,vht,mus
+07:27 SINAL,HC,VHTENT,mus,vht,mus
+07:55 SINAL,HC,VHTENT,mus,vht,mus
+08:27 SINAL,HC,VHTENT,mus,vht,mus
+08:55 SINAL,HC,VHTENT,mus,vht,mus
+09:27 SINAL,HC,VHTENT,mus,vht,mus
+09:55 SINAL,HC,VHTENT,mus,vht,mus
+10:27 SINAL,HC,VHTENT,mus,vht,mus
+10:55 SINAL,HC,VHTENT,mus,vht,mus
+11:27 SINAL,HC,VHTENT,mus,vht,mus
+11:55 SINAL,HC,VHTENT,mus,vht,mus
+12:27 SINAL,HC,VHTENT,mus,vht,mus
+12:55 SINAL,HC,VHTENT,mus,vht,mus
+13:27 SINAL,HC,VHTENT,mus,vht,mus
+13:55 SINAL,HC,VHTENT,mus,vht,mus
+14:27 SINAL,HC,VHTENT,mus,vht,mus
+14:55 SINAL,HC,VHTENT,mus,vht,mus
+15:27 SINAL,HC,VHTENT,mus,vht,mus
+15:55 SINAL,HC,VHTENT,mus,vht,mus
+16:27 SINAL,HC,VHTENT,mus,vht,mus
+16:55 SINAL,HC,VHTENT,mus,vht,mus
+17:27 SINAL,HC,VHTENT,mus,vht,mus
+17:55 SINAL,HC,VHTENT,mus,vht,mus
+18:27 SINAL,HC,VHTENT,mus,vht,mus
+18:55 SINAL,HC,VHTENT,mus,vht,mus
+19:27 SINAL,HC,VHTENT,mus,vht,mus
+19:55 SINAL,HC,VHTENT,mus,vht,mus
+20:27 SINAL,HC,VHTENT,mus,vht,mus
+20:59 SINAL,HC,VHTENT,mus,vht,mus
+22:00 SINAL,HC,VHTENT,mus,vht,mus
+22:27 SINAL,HC,VHTENT,mus,vht,mus
+22:55 SINAL,HC,VHTENT,mus,vht,mus
+23:27 SINAL,HC,VHTENT,mus,vht,mus
+23:55 SINAL,HC,VHTENT,mus,vht,mus`,
+};
+
 // ─── Color System for Code Types ───
 const CODE_COLORS: Record<string, { bg: string; border: string; text: string; glow: string }> = {
   literal:   { bg: 'bg-slate-500/10', border: 'border-slate-500/30', text: 'text-slate-300', glow: '' },
