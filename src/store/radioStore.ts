@@ -745,6 +745,31 @@ export const useRadioStore = create<RadioState>()(
         configs.splice(toIndex, 0, moved);
         return { mapasConfig: { ...state.mapasConfig, codeConfigs: configs } };
       }),
+      updateMapaTemplateLine: (templateIndex, lineIndex, codes) => set((state) => {
+        const templates = state.mapasConfig.templates.map((t, ti) => {
+          if (ti !== templateIndex) return t;
+          return { ...t, lines: t.lines.map((l, li) => li === lineIndex ? { ...l, codes } : l) };
+        });
+        return { mapasConfig: { ...state.mapasConfig, templates } };
+      }),
+      addMapaTemplateLine: (templateIndex, time, codes) => set((state) => {
+        const templates = state.mapasConfig.templates.map((t, ti) => {
+          if (ti !== templateIndex) return t;
+          const newLines = [...t.lines, { time, codes }].sort((a, b) => a.time.localeCompare(b.time));
+          return { ...t, lines: newLines };
+        });
+        return { mapasConfig: { ...state.mapasConfig, templates } };
+      }),
+      removeMapaTemplateLine: (templateIndex, lineIndex) => set((state) => {
+        const templates = state.mapasConfig.templates.map((t, ti) => {
+          if (ti !== templateIndex) return t;
+          return { ...t, lines: t.lines.filter((_, li) => li !== lineIndex) };
+        });
+        return { mapasConfig: { ...state.mapasConfig, templates } };
+      }),
+      resetMapaTemplates: () => set((state) => ({
+        mapasConfig: { ...state.mapasConfig, templates: DEFAULT_TEMPLATES },
+      })),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
