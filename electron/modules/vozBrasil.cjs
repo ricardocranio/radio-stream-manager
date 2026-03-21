@@ -205,6 +205,9 @@ function register({ getMainWindow, showNotification, safeHandle }) {
           if (remaining.length === 0) fs.rmdirSync(tempDir);
         } catch (e) {}
         
+        // Clean PkInfo folder after file update
+        deletePkInfoFolder(outputFolder);
+        
         _showNotification('📻 A Voz do Brasil', `Download concluído: ${filename}`, () => { shell.openPath(outputFolder); });
         return { success: true, fileSize: stats.size };
       }
