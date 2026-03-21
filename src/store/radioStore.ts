@@ -719,6 +719,21 @@ export const useRadioStore = create<RadioState>()(
           ),
         },
       })),
+      addMapaCodeConfig: (config) => set((state) => ({
+        mapasConfig: {
+          ...state.mapasConfig,
+          codeConfigs: [...state.mapasConfig.codeConfigs, config],
+        },
+      })),
+      removeMapaCodeConfig: (code) => set((state) => ({
+        mapasConfig: {
+          ...state.mapasConfig,
+          codeConfigs: state.mapasConfig.codeConfigs.filter(c => c.code !== code),
+        },
+      })),
+      resetMapaCodeConfigs: () => set((state) => ({
+        mapasConfig: { ...state.mapasConfig, codeConfigs: DEFAULT_CODE_CONFIGS },
+      })),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
