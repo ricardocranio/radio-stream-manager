@@ -351,22 +351,20 @@ async function resolveCode(
       const cacheKey = `genre:${genres.join(',')}${stationKey}${decadeKey}`;
       
       if (!cache.has(cacheKey)) {
-        let songs: string[] = [];
-        if (codeConfig.stationSource) {
-          const stationSongs = await loadMonitoredSongs(codeConfig.stationSource, musicFolders);
-          if (stationSongs.length > 0 && (genres.length > 0 || decade)) {
-            const genreSongs = await loadGenreSongs(genres, musicFolders, decade);
-            const genreSet = new Set(genreSongs.map(f => f.toLowerCase()));
-            songs = stationSongs.filter(f => genreSet.has(f.toLowerCase()));
-            if (songs.length < 5) songs = stationSongs;
-          } else {
-            songs = stationSongs;
-          }
-        } else {
-          songs = await loadGenreSongs(genres, musicFolders, decade);
+        // PRIMARY: Use real monitored songs from DB (ai_genre + year)
+        let songs = await loadMonitoredGenreSongs(genres, musicFolders, decade, codeConfig.stationSource);
+        
+        // FALLBACK: If DB yields too few, supplement with local ID3 scan
+        if (songs.length < 10) {
+          console.log(`[MAPAS] ⚠️ Apenas ${songs.length} do monitoramento, complementando com ID3 local...`);
+          const localSongs = await loadGenreSongs(genres, musicFolders, decade);
+          const existing = new Set(songs.map(f => f.toLowerCase()));
+          const extra = localSongs.filter(f => !existing.has(f.toLowerCase()));
+          songs = [...songs, ...extra];
         }
+        
         cache.set(cacheKey, songs);
-        console.log(`[MAPAS] 🎵 ${songs.length} músicas gênero ${genres.join(',')}${decadeKey}${stationKey}`);
+        console.log(`[MAPAS] 🎵 ${songs.length} músicas total gênero ${genres.join(',')}${decadeKey}${stationKey}`);
       }
       
       const files = cache.get(cacheKey)!;
