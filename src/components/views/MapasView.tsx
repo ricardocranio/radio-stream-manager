@@ -19,6 +19,7 @@ const CODE_TYPE_LABELS: Record<string, string> = {
   vinheta: 'Vinheta (arquivo)',
   monitored: 'Monitoramento',
   genre: 'Gênero ID3',
+  comercial: 'Comercial',
 };
 
 const CODE_ICONS: Record<string, React.ReactNode> = {
