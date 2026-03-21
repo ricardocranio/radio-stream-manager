@@ -241,8 +241,29 @@ export function useGlobalDownloadService() {
         const isVozDoBrasil = song.title?.toLowerCase().includes('voz do brasil') || 
                               song.artist?.toLowerCase().includes('voz do brasil');
         if (!isVozDoBrasil) {
-          const { deezerConfig: dlConfig } = useRadioStore.getState();
-          if (dlConfig.genreRoutingEnabled) {
+          const { deezerConfig: dlConfig, stations: allStations } = useRadioStore.getState();
+          
+          // === Station-based folder routing ===
+          const songStation = allStations.find(s => s.name.toLowerCase() === (song.station?.toLowerCase() || ''));
+          if (songStation?.downloadFolder) {
+            const stationFolder = `${dlConfig.downloadFolder}\\${songStation.downloadFolder}`;
+            const fileForMove = (result as any).verifiedFile || `${song.artist} - ${song.title}.mp3`;
+            try {
+              if (isElectron && window.electronAPI?.ensureFolder) {
+                await window.electronAPI.ensureFolder(stationFolder);
+              }
+              if (isElectron && (window.electronAPI as any)?.moveFileToGenreFolder) {
+                await (window.electronAPI as any).moveFileToGenreFolder({
+                  fileName: fileForMove,
+                  sourceFolders: [dlConfig.downloadFolder, ...storeState.config.musicFolders],
+                  targetFolder: stationFolder,
+                });
+                console.log(`[DL-SVC] 📁 Moved to station folder: ${songStation.downloadFolder}`);
+              }
+            } catch (e) {
+              console.warn(`[DL-SVC] Station folder routing failed:`, e);
+            }
+          } else if (dlConfig.genreRoutingEnabled) {
             const fileForRoute = (result as any).verifiedFile || `${song.artist} - ${song.title}.mp3`;
             await routeFileByGenre(fileForRoute, dlConfig.downloadFolder, storeState.config.musicFolders || [], '[DL-SVC]', downloadedGenre);
           }

@@ -225,6 +225,7 @@ const defaultStations: RadioStation[] = [
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-bh-fm-402270',
     styles: ['SERTANEJO', 'PAGODE', 'AGRONEJO'],
     enabled: true,
+    downloadFolder: 'hist',
   },
   {
     id: 'band',
@@ -233,6 +234,7 @@ const defaultStations: RadioStation[] = [
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/band-fm-413397/',
     styles: ['SERTANEJO', 'PAGODE', 'AGRONEJO'],
     enabled: true,
+    downloadFolder: 'hist',
   },
   {
     id: 'clube',
@@ -241,6 +243,7 @@ const defaultStations: RadioStation[] = [
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-clube-fm-brasilia-1055-406812/',
     styles: ['SERTANEJO', 'PAGODE', 'POP/VARIADO'],
     enabled: true,
+    downloadFolder: 'hist',
   },
   {
     id: 'globo',
@@ -249,6 +252,7 @@ const defaultStations: RadioStation[] = [
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-globo-rj-402262/',
     styles: ['POP', 'SERTANEJO'],
     enabled: true,
+    downloadFolder: 'hist',
   },
   {
     id: 'blink',
@@ -265,6 +269,7 @@ const defaultStations: RadioStation[] = [
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/positiva-fm-421607/',
     styles: ['POP', 'SERTANEJO'],
     enabled: true,
+    downloadFolder: 'sertanejo',
   },
   {
     id: 'liberdade',
@@ -273,6 +278,7 @@ const defaultStations: RadioStation[] = [
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-liberdade-fm-929-395273/',
     styles: ['SERTANEJO'],
     enabled: true,
+    downloadFolder: 'sertanejo',
   },
   {
     id: 'mix',
@@ -281,6 +287,7 @@ const defaultStations: RadioStation[] = [
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/mix-fm-sao-paulo-408793/',
     styles: ['POP', 'DANCE'],
     enabled: true,
+    downloadFolder: 'jovem',
   },
 ];
 

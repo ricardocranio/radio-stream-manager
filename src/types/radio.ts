@@ -24,6 +24,7 @@ export interface RadioStation {
   enabled: boolean;
   prioritizeDownloads?: boolean; // Force download priority for building local folder cache
   monitoringSchedules?: MonitoringSchedule[]; // Horários específicos para monitoramento
+  downloadFolder?: string; // Station-specific download subfolder (e.g. "hist", "sertanejo")
 }
 
 export interface ProgramSchedule {

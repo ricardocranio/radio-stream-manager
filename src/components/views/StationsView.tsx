@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Radio, Plus, Trash2, ExternalLink, Save, X, RefreshCw, Loader2, Download, Copy, CheckCircle2, AlertCircle, Power, Settings, CloudUpload, Clock, Zap } from 'lucide-react';
+import { Radio, Plus, Trash2, ExternalLink, Save, X, RefreshCw, Loader2, Download, Copy, CheckCircle2, AlertCircle, Power, Settings, CloudUpload, Clock, Zap, FolderOpen } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -757,6 +757,31 @@ export function StationsView() {
                       }
                     }}
                   />
+                </div>
+
+                {/* Pasta de Download por Estação */}
+                <div className="space-y-1 py-1">
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Pasta de Download</span>
+                  </div>
+                  <Input
+                    className="h-7 text-xs font-mono"
+                    value={data.downloadFolder || ''}
+                    onChange={(e) => {
+                      if (isEditing) {
+                        setEditForm((prev) => prev && { ...prev, downloadFolder: e.target.value });
+                      } else {
+                        updateStation(station.id, { downloadFolder: e.target.value });
+                      }
+                    }}
+                    placeholder="Ex: hist, sertanejo, jovem..."
+                  />
+                  {data.downloadFolder && (
+                    <p className="text-[10px] text-muted-foreground/60 font-mono">
+                      → C:\Playlist\Downloads\{data.downloadFolder}
+                    </p>
+                  )}
                 </div>
 
                 {/* Actions */}
