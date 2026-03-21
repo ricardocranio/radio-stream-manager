@@ -277,7 +277,7 @@ export function MapasView() {
                       type: newCode.type,
                       ...(newCode.type === 'monitored' ? { stationSource: newCode.stationSource } : {}),
                       ...(newCode.type === 'genre' ? { genreFilter: newCode.genreFilter.split(',').map(g => g.trim().toUpperCase()).filter(Boolean) } : {}),
-                      ...(newCode.type === 'vinheta' ? { vinhetaFolder: newCode.vinhetaFolder } : {}),
+                      ...((newCode.type === 'vinheta' || newCode.type === 'comercial') ? { vinhetaFolder: newCode.vinhetaFolder } : {}),
                     });
                     setNewCode({ code: '', label: '', type: 'literal', stationSource: '', genreFilter: '', vinhetaFolder: '' });
                     setShowNewCode(false);
