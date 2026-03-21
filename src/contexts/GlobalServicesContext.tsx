@@ -25,6 +25,7 @@ import { useRadioagenciaService } from '@/hooks/useRadioagenciaService';
 import { useBackgroundMaintenance } from '@/hooks/useBackgroundMaintenance';
 import { useServiceWatchdog } from '@/hooks/useServiceWatchdog';
 import { useDailyReport } from '@/hooks/useDailyReport';
+import { useAutoMapaBuilder } from '@/hooks/useAutoMapaBuilder';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -63,6 +64,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   const maintenanceService = useBackgroundMaintenance();
   const watchdogService = useServiceWatchdog();
   const dailyReportService = useDailyReport();
+  const mapaBuilder = useAutoMapaBuilder();
 
   // ============= INITIALIZATION (runs once) =============
   useEffect(() => {
@@ -98,6 +100,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log(`║ 💾 Cache Offline:  ✅ ATIVO (fallback 24h)`.padEnd(65) + '║');
     console.log(`║ 🔄 Cross-Day:     ✅ ATIVO (buffer 4h)`.padEnd(65) + '║');
     console.log(`║ 📉 Ranking Decay: ✅ ATIVO (5%/dia)`.padEnd(65) + '║');
+    console.log(`║ 🗺️ Mapas JIT:     ✅ ATIVO (20 min antes)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
     // Start all services
