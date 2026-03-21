@@ -9,3 +9,4 @@ if (typeof window !== 'undefined' && !window.electronAPI) {
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
+
