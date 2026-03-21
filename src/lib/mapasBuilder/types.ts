@@ -45,6 +45,7 @@ export interface MapasConfig {
   vhtEntradaFolder: string;      // C:\Playlist\Vht Entrada
   outputFolder: string;          // Where to save generated files
   codeConfigs: MapaCodeConfig[]; // Config for each resolvable code
+  templates: MapaTemplate[];     // Built-in editable templates
 }
 
 /** Default code configurations */
@@ -61,10 +62,113 @@ export const DEFAULT_CODE_CONFIGS: MapaCodeConfig[] = [
   { code: 'com', label: 'Comercial', type: 'comercial', vinhetaFolder: 'C:\\Playlist\\Comerciais' },
 ];
 
+// Standard block used in most time slots
+const STD = ['SINAL','HC','VHTENT','mus','vht','mus'];
+const STD_NOT = ['SINAL','HC','NOT','VHTENT','mus','vht','mus'];
+const STD_FUN = ['SINAL','HC','VHTENT','fun','vht','fun'];
+const STD_ROM = ['SINAL','HC','VHTENT','rom','vht'];
+
+/** Default MAPA template (weekdays: Seg-Sex) */
+export const DEFAULT_TEMPLATE_MAPA: MapaTemplate = {
+  filename: 'MAPA.txt',
+  dayMapping: 'weekdays',
+  lines: [
+    { time: '00:55', codes: ['SINAL','SINAL','HC','VHTENT','mus','vht','mus'] },
+    { time: '01:55', codes: STD }, { time: '02:55', codes: STD },
+    { time: '03:55', codes: STD }, { time: '04:55', codes: STD },
+    { time: '05:55', codes: ['RESTART','SINAL','HC','VHTENT'] },
+    { time: '06:55', codes: STD }, { time: '07:27', codes: STD },
+    { time: '07:55', codes: STD },
+    { time: '08:27', codes: STD_NOT }, { time: '08:55', codes: STD },
+    { time: '09:27', codes: STD_NOT }, { time: '09:55', codes: STD },
+    { time: '10:27', codes: STD_NOT }, { time: '10:55', codes: STD },
+    { time: '11:27', codes: STD_NOT }, { time: '11:55', codes: STD },
+    { time: '12:27', codes: STD_NOT }, { time: '12:55', codes: STD },
+    { time: '13:27', codes: STD_NOT }, { time: '13:55', codes: STD },
+    { time: '14:27', codes: STD_NOT }, { time: '14:55', codes: STD },
+    { time: '15:27', codes: STD_NOT }, { time: '15:55', codes: STD },
+    { time: '16:27', codes: STD_NOT }, { time: '16:55', codes: STD },
+    { time: '17:27', codes: STD_NOT }, { time: '17:55', codes: STD },
+    { time: '18:27', codes: STD }, { time: '18:55', codes: STD },
+    { time: '19:27', codes: STD }, { time: '19:55', codes: STD },
+    { time: '20:59', codes: ['VHTENT'] },
+    { time: '22:00', codes: ['SINAL','HC','VHTENT'] },
+    { time: '22:27', codes: [...STD_ROM] }, { time: '22:55', codes: [...STD_ROM] },
+    { time: '23:27', codes: [...STD_ROM] }, { time: '23:55', codes: [...STD_ROM] },
+  ],
+};
+
+/** Default S_B template (Sábado) */
+export const DEFAULT_TEMPLATE_SAB: MapaTemplate = {
+  filename: 'S_B.txt',
+  dayMapping: 'saturday',
+  lines: [
+    { time: '00:55', codes: ['SINAL','SINAL','HC','VHTENT','mus','vht','mus'] },
+    { time: '01:55', codes: STD }, { time: '02:55', codes: STD },
+    { time: '03:55', codes: STD }, { time: '04:55', codes: STD },
+    { time: '05:55', codes: ['RESTART','SINAL','HC','VHTENT'] },
+    { time: '06:55', codes: STD }, { time: '07:27', codes: STD },
+    { time: '07:55', codes: STD }, { time: '08:27', codes: STD },
+    { time: '08:55', codes: STD }, { time: '09:27', codes: STD },
+    { time: '09:55', codes: STD }, { time: '10:27', codes: STD },
+    { time: '10:55', codes: STD }, { time: '11:27', codes: STD },
+    { time: '11:55', codes: STD }, { time: '12:27', codes: STD },
+    { time: '12:55', codes: STD }, { time: '13:27', codes: STD },
+    { time: '13:55', codes: STD }, { time: '14:27', codes: STD },
+    { time: '14:55', codes: STD }, { time: '15:27', codes: STD },
+    { time: '15:55', codes: STD }, { time: '16:27', codes: STD },
+    { time: '16:55', codes: STD }, { time: '17:27', codes: STD },
+    { time: '17:55', codes: STD_FUN }, { time: '18:27', codes: STD_FUN },
+    { time: '18:55', codes: STD }, { time: '19:27', codes: STD },
+    { time: '19:55', codes: STD }, { time: '20:27', codes: STD },
+    { time: '20:59', codes: STD },
+    { time: '22:00', codes: STD }, { time: '22:27', codes: STD },
+    { time: '22:55', codes: STD }, { time: '23:27', codes: STD },
+    { time: '23:55', codes: STD },
+  ],
+};
+
+/** Default DOM template (Domingo) */
+export const DEFAULT_TEMPLATE_DOM: MapaTemplate = {
+  filename: 'DOM-4.txt',
+  dayMapping: 'sunday',
+  lines: [
+    { time: '00:55', codes: ['SINAL','SINAL','HC','VHTENT','mus','vht','mus'] },
+    { time: '01:55', codes: STD }, { time: '02:55', codes: STD },
+    { time: '03:55', codes: STD }, { time: '04:55', codes: STD },
+    { time: '05:55', codes: ['RESTART','SINAL','HC','VHTENT'] },
+    { time: '06:55', codes: STD }, { time: '07:27', codes: STD },
+    { time: '07:55', codes: STD }, { time: '08:27', codes: STD },
+    { time: '08:55', codes: STD }, { time: '09:27', codes: STD },
+    { time: '09:55', codes: STD }, { time: '10:27', codes: STD },
+    { time: '10:55', codes: STD }, { time: '11:27', codes: STD },
+    { time: '11:55', codes: STD }, { time: '12:27', codes: STD },
+    { time: '12:55', codes: STD }, { time: '13:27', codes: STD },
+    { time: '13:55', codes: STD }, { time: '14:27', codes: STD },
+    { time: '14:55', codes: STD }, { time: '15:27', codes: STD },
+    { time: '15:55', codes: STD }, { time: '16:27', codes: STD },
+    { time: '16:55', codes: STD }, { time: '17:27', codes: STD },
+    { time: '17:55', codes: STD }, { time: '18:27', codes: STD },
+    { time: '18:55', codes: STD }, { time: '19:27', codes: STD },
+    { time: '19:55', codes: STD }, { time: '20:27', codes: STD },
+    { time: '20:59', codes: STD },
+    { time: '22:00', codes: STD }, { time: '22:27', codes: STD },
+    { time: '22:55', codes: STD }, { time: '23:27', codes: STD },
+    { time: '23:55', codes: STD },
+  ],
+};
+
+export const DEFAULT_TEMPLATES: MapaTemplate[] = [
+  DEFAULT_TEMPLATE_MAPA,
+  DEFAULT_TEMPLATE_SAB,
+  DEFAULT_TEMPLATE_DOM,
+];
+
 export const DEFAULT_MAPAS_CONFIG: MapasConfig = {
   enabled: true,
   mapasFolder: 'C:\\Playlist\\pgm\\Mapas',
   vhtEntradaFolder: 'C:\\Playlist\\Vht Entrada',
   outputFolder: 'C:\\Playlist\\pgm\\Mapas',
   codeConfigs: DEFAULT_CODE_CONFIGS,
+  templates: DEFAULT_TEMPLATES,
 };
