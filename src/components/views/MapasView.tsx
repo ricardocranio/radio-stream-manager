@@ -263,8 +263,8 @@ export function MapasView() {
                 {newCode.type === 'genre' && (
                   <Input className="h-8 text-xs" placeholder="Gêneros (ex: POP, DANCE)" value={newCode.genreFilter} onChange={(e) => setNewCode(p => ({ ...p, genreFilter: e.target.value }))} />
                 )}
-                {newCode.type === 'vinheta' && (
-                  <Input className="h-8 text-xs font-mono" placeholder="Pasta (ex: C:\Playlist\Vht)" value={newCode.vinhetaFolder} onChange={(e) => setNewCode(p => ({ ...p, vinhetaFolder: e.target.value }))} />
+                {(newCode.type === 'vinheta' || newCode.type === 'comercial') && (
+                  <Input className="h-8 text-xs font-mono" placeholder="Pasta (ex: C:\Playlist\Comerciais)" value={newCode.vinhetaFolder} onChange={(e) => setNewCode(p => ({ ...p, vinhetaFolder: e.target.value }))} />
                 )}
                 <div className="flex gap-2">
                   <Button size="sm" className="text-xs flex-1" disabled={!newCode.code.trim() || !newCode.label.trim()} onClick={() => {
