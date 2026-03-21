@@ -336,7 +336,7 @@ export function MapasView() {
   const [comercialFiles, setComercialFiles] = useState<Record<string, string[]>>({});
   const autoSaveTimerRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
-  const dayLabels: Record<string, string> = { weekdays: 'Seg-Sex', saturday: 'Sáb', sunday: 'Dom' };
+  const dayLabels: Record<string, string> = { dom: 'Dom', seg: 'Seg', ter: 'Ter', qua: 'Qua', qui: 'Qui', sex: 'Sex', sab: 'Sáb', weekdays: 'Seg-Sex', saturday: 'Sáb', sunday: 'Dom' };
   const template = mapasConfig.templates?.[activeDay];
   const stdPattern = 'SINAL,HC,VHTENT,mus,vht,mus';
 
