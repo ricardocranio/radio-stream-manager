@@ -280,8 +280,9 @@ export function MapasView() {
                       ...(newCode.type === 'monitored' ? { stationSource: newCode.stationSource } : {}),
                       ...(newCode.type === 'genre' ? { genreFilter: newCode.genreFilter.split(',').map(g => g.trim().toUpperCase()).filter(Boolean) } : {}),
                       ...((newCode.type === 'vinheta' || newCode.type === 'comercial') ? { vinhetaFolder: newCode.vinhetaFolder } : {}),
+                      ...(newCode.type === 'comercial' ? { fixedFile: newCode.fixedFile } : {}),
                     });
-                    setNewCode({ code: '', label: '', type: 'literal', stationSource: '', genreFilter: '', vinhetaFolder: '' });
+                    setNewCode({ code: '', label: '', type: 'literal', stationSource: '', genreFilter: '', vinhetaFolder: '', fixedFile: '' });
                     setShowNewCode(false);
                     toast.success('Código adicionado!');
                   }}>
