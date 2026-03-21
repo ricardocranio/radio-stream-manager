@@ -371,16 +371,13 @@ export function MapasView() {
     if (!isElectron || !mapasConfig.templates?.length) return;
     setIsBuilding(true); let built = 0;
     for (const tmpl of mapasConfig.templates) {
-      const filenames = DAY_FILENAMES[tmpl.dayMapping] || [tmpl.filename];
-      for (const filename of filenames) {
-        resetMapasPools(); const cache = new Map<string, string[]>(); const lines: string[] = [];
-        try {
-          for (const line of tmpl.lines) { const r = await resolveTemplateLine(line, mapasConfig, config.musicFolders, cache); lines.push(formatResolvedLine(r)); }
-          await window.electronAPI!.saveGradeFile({ folder: mapasConfig.outputFolder, filename, content: lines.join('\n') }); built++;
-        } catch { /* skip */ }
-      }
+      resetMapasPools(); const cache = new Map<string, string[]>(); const lines: string[] = [];
+      try {
+        for (const line of tmpl.lines) { const r = await resolveTemplateLine(line, mapasConfig, config.musicFolders, cache); lines.push(formatResolvedLine(r)); }
+        await window.electronAPI!.saveGradeFile({ folder: mapasConfig.outputFolder, filename: tmpl.filename, content: lines.join('\n') }); built++;
+      } catch { /* skip */ }
     }
-    toast.success(`${built} mapas construídos (dom-sáb)!`); setIsBuilding(false);
+    toast.success(`${built} mapas construídos!`); setIsBuilding(false);
   }, [mapasConfig, config.musicFolders]);
 
   const saveSlotEdit = (lineIdx: number) => {
