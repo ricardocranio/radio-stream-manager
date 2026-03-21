@@ -60,9 +60,9 @@ export function useAutoMapaBuilder() {
     
     const now = new Date();
     const dow = now.getDay();
-    const dayConfig = DAY_CONFIG[dow];
-    const template = mapasConfig.templates[dayConfig.tmplIdx];
-    const outputFilename = dayConfig.filename;
+    const tmplIdx = DAY_TO_TEMPLATE_INDEX[dow];
+    const template = mapasConfig.templates[tmplIdx];
+    const outputFilename = template?.filename || 'seg.txt';
     if (!template?.lines?.length) return;
     
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
