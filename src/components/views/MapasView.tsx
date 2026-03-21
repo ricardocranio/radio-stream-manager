@@ -307,7 +307,7 @@ export function MapasView() {
           <CardContent>
             {templates.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                <Map className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                <MapIcon className="w-10 h-10 mx-auto mb-2 opacity-30" />
                 <p className="text-sm">Clique "Carregar" para ler os templates</p>
                 <p className="text-xs mt-1">Pasta: {mapasConfig.mapasFolder}</p>
               </div>
