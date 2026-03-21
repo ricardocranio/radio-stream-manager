@@ -183,16 +183,75 @@ function SortableCodePill({ cc, stations, updateMapaCodeConfig, removeMapaCodeCo
       </div>
       {expanded && (
         <div className="px-2.5 pb-2 pt-1 space-y-1.5 border-t border-border/10">
-          {cc.type === 'monitored' && (
-            <Select value={cc.stationSource || ''} onValueChange={(v) => updateMapaCodeConfig(cc.code, { stationSource: v })}>
-              <SelectTrigger className="h-6 text-[10px] bg-background/50"><SelectValue placeholder="Estação" /></SelectTrigger>
-              <SelectContent>{stations.filter(s => s.enabled).map(s => (<SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>))}</SelectContent>
-            </Select>
+          {/* Station source (monitored + genre) */}
+          {(cc.type === 'monitored' || cc.type === 'genre') && (
+            <div className="space-y-1">
+              <label className="text-[8px] text-muted-foreground/50 uppercase tracking-wider">Fonte (Estação)</label>
+              <Select value={cc.stationSource || ''} onValueChange={(v) => updateMapaCodeConfig(cc.code, { stationSource: v === '__none__' ? undefined : v })}>
+                <SelectTrigger className="h-6 text-[10px] bg-background/50"><SelectValue placeholder="Todas / Automático" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Todas / Automático</SelectItem>
+                  {stations.filter(s => s.enabled).map(s => (<SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
-          {cc.type === 'genre' && <Input className="h-6 text-[10px] bg-background/50 font-mono" value={cc.genreFilter?.join(', ') || ''} onChange={(e) => updateMapaCodeConfig(cc.code, { genreFilter: e.target.value.split(',').map(g => g.trim().toUpperCase()).filter(Boolean) })} placeholder="FUNK, MPB..." />}
-          {cc.type === 'vinheta' && <Input className="h-6 text-[10px] bg-background/50 font-mono" value={cc.vinhetaFolder || ''} onChange={(e) => updateMapaCodeConfig(cc.code, { vinhetaFolder: e.target.value })} placeholder="C:\Playlist\..." />}
+          {/* Genre filter (genre type) */}
+          {cc.type === 'genre' && (
+            <div className="space-y-1">
+              <label className="text-[8px] text-muted-foreground/50 uppercase tracking-wider">Filtro de Gênero ID3</label>
+              <Input className="h-6 text-[10px] bg-background/50 font-mono" value={cc.genreFilter?.join(', ') || ''} onChange={(e) => updateMapaCodeConfig(cc.code, { genreFilter: e.target.value.split(',').map(g => g.trim().toUpperCase()).filter(Boolean) })} placeholder="FUNK, MPB..." />
+              <div className="flex gap-1 flex-wrap mt-0.5">
+                {cc.genreFilter?.map((g, gi) => (
+                  <span key={gi} className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-mono bg-amber-500/15 text-amber-400 border border-amber-500/20">{g}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Vinheta folder */}
+          {cc.type === 'vinheta' && (
+            <div className="space-y-1">
+              <label className="text-[8px] text-muted-foreground/50 uppercase tracking-wider">Pasta</label>
+              <Input className="h-6 text-[10px] bg-background/50 font-mono" value={cc.vinhetaFolder || ''} onChange={(e) => updateMapaCodeConfig(cc.code, { vinhetaFolder: e.target.value })} placeholder="C:\Playlist\..." />
+            </div>
+          )}
+          {/* Conteúdo fixo / year / style info */}
+          {(cc.type === 'monitored' || cc.type === 'genre') && (
+            <div className="space-y-1 pt-1 border-t border-border/10">
+              <label className="text-[8px] text-muted-foreground/50 uppercase tracking-wider">Opções avançadas</label>
+              <div className="grid grid-cols-2 gap-1">
+                <div className="rounded bg-background/30 px-1.5 py-1">
+                  <span className="text-[7px] text-muted-foreground/40 block">Conteúdo fixo</span>
+                  <span className="text-[9px] text-foreground/70 font-mono">{cc.fixedFile || '—'}</span>
+                </div>
+                <div className="rounded bg-background/30 px-1.5 py-1">
+                  <span className="text-[7px] text-muted-foreground/40 block">Estilo</span>
+                  <span className="text-[9px] text-foreground/70 font-mono">{cc.genreFilter?.join(', ') || cc.stationSource || 'Auto'}</span>
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <Button size="sm" variant="outline" className="h-5 text-[9px] px-1.5" onClick={async () => {
+                  const folder = cc.type === 'genre' ? (cc.vinhetaFolder || 'C:\\Playlist\\Músicas') : '';
+                  if (!isElectron || !window.electronAPI?.listFolderFiles || !folder) return;
+                  try { const r = await window.electronAPI.listFolderFiles({ folder, extension: '.mp3' }); if (r.success && r.files) { setComercialFiles(p => ({ ...p, [cc.code]: r.files!.map(f => f.name) })); toast.success(`${r.files.length} arquivos`); } } catch { toast.error('Erro ao listar'); }
+                }}><FolderOpen className="w-2.5 h-2.5 mr-0.5" /> Listar</Button>
+                {cc.fixedFile && <span className="text-[8px] text-emerald-400 font-mono truncate flex-1">📎 {cc.fixedFile}</span>}
+              </div>
+              {comercialFiles[cc.code]?.length > 0 && (
+                <Select value={cc.fixedFile || ''} onValueChange={(v) => updateMapaCodeConfig(cc.code, { fixedFile: v === '__none__' ? undefined : v })}>
+                  <SelectTrigger className="h-6 text-[10px] bg-background/50"><SelectValue placeholder="Arquivo fixo (opcional)" /></SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    <SelectItem value="__none__">Nenhum (aleatório)</SelectItem>
+                    {comercialFiles[cc.code].map(f => (<SelectItem key={f} value={f} className="text-[10px] font-mono">{f}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
+          {/* Comercial */}
           {cc.type === 'comercial' && (
             <div className="space-y-1">
+              <label className="text-[8px] text-muted-foreground/50 uppercase tracking-wider">Pasta</label>
               <Input className="h-6 text-[10px] bg-background/50 font-mono" value={cc.vinhetaFolder || ''} onChange={(e) => updateMapaCodeConfig(cc.code, { vinhetaFolder: e.target.value })} placeholder="C:\Playlist\Comerciais" />
               <div className="flex gap-1">
                 <Button size="sm" variant="outline" className="h-5 text-[9px] px-1.5" onClick={async () => {
