@@ -765,18 +765,47 @@ export function StationsView() {
                     <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">Pasta de Download</span>
                   </div>
-                  <Input
-                    className="h-7 text-xs font-mono"
-                    value={data.downloadFolder || ''}
-                    onChange={(e) => {
-                      if (isEditing) {
-                        setEditForm((prev) => prev && { ...prev, downloadFolder: e.target.value });
-                      } else {
-                        updateStation(station.id, { downloadFolder: e.target.value });
-                      }
-                    }}
-                    placeholder="Ex: hist, sertanejo, jovem..."
-                  />
+                  <div className="flex gap-1">
+                    <Input
+                      className="h-7 text-xs font-mono flex-1"
+                      value={data.downloadFolder || ''}
+                      onChange={(e) => {
+                        if (isEditing) {
+                          setEditForm((prev) => prev && { ...prev, downloadFolder: e.target.value });
+                        } else {
+                          updateStation(station.id, { downloadFolder: e.target.value });
+                        }
+                      }}
+                      placeholder="Selecione a pasta..."
+                      readOnly
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2"
+                      onClick={async () => {
+                        const isElectron = !!(window as any).electronAPI;
+                        if (isElectron) {
+                          try {
+                            const folder = await (window as any).electronAPI.selectFolder();
+                            if (folder) {
+                              if (isEditing) {
+                                setEditForm((prev) => prev && { ...prev, downloadFolder: folder });
+                              } else {
+                                updateStation(station.id, { downloadFolder: folder });
+                              }
+                            }
+                          } catch (err) {
+                            console.error('Erro ao selecionar pasta:', err);
+                          }
+                        } else {
+                          toast({ description: 'Seleção de pasta disponível apenas no app desktop' });
+                        }
+                      }}
+                    >
+                      <FolderOpen className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
                   {data.downloadFolder && (
                     <p className="text-[10px] text-muted-foreground/60 font-mono">
                       → C:\Playlist\Downloads\{data.downloadFolder}
