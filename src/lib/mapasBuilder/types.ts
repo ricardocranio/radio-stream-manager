@@ -12,12 +12,12 @@ export interface MapaCodeConfig {
   /** Human-readable label */
   label: string;
   /** Type of resolution */
-  type: 'literal' | 'vinheta' | 'monitored' | 'genre';
+  type: 'literal' | 'vinheta' | 'monitored' | 'genre' | 'comercial';
   /** For 'monitored': station name to pull from */
   stationSource?: string;
   /** For 'genre': ID3 genre filter */
   genreFilter?: string[];
-  /** For 'vinheta': folder path */
+  /** For 'vinheta'/'comercial': folder path */
   vinhetaFolder?: string;
 }
 
@@ -56,6 +56,7 @@ export const DEFAULT_CODE_CONFIGS: MapaCodeConfig[] = [
   { code: 'mus', label: 'Música (Monitoramento)', type: 'monitored', stationSource: 'Disney FM' },
   { code: 'fun', label: 'Funk', type: 'genre', genreFilter: ['FUNK', 'FUNK MELODY', 'FUNK CARIOCA'] },
   { code: 'rom', label: 'MPB / Românticas', type: 'genre', genreFilter: ['MPB', 'ROMANTICA', 'ROMANTICO', 'BALADA', 'BOSSA NOVA'] },
+  { code: 'com', label: 'Comercial', type: 'comercial', vinhetaFolder: 'C:\\Playlist\\Comerciais' },
 ];
 
 export const DEFAULT_MAPAS_CONFIG: MapasConfig = {

@@ -19,6 +19,7 @@ const CODE_TYPE_LABELS: Record<string, string> = {
   vinheta: 'Vinheta (arquivo)',
   monitored: 'Monitoramento',
   genre: 'Gênero ID3',
+  comercial: 'Comercial',
 };
 
 const CODE_ICONS: Record<string, React.ReactNode> = {
@@ -26,6 +27,7 @@ const CODE_ICONS: Record<string, React.ReactNode> = {
   vinheta: <Mic2 className="w-3 h-3" />,
   monitored: <Radio className="w-3 h-3" />,
   genre: <Music className="w-3 h-3" />,
+  comercial: <FileText className="w-3 h-3" />,
 };
 
 export function MapasView() {
@@ -245,6 +247,7 @@ export function MapasView() {
                     <SelectItem value="vinheta">Vinheta (arquivo)</SelectItem>
                     <SelectItem value="monitored">Monitoramento</SelectItem>
                     <SelectItem value="genre">Gênero ID3</SelectItem>
+                    <SelectItem value="comercial">Comercial</SelectItem>
                   </SelectContent>
                 </Select>
                 {newCode.type === 'monitored' && (
@@ -260,8 +263,8 @@ export function MapasView() {
                 {newCode.type === 'genre' && (
                   <Input className="h-8 text-xs" placeholder="Gêneros (ex: POP, DANCE)" value={newCode.genreFilter} onChange={(e) => setNewCode(p => ({ ...p, genreFilter: e.target.value }))} />
                 )}
-                {newCode.type === 'vinheta' && (
-                  <Input className="h-8 text-xs font-mono" placeholder="Pasta (ex: C:\Playlist\Vht)" value={newCode.vinhetaFolder} onChange={(e) => setNewCode(p => ({ ...p, vinhetaFolder: e.target.value }))} />
+                {(newCode.type === 'vinheta' || newCode.type === 'comercial') && (
+                  <Input className="h-8 text-xs font-mono" placeholder="Pasta (ex: C:\Playlist\Comerciais)" value={newCode.vinhetaFolder} onChange={(e) => setNewCode(p => ({ ...p, vinhetaFolder: e.target.value }))} />
                 )}
                 <div className="flex gap-2">
                   <Button size="sm" className="text-xs flex-1" disabled={!newCode.code.trim() || !newCode.label.trim()} onClick={() => {
@@ -274,7 +277,7 @@ export function MapasView() {
                       type: newCode.type,
                       ...(newCode.type === 'monitored' ? { stationSource: newCode.stationSource } : {}),
                       ...(newCode.type === 'genre' ? { genreFilter: newCode.genreFilter.split(',').map(g => g.trim().toUpperCase()).filter(Boolean) } : {}),
-                      ...(newCode.type === 'vinheta' ? { vinhetaFolder: newCode.vinhetaFolder } : {}),
+                      ...((newCode.type === 'vinheta' || newCode.type === 'comercial') ? { vinhetaFolder: newCode.vinhetaFolder } : {}),
                     });
                     setNewCode({ code: '', label: '', type: 'literal', stationSource: '', genreFilter: '', vinhetaFolder: '' });
                     setShowNewCode(false);
@@ -332,7 +335,7 @@ export function MapasView() {
                   />
                 )}
 
-                {cc.type === 'vinheta' && (
+                {(cc.type === 'vinheta' || cc.type === 'comercial') && (
                   <Input
                     className="h-8 text-xs font-mono"
                     value={cc.vinhetaFolder || ''}
