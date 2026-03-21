@@ -100,6 +100,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
     console.log(`║ 💾 Cache Offline:  ✅ ATIVO (fallback 24h)`.padEnd(65) + '║');
     console.log(`║ 🔄 Cross-Day:     ✅ ATIVO (buffer 4h)`.padEnd(65) + '║');
     console.log(`║ 📉 Ranking Decay: ✅ ATIVO (5%/dia)`.padEnd(65) + '║');
+    console.log(`║ 🗺️ Mapas JIT:     ✅ ATIVO (20 min antes)`.padEnd(65) + '║');
     console.log('╚══════════════════════════════════════════════════════════════╝');
 
     // Start all services
