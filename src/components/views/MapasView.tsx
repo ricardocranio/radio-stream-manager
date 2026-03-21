@@ -366,13 +366,7 @@ export function MapasView() {
     }, 1500);
   }, []);
 
-  // Map template dayMapping to per-day filenames
-  const DAY_FILENAMES: Record<string, string[]> = {
-    weekdays: ['seg.txt', 'ter.txt', 'qua.txt', 'qui.txt', 'sex.txt'],
-    saturday: ['sab.txt'],
-    sunday: ['dom.txt'],
-  };
-
+  // Each template now maps directly to its own file
   const buildAll = useCallback(async () => {
     if (!isElectron || !mapasConfig.templates?.length) return;
     setIsBuilding(true); let built = 0;
