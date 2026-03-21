@@ -704,6 +704,18 @@ export const useRadioStore = create<RadioState>()(
       updateSongAlias: (id, updates) => set((state) => ({
         songAliases: state.songAliases.map(a => a.id === id ? { ...a, ...updates } : a),
       })),
+
+      // Mapas Config
+      mapasConfig: DEFAULT_MAPAS_CONFIG,
+      setMapasConfig: (config) => set((state) => ({ mapasConfig: { ...state.mapasConfig, ...config } })),
+      updateMapaCodeConfig: (code, updates) => set((state) => ({
+        mapasConfig: {
+          ...state.mapasConfig,
+          codeConfigs: state.mapasConfig.codeConfigs.map(c =>
+            c.code === code ? { ...c, ...updates } : c
+          ),
+        },
+      })),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
