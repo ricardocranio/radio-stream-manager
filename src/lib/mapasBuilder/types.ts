@@ -17,6 +17,8 @@ export interface MapaCodeConfig {
   stationSource?: string;
   /** For 'genre': ID3 genre filter */
   genreFilter?: string[];
+  /** For 'genre': decade filter (e.g., '80s', '90s', '2000s') */
+  decadeFilter?: string;
   /** For 'vinheta'/'comercial': folder path */
   vinhetaFolder?: string;
   /** For 'comercial': specific fixed file chosen by user */

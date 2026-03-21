@@ -131,19 +131,40 @@ async function loadMonitoredSongs(
  */
 async function loadGenreSongs(
   genreFilter: string[],
-  musicFolders: string[]
+  musicFolders: string[],
+  decadeFilter?: string
 ): Promise<string[]> {
   if (!isElectron || !window.electronAPI?.scanLibraryMetadata) return [];
   
+  // Parse decade to year range
+  let yearStart = 0, yearEnd = 9999;
+  if (decadeFilter) {
+    const decadeMap: Record<string, [number, number]> = {
+      '80s': [1980, 1989], '90s': [1990, 1999], '2000s': [2000, 2009],
+      '2010s': [2010, 2019], '2020s': [2020, 2029],
+    };
+    const range = decadeMap[decadeFilter];
+    if (range) { yearStart = range[0]; yearEnd = range[1]; }
+  }
+
   try {
     const result = await window.electronAPI.scanLibraryMetadata({ musicFolders });
     if (!result.success || !result.songs) return [];
     
     const genreUpper = genreFilter.map(g => g.toUpperCase());
-    const filtered = result.songs.filter(s => {
-      if (!s.genre) return false;
-      const songGenre = s.genre.toUpperCase();
-      return genreUpper.some(g => songGenre.includes(g));
+    const filtered = result.songs.filter((s: any) => {
+      // Genre check
+      if (genreUpper.length > 0) {
+        if (!s.genre) return false;
+        const songGenre = s.genre.toUpperCase();
+        if (!genreUpper.some((g: string) => songGenre.includes(g))) return false;
+      }
+      // Decade check
+      if (decadeFilter && s.year) {
+        const y = parseInt(s.year, 10);
+        if (isNaN(y) || y < yearStart || y > yearEnd) return false;
+      }
+      return true;
     });
     
     return filtered.map(s => s.filename);
@@ -219,30 +240,28 @@ async function resolveCode(
       
     case 'genre': {
       const genres = codeConfig.genreFilter || [];
-      // If a station source is also set, combine station + genre filter
+      const decade = codeConfig.decadeFilter;
       const stationKey = codeConfig.stationSource ? `:${codeConfig.stationSource}` : '';
-      const cacheKey = `genre:${genres.join(',')}${stationKey}`;
+      const decadeKey = decade ? `:${decade}` : '';
+      const cacheKey = `genre:${genres.join(',')}${stationKey}${decadeKey}`;
       
       if (!cache.has(cacheKey)) {
         let songs: string[] = [];
         if (codeConfig.stationSource) {
-          // Load from station first, then filter by genre
           const stationSongs = await loadMonitoredSongs(codeConfig.stationSource, musicFolders);
-          if (stationSongs.length > 0 && genres.length > 0) {
-            // Need to re-check genre from library metadata
-            const genreSongs = await loadGenreSongs(genres, musicFolders);
+          if (stationSongs.length > 0 && (genres.length > 0 || decade)) {
+            const genreSongs = await loadGenreSongs(genres, musicFolders, decade);
             const genreSet = new Set(genreSongs.map(f => f.toLowerCase()));
             songs = stationSongs.filter(f => genreSet.has(f.toLowerCase()));
-            // Fallback: if combined filter yields too few, use station songs
             if (songs.length < 5) songs = stationSongs;
           } else {
             songs = stationSongs;
           }
         } else {
-          songs = await loadGenreSongs(genres, musicFolders);
+          songs = await loadGenreSongs(genres, musicFolders, decade);
         }
         cache.set(cacheKey, songs);
-        console.log(`[MAPAS] 🎵 ${songs.length} músicas gênero ${genres.join(',')}${stationKey}`);
+        console.log(`[MAPAS] 🎵 ${songs.length} músicas gênero ${genres.join(',')}${decadeKey}${stationKey}`);
       }
       
       const files = cache.get(cacheKey)!;

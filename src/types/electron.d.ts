@@ -309,7 +309,7 @@ interface ElectronAPI {
   loadBpmCache: (params: BpmCacheLoadParams) => Promise<BpmCacheResult>;
   scanLibraryMetadata: (params: { musicFolders: string[] }) => Promise<{
     success: boolean;
-    songs: Array<{ filename: string; artist: string; title: string; bpm: number | null; genre: string | null; folder: string }>;
+    songs: Array<{ filename: string; artist: string; title: string; bpm: number | null; genre: string | null; year: string | null; folder: string }>;
     scanned: number;
     genreSummary: Array<{ genre: string; count: number }>;
   }>;
