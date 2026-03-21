@@ -34,7 +34,7 @@ const CODE_ICONS: Record<string, React.ReactNode> = {
 };
 
 export function MapasView() {
-  const { mapasConfig, setMapasConfig, updateMapaCodeConfig, addMapaCodeConfig, removeMapaCodeConfig, resetMapaCodeConfigs, config, stations } = useRadioStore();
+  const { mapasConfig, setMapasConfig, updateMapaCodeConfig, addMapaCodeConfig, removeMapaCodeConfig, resetMapaCodeConfigs, reorderMapaCodeConfigs, config, stations } = useRadioStore();
   const [templates, setTemplates] = useState<MapaTemplate[]>([]);
   const [preview, setPreview] = useState<MapaResolvedLine[]>([]);
   const [isLoading, setIsLoading] = useState(false);
