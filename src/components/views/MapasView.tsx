@@ -176,13 +176,13 @@ export function MapasView() {
 
   const dayLabels: Record<string, string> = {
     weekdays: 'Seg-Sex',
-    saturday: 'Sábado',
-    sunday: 'Domingo',
-    monday: 'Segunda',
-    tuesday: 'Terça',
-    wednesday: 'Quarta',
-    thursday: 'Quinta',
-    friday: 'Sexta',
+    saturday: 'Sáb',
+    sunday: 'Dom',
+    monday: 'Seg',
+    tuesday: 'Ter',
+    wednesday: 'Qua',
+    thursday: 'Qui',
+    friday: 'Sex',
   };
 
   return (
