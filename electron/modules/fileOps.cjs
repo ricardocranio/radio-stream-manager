@@ -184,6 +184,8 @@ function register({ getMainWindow, safeHandle }) {
       if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
       const filePath = path.join(folder, filename);
       fs.writeFileSync(filePath, content, 'utf-8');
+      // Clean PkInfo after file update
+      deletePkInfoFolder(folder);
       return { success: true, filePath };
     } catch (error) {
       return { success: false, error: error.message || 'Erro ao salvar arquivo' };
