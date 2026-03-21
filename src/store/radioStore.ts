@@ -844,6 +844,7 @@ export const useRadioStore = create<RadioState>()(
                 : c
             );
           }
+        }
       },
       version: 1, // For future migrations
     }
