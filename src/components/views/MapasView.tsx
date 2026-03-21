@@ -38,7 +38,9 @@ export function MapasView() {
   const [isBuilding, setIsBuilding] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [showNewCode, setShowNewCode] = useState(false);
-  const [newCode, setNewCode] = useState({ code: '', label: '', type: 'literal' as MapaCodeConfig['type'], stationSource: '', genreFilter: '', vinhetaFolder: '' });
+  const [newCode, setNewCode] = useState({ code: '', label: '', type: 'literal' as MapaCodeConfig['type'], stationSource: '', genreFilter: '', vinhetaFolder: '', fixedFile: '' });
+  // Cache of folder files for comercial file picker
+  const [comercialFiles, setComercialFiles] = useState<Record<string, string[]>>({});
 
   // Load templates from folder
   const loadTemplates = useCallback(async () => {
