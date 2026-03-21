@@ -205,16 +205,32 @@ function SortableCodePill({ cc, stations, updateMapaCodeConfig, removeMapaCodeCo
               </Select>
             </div>
           )}
-          {/* Genre filter (genre type) */}
+          {/* Genre filter (genre type) - clickable badges like SequenceView */}
           {cc.type === 'genre' && (
-            <div className="space-y-1">
-              <label className="text-[8px] text-muted-foreground/50 uppercase tracking-wider">Filtro de Gênero ID3</label>
-              <Input className="h-6 text-[10px] bg-background/50 font-mono" value={cc.genreFilter?.join(', ') || ''} onChange={(e) => updateMapaCodeConfig(cc.code, { genreFilter: e.target.value.split(',').map(g => g.trim().toUpperCase()).filter(Boolean) })} placeholder="FUNK, MPB..." />
-              <div className="flex gap-1 flex-wrap mt-0.5">
-                {cc.genreFilter?.map((g, gi) => (
-                  <span key={gi} className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-mono bg-amber-500/15 text-amber-400 border border-amber-500/20">{g}</span>
-                ))}
+            <div className="space-y-1.5">
+              <label className="text-[8px] text-muted-foreground/50 uppercase tracking-wider">Gêneros (clique para selecionar)</label>
+              <div className="flex gap-1 flex-wrap">
+                {MAPAS_AVAILABLE_GENRES.map(genre => {
+                  const isActive = cc.genreFilter?.includes(genre);
+                  return (
+                    <button key={genre} onClick={() => {
+                      const current = cc.genreFilter || [];
+                      const updated = isActive ? current.filter(g => g !== genre) : [...current, genre];
+                      updateMapaCodeConfig(cc.code, { genreFilter: updated });
+                    }}
+                      className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-medium border transition-all ${
+                        isActive
+                          ? 'bg-amber-500/25 text-amber-300 border-amber-500/40 shadow-[0_0_6px_rgba(245,158,11,0.2)]'
+                          : 'bg-background/30 text-muted-foreground/60 border-border/20 hover:border-amber-500/30 hover:text-amber-400'
+                      }`}>
+                      {genre}
+                    </button>
+                  );
+                })}
               </div>
+              {(cc.genreFilter?.length || 0) > 0 && (
+                <p className="text-[8px] text-amber-400/80">✓ {cc.genreFilter!.join(' / ')}</p>
+              )}
             </div>
           )}
           {/* Vinheta folder */}
