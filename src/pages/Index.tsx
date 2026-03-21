@@ -28,6 +28,7 @@ const GradeBuilderView = lazy(() => import('@/components/views/GradeBuilderView'
 const TrendsView = lazy(() => import('@/components/views/TrendsView').then(m => ({ default: m.TrendsView })));
 const AnalyticsView = lazy(() => import('@/components/views/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
 const CompetitorView = lazy(() => import('@/components/views/CompetitorView').then(m => ({ default: m.CompetitorView })));
+const MapasView = lazy(() => import('@/components/views/MapasView').then(m => ({ default: m.MapasView })));
 
 // Prefetch map: preload chunk on hover for instant navigation
 const PREFETCH_MAP: Record<string, () => void> = {
