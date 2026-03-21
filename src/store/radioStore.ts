@@ -478,6 +478,23 @@ export const useRadioStore = create<RadioState>()(
             console.log(`[STORE] 🚫 Vinheta/jingle filtrada, não adicionada: ${song.artist} - ${song.title}`);
             return state;
           }
+          // 🚫 Block check — blocked songs must NEVER enter the missing/download queue
+          const { blockedSongs = [], forbiddenWords = [] } = state.config;
+          const artistL = (song.artist || '').trim().toLowerCase();
+          const titleL = (song.title || '').trim().toLowerCase();
+          const songKey = `${artistL} - ${titleL}`;
+          const blockedList = blockedSongs.map(s => s.toLowerCase().trim());
+          const blockedExact = new Set(blockedList.filter(s => !s.endsWith(' - *')));
+          const blockedWild = blockedList.filter(s => s.endsWith(' - *')).map(s => s.replace(/ - \*$/, ''));
+          const forbiddenLower = forbiddenWords.map(w => w.toLowerCase().trim()).filter(Boolean);
+          if (
+            blockedExact.has(songKey) ||
+            blockedWild.some(b => artistL === b || artistL.includes(b)) ||
+            forbiddenLower.some(w => artistL.includes(w) || titleL.includes(w))
+          ) {
+            console.log(`[STORE] 🚫 Música bloqueada, não adicionada: ${song.artist} - ${song.title}`);
+            return state;
+          }
           // Cap at 500 entries, trim oldest
           const updated = [...state.missingSongs, song];
           return { missingSongs: updated.length > 500 ? updated.slice(-500) : updated };
