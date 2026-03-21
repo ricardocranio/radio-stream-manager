@@ -267,24 +267,31 @@ export function MapasView() {
                         {currentTemplate.lines.map((line, i) => {
                           const isStd = line.codes.join(',') === stdPattern;
                           const isEditing = editingLine === i;
+                          const saveEdit = () => {
+                            const codes = editCodes.split(',').map(c => c.trim()).filter(Boolean);
+                            if (codes.length > 0) {
+                              updateMapaTemplateLine(activeTemplateIdx, i, codes);
+                              toast.success(`${line.time} salvo`, { duration: 1500 });
+                            }
+                            setEditingLine(null);
+                          };
                           return (
-                            <tr key={`${line.time}-${i}`} className={`border-b border-border/10 hover:bg-muted/20 ${!isStd ? 'bg-primary/5' : ''}`}>
+                            <tr key={`${line.time}-${i}`} className={`border-b border-border/10 hover:bg-muted/20 ${!isStd ? 'bg-primary/5' : ''} ${isEditing ? 'bg-accent/20' : ''}`}>
                               <td className="px-3 py-1.5 font-mono text-primary font-bold">{line.time}</td>
                               <td className="px-3 py-1.5">
                                 {isEditing ? (
-                                  <div className="flex gap-1 items-center">
-                                    <Input className="h-7 text-xs font-mono flex-1" value={editCodes} onChange={(e) => setEditCodes(e.target.value)}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') { updateMapaTemplateLine(activeTemplateIdx, i, editCodes.split(',').map(c => c.trim()).filter(Boolean)); setEditingLine(null); } else if (e.key === 'Escape') setEditingLine(null); }} autoFocus />
-                                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { updateMapaTemplateLine(activeTemplateIdx, i, editCodes.split(',').map(c => c.trim()).filter(Boolean)); setEditingLine(null); }}><Play className="w-3 h-3" /></Button>
-                                  </div>
+                                  <Input className="h-7 text-xs font-mono" value={editCodes} onChange={(e) => setEditCodes(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingLine(null); }}
+                                    onBlur={saveEdit} autoFocus />
                                 ) : (
-                                  <div className="flex gap-1 flex-wrap cursor-pointer" onClick={() => { setEditingLine(i); setEditCodes(line.codes.join(',')); }}>
+                                  <div className="flex gap-1 flex-wrap">
                                     {line.codes.map((code, j) => <Badge key={j} variant={getCodeBadgeVariant(code) as any} className="text-[9px] font-mono">{code}</Badge>)}
                                   </div>
                                 )}
                               </td>
                               {preview.length > 0 && preview[i] && <td className="px-3 py-1.5 font-mono text-[10px] text-muted-foreground max-w-[250px] truncate">{preview[i].items.join(', ')}</td>}
-                              <td className="px-2 py-1.5">
+                              <td className="px-2 py-1.5 flex gap-0.5">
+                                <Button size="icon" variant="ghost" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => { if (isEditing) { saveEdit(); } else { setEditingLine(i); setEditCodes(line.codes.join(',')); } }}>{isEditing ? <Play className="w-3 h-3" /> : <Settings2 className="w-3 h-3" />}</Button>
                                 <Button size="icon" variant="ghost" className="h-5 w-5 text-destructive/50 hover:text-destructive" onClick={() => removeMapaTemplateLine(activeTemplateIdx, i)}><Trash2 className="w-3 h-3" /></Button>
                               </td>
                             </tr>
