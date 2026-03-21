@@ -4,6 +4,21 @@ const fs = require('fs');
 const path = require('path');
 const { sanitizeFolderName, parseID3TagsFromFile, sanitizeForDisk } = require('./utils.cjs');
 
+/**
+ * Delete PkInfo folder inside a given directory (created by some media players).
+ */
+function deletePkInfoFolder(folder) {
+  try {
+    const pkInfoPath = path.join(folder, 'PkInfo');
+    if (fs.existsSync(pkInfoPath)) {
+      fs.rmSync(pkInfoPath, { recursive: true, force: true });
+      console.log(`[FILE-OPS] 🗑️ PkInfo removido: ${pkInfoPath}`);
+    }
+  } catch (err) {
+    console.log(`[FILE-OPS] ⚠️ Erro ao remover PkInfo: ${err.message}`);
+  }
+}
+
 let _getMainWindow = null;
 
 function register({ getMainWindow, safeHandle }) {
@@ -169,6 +184,8 @@ function register({ getMainWindow, safeHandle }) {
       if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
       const filePath = path.join(folder, filename);
       fs.writeFileSync(filePath, content, 'utf-8');
+      // Clean PkInfo after file update
+      deletePkInfoFolder(folder);
       return { success: true, filePath };
     } catch (error) {
       return { success: false, error: error.message || 'Erro ao salvar arquivo' };
@@ -491,6 +508,10 @@ function register({ getMainWindow, safeHandle }) {
 
     if (results.moved > 0) {
       console.log(`[TEMP-ID3] Done: ${results.processed} found, ${results.moved} moved, ${results.skipped} skipped, ${results.errors} errors`);
+      // Clean PkInfo folders after moving files
+      for (const folder of (musicFolders || [])) {
+        deletePkInfoFolder(folder);
+      }
     }
     return results;
   });

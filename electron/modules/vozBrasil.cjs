@@ -121,6 +121,22 @@ function scrapeVozDownloadUrl() {
   });
 }
 
+/**
+ * Delete PkInfo folder inside a given directory (created by some media players).
+ * Called after every file update to keep the folder clean.
+ */
+function deletePkInfoFolder(folder) {
+  try {
+    const pkInfoPath = path.join(folder, 'PkInfo');
+    if (fs.existsSync(pkInfoPath)) {
+      fs.rmSync(pkInfoPath, { recursive: true, force: true });
+      console.log(`[VOZ] 🗑️ PkInfo removido: ${pkInfoPath}`);
+    }
+  } catch (err) {
+    console.log(`[VOZ] ⚠️ Erro ao remover PkInfo: ${err.message}`);
+  }
+}
+
 function register({ getMainWindow, showNotification, safeHandle }) {
   _getMainWindow = getMainWindow;
   _showNotification = showNotification;
@@ -189,6 +205,9 @@ function register({ getMainWindow, showNotification, safeHandle }) {
           if (remaining.length === 0) fs.rmdirSync(tempDir);
         } catch (e) {}
         
+        // Clean PkInfo folder after file update
+        deletePkInfoFolder(outputFolder);
+        
         _showNotification('📻 A Voz do Brasil', `Download concluído: ${filename}`, () => { shell.openPath(outputFolder); });
         return { success: true, fileSize: stats.size };
       }
@@ -213,11 +232,21 @@ function register({ getMainWindow, showNotification, safeHandle }) {
       let deletedCount = 0;
       for (const file of files) {
         const filePath = path.join(folder, file);
-        const stats = fs.statSync(filePath);
-        if (now - stats.mtimeMs > maxAgeMs) {
-          fs.unlinkSync(filePath);
-          deletedCount++;
-        }
+        try {
+          const stat = fs.statSync(filePath);
+          if (stat.isDirectory()) {
+            // Always delete PkInfo folder
+            if (file === 'PkInfo') {
+              fs.rmSync(filePath, { recursive: true, force: true });
+              console.log(`[VOZ] 🗑️ PkInfo removido na limpeza`);
+            }
+            continue;
+          }
+          if (now - stat.mtimeMs > maxAgeMs) {
+            fs.unlinkSync(filePath);
+            deletedCount++;
+          }
+        } catch (e) {}
       }
       return { success: true, deletedCount };
     } catch (error) {
