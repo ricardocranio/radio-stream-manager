@@ -179,8 +179,7 @@ async function resolveCode(
     case 'literal':
       return code;
       
-    case 'vinheta':
-    case 'comercial': {
+    case 'vinheta': {
       const folder = codeConfig.vinhetaFolder || config.vhtEntradaFolder;
       const cacheKey = `vht:${folder}`;
       
@@ -193,6 +192,14 @@ async function resolveCode(
       const files = cache.get(cacheKey)!;
       const next = getNextFromPool(cacheKey, files);
       return next ? `"${next}"` : code;
+    }
+
+    case 'comercial': {
+      // Comercial uses a fixed file chosen by user, not random
+      if (codeConfig.fixedFile) {
+        return `"${codeConfig.fixedFile}"`;
+      }
+      return code;
     }
       
     case 'monitored': {
