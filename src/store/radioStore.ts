@@ -201,6 +201,11 @@ interface RadioState {
   addSongAlias: (alias: SongAlias) => void;
   removeSongAlias: (id: string) => void;
   updateSongAlias: (id: string, updates: Partial<SongAlias>) => void;
+
+  // Mapas Config (commercial programming templates)
+  mapasConfig: MapasConfig;
+  setMapasConfig: (config: Partial<MapasConfig>) => void;
+  updateMapaCodeConfig: (code: string, updates: Partial<MapaCodeConfig>) => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
