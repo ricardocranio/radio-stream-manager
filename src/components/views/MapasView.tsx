@@ -113,8 +113,31 @@ function DayScheduleEditor({ templateIdx, autoSaveToFile }: { templateIdx: numbe
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground font-mono">{template.filename} — {template.lines.length} horários</span>
-        <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => setShowAddLine(!showAddLine)}><Plus className="w-3 h-3 mr-1" /> Horário</Button>
+        <div className="flex gap-1">
+          <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={async () => {
+            if (!isElectron || !window.electronAPI?.readGradeFile) return;
+            try {
+              const r = await window.electronAPI.readGradeFile({ folder: mapasConfig.outputFolder, filename: template.filename });
+              if (r.success && r.content) {
+                setFilePreview(r.content.split('\n').filter(Boolean));
+                toast.success(`📂 ${template.filename} carregado do disco`);
+              } else { toast.error('Arquivo não encontrado'); setFilePreview(null); }
+            } catch { toast.error('Erro ao ler arquivo'); }
+          }}><FolderOpen className="w-3 h-3 mr-1" /> Carregar</Button>
+          <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => setShowAddLine(!showAddLine)}><Plus className="w-3 h-3 mr-1" /> Horário</Button>
+          {filePreview && <Button size="sm" variant="ghost" className="h-7 text-[10px]" onClick={() => setFilePreview(null)}>✕ Fechar</Button>}
+        </div>
       </div>
+      {filePreview && (
+        <div className="border border-accent/40 rounded-lg p-3 bg-accent/5 max-h-[350px] overflow-y-auto">
+          <p className="text-[10px] text-accent-foreground font-semibold mb-2">📂 Arquivo atual: {template.filename}</p>
+          <div className="space-y-0.5">
+            {filePreview.map((line, i) => (
+              <div key={i} className="font-mono text-[10px] text-muted-foreground leading-tight">{line}</div>
+            ))}
+          </div>
+        </div>
+      )}
       {showAddLine && (
         <div className="flex gap-2 items-center border border-primary/30 rounded-lg p-2 bg-primary/5">
           <Input className="h-7 text-xs font-mono w-20" placeholder="HH:MM" value={newLineTime} onChange={(e) => setNewLineTime(e.target.value)} />
