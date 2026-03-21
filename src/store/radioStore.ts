@@ -209,6 +209,7 @@ interface RadioState {
   addMapaCodeConfig: (config: MapaCodeConfig) => void;
   removeMapaCodeConfig: (code: string) => void;
   resetMapaCodeConfigs: () => void;
+  reorderMapaCodeConfigs: (fromIndex: number, toIndex: number) => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
