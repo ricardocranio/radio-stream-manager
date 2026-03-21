@@ -56,6 +56,7 @@ export const DEFAULT_CODE_CONFIGS: MapaCodeConfig[] = [
   { code: 'mus', label: 'Música (Monitoramento)', type: 'monitored', stationSource: 'Disney FM' },
   { code: 'fun', label: 'Funk', type: 'genre', genreFilter: ['FUNK', 'FUNK MELODY', 'FUNK CARIOCA'] },
   { code: 'rom', label: 'MPB / Românticas', type: 'genre', genreFilter: ['MPB', 'ROMANTICA', 'ROMANTICO', 'BALADA', 'BOSSA NOVA'] },
+  { code: 'com', label: 'Comercial', type: 'comercial', vinhetaFolder: 'C:\\Playlist\\Comerciais' },
 ];
 
 export const DEFAULT_MAPAS_CONFIG: MapasConfig = {
