@@ -33,6 +33,90 @@ const CODE_ICONS: Record<string, React.ReactNode> = {
   comercial: <FileText className="w-3 h-3" />,
 };
 
+// Sortable code card component
+function SortableCodeCard({ cc, stations, updateMapaCodeConfig, removeMapaCodeConfig, comercialFiles, setComercialFiles }: {
+  cc: MapaCodeConfig;
+  stations: Array<{ id: string; name: string; enabled?: boolean }>;
+  updateMapaCodeConfig: (code: string, updates: Partial<MapaCodeConfig>) => void;
+  removeMapaCodeConfig: (code: string) => void;
+  comercialFiles: Record<string, string[]>;
+  setComercialFiles: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cc.code });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+
+  return (
+    <div ref={setNodeRef} style={style} className="border border-border/50 rounded-lg p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none">
+            <GripVertical className="w-4 h-4" />
+          </button>
+          {CODE_ICONS[cc.type]}
+          <span className="font-mono text-sm font-bold text-primary">{cc.code}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Badge variant="outline" className="text-[10px]">{CODE_TYPE_LABELS[cc.type]}</Badge>
+          <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive/60 hover:text-destructive" onClick={() => { removeMapaCodeConfig(cc.code); toast.info(`Código "${cc.code}" removido`); }}>
+            <Trash2 className="w-3 h-3" />
+          </Button>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">{cc.label}</p>
+
+      {cc.type === 'monitored' && (
+        <Select value={cc.stationSource || ''} onValueChange={(v) => updateMapaCodeConfig(cc.code, { stationSource: v })}>
+          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Estação fonte" /></SelectTrigger>
+          <SelectContent>
+            {stations.filter(s => s.enabled).map(s => (
+              <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      {cc.type === 'genre' && (
+        <Input className="h-8 text-xs" value={cc.genreFilter?.join(', ') || ''} onChange={(e) => updateMapaCodeConfig(cc.code, { genreFilter: e.target.value.split(',').map(g => g.trim().toUpperCase()).filter(Boolean) })} placeholder="Gêneros separados por vírgula" />
+      )}
+
+      {cc.type === 'vinheta' && (
+        <Input className="h-8 text-xs font-mono" value={cc.vinhetaFolder || ''} onChange={(e) => updateMapaCodeConfig(cc.code, { vinhetaFolder: e.target.value })} placeholder="Pasta das vinhetas" />
+      )}
+
+      {cc.type === 'comercial' && (
+        <div className="space-y-2">
+          <Input className="h-8 text-xs font-mono" value={cc.vinhetaFolder || ''} onChange={(e) => updateMapaCodeConfig(cc.code, { vinhetaFolder: e.target.value })} placeholder="Pasta dos comerciais" />
+          <div className="flex gap-1 items-center">
+            <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={async () => {
+              if (!isElectron || !window.electronAPI?.listFolderFiles || !cc.vinhetaFolder) return;
+              try {
+                const result = await window.electronAPI.listFolderFiles({ folder: cc.vinhetaFolder, extension: '.mp3' });
+                if (result.success && result.files) {
+                  setComercialFiles(prev => ({ ...prev, [cc.code]: result.files!.map(f => f.name) }));
+                  toast.success(`${result.files.length} arquivos encontrados`);
+                }
+              } catch { toast.error('Erro ao listar pasta'); }
+            }}>
+              <FolderOpen className="w-3 h-3 mr-1" /> Listar
+            </Button>
+            {cc.fixedFile && <span className="text-[10px] text-primary font-mono truncate flex-1">📎 {cc.fixedFile}</span>}
+          </div>
+          {comercialFiles[cc.code]?.length > 0 && (
+            <Select value={cc.fixedFile || ''} onValueChange={(v) => updateMapaCodeConfig(cc.code, { fixedFile: v })}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecione o arquivo fixo" /></SelectTrigger>
+              <SelectContent className="max-h-60">
+                {comercialFiles[cc.code].map(f => (
+                  <SelectItem key={f} value={f} className="text-xs font-mono">{f}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MapasView() {
   const { mapasConfig, setMapasConfig, updateMapaCodeConfig, addMapaCodeConfig, removeMapaCodeConfig, resetMapaCodeConfigs, reorderMapaCodeConfigs, config, stations } = useRadioStore();
   const [templates, setTemplates] = useState<MapaTemplate[]>([]);
