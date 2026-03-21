@@ -17,7 +17,7 @@ export function detectDayMapping(filename: string): string {
   const name = filename.toUpperCase().replace(/\.TXT$/i, '');
   
   if (name.startsWith('DOM')) return 'sunday';
-  if (name === 'S_B' || name === 'SAB' || name === 'SABADO') return 'saturday';
+  if (name === 'S_B' || name === 'SAB' || name === 'SABADO' || name === 'SÁB') return 'saturday';
   if (name === 'MAPA' || name === 'SEG_SEX') return 'weekdays';
   
   // Specific days

@@ -49,8 +49,8 @@ export interface MapasConfig {
 export const DEFAULT_CODE_CONFIGS: MapaCodeConfig[] = [
   { code: 'SINAL', label: 'Sinal (Hora)', type: 'literal' },
   { code: 'HC', label: 'Hora Certa', type: 'literal' },
-  { code: 'RESTART', label: 'Reinício', type: 'literal' },
-  { code: 'NOT', label: 'Notícias', type: 'literal' },
+  { code: 'RESTART', label: 'Reinício (Vinheta)', type: 'vinheta', vinhetaFolder: 'C:\\Playlist\\Vinhetas' },
+  { code: 'NOT', label: 'Notícias (Mix FM)', type: 'monitored', stationSource: 'Mix FM' },
   { code: 'VHTENT', label: 'Vinheta Entrada', type: 'vinheta', vinhetaFolder: 'C:\\Playlist\\Vht Entrada' },
   { code: 'vht', label: 'Vinheta Normal', type: 'vinheta', vinhetaFolder: 'C:\\Playlist\\Vinhetas' },
   { code: 'mus', label: 'Música (Monitoramento)', type: 'monitored', stationSource: 'Disney FM' },
