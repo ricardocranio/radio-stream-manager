@@ -323,7 +323,7 @@ function SortableCodePill({ cc, stations, updateMapaCodeConfig, removeMapaCodeCo
 export function MapasView() {
   const { mapasConfig, setMapasConfig, updateMapaCodeConfig, addMapaCodeConfig, removeMapaCodeConfig, resetMapaCodeConfigs, reorderMapaCodeConfigs, resetMapaTemplates, updateMapaTemplateLine, removeMapaTemplateLine, addMapaTemplateLine, config, stations } = useRadioStore();
   const [isBuilding, setIsBuilding] = useState(false);
-  const [activeDay, setActiveDay] = useState(0);
+  const [activeDay, setActiveDay] = useState(() => { const d = new Date().getDay(); return [0,1,2,3,4,5,6][d]; }); // 0=dom,1=seg...6=sab
   const [editingSlot, setEditingSlot] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editTime, setEditTime] = useState('');
@@ -336,7 +336,7 @@ export function MapasView() {
   const [comercialFiles, setComercialFiles] = useState<Record<string, string[]>>({});
   const autoSaveTimerRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
-  const dayLabels: Record<string, string> = { weekdays: 'Seg-Sex', saturday: 'Sáb', sunday: 'Dom' };
+  const dayLabels: Record<string, string> = { dom: 'Dom', seg: 'Seg', ter: 'Ter', qua: 'Qua', qui: 'Qui', sex: 'Sex', sab: 'Sáb', weekdays: 'Seg-Sex', saturday: 'Sáb', sunday: 'Dom' };
   const template = mapasConfig.templates?.[activeDay];
   const stdPattern = 'SINAL,HC,VHTENT,mus,vht,mus';
 
@@ -366,27 +366,18 @@ export function MapasView() {
     }, 1500);
   }, []);
 
-  // Map template dayMapping to per-day filenames
-  const DAY_FILENAMES: Record<string, string[]> = {
-    weekdays: ['seg.txt', 'ter.txt', 'qua.txt', 'qui.txt', 'sex.txt'],
-    saturday: ['sab.txt'],
-    sunday: ['dom.txt'],
-  };
-
+  // Each template now maps directly to its own file
   const buildAll = useCallback(async () => {
     if (!isElectron || !mapasConfig.templates?.length) return;
     setIsBuilding(true); let built = 0;
     for (const tmpl of mapasConfig.templates) {
-      const filenames = DAY_FILENAMES[tmpl.dayMapping] || [tmpl.filename];
-      for (const filename of filenames) {
-        resetMapasPools(); const cache = new Map<string, string[]>(); const lines: string[] = [];
-        try {
-          for (const line of tmpl.lines) { const r = await resolveTemplateLine(line, mapasConfig, config.musicFolders, cache); lines.push(formatResolvedLine(r)); }
-          await window.electronAPI!.saveGradeFile({ folder: mapasConfig.outputFolder, filename, content: lines.join('\n') }); built++;
-        } catch { /* skip */ }
-      }
+      resetMapasPools(); const cache = new Map<string, string[]>(); const lines: string[] = [];
+      try {
+        for (const line of tmpl.lines) { const r = await resolveTemplateLine(line, mapasConfig, config.musicFolders, cache); lines.push(formatResolvedLine(r)); }
+        await window.electronAPI!.saveGradeFile({ folder: mapasConfig.outputFolder, filename: tmpl.filename, content: lines.join('\n') }); built++;
+      } catch { /* skip */ }
     }
-    toast.success(`${built} mapas construídos (dom-sáb)!`); setIsBuilding(false);
+    toast.success(`${built} mapas construídos!`); setIsBuilding(false);
   }, [mapasConfig, config.musicFolders]);
 
   const saveSlotEdit = (lineIdx: number) => {
@@ -400,7 +391,11 @@ export function MapasView() {
   };
 
   const dayColors: Record<string, { tab: string; activeTab: string; accent: string; headerBg: string }> = {
-    'Seg-Sex': { tab: 'border-border/20 text-muted-foreground hover:text-cyan-400', activeTab: 'bg-cyan-500/15 border-cyan-500/40 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.15)]', accent: 'text-cyan-400', headerBg: 'from-cyan-500/10 to-transparent' },
+    'Seg': { tab: 'border-border/20 text-muted-foreground hover:text-cyan-400', activeTab: 'bg-cyan-500/15 border-cyan-500/40 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.15)]', accent: 'text-cyan-400', headerBg: 'from-cyan-500/10 to-transparent' },
+    'Ter': { tab: 'border-border/20 text-muted-foreground hover:text-cyan-400', activeTab: 'bg-cyan-500/15 border-cyan-500/40 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.15)]', accent: 'text-cyan-400', headerBg: 'from-cyan-500/10 to-transparent' },
+    'Qua': { tab: 'border-border/20 text-muted-foreground hover:text-teal-400', activeTab: 'bg-teal-500/15 border-teal-500/40 text-teal-400 shadow-[0_0_10px_rgba(20,184,166,0.15)]', accent: 'text-teal-400', headerBg: 'from-teal-500/10 to-transparent' },
+    'Qui': { tab: 'border-border/20 text-muted-foreground hover:text-teal-400', activeTab: 'bg-teal-500/15 border-teal-500/40 text-teal-400 shadow-[0_0_10px_rgba(20,184,166,0.15)]', accent: 'text-teal-400', headerBg: 'from-teal-500/10 to-transparent' },
+    'Sex': { tab: 'border-border/20 text-muted-foreground hover:text-sky-400', activeTab: 'bg-sky-500/15 border-sky-500/40 text-sky-400 shadow-[0_0_10px_rgba(14,165,233,0.15)]', accent: 'text-sky-400', headerBg: 'from-sky-500/10 to-transparent' },
     'Sáb': { tab: 'border-border/20 text-muted-foreground hover:text-amber-400', activeTab: 'bg-amber-500/15 border-amber-500/40 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.15)]', accent: 'text-amber-400', headerBg: 'from-amber-500/10 to-transparent' },
     'Dom': { tab: 'border-border/20 text-muted-foreground hover:text-violet-400', activeTab: 'bg-violet-500/15 border-violet-500/40 text-violet-400 shadow-[0_0_10px_rgba(139,92,246,0.15)]', accent: 'text-violet-400', headerBg: 'from-violet-500/10 to-transparent' },
   };
