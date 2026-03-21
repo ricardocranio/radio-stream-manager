@@ -185,7 +185,7 @@ export function MapasView() {
   const [showNewCode, setShowNewCode] = useState(false);
   const [newCode, setNewCode] = useState({ code: '', label: '', type: 'literal' as MapaCodeConfig['type'], stationSource: '', genreFilter: '', vinhetaFolder: '', fixedFile: '' });
   const [comercialFiles, setComercialFiles] = useState<Record<string, string[]>>({});
-  const autoSaveTimerRef = useRef<Record<number, NodeJS.Timeout>>({});
+  const autoSaveTimerRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
   const dayLabels: Record<string, string> = { weekdays: 'Seg-Sex', saturday: 'Sáb', sunday: 'Dom' };
 
