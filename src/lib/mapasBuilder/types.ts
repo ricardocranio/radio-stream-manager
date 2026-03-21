@@ -12,7 +12,7 @@ export interface MapaCodeConfig {
   /** Human-readable label */
   label: string;
   /** Type of resolution */
-  type: 'literal' | 'vinheta' | 'monitored' | 'genre';
+  type: 'literal' | 'vinheta' | 'monitored' | 'genre' | 'comercial';
   /** For 'monitored': station name to pull from */
   stationSource?: string;
   /** For 'genre': ID3 genre filter */
