@@ -799,7 +799,7 @@ export function StationsView() {
                             console.error('Erro ao selecionar pasta:', err);
                           }
                         } else {
-                          toast('Seleção de pasta disponível apenas no app desktop');
+                          toast({ description: 'Seleção de pasta disponível apenas no app desktop' });
                         }
                       }}
                     >
