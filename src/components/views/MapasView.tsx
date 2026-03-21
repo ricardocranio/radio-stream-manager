@@ -516,7 +516,28 @@ export function MapasView() {
                       </SelectContent>
                     </Select>
                     {newCode.type === 'monitored' && <Select value={newCode.stationSource} onValueChange={(v) => setNewCode(p => ({ ...p, stationSource: v }))}><SelectTrigger className="h-6 text-[10px] bg-background/50"><SelectValue placeholder="Estação" /></SelectTrigger><SelectContent>{stations.filter(s => s.enabled).map(s => (<SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>))}</SelectContent></Select>}
-                    {newCode.type === 'genre' && <Input className="h-6 text-[10px] bg-background/50 font-mono" placeholder="FUNK, MPB..." value={newCode.genreFilter} onChange={(e) => setNewCode(p => ({ ...p, genreFilter: e.target.value }))} />}
+                    {newCode.type === 'genre' && (
+                      <div className="space-y-1">
+                        <label className="text-[8px] text-muted-foreground/50 uppercase tracking-wider">Gêneros</label>
+                        <div className="flex gap-1 flex-wrap">
+                          {MAPAS_AVAILABLE_GENRES.map(genre => {
+                            const selected = newCode.genreFilter.split(',').map(g => g.trim()).filter(Boolean);
+                            const isActive = selected.includes(genre);
+                            return (
+                              <button key={genre} onClick={() => {
+                                const updated = isActive ? selected.filter(g => g !== genre) : [...selected, genre];
+                                setNewCode(p => ({ ...p, genreFilter: updated.join(',') }));
+                              }}
+                                className={`px-1.5 py-0.5 rounded text-[8px] font-mono border transition-all ${
+                                  isActive ? 'bg-amber-500/25 text-amber-300 border-amber-500/40' : 'bg-background/30 text-muted-foreground/60 border-border/20 hover:text-amber-400'
+                                }`}>
+                                {genre}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     {(newCode.type === 'vinheta' || newCode.type === 'comercial') && <Input className="h-6 text-[10px] bg-background/50 font-mono" placeholder="C:\Playlist\..." value={newCode.vinhetaFolder} onChange={(e) => setNewCode(p => ({ ...p, vinhetaFolder: e.target.value }))} />}
                     <div className="flex gap-1">
                       <Button size="sm" className="h-6 text-[9px] flex-1" disabled={!newCode.code.trim() || !newCode.label.trim()} onClick={() => {
