@@ -86,7 +86,7 @@ export function useAutoMapaBuilder() {
       // We want to build it if it's 20 min away in either direction
       const normalizedDiff = diff < -720 ? diff + 1440 : diff > 720 ? diff - 1440 : diff;
       
-      const slotKey = `${template.filename}:${line.time}:${now.toDateString()}`;
+      const slotKey = `${outputFilename}:${line.time}:${now.toDateString()}`;
       if (normalizedDiff > 0 && normalizedDiff <= MINUTES_BEFORE && !built.has(slotKey)) {
         dueSlots.push({ lineIdx: i, time: line.time });
       }
