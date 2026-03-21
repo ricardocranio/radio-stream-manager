@@ -347,12 +347,18 @@ function DayColumn({ templateIdx, dayLabel, autoSaveToFile }: {
             <Badge variant="outline" className="text-[9px] border-border/30">{template.lines.length} slots</Badge>
             <div className="flex gap-1">
               <button onClick={async () => {
-                if (!isElectron || !window.electronAPI?.readGradeFile) return;
-                try {
-                  const r = await window.electronAPI.readGradeFile({ folder: mapasConfig.outputFolder, filename: template.filename });
-                  if (r.success && r.content) { setFilePreview(r.content.split('\n').filter(Boolean)); toast.success(`📂 ${template.filename} carregado`); }
-                  else { toast.error('Arquivo não encontrado'); setFilePreview(null); }
-                } catch { toast.error('Erro ao ler'); }
+                if (isElectron && window.electronAPI?.readGradeFile) {
+                  try {
+                    const r = await window.electronAPI.readGradeFile({ folder: mapasConfig.outputFolder, filename: template.filename });
+                    if (r.success && r.content) { setFilePreview(r.content.split('\n').filter(Boolean)); toast.success(`📂 ${template.filename} carregado`); }
+                    else { toast.error('Arquivo não encontrado'); setFilePreview(null); }
+                  } catch { toast.error('Erro ao ler'); }
+                } else {
+                  // Mock fallback for preview
+                  const mock = MOCK_FILES[template.filename];
+                  if (mock) { setFilePreview(mock.split('\n').filter(Boolean)); toast.success(`📂 ${template.filename} (preview)`); }
+                  else { toast.error('Mock não disponível'); }
+                }
               }} className="p-1.5 rounded-lg hover:bg-background/30 text-muted-foreground hover:text-foreground transition-colors" title="Carregar do disco">
                 <FolderOpen className="w-3.5 h-3.5" />
               </button>
