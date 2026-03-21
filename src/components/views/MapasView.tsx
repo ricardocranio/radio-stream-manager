@@ -87,6 +87,7 @@ function DayScheduleEditor({ templateIdx, autoSaveToFile }: { templateIdx: numbe
   const [showAddLine, setShowAddLine] = useState(false);
   const [newLineTime, setNewLineTime] = useState('');
   const [newLineCodes, setNewLineCodes] = useState('SINAL,HC,VHTENT,mus,vht,mus');
+  const [filePreview, setFilePreview] = useState<string[] | null>(null);
 
   const stdPattern = 'SINAL,HC,VHTENT,mus,vht,mus';
 
