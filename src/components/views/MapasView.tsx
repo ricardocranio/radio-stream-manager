@@ -146,6 +146,15 @@ const CODE_COLORS: Record<string, { bg: string; border: string; text: string; gl
   comercial: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', glow: 'shadow-[0_0_8px_rgba(16,185,129,0.15)]', pill: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
 };
 
+const MAPAS_AVAILABLE_GENRES = ['POP', 'ROCK', 'DANCE', 'SERTANEJO', 'PAGODE', 'FUNK', 'MPB', 'ROMANTICO', 'ROMANTICA', 'BOSSA NOVA', 'FORRO', 'METAL', 'ELETRONICA', 'RAP'];
+const MAPAS_AVAILABLE_DECADES = [
+  { value: '80s', label: 'Anos 80' },
+  { value: '90s', label: 'Anos 90' },
+  { value: '2000s', label: 'Anos 2000' },
+  { value: '2010s', label: 'Anos 2010' },
+  { value: '2020s', label: 'Anos 2020' },
+];
+
 const CODE_ICONS: Record<string, React.ReactNode> = {
   literal: <Clock className="w-3 h-3" />, vinheta: <Mic2 className="w-3 h-3" />,
   monitored: <Radio className="w-3 h-3" />, genre: <Music className="w-3 h-3" />,
