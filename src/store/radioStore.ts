@@ -206,6 +206,9 @@ interface RadioState {
   mapasConfig: MapasConfig;
   setMapasConfig: (config: Partial<MapasConfig>) => void;
   updateMapaCodeConfig: (code: string, updates: Partial<MapaCodeConfig>) => void;
+  addMapaCodeConfig: (config: MapaCodeConfig) => void;
+  removeMapaCodeConfig: (code: string) => void;
+  resetMapaCodeConfigs: () => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
