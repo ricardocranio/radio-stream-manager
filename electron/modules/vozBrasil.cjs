@@ -121,6 +121,22 @@ function scrapeVozDownloadUrl() {
   });
 }
 
+/**
+ * Delete PkInfo folder inside a given directory (created by some media players).
+ * Called after every file update to keep the folder clean.
+ */
+function deletePkInfoFolder(folder) {
+  try {
+    const pkInfoPath = path.join(folder, 'PkInfo');
+    if (fs.existsSync(pkInfoPath)) {
+      fs.rmSync(pkInfoPath, { recursive: true, force: true });
+      console.log(`[VOZ] 🗑️ PkInfo removido: ${pkInfoPath}`);
+    }
+  } catch (err) {
+    console.log(`[VOZ] ⚠️ Erro ao remover PkInfo: ${err.message}`);
+  }
+}
+
 function register({ getMainWindow, showNotification, safeHandle }) {
   _getMainWindow = getMainWindow;
   _showNotification = showNotification;
