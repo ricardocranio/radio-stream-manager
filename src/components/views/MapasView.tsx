@@ -9,8 +9,11 @@ import { parseTemplateText, detectDayMapping, getTemplateForDay } from '@/lib/ma
 import { resolveTemplateLine, formatResolvedLine, resetMapasPools } from '@/lib/mapasBuilder/resolver';
 import type { MapaTemplate, MapaResolvedLine, MapaCodeConfig } from '@/lib/mapasBuilder/types';
 import { DEFAULT_CODE_CONFIGS } from '@/lib/mapasBuilder/types';
-import { MapIcon, FileText, Play, Settings2, Radio, Music, Mic2, Clock, RefreshCw, FolderOpen, Eye, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { MapIcon, FileText, Play, Settings2, Radio, Music, Mic2, Clock, RefreshCw, FolderOpen, Eye, Plus, RotateCcw, Trash2, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
