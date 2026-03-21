@@ -70,10 +70,10 @@ const STD_NOT = ['SINAL','HC','NOT','VHTENT','mus','vht','mus'];
 const STD_FUN = ['SINAL','HC','VHTENT','fun','vht','fun'];
 const STD_ROM = ['SINAL','HC','VHTENT','rom','vht'];
 
-/** Default MAPA template (weekdays: Seg-Sex) */
-export const DEFAULT_TEMPLATE_MAPA: MapaTemplate = {
-  filename: 'MAPA.txt',
-  dayMapping: 'weekdays',
+/** Default MAPA template (Seg) */
+const makeWeekdayTemplate = (day: string, filename: string): MapaTemplate => ({
+  filename,
+  dayMapping: day,
   lines: [
     { time: '00:55', codes: ['SINAL','SINAL','HC','VHTENT','mus','vht','mus'] },
     { time: '01:55', codes: STD }, { time: '02:55', codes: STD },
@@ -98,12 +98,18 @@ export const DEFAULT_TEMPLATE_MAPA: MapaTemplate = {
     { time: '22:27', codes: [...STD_ROM] }, { time: '22:55', codes: [...STD_ROM] },
     { time: '23:27', codes: [...STD_ROM] }, { time: '23:55', codes: [...STD_ROM] },
   ],
-};
+});
+
+export const DEFAULT_TEMPLATE_SEG = makeWeekdayTemplate('seg', 'seg.txt');
+export const DEFAULT_TEMPLATE_TER = makeWeekdayTemplate('ter', 'ter.txt');
+export const DEFAULT_TEMPLATE_QUA = makeWeekdayTemplate('qua', 'qua.txt');
+export const DEFAULT_TEMPLATE_QUI = makeWeekdayTemplate('qui', 'qui.txt');
+export const DEFAULT_TEMPLATE_SEX = makeWeekdayTemplate('sex', 'sex.txt');
 
 /** Default S_B template (Sábado) */
 export const DEFAULT_TEMPLATE_SAB: MapaTemplate = {
-  filename: 'S_B.txt',
-  dayMapping: 'saturday',
+  filename: 'sab.txt',
+  dayMapping: 'sab',
   lines: [
     { time: '00:55', codes: ['SINAL','SINAL','HC','VHTENT','mus','vht','mus'] },
     { time: '01:55', codes: STD }, { time: '02:55', codes: STD },
@@ -132,8 +138,8 @@ export const DEFAULT_TEMPLATE_SAB: MapaTemplate = {
 
 /** Default DOM template (Domingo) */
 export const DEFAULT_TEMPLATE_DOM: MapaTemplate = {
-  filename: 'DOM-4.txt',
-  dayMapping: 'sunday',
+  filename: 'dom.txt',
+  dayMapping: 'dom',
   lines: [
     { time: '00:55', codes: ['SINAL','SINAL','HC','VHTENT','mus','vht','mus'] },
     { time: '01:55', codes: STD }, { time: '02:55', codes: STD },
@@ -161,9 +167,13 @@ export const DEFAULT_TEMPLATE_DOM: MapaTemplate = {
 };
 
 export const DEFAULT_TEMPLATES: MapaTemplate[] = [
-  DEFAULT_TEMPLATE_MAPA,
-  DEFAULT_TEMPLATE_SAB,
   DEFAULT_TEMPLATE_DOM,
+  DEFAULT_TEMPLATE_SEG,
+  DEFAULT_TEMPLATE_TER,
+  DEFAULT_TEMPLATE_QUA,
+  DEFAULT_TEMPLATE_QUI,
+  DEFAULT_TEMPLATE_SEX,
+  DEFAULT_TEMPLATE_SAB,
 ];
 
 export const DEFAULT_MAPAS_CONFIG: MapasConfig = {

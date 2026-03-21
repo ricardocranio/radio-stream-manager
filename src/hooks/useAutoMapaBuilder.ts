@@ -38,16 +38,8 @@ function markSlotBuilt(key: string) {
   }));
 }
 
-// Map JS day-of-week to template index and output filename
-const DAY_CONFIG: Array<{ tmplIdx: number; filename: string }> = [
-  { tmplIdx: 2, filename: 'dom.txt' },   // 0 = Sunday
-  { tmplIdx: 0, filename: 'seg.txt' },   // 1 = Monday
-  { tmplIdx: 0, filename: 'ter.txt' },   // 2 = Tuesday
-  { tmplIdx: 0, filename: 'qua.txt' },   // 3 = Wednesday
-  { tmplIdx: 0, filename: 'qui.txt' },   // 4 = Thursday
-  { tmplIdx: 0, filename: 'sex.txt' },   // 5 = Friday
-  { tmplIdx: 1, filename: 'sab.txt' },   // 6 = Saturday
-];
+// Map JS day-of-week (0=Sun) to template index in the 7-day array [dom,seg,ter,qua,qui,sex,sab]
+const DAY_TO_TEMPLATE_INDEX: number[] = [0, 1, 2, 3, 4, 5, 6];
 
 function timeToMinutes(time: string): number {
   const [h, m] = time.split(':').map(Number);
