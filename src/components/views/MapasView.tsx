@@ -338,13 +338,53 @@ export function MapasView() {
                   />
                 )}
 
-                {(cc.type === 'vinheta' || cc.type === 'comercial') && (
+                {cc.type === 'vinheta' && (
                   <Input
                     className="h-8 text-xs font-mono"
                     value={cc.vinhetaFolder || ''}
                     onChange={(e) => updateMapaCodeConfig(cc.code, { vinhetaFolder: e.target.value })}
                     placeholder="Pasta das vinhetas"
                   />
+                )}
+
+                {cc.type === 'comercial' && (
+                  <div className="space-y-2">
+                    <Input
+                      className="h-8 text-xs font-mono"
+                      value={cc.vinhetaFolder || ''}
+                      onChange={(e) => updateMapaCodeConfig(cc.code, { vinhetaFolder: e.target.value })}
+                      placeholder="Pasta dos comerciais"
+                    />
+                    <div className="flex gap-1 items-center">
+                      <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={async () => {
+                        if (!isElectron || !window.electronAPI?.listFolderFiles || !cc.vinhetaFolder) return;
+                        try {
+                          const result = await window.electronAPI.listFolderFiles({ folder: cc.vinhetaFolder, extension: '.mp3' });
+                          if (result.success && result.files) {
+                            setComercialFiles(prev => ({ ...prev, [cc.code]: result.files!.map(f => f.name) }));
+                            toast.success(`${result.files.length} arquivos encontrados`);
+                          }
+                        } catch { toast.error('Erro ao listar pasta'); }
+                      }}>
+                        <FolderOpen className="w-3 h-3 mr-1" /> Listar
+                      </Button>
+                      {cc.fixedFile && (
+                        <span className="text-[10px] text-primary font-mono truncate flex-1">📎 {cc.fixedFile}</span>
+                      )}
+                    </div>
+                    {comercialFiles[cc.code]?.length > 0 && (
+                      <Select value={cc.fixedFile || ''} onValueChange={(v) => updateMapaCodeConfig(cc.code, { fixedFile: v })}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Selecione o arquivo fixo" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {comercialFiles[cc.code].map(f => (
+                            <SelectItem key={f} value={f} className="text-xs font-mono">{f}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
                 )}
               </div>
             ))}
