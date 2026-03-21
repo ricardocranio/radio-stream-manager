@@ -231,6 +231,26 @@ function SortableCodePill({ cc, stations, updateMapaCodeConfig, removeMapaCodeCo
               {(cc.genreFilter?.length || 0) > 0 && (
                 <p className="text-[8px] text-amber-400/80">✓ {cc.genreFilter!.join(' / ')}</p>
               )}
+              {/* Decade selector */}
+              <label className="text-[8px] text-muted-foreground/50 uppercase tracking-wider">Década</label>
+              <div className="flex gap-1 flex-wrap">
+                {MAPAS_AVAILABLE_DECADES.map(d => {
+                  const isActive = cc.decadeFilter === d.value;
+                  return (
+                    <button key={d.value} onClick={() => updateMapaCodeConfig(cc.code, { decadeFilter: isActive ? undefined : d.value })}
+                      className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-medium border transition-all ${
+                        isActive
+                          ? 'bg-violet-500/25 text-violet-300 border-violet-500/40 shadow-[0_0_6px_rgba(139,92,246,0.2)]'
+                          : 'bg-background/30 text-muted-foreground/60 border-border/20 hover:border-violet-500/30 hover:text-violet-400'
+                      }`}>
+                      📅 {d.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {cc.decadeFilter && (
+                <p className="text-[8px] text-violet-400/80">✓ {MAPAS_AVAILABLE_DECADES.find(d => d.value === cc.decadeFilter)?.label || cc.decadeFilter}</p>
+              )}
             </div>
           )}
           {/* Vinheta folder */}
