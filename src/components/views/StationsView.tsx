@@ -759,6 +759,31 @@ export function StationsView() {
                   />
                 </div>
 
+                {/* Pasta de Download por Estação */}
+                <div className="space-y-1 py-1">
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Pasta de Download</span>
+                  </div>
+                  <Input
+                    className="h-7 text-xs font-mono"
+                    value={data.downloadFolder || ''}
+                    onChange={(e) => {
+                      if (isEditing) {
+                        setEditForm((prev) => prev && { ...prev, downloadFolder: e.target.value });
+                      } else {
+                        updateStation(station.id, { downloadFolder: e.target.value });
+                      }
+                    }}
+                    placeholder="Ex: hist, sertanejo, jovem..."
+                  />
+                  {data.downloadFolder && (
+                    <p className="text-[10px] text-muted-foreground/60 font-mono">
+                      → C:\Playlist\Downloads\{data.downloadFolder}
+                    </p>
+                  )}
+                </div>
+
                 {/* Actions */}
                 <div className="flex justify-end gap-2 pt-2 border-t border-border">
                   {isEditing ? (
