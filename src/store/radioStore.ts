@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule, ScheduledSequence } from '@/types/radio';
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
+import type { MapasConfig, MapaCodeConfig } from '@/lib/mapasBuilder/types';
+import { DEFAULT_MAPAS_CONFIG } from '@/lib/mapasBuilder/types';
 
 export interface GenreRouteRule {
   genre: string;      // normalized genre key e.g. "ROCK", "METAL"
