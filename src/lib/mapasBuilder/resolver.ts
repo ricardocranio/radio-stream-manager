@@ -131,19 +131,40 @@ async function loadMonitoredSongs(
  */
 async function loadGenreSongs(
   genreFilter: string[],
-  musicFolders: string[]
+  musicFolders: string[],
+  decadeFilter?: string
 ): Promise<string[]> {
   if (!isElectron || !window.electronAPI?.scanLibraryMetadata) return [];
   
+  // Parse decade to year range
+  let yearStart = 0, yearEnd = 9999;
+  if (decadeFilter) {
+    const decadeMap: Record<string, [number, number]> = {
+      '80s': [1980, 1989], '90s': [1990, 1999], '2000s': [2000, 2009],
+      '2010s': [2010, 2019], '2020s': [2020, 2029],
+    };
+    const range = decadeMap[decadeFilter];
+    if (range) { yearStart = range[0]; yearEnd = range[1]; }
+  }
+
   try {
     const result = await window.electronAPI.scanLibraryMetadata({ musicFolders });
     if (!result.success || !result.songs) return [];
     
     const genreUpper = genreFilter.map(g => g.toUpperCase());
     const filtered = result.songs.filter(s => {
-      if (!s.genre) return false;
-      const songGenre = s.genre.toUpperCase();
-      return genreUpper.some(g => songGenre.includes(g));
+      // Genre check
+      if (genreUpper.length > 0) {
+        if (!s.genre) return false;
+        const songGenre = s.genre.toUpperCase();
+        if (!genreUpper.some(g => songGenre.includes(g))) return false;
+      }
+      // Decade check
+      if (decadeFilter && s.year) {
+        const y = parseInt(s.year, 10);
+        if (isNaN(y) || y < yearStart || y > yearEnd) return false;
+      }
+      return true;
     });
     
     return filtered.map(s => s.filename);
