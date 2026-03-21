@@ -66,13 +66,13 @@ export function useAutoMapaBuilder() {
     
     if (!mapasConfig.enabled || !mapasConfig.templates?.length) return;
     
+    const now = new Date();
     const dow = now.getDay();
     const dayConfig = DAY_CONFIG[dow];
     const template = mapasConfig.templates[dayConfig.tmplIdx];
     const outputFilename = dayConfig.filename;
     if (!template?.lines?.length) return;
     
-    const now = new Date();
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
     const built = getBuiltSlots();
 
