@@ -25,6 +25,7 @@ import { useRadioagenciaService } from '@/hooks/useRadioagenciaService';
 import { useBackgroundMaintenance } from '@/hooks/useBackgroundMaintenance';
 import { useServiceWatchdog } from '@/hooks/useServiceWatchdog';
 import { useDailyReport } from '@/hooks/useDailyReport';
+import { useAutoMapaBuilder } from '@/hooks/useAutoMapaBuilder';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
