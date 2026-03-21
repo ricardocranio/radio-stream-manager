@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule, ScheduledSequence } from '@/types/radio';
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
 import type { MapasConfig, MapaCodeConfig } from '@/lib/mapasBuilder/types';
-import { DEFAULT_MAPAS_CONFIG, DEFAULT_CODE_CONFIGS } from '@/lib/mapasBuilder/types';
+import { DEFAULT_MAPAS_CONFIG, DEFAULT_CODE_CONFIGS, DEFAULT_TEMPLATES } from '@/lib/mapasBuilder/types';
 
 export interface GenreRouteRule {
   genre: string;      // normalized genre key e.g. "ROCK", "METAL"
@@ -210,6 +210,10 @@ interface RadioState {
   removeMapaCodeConfig: (code: string) => void;
   resetMapaCodeConfigs: () => void;
   reorderMapaCodeConfigs: (fromIndex: number, toIndex: number) => void;
+  updateMapaTemplateLine: (templateIndex: number, lineIndex: number, codes: string[]) => void;
+  addMapaTemplateLine: (templateIndex: number, time: string, codes: string[]) => void;
+  removeMapaTemplateLine: (templateIndex: number, lineIndex: number) => void;
+  resetMapaTemplates: () => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
@@ -741,6 +745,31 @@ export const useRadioStore = create<RadioState>()(
         configs.splice(toIndex, 0, moved);
         return { mapasConfig: { ...state.mapasConfig, codeConfigs: configs } };
       }),
+      updateMapaTemplateLine: (templateIndex, lineIndex, codes) => set((state) => {
+        const templates = state.mapasConfig.templates.map((t, ti) => {
+          if (ti !== templateIndex) return t;
+          return { ...t, lines: t.lines.map((l, li) => li === lineIndex ? { ...l, codes } : l) };
+        });
+        return { mapasConfig: { ...state.mapasConfig, templates } };
+      }),
+      addMapaTemplateLine: (templateIndex, time, codes) => set((state) => {
+        const templates = state.mapasConfig.templates.map((t, ti) => {
+          if (ti !== templateIndex) return t;
+          const newLines = [...t.lines, { time, codes }].sort((a, b) => a.time.localeCompare(b.time));
+          return { ...t, lines: newLines };
+        });
+        return { mapasConfig: { ...state.mapasConfig, templates } };
+      }),
+      removeMapaTemplateLine: (templateIndex, lineIndex) => set((state) => {
+        const templates = state.mapasConfig.templates.map((t, ti) => {
+          if (ti !== templateIndex) return t;
+          return { ...t, lines: t.lines.filter((_, li) => li !== lineIndex) };
+        });
+        return { mapasConfig: { ...state.mapasConfig, templates } };
+      }),
+      resetMapaTemplates: () => set((state) => ({
+        mapasConfig: { ...state.mapasConfig, templates: DEFAULT_TEMPLATES },
+      })),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
