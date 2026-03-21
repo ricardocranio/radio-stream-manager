@@ -209,6 +209,7 @@ interface RadioState {
   addMapaCodeConfig: (config: MapaCodeConfig) => void;
   removeMapaCodeConfig: (code: string) => void;
   resetMapaCodeConfigs: () => void;
+  reorderMapaCodeConfigs: (fromIndex: number, toIndex: number) => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
@@ -734,6 +735,12 @@ export const useRadioStore = create<RadioState>()(
       resetMapaCodeConfigs: () => set((state) => ({
         mapasConfig: { ...state.mapasConfig, codeConfigs: DEFAULT_CODE_CONFIGS },
       })),
+      reorderMapaCodeConfigs: (fromIndex, toIndex) => set((state) => {
+        const configs = [...state.mapasConfig.codeConfigs];
+        const [moved] = configs.splice(fromIndex, 1);
+        configs.splice(toIndex, 0, moved);
+        return { mapasConfig: { ...state.mapasConfig, codeConfigs: configs } };
+      }),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
