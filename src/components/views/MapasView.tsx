@@ -391,7 +391,11 @@ export function MapasView() {
   };
 
   const dayColors: Record<string, { tab: string; activeTab: string; accent: string; headerBg: string }> = {
-    'Seg-Sex': { tab: 'border-border/20 text-muted-foreground hover:text-cyan-400', activeTab: 'bg-cyan-500/15 border-cyan-500/40 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.15)]', accent: 'text-cyan-400', headerBg: 'from-cyan-500/10 to-transparent' },
+    'Seg': { tab: 'border-border/20 text-muted-foreground hover:text-cyan-400', activeTab: 'bg-cyan-500/15 border-cyan-500/40 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.15)]', accent: 'text-cyan-400', headerBg: 'from-cyan-500/10 to-transparent' },
+    'Ter': { tab: 'border-border/20 text-muted-foreground hover:text-cyan-400', activeTab: 'bg-cyan-500/15 border-cyan-500/40 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.15)]', accent: 'text-cyan-400', headerBg: 'from-cyan-500/10 to-transparent' },
+    'Qua': { tab: 'border-border/20 text-muted-foreground hover:text-teal-400', activeTab: 'bg-teal-500/15 border-teal-500/40 text-teal-400 shadow-[0_0_10px_rgba(20,184,166,0.15)]', accent: 'text-teal-400', headerBg: 'from-teal-500/10 to-transparent' },
+    'Qui': { tab: 'border-border/20 text-muted-foreground hover:text-teal-400', activeTab: 'bg-teal-500/15 border-teal-500/40 text-teal-400 shadow-[0_0_10px_rgba(20,184,166,0.15)]', accent: 'text-teal-400', headerBg: 'from-teal-500/10 to-transparent' },
+    'Sex': { tab: 'border-border/20 text-muted-foreground hover:text-sky-400', activeTab: 'bg-sky-500/15 border-sky-500/40 text-sky-400 shadow-[0_0_10px_rgba(14,165,233,0.15)]', accent: 'text-sky-400', headerBg: 'from-sky-500/10 to-transparent' },
     'Sáb': { tab: 'border-border/20 text-muted-foreground hover:text-amber-400', activeTab: 'bg-amber-500/15 border-amber-500/40 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.15)]', accent: 'text-amber-400', headerBg: 'from-amber-500/10 to-transparent' },
     'Dom': { tab: 'border-border/20 text-muted-foreground hover:text-violet-400', activeTab: 'bg-violet-500/15 border-violet-500/40 text-violet-400 shadow-[0_0_10px_rgba(139,92,246,0.15)]', accent: 'text-violet-400', headerBg: 'from-violet-500/10 to-transparent' },
   };
