@@ -115,19 +115,19 @@ export function useAutoMapaBuilder() {
         allLines.push(formatResolvedLine(resolved));
       }
 
-      // Save to disk
+      // Save to disk with day-specific filename
       const result = await window.electronAPI!.saveGradeFile({
         folder: mapasConfig.outputFolder,
-        filename: template.filename,
+        filename: outputFilename,
         content: allLines.join('\n'),
       });
 
       if (result.success) {
         for (const slot of dueSlots) {
-          const slotKey = `${template.filename}:${slot.time}:${now.toDateString()}`;
+          const slotKey = `${outputFilename}:${slot.time}:${now.toDateString()}`;
           markSlotBuilt(slotKey);
         }
-        console.log(`[MAPA-JIT] ✅ ${template.filename} salvo com ${allLines.length} linhas`);
+        console.log(`[MAPA-JIT] ✅ ${outputFilename} salvo com ${allLines.length} linhas (${['dom','seg','ter','qua','qui','sex','sáb'][dow]})`);
         reportServiceHeartbeat('mapa-jit');
       }
     } catch (err) {
