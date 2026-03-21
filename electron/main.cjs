@@ -155,18 +155,34 @@ function createWindow() {
   }
 
   // =============== WHITE SCREEN RECOVERY ===============
+  let failLoadAttempts = 0;
+  const MAX_FAIL_LOAD_ATTEMPTS = 3;
+
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
     console.error(`[WINDOW] Load failed: ${errorCode} - ${errorDescription}`);
-    setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.reload();
-    }, 2000);
+    failLoadAttempts++;
+    if (failLoadAttempts < MAX_FAIL_LOAD_ATTEMPTS) {
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.reload();
+      }, 2000);
+    } else {
+      console.error(`[WINDOW] Max fail-load attempts (${MAX_FAIL_LOAD_ATTEMPTS}) reached, stopping reload loop`);
+    }
   });
+
+  let renderGoneAttempts = 0;
+  const MAX_RENDER_GONE_ATTEMPTS = 2;
 
   mainWindow.webContents.on('render-process-gone', (event, details) => {
     console.error(`[WINDOW] Render process gone: ${details.reason}`);
-    setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.reload();
-    }, 1000);
+    renderGoneAttempts++;
+    if (renderGoneAttempts < MAX_RENDER_GONE_ATTEMPTS) {
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.reload();
+      }, 1000);
+    } else {
+      console.error(`[WINDOW] Max render-gone attempts (${MAX_RENDER_GONE_ATTEMPTS}) reached, stopping reload loop`);
+    }
   });
 
   mainWindow.webContents.on('unresponsive', () => {

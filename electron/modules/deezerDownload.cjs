@@ -292,20 +292,20 @@ function register({ getMainWindow, showNotification, safeHandle }) {
                 console.warn(`[DEEMIX] ⚠️ Could not read ID3 tags: ${tagErr.message}`);
               }
 
-              // Sanitize: remove filesystem chars, accents, & → e
-              const sanitizeForDisk = (str) => str
-                .replace(/&/g, 'e')
-                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-                .replace(/[<>:"/\\|?*]/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
+              // Sanitize: use shared utility from utils.cjs (handles accents, &, filesystem chars)
+              // Detect corrupted ID3 chars (encoding artifacts like Ø, ÿ in unexpected positions)
+              const hasCorruptedChars = (str) => {
+                if (!str) return true;
+                const corruptPatterns = /[\x00-\x08\x0E-\x1F\x7F-\x9F]|Ã[€-¿]|Â[€-¿]/;
+                return corruptPatterns.test(str);
+              };
 
               // Priority: Deezer API names > ID3 tags > original search params
               // ID3 tags can have encoding corruption (e.g., Ø instead of o)
               const safeId3Artist = id3Artist && !hasCorruptedChars(id3Artist) ? id3Artist : null;
               const safeId3Title = id3Title && !hasCorruptedChars(id3Title) ? id3Title : null;
               
-              // Use shared disk sanitization so separators don't get collapsed together
+              // Use shared disk sanitization from utils.cjs
               const finalArtist = sanitizeForDisk(track.artist.name || safeId3Artist || artist, 'artist');
               const finalTitle = sanitizeForDisk(track.title || safeId3Title || title, 'title');
               const finalFilename = `${finalArtist} - ${finalTitle}.mp3`;
