@@ -247,6 +247,7 @@ export function MapasView() {
                     <SelectItem value="vinheta">Vinheta (arquivo)</SelectItem>
                     <SelectItem value="monitored">Monitoramento</SelectItem>
                     <SelectItem value="genre">Gênero ID3</SelectItem>
+                    <SelectItem value="comercial">Comercial</SelectItem>
                   </SelectContent>
                 </Select>
                 {newCode.type === 'monitored' && (
