@@ -179,7 +179,8 @@ async function resolveCode(
     case 'literal':
       return code;
       
-    case 'vinheta': {
+    case 'vinheta':
+    case 'comercial': {
       const folder = codeConfig.vinhetaFolder || config.vhtEntradaFolder;
       const cacheKey = `vht:${folder}`;
       
