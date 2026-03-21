@@ -19,6 +19,8 @@ export interface MapaCodeConfig {
   genreFilter?: string[];
   /** For 'vinheta'/'comercial': folder path */
   vinhetaFolder?: string;
+  /** For 'comercial': specific fixed file chosen by user */
+  fixedFile?: string;
 }
 
 export interface MapaTemplateLine {
