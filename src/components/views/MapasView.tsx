@@ -27,6 +27,7 @@ const CODE_ICONS: Record<string, React.ReactNode> = {
   vinheta: <Mic2 className="w-3 h-3" />,
   monitored: <Radio className="w-3 h-3" />,
   genre: <Music className="w-3 h-3" />,
+  comercial: <FileText className="w-3 h-3" />,
 };
 
 export function MapasView() {
