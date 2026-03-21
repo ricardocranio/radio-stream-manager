@@ -8,7 +8,8 @@ import { useRadioStore } from '@/store/radioStore';
 import { parseTemplateText, detectDayMapping, getTemplateForDay } from '@/lib/mapasBuilder/parser';
 import { resolveTemplateLine, formatResolvedLine, resetMapasPools } from '@/lib/mapasBuilder/resolver';
 import type { MapaTemplate, MapaResolvedLine, MapaCodeConfig } from '@/lib/mapasBuilder/types';
-import { MapIcon, FileText, Play, Settings2, Radio, Music, Mic2, Clock, RefreshCw, FolderOpen, Eye } from 'lucide-react';
+import { DEFAULT_CODE_CONFIGS } from '@/lib/mapasBuilder/types';
+import { MapIcon, FileText, Play, Settings2, Radio, Music, Mic2, Clock, RefreshCw, FolderOpen, Eye, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
