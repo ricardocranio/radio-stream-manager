@@ -335,7 +335,7 @@ export function MapasView() {
                   />
                 )}
 
-                {cc.type === 'vinheta' && (
+                {(cc.type === 'vinheta' || cc.type === 'comercial') && (
                   <Input
                     className="h-8 text-xs font-mono"
                     value={cc.vinhetaFolder || ''}
