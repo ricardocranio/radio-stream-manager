@@ -296,101 +296,31 @@ export function MapasView() {
               </div>
             )}
 
-            {mapasConfig.codeConfigs.map((cc) => (
-              <div key={cc.code} className="border border-border/50 rounded-lg p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {CODE_ICONS[cc.type]}
-                    <span className="font-mono text-sm font-bold text-primary">{cc.code}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Badge variant="outline" className="text-[10px]">
-                      {CODE_TYPE_LABELS[cc.type]}
-                    </Badge>
-                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive/60 hover:text-destructive" onClick={() => { removeMapaCodeConfig(cc.code); toast.info(`Código "${cc.code}" removido`); }}>
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">{cc.label}</p>
-
-                {cc.type === 'monitored' && (
-                  <Select
-                    value={cc.stationSource || ''}
-                    onValueChange={(v) => updateMapaCodeConfig(cc.code, { stationSource: v })}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Estação fonte" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stations.filter(s => s.enabled).map(s => (
-                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-
-                {cc.type === 'genre' && (
-                  <Input
-                    className="h-8 text-xs"
-                    value={cc.genreFilter?.join(', ') || ''}
-                    onChange={(e) => updateMapaCodeConfig(cc.code, {
-                      genreFilter: e.target.value.split(',').map(g => g.trim().toUpperCase()).filter(Boolean),
-                    })}
-                    placeholder="Gêneros separados por vírgula"
+            <DndContext
+              sensors={useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))}
+              collisionDetection={closestCenter}
+              onDragEnd={(event: DragEndEvent) => {
+                const { active, over } = event;
+                if (!over || active.id === over.id) return;
+                const oldIdx = mapasConfig.codeConfigs.findIndex(c => c.code === active.id);
+                const newIdx = mapasConfig.codeConfigs.findIndex(c => c.code === over.id);
+                if (oldIdx >= 0 && newIdx >= 0) reorderMapaCodeConfigs(oldIdx, newIdx);
+              }}
+            >
+              <SortableContext items={mapasConfig.codeConfigs.map(c => c.code)} strategy={verticalListSortingStrategy}>
+                {mapasConfig.codeConfigs.map((cc) => (
+                  <SortableCodeCard
+                    key={cc.code}
+                    cc={cc}
+                    stations={stations}
+                    updateMapaCodeConfig={updateMapaCodeConfig}
+                    removeMapaCodeConfig={removeMapaCodeConfig}
+                    comercialFiles={comercialFiles}
+                    setComercialFiles={setComercialFiles}
                   />
-                )}
-
-                {cc.type === 'vinheta' && (
-                  <Input
-                    className="h-8 text-xs font-mono"
-                    value={cc.vinhetaFolder || ''}
-                    onChange={(e) => updateMapaCodeConfig(cc.code, { vinhetaFolder: e.target.value })}
-                    placeholder="Pasta das vinhetas"
-                  />
-                )}
-
-                {cc.type === 'comercial' && (
-                  <div className="space-y-2">
-                    <Input
-                      className="h-8 text-xs font-mono"
-                      value={cc.vinhetaFolder || ''}
-                      onChange={(e) => updateMapaCodeConfig(cc.code, { vinhetaFolder: e.target.value })}
-                      placeholder="Pasta dos comerciais"
-                    />
-                    <div className="flex gap-1 items-center">
-                      <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={async () => {
-                        if (!isElectron || !window.electronAPI?.listFolderFiles || !cc.vinhetaFolder) return;
-                        try {
-                          const result = await window.electronAPI.listFolderFiles({ folder: cc.vinhetaFolder, extension: '.mp3' });
-                          if (result.success && result.files) {
-                            setComercialFiles(prev => ({ ...prev, [cc.code]: result.files!.map(f => f.name) }));
-                            toast.success(`${result.files.length} arquivos encontrados`);
-                          }
-                        } catch { toast.error('Erro ao listar pasta'); }
-                      }}>
-                        <FolderOpen className="w-3 h-3 mr-1" /> Listar
-                      </Button>
-                      {cc.fixedFile && (
-                        <span className="text-[10px] text-primary font-mono truncate flex-1">📎 {cc.fixedFile}</span>
-                      )}
-                    </div>
-                    {comercialFiles[cc.code]?.length > 0 && (
-                      <Select value={cc.fixedFile || ''} onValueChange={(v) => updateMapaCodeConfig(cc.code, { fixedFile: v })}>
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Selecione o arquivo fixo" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          {comercialFiles[cc.code].map(f => (
-                            <SelectItem key={f} value={f} className="text-xs font-mono">{f}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
+                ))}
+              </SortableContext>
+            </DndContext>
 
             {/* Pasta config */}
             <div className="pt-2 border-t border-border/30 space-y-2">
