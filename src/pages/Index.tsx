@@ -78,6 +78,7 @@ const TAB_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentTy
   analytics: AnalyticsView,
   competitor: CompetitorView,
   vozbrasil: VozBrasilView,
+  mapas: MapasView,
   logs: LogsView,
   export: ExportView,
   folders: FoldersView,
