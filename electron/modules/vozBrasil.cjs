@@ -122,10 +122,11 @@ function scrapeVozDownloadUrl() {
 }
 
 /**
- * Delete PkInfo folder inside a given directory (created by some media players).
- * Called after every file update to keep the folder clean.
+ * Delete PkInfo folder — ONLY in C:\Playlist\A Voz do Brasil
  */
 function deletePkInfoFolder(folder) {
+  const normalized = path.resolve(folder);
+  if (normalized !== path.resolve('C:\\Playlist\\A Voz do Brasil')) return;
   try {
     const pkInfoPath = path.join(folder, 'PkInfo');
     if (fs.existsSync(pkInfoPath)) {
