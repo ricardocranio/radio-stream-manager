@@ -34,6 +34,7 @@ const staticNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'gradebuilder', label: 'Montagem', icon: FileCode, group: 'grade' },
   { id: 'blockeditor', label: 'Editor Blocos', icon: Layers, group: 'grade' },
   { id: 'fixedcontent', label: 'Conteúdos Fixos', icon: Newspaper, group: 'grade' },
+  { id: 'mapas', label: 'Mapas Comerciais', icon: MapIcon, group: 'grade' },
   { id: 'ranking', label: 'Ranking TOP25', icon: TrendingUp, group: 'library' },
   { id: 'vozbrasil', label: 'Voz do Brasil', icon: Mic, group: 'library' },
   { id: 'missing', label: 'Faltando', icon: AlertTriangle, group: 'library' },
