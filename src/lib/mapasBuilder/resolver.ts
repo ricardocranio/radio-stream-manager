@@ -152,12 +152,12 @@ async function loadGenreSongs(
     if (!result.success || !result.songs) return [];
     
     const genreUpper = genreFilter.map(g => g.toUpperCase());
-    const filtered = result.songs.filter(s => {
+    const filtered = result.songs.filter((s: any) => {
       // Genre check
       if (genreUpper.length > 0) {
         if (!s.genre) return false;
         const songGenre = s.genre.toUpperCase();
-        if (!genreUpper.some(g => songGenre.includes(g))) return false;
+        if (!genreUpper.some((g: string) => songGenre.includes(g))) return false;
       }
       // Decade check
       if (decadeFilter && s.year) {
