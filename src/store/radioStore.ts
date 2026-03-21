@@ -210,6 +210,10 @@ interface RadioState {
   removeMapaCodeConfig: (code: string) => void;
   resetMapaCodeConfigs: () => void;
   reorderMapaCodeConfigs: (fromIndex: number, toIndex: number) => void;
+  updateMapaTemplateLine: (templateIndex: number, lineIndex: number, codes: string[]) => void;
+  addMapaTemplateLine: (templateIndex: number, time: string, codes: string[]) => void;
+  removeMapaTemplateLine: (templateIndex: number, lineIndex: number) => void;
+  resetMapaTemplates: () => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
