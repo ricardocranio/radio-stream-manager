@@ -508,6 +508,10 @@ function register({ getMainWindow, safeHandle }) {
 
     if (results.moved > 0) {
       console.log(`[TEMP-ID3] Done: ${results.processed} found, ${results.moved} moved, ${results.skipped} skipped, ${results.errors} errors`);
+      // Clean PkInfo folders after moving files
+      for (const folder of (musicFolders || [])) {
+        deletePkInfoFolder(folder);
+      }
     }
     return results;
   });
