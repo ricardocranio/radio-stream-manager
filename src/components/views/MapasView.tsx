@@ -29,12 +29,14 @@ const CODE_ICONS: Record<string, React.ReactNode> = {
 };
 
 export function MapasView() {
-  const { mapasConfig, setMapasConfig, updateMapaCodeConfig, config, stations } = useRadioStore();
+  const { mapasConfig, setMapasConfig, updateMapaCodeConfig, addMapaCodeConfig, removeMapaCodeConfig, resetMapaCodeConfigs, config, stations } = useRadioStore();
   const [templates, setTemplates] = useState<MapaTemplate[]>([]);
   const [preview, setPreview] = useState<MapaResolvedLine[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [showNewCode, setShowNewCode] = useState(false);
+  const [newCode, setNewCode] = useState({ code: '', label: '', type: 'literal' as MapaCodeConfig['type'], stationSource: '', genreFilter: '', vinhetaFolder: '' });
 
   // Load templates from folder
   const loadTemplates = useCallback(async () => {
