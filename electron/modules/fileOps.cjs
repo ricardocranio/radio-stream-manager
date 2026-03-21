@@ -4,6 +4,21 @@ const fs = require('fs');
 const path = require('path');
 const { sanitizeFolderName, parseID3TagsFromFile, sanitizeForDisk } = require('./utils.cjs');
 
+/**
+ * Delete PkInfo folder inside a given directory (created by some media players).
+ */
+function deletePkInfoFolder(folder) {
+  try {
+    const pkInfoPath = path.join(folder, 'PkInfo');
+    if (fs.existsSync(pkInfoPath)) {
+      fs.rmSync(pkInfoPath, { recursive: true, force: true });
+      console.log(`[FILE-OPS] 🗑️ PkInfo removido: ${pkInfoPath}`);
+    }
+  } catch (err) {
+    console.log(`[FILE-OPS] ⚠️ Erro ao remover PkInfo: ${err.message}`);
+  }
+}
+
 let _getMainWindow = null;
 
 function register({ getMainWindow, safeHandle }) {

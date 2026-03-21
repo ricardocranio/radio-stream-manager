@@ -232,11 +232,21 @@ function register({ getMainWindow, showNotification, safeHandle }) {
       let deletedCount = 0;
       for (const file of files) {
         const filePath = path.join(folder, file);
-        const stats = fs.statSync(filePath);
-        if (now - stats.mtimeMs > maxAgeMs) {
-          fs.unlinkSync(filePath);
-          deletedCount++;
-        }
+        try {
+          const stat = fs.statSync(filePath);
+          if (stat.isDirectory()) {
+            // Always delete PkInfo folder
+            if (file === 'PkInfo') {
+              fs.rmSync(filePath, { recursive: true, force: true });
+              console.log(`[VOZ] 🗑️ PkInfo removido na limpeza`);
+            }
+            continue;
+          }
+          if (now - stat.mtimeMs > maxAgeMs) {
+            fs.unlinkSync(filePath);
+            deletedCount++;
+          }
+        } catch (e) {}
       }
       return { success: true, deletedCount };
     } catch (error) {
