@@ -1,13 +1,14 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useRadioStore } from '@/store/radioStore';
 import { resolveTemplateLine, formatResolvedLine, resetMapasPools } from '@/lib/mapasBuilder/resolver';
 import type { MapaResolvedLine, MapaCodeConfig } from '@/lib/mapasBuilder/types';
-import { MapIcon, FileText, Play, Settings2, Radio, Music, Mic2, Clock, RefreshCw, FolderOpen, Eye, Plus, RotateCcw, Trash2, GripVertical } from 'lucide-react';
+import { MapIcon, FileText, Play, Settings2, Radio, Music, Mic2, Clock, FolderOpen, Eye, Plus, RotateCcw, Trash2, GripVertical, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -77,39 +78,145 @@ function SortableCodeCard({ cc, stations, updateMapaCodeConfig, removeMapaCodeCo
   );
 }
 
-export function MapasView() {
-  const { mapasConfig, setMapasConfig, updateMapaCodeConfig, addMapaCodeConfig, removeMapaCodeConfig, resetMapaCodeConfigs, reorderMapaCodeConfigs, updateMapaTemplateLine, addMapaTemplateLine, removeMapaTemplateLine, resetMapaTemplates, config, stations } = useRadioStore();
-  const [preview, setPreview] = useState<MapaResolvedLine[]>([]);
-  const [isBuilding, setIsBuilding] = useState(false);
-  const [activeTemplateIdx, setActiveTemplateIdx] = useState(0);
-  const [showNewCode, setShowNewCode] = useState(false);
-  const [newCode, setNewCode] = useState({ code: '', label: '', type: 'literal' as MapaCodeConfig['type'], stationSource: '', genreFilter: '', vinhetaFolder: '', fixedFile: '' });
-  const [comercialFiles, setComercialFiles] = useState<Record<string, string[]>>({});
+/** Individual day schedule editor */
+function DayScheduleEditor({ templateIdx, autoSaveToFile }: { templateIdx: number; autoSaveToFile: (idx: number) => void }) {
+  const { mapasConfig, updateMapaTemplateLine, addMapaTemplateLine, removeMapaTemplateLine } = useRadioStore();
+  const template = mapasConfig.templates?.[templateIdx];
   const [editingLine, setEditingLine] = useState<number | null>(null);
   const [editCodes, setEditCodes] = useState('');
   const [showAddLine, setShowAddLine] = useState(false);
   const [newLineTime, setNewLineTime] = useState('');
-  const [newLineCodes, setNewLineCodes] = useState('');
+  const [newLineCodes, setNewLineCodes] = useState('SINAL,HC,VHTENT,mus,vht,mus');
 
-  const currentTemplate = mapasConfig.templates?.[activeTemplateIdx];
+  const stdPattern = 'SINAL,HC,VHTENT,mus,vht,mus';
 
-  const buildTemplate = useCallback(async (tmplIdx: number) => {
-    const tmpl = mapasConfig.templates[tmplIdx];
-    if (!tmpl || !isElectron) return;
-    setIsBuilding(true); resetMapasPools();
-    const cache = new Map<string, string[]>(); const lines: string[] = [];
-    try {
-      for (const line of tmpl.lines) { const r = await resolveTemplateLine(line, mapasConfig, config.musicFolders, cache); lines.push(formatResolvedLine(r)); }
-      const result = await window.electronAPI!.saveGradeFile({ folder: mapasConfig.outputFolder, filename: tmpl.filename, content: lines.join('\n') });
-      result.success ? toast.success(`Mapa salvo: ${tmpl.filename}`) : toast.error('Erro: ' + result.error);
-    } catch (err: any) { toast.error('Erro: ' + err.message); }
-    setIsBuilding(false);
-  }, [mapasConfig, config.musicFolders]);
+  const getCodeBadgeVariant = (code: string) => {
+    const cc = mapasConfig.codeConfigs.find(c => c.code.toLowerCase() === code.toLowerCase());
+    if (!cc) return 'outline';
+    return cc.type === 'literal' ? 'outline' : cc.type === 'monitored' ? 'default' : cc.type === 'genre' ? 'destructive' : 'secondary';
+  };
+
+  if (!template) return null;
+
+  const saveEdit = (lineIdx: number) => {
+    const codes = editCodes.split(',').map(c => c.trim()).filter(Boolean);
+    if (codes.length > 0) {
+      updateMapaTemplateLine(templateIdx, lineIdx, codes);
+      toast.success(`${template.lines[lineIdx]?.time} salvo`, { duration: 1200 });
+      autoSaveToFile(templateIdx);
+    }
+    setEditingLine(null);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted-foreground font-mono">{template.filename} — {template.lines.length} horários</span>
+        <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => setShowAddLine(!showAddLine)}><Plus className="w-3 h-3 mr-1" /> Horário</Button>
+      </div>
+      {showAddLine && (
+        <div className="flex gap-2 items-center border border-primary/30 rounded-lg p-2 bg-primary/5">
+          <Input className="h-7 text-xs font-mono w-20" placeholder="HH:MM" value={newLineTime} onChange={(e) => setNewLineTime(e.target.value)} />
+          <Input className="h-7 text-xs font-mono flex-1" placeholder="SINAL,HC,VHTENT,mus,vht,mus" value={newLineCodes} onChange={(e) => setNewLineCodes(e.target.value)} />
+          <Button size="sm" className="h-7 text-[10px]" disabled={!newLineTime.match(/^\d{2}:\d{2}$/)} onClick={() => {
+            const codes = newLineCodes.split(',').map(c => c.trim()).filter(Boolean);
+            if (!codes.length) { toast.error('Informe os códigos'); return; }
+            addMapaTemplateLine(templateIdx, newLineTime, codes);
+            setNewLineTime(''); setNewLineCodes('SINAL,HC,VHTENT,mus,vht,mus'); setShowAddLine(false);
+            toast.success('Horário adicionado');
+            autoSaveToFile(templateIdx);
+          }}><Plus className="w-3 h-3" /></Button>
+        </div>
+      )}
+      <div className="border border-border/30 rounded-lg overflow-hidden">
+        <div className="max-h-[420px] overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-background z-10">
+              <tr className="border-b border-border/30">
+                <th className="px-3 py-1.5 text-left w-16">Hora</th>
+                <th className="px-3 py-1.5 text-left">Códigos</th>
+                <th className="px-3 py-1.5 w-16"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {template.lines.map((line, i) => {
+                const isStd = line.codes.join(',') === stdPattern;
+                const isEditing = editingLine === i;
+                return (
+                  <tr key={`${line.time}-${i}`} className={`border-b border-border/10 hover:bg-muted/20 ${!isStd ? 'bg-primary/5' : ''} ${isEditing ? 'bg-accent/20' : ''}`}>
+                    <td className="px-3 py-1.5 font-mono text-primary font-bold">{line.time}</td>
+                    <td className="px-3 py-1.5">
+                      {isEditing ? (
+                        <Input className="h-7 text-xs font-mono" value={editCodes} onChange={(e) => setEditCodes(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(i); else if (e.key === 'Escape') setEditingLine(null); }}
+                          onBlur={() => saveEdit(i)} autoFocus />
+                      ) : (
+                        <div className="flex gap-1 flex-wrap">
+                          {line.codes.map((code, j) => <Badge key={j} variant={getCodeBadgeVariant(code) as any} className="text-[9px] font-mono">{code}</Badge>)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex gap-0.5">
+                        <Button size="icon" variant="ghost" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => {
+                          if (isEditing) { saveEdit(i); } else { setEditingLine(i); setEditCodes(line.codes.join(',')); }
+                        }}>{isEditing ? <Save className="w-3 h-3" /> : <Settings2 className="w-3 h-3" />}</Button>
+                        <Button size="icon" variant="ghost" className="h-5 w-5 text-destructive/50 hover:text-destructive" onClick={() => {
+                          removeMapaTemplateLine(templateIdx, i);
+                          toast.info(`${line.time} removido`);
+                          autoSaveToFile(templateIdx);
+                        }}><Trash2 className="w-3 h-3" /></Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function MapasView() {
+  const { mapasConfig, setMapasConfig, updateMapaCodeConfig, addMapaCodeConfig, removeMapaCodeConfig, resetMapaCodeConfigs, reorderMapaCodeConfigs, resetMapaTemplates, config, stations } = useRadioStore();
+  const [isBuilding, setIsBuilding] = useState(false);
+  const [showNewCode, setShowNewCode] = useState(false);
+  const [newCode, setNewCode] = useState({ code: '', label: '', type: 'literal' as MapaCodeConfig['type'], stationSource: '', genreFilter: '', vinhetaFolder: '', fixedFile: '' });
+  const [comercialFiles, setComercialFiles] = useState<Record<string, string[]>>({});
+  const autoSaveTimerRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  const dayLabels: Record<string, string> = { weekdays: 'Seg-Sex', saturday: 'Sáb', sunday: 'Dom' };
+
+  /** Auto-save: debounced write to disk */
+  const autoSaveToFile = useCallback(async (tmplIdx: number) => {
+    if (!isElectron) return;
+    // Debounce 1.5s
+    if (autoSaveTimerRef.current[tmplIdx]) clearTimeout(autoSaveTimerRef.current[tmplIdx]);
+    autoSaveTimerRef.current[tmplIdx] = setTimeout(async () => {
+      const store = useRadioStore.getState();
+      const tmpl = store.mapasConfig.templates[tmplIdx];
+      if (!tmpl) return;
+      resetMapasPools();
+      const cache = new Map<string, string[]>();
+      const lines: string[] = [];
+      try {
+        for (const line of tmpl.lines) {
+          const r = await resolveTemplateLine(line, store.mapasConfig, store.config.musicFolders, cache);
+          lines.push(formatResolvedLine(r));
+        }
+        const result = await window.electronAPI!.saveGradeFile({ folder: store.mapasConfig.outputFolder, filename: tmpl.filename, content: lines.join('\n') });
+        if (result.success) toast.success(`💾 ${tmpl.filename} salvo`, { duration: 1500 });
+      } catch { /* silent */ }
+    }, 1500);
+  }, []);
 
   const buildAll = useCallback(async () => {
     if (!isElectron || !mapasConfig.templates?.length) return;
     setIsBuilding(true); let built = 0;
-    for (const tmpl of mapasConfig.templates) {
+    for (let i = 0; i < mapasConfig.templates.length; i++) {
+      const tmpl = mapasConfig.templates[i];
       resetMapasPools(); const cache = new Map<string, string[]>(); const lines: string[] = [];
       try {
         for (const line of tmpl.lines) { const r = await resolveTemplateLine(line, mapasConfig, config.musicFolders, cache); lines.push(formatResolvedLine(r)); }
@@ -119,26 +226,6 @@ export function MapasView() {
     toast.success(`${built}/${mapasConfig.templates.length} mapas construídos!`); setIsBuilding(false);
   }, [mapasConfig, config.musicFolders]);
 
-  const previewTemplate = useCallback(async () => {
-    if (!currentTemplate) return;
-    setIsBuilding(true); resetMapasPools();
-    const cache = new Map<string, string[]>(); const resolved: MapaResolvedLine[] = [];
-    try {
-      for (const line of currentTemplate.lines) { const r = await resolveTemplateLine(line, mapasConfig, config.musicFolders, cache); resolved.push(r); }
-      setPreview(resolved); toast.success(`Preview: ${resolved.length} linhas`);
-    } catch (err: any) { toast.error('Erro: ' + err.message); }
-    setIsBuilding(false);
-  }, [currentTemplate, mapasConfig, config.musicFolders]);
-
-  const dayLabels: Record<string, string> = { weekdays: 'Seg-Sex', saturday: 'Sáb', sunday: 'Dom' };
-  const stdPattern = 'SINAL,HC,VHTENT,mus,vht,mus';
-
-  const getCodeBadgeVariant = (code: string) => {
-    const cc = mapasConfig.codeConfigs.find(c => c.code.toLowerCase() === code.toLowerCase());
-    if (!cc) return 'outline';
-    return cc.type === 'literal' ? 'outline' : cc.type === 'monitored' ? 'default' : cc.type === 'genre' ? 'destructive' : 'secondary';
-  };
-
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -146,7 +233,7 @@ export function MapasView() {
           <MapIcon className="w-6 h-6 text-primary" />
           <div>
             <h1 className="text-xl font-bold text-foreground">Mapas Comerciais</h1>
-            <p className="text-xs text-muted-foreground">Templates de programação comercial/institucional</p>
+            <p className="text-xs text-muted-foreground">Templates de programação — auto-save em C:\Playlist\pgm\Mapas</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -156,7 +243,7 @@ export function MapasView() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Códigos */}
+        {/* Códigos - coluna esquerda (vermelho) */}
         <Card className="lg:col-span-1">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -167,7 +254,7 @@ export function MapasView() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto">
             {showNewCode && (
               <div className="border border-primary/30 rounded-lg p-3 space-y-2 bg-primary/5">
                 <p className="text-xs font-semibold text-primary">Novo Código</p>
@@ -207,102 +294,34 @@ export function MapasView() {
               </SortableContext>
             </DndContext>
             <div className="pt-2 border-t border-border/30 space-y-2">
-              <label className="text-xs text-muted-foreground">Pasta dos Mapas</label>
-              <Input className="h-8 text-xs font-mono" value={mapasConfig.mapasFolder} onChange={(e) => setMapasConfig({ mapasFolder: e.target.value })} />
+              <label className="text-xs text-muted-foreground">Pasta destino</label>
+              <Input className="h-8 text-xs font-mono" value={mapasConfig.outputFolder} onChange={(e) => setMapasConfig({ outputFolder: e.target.value })} />
             </div>
           </CardContent>
         </Card>
 
-        {/* Montagem */}
+        {/* Montagem por dia - coluna direita (verde) */}
         <Card className="lg:col-span-2">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-2"><FileText className="w-4 h-4" /> Montagem</CardTitle>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={previewTemplate} disabled={isBuilding}><Eye className="w-3 h-3 mr-1" /> Preview</Button>
-                <Button size="sm" onClick={() => buildTemplate(activeTemplateIdx)} disabled={isBuilding}><Play className="w-3 h-3 mr-1" /> Construir</Button>
-              </div>
-            </div>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2"><FileText className="w-4 h-4" /> Montagem por Dia <Badge variant="outline" className="text-[9px]">auto-save</Badge></CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-2 mb-4">
+            <Tabs defaultValue="0" className="w-full">
+              <TabsList className="w-full justify-start mb-3">
+                {(mapasConfig.templates || []).map((t, i) => (
+                  <TabsTrigger key={t.filename} value={String(i)} className="text-xs gap-1.5">
+                    <FileText className="w-3 h-3" />
+                    {dayLabels[t.dayMapping] || t.filename}
+                    <Badge variant="secondary" className="text-[9px] ml-1">{t.lines.length}</Badge>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
               {(mapasConfig.templates || []).map((t, i) => (
-                <Button key={t.filename} size="sm" variant={activeTemplateIdx === i ? 'default' : 'outline'}
-                  onClick={() => { setActiveTemplateIdx(i); setPreview([]); setEditingLine(null); }} className="text-xs">
-                  <FileText className="w-3 h-3 mr-1" /> {dayLabels[t.dayMapping] || t.filename}
-                  <Badge variant="secondary" className="ml-1 text-[9px]">{t.lines.length}</Badge>
-                </Button>
+                <TabsContent key={t.filename} value={String(i)}>
+                  <DayScheduleEditor templateIdx={i} autoSaveToFile={autoSaveToFile} />
+                </TabsContent>
               ))}
-            </div>
-
-            {currentTemplate && (
-              <div className="space-y-2">
-                <div className="flex justify-end">
-                  <Button size="sm" variant="outline" className="text-xs" onClick={() => setShowAddLine(!showAddLine)}><Plus className="w-3 h-3 mr-1" /> Horário</Button>
-                </div>
-                {showAddLine && (
-                  <div className="flex gap-2 items-center border border-primary/30 rounded-lg p-2 bg-primary/5">
-                    <Input className="h-8 text-xs font-mono w-20" placeholder="HH:MM" value={newLineTime} onChange={(e) => setNewLineTime(e.target.value)} />
-                    <Input className="h-8 text-xs font-mono flex-1" placeholder="SINAL,HC,VHTENT,mus,vht,mus" value={newLineCodes} onChange={(e) => setNewLineCodes(e.target.value)} />
-                    <Button size="sm" className="text-xs" disabled={!newLineTime.match(/^\d{2}:\d{2}$/)} onClick={() => {
-                      const codes = newLineCodes.split(',').map(c => c.trim()).filter(Boolean);
-                      if (!codes.length) { toast.error('Informe os códigos'); return; }
-                      addMapaTemplateLine(activeTemplateIdx, newLineTime, codes);
-                      setNewLineTime(''); setNewLineCodes(''); setShowAddLine(false); toast.success('Horário adicionado');
-                    }}><Plus className="w-3 h-3" /></Button>
-                  </div>
-                )}
-                <div className="border border-border/30 rounded-lg overflow-hidden">
-                  <div className="max-h-[550px] overflow-y-auto">
-                    <table className="w-full text-xs">
-                      <thead className="sticky top-0 bg-background z-10">
-                        <tr className="border-b border-border/30">
-                          <th className="px-3 py-1.5 text-left w-16">Hora</th>
-                          <th className="px-3 py-1.5 text-left">Códigos</th>
-                          {preview.length > 0 && <th className="px-3 py-1.5 text-left">Resolvido</th>}
-                          <th className="px-3 py-1.5 w-10"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {currentTemplate.lines.map((line, i) => {
-                          const isStd = line.codes.join(',') === stdPattern;
-                          const isEditing = editingLine === i;
-                          const saveEdit = () => {
-                            const codes = editCodes.split(',').map(c => c.trim()).filter(Boolean);
-                            if (codes.length > 0) {
-                              updateMapaTemplateLine(activeTemplateIdx, i, codes);
-                              toast.success(`${line.time} salvo`, { duration: 1500 });
-                            }
-                            setEditingLine(null);
-                          };
-                          return (
-                            <tr key={`${line.time}-${i}`} className={`border-b border-border/10 hover:bg-muted/20 ${!isStd ? 'bg-primary/5' : ''} ${isEditing ? 'bg-accent/20' : ''}`}>
-                              <td className="px-3 py-1.5 font-mono text-primary font-bold">{line.time}</td>
-                              <td className="px-3 py-1.5">
-                                {isEditing ? (
-                                  <Input className="h-7 text-xs font-mono" value={editCodes} onChange={(e) => setEditCodes(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingLine(null); }}
-                                    onBlur={saveEdit} autoFocus />
-                                ) : (
-                                  <div className="flex gap-1 flex-wrap">
-                                    {line.codes.map((code, j) => <Badge key={j} variant={getCodeBadgeVariant(code) as any} className="text-[9px] font-mono">{code}</Badge>)}
-                                  </div>
-                                )}
-                              </td>
-                              {preview.length > 0 && preview[i] && <td className="px-3 py-1.5 font-mono text-[10px] text-muted-foreground max-w-[250px] truncate">{preview[i].items.join(', ')}</td>}
-                              <td className="px-2 py-1.5 flex gap-0.5">
-                                <Button size="icon" variant="ghost" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => { if (isEditing) { saveEdit(); } else { setEditingLine(i); setEditCodes(line.codes.join(',')); } }}>{isEditing ? <Play className="w-3 h-3" /> : <Settings2 className="w-3 h-3" />}</Button>
-                                <Button size="icon" variant="ghost" className="h-5 w-5 text-destructive/50 hover:text-destructive" onClick={() => removeMapaTemplateLine(activeTemplateIdx, i)}><Trash2 className="w-3 h-3" /></Button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
+            </Tabs>
           </CardContent>
         </Card>
       </div>
