@@ -17,7 +17,7 @@ export interface MapaCodeConfig {
   stationSource?: string;
   /** For 'genre': ID3 genre filter */
   genreFilter?: string[];
-  /** For 'vinheta': folder path */
+  /** For 'vinheta'/'comercial': folder path */
   vinhetaFolder?: string;
 }
 
