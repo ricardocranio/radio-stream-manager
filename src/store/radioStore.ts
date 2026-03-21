@@ -836,7 +836,14 @@ export const useRadioStore = create<RadioState>()(
           if (missing.length > 0) {
             state.songAliases = [...existing, ...missing];
           }
-        }
+          // Fix NOT code: must be vinheta, not monitored
+          if (state.mapasConfig?.codeConfigs) {
+            state.mapasConfig.codeConfigs = state.mapasConfig.codeConfigs.map(c =>
+              c.code === 'NOT' && c.type === 'monitored'
+                ? { ...c, type: 'vinheta' as const, label: 'Locuções', vinhetaFolder: 'C:\\Playlist\\Locucoes', stationSource: undefined }
+                : c
+            );
+          }
       },
       version: 1, // For future migrations
     }
