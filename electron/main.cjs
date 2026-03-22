@@ -4,9 +4,12 @@ const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification, dialog } =
 const path = require('path');
 const fs = require('fs');
 
+// LAN API Router - enables remote access to all IPC handlers
+const { handleApiRequest, createDualHandle } = require('./modules/lanApiRouter.cjs');
+
 // Safe IPC handler registration - prevents "second handler" crashes
 const registeredHandlers = new Set();
-function safeHandle(channel, handler) {
+function _baseSafeHandle(channel, handler) {
   if (registeredHandlers.has(channel)) {
     console.warn(`[IPC] Handler already registered for '${channel}', skipping duplicate`);
     return;
@@ -14,6 +17,9 @@ function safeHandle(channel, handler) {
   registeredHandlers.add(channel);
   ipcMain.handle(channel, handler);
 }
+
+// Dual handle: registers both IPC + HTTP API routes
+const safeHandle = createDualHandle(_baseSafeHandle);
 
 // Auto-updater (only in packaged app)
 let autoUpdater = null;
