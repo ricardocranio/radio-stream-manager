@@ -519,6 +519,10 @@ export function GradeBuilderView() {
 
   const demoSongs = getDemoSongs();
 
+  if (!isReady) {
+    return <div className="h-full flex items-center justify-center"><div className="text-center space-y-2"><FileText className="w-8 h-8 text-primary/30 mx-auto animate-pulse" /><p className="text-sm text-muted-foreground/60">Carregando Grade Builder...</p></div></div>;
+  }
+
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

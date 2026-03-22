@@ -289,6 +289,10 @@ export function RankingView() {
     return Array.from(merged).filter(Boolean).sort();
   }, [currentRankingData]);
 
+  if (!isReady) {
+    return <div className="h-full flex items-center justify-center"><div className="text-center space-y-2"><TrendingUp className="w-8 h-8 text-primary/30 mx-auto animate-pulse" /><p className="text-sm text-muted-foreground/60">Carregando Ranking...</p></div></div>;
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

@@ -424,6 +424,10 @@ export function CapturedSongsView() {
   // Unique stations for timeline chart
   const uniqueStations = useMemo(() => [...new Set(songs.map(s => s.station_name))], [songs]);
 
+  if (!isReady) {
+    return <div className="h-full flex items-center justify-center"><div className="text-center space-y-2"><Music className="w-8 h-8 text-primary/30 mx-auto animate-pulse" /><p className="text-sm text-muted-foreground/60">Carregando Capturadas...</p></div></div>;
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">
       {/* Header */}

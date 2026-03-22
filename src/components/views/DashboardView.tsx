@@ -407,6 +407,10 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       return acc;
     }, {});
 
+  if (!isReady) {
+    return <div className="h-full flex items-center justify-center"><div className="text-center space-y-2"><Radio className="w-8 h-8 text-primary/30 mx-auto animate-pulse" /><p className="text-sm text-muted-foreground/60">Carregando Dashboard...</p></div></div>;
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-5 animate-fade-in">
       {/* === METRICS — Compact Strip === */}
