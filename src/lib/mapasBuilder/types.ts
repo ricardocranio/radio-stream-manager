@@ -108,7 +108,7 @@ export const DEFAULT_TEMPLATE_SEX = makeWeekdayTemplate('sex', 'SEX.txt');
 
 /** Default S_B template (Sábado) */
 export const DEFAULT_TEMPLATE_SAB: MapaTemplate = {
-  filename: 'sáb.txt',
+  filename: 'SÁB.txt',
   dayMapping: 'sáb',
   lines: [
     { time: '00:55', codes: ['SINAL','SINAL','HC','VHTENT','mus','vht','mus'] },
