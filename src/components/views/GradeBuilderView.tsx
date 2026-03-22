@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useDeferredRender } from '@/hooks/useDeferredRender';
 import { FileText, Edit3, Save, RotateCcw, Eye, Code, Layers, ArrowRight, RefreshCw, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

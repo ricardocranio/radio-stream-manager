@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useDeferredRender } from '@/hooks/useDeferredRender';
 import { TrendingUp, Music, Crown, Medal, Award, BarChart3, RotateCcw, AlertTriangle, Search, Filter, Calendar, Download, FileJson } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
