@@ -325,6 +325,18 @@ export function MapasView() {
   const [isBuilding, setIsBuilding] = useState(false);
   const [activeDay, setActiveDay] = useState(() => { const d = new Date().getDay(); return [0,1,2,3,4,5,6][d]; }); // 0=dom,1=seg...6=sab
   const [editingSlot, setEditingSlot] = useState<number | null>(null);
+
+  // Deferred rendering to prevent black screen freeze in Electron
+  const [isReady, setIsReady] = useState(false);
+  const readyRef = useRef(false);
+  if (!readyRef.current) {
+    readyRef.current = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setIsReady(true);
+      });
+    });
+  }
   const [editValue, setEditValue] = useState('');
   const [editTime, setEditTime] = useState('');
   const [showAdd, setShowAdd] = useState(false);
@@ -402,6 +414,19 @@ export function MapasView() {
 
   const currentDayLabel = template ? (dayLabels[template.dayMapping] || template.filename) : '';
   const currentColors = dayColors[currentDayLabel] || dayColors['Seg-Sex'];
+
+  if (!isReady) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 mx-auto rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center animate-pulse">
+            <MapIcon className="w-6 h-6 text-primary/50" />
+          </div>
+          <p className="text-sm text-muted-foreground/60">Carregando Mapas...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col">
