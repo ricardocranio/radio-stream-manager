@@ -100,11 +100,11 @@ const makeWeekdayTemplate = (day: string, filename: string): MapaTemplate => ({
   ],
 });
 
-export const DEFAULT_TEMPLATE_SEG = makeWeekdayTemplate('seg', 'seg.txt');
-export const DEFAULT_TEMPLATE_TER = makeWeekdayTemplate('ter', 'ter.txt');
-export const DEFAULT_TEMPLATE_QUA = makeWeekdayTemplate('qua', 'qua.txt');
-export const DEFAULT_TEMPLATE_QUI = makeWeekdayTemplate('qui', 'qui.txt');
-export const DEFAULT_TEMPLATE_SEX = makeWeekdayTemplate('sex', 'sex.txt');
+export const DEFAULT_TEMPLATE_SEG = makeWeekdayTemplate('seg', 'SEG.txt');
+export const DEFAULT_TEMPLATE_TER = makeWeekdayTemplate('ter', 'TER.txt');
+export const DEFAULT_TEMPLATE_QUA = makeWeekdayTemplate('qua', 'QUA.txt');
+export const DEFAULT_TEMPLATE_QUI = makeWeekdayTemplate('qui', 'QUI.txt');
+export const DEFAULT_TEMPLATE_SEX = makeWeekdayTemplate('sex', 'SEX.txt');
 
 /** Default S_B template (Sábado) */
 export const DEFAULT_TEMPLATE_SAB: MapaTemplate = {
