@@ -2,7 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.pgmfm.programador-radio",
   "productName": "Programador de Radio",
-  "copyright": "Copyright © 2024 PGM-FM",
+  "copyright": "Copyright © 2024 Ricardo Amaral",
+  "author": "Ricardo Amaral",
   "extraMetadata": {
     "main": "electron/main.cjs",
     "type": "commonjs"
