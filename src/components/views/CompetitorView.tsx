@@ -16,11 +16,16 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export function CompetitorView() {
+  const isReady = useDeferredRender();
   const { stats, isAnalyzing, lastAnalysis, analyze } = useCompetitorAnalysis();
 
   useEffect(() => {
     if (!stats && !isAnalyzing) analyze();
   }, [stats, isAnalyzing, analyze]);
+
+  if (!isReady) {
+    return <div className="h-full flex items-center justify-center"><div className="text-center space-y-2"><Swords className="w-8 h-8 text-primary/30 mx-auto animate-pulse" /><p className="text-sm text-muted-foreground/60">Carregando Competidor...</p></div></div>;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-5 animate-fade-in">
