@@ -425,6 +425,47 @@ const defaultFixedContent: FixedContent[] = [
   { id: '23', name: 'Conexão Mix', fileName: 'CONEXAO_MIX_BLOCO{ED}_FINAL_DE_SEMANA', type: 'other', dayPattern: 'WEEKEND', timeSlots: [{ hour: 21, minute: 0 }, { hour: 21, minute: 30 }, { hour: 22, minute: 0 }, { hour: 22, minute: 30 }, { hour: 23, minute: 0 }, { hour: 23, minute: 30 }], enabled: true },
 ];
 
+const MAPA_FILENAME_BY_DAY: Record<string, string> = {
+  dom: 'DOM.txt',
+  sunday: 'DOM.txt',
+  seg: 'SEG.txt',
+  monday: 'SEG.txt',
+  ter: 'TER.txt',
+  tuesday: 'TER.txt',
+  qua: 'QUA.txt',
+  wednesday: 'QUA.txt',
+  qui: 'QUI.txt',
+  thursday: 'QUI.txt',
+  sex: 'SEX.txt',
+  friday: 'SEX.txt',
+  sab: 'SÁB.txt',
+  sáb: 'SÁB.txt',
+  saturday: 'SÁB.txt',
+};
+
+function normalizeMapaTemplateFilename(filename: string | undefined, dayMapping: string | undefined, index: number): string {
+  const normalizedDay = (dayMapping || '').trim().toLowerCase();
+  if (MAPA_FILENAME_BY_DAY[normalizedDay]) {
+    return MAPA_FILENAME_BY_DAY[normalizedDay];
+  }
+
+  const normalizedFilename = (filename || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (normalizedFilename === 'dom.txt') return 'DOM.txt';
+  if (normalizedFilename === 'seg.txt') return 'SEG.txt';
+  if (normalizedFilename === 'ter.txt') return 'TER.txt';
+  if (normalizedFilename === 'qua.txt') return 'QUA.txt';
+  if (normalizedFilename === 'qui.txt') return 'QUI.txt';
+  if (normalizedFilename === 'sex.txt') return 'SEX.txt';
+  if (normalizedFilename === 'sab.txt' || normalizedFilename === 's_b.txt') return 'SÁB.txt';
+
+  return DEFAULT_TEMPLATES[index]?.filename || filename || `MAPA_${index + 1}.txt`;
+}
+
 export const useRadioStore = create<RadioState>()(
   persist(
     (set) => ({
@@ -850,6 +891,13 @@ export const useRadioStore = create<RadioState>()(
                 ? { ...c, type: 'vinheta' as const, label: 'Locuções', vinhetaFolder: 'C:\\Playlist\\Locucoes', stationSource: undefined }
                 : c
             );
+          }
+          if (state.mapasConfig?.templates?.length) {
+            state.mapasConfig.templates = state.mapasConfig.templates.map((template, index) => ({
+              ...template,
+              dayMapping: template.dayMapping || DEFAULT_TEMPLATES[index]?.dayMapping || '',
+              filename: normalizeMapaTemplateFilename(template.filename, template.dayMapping, index),
+            }));
           }
         }
       },
