@@ -113,6 +113,7 @@ const getStyleColor = (style: string) => {
 };
 
 export function RankingView() {
+  const isReady = useDeferredRender();
   const { rankingSongs, clearRanking, setRankingSongs } = useRadioStore();
   const { toast } = useToast();
   const [selectedStyle, setSelectedStyle] = useState<string>('all');
