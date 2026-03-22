@@ -484,12 +484,111 @@ safeHandle('check-for-updates', async () => {
   return { success: false, error: 'Auto-updater not available' };
 });
 
+// =============== LAN SERVER (acesso remoto via VPN/rede local) ===============
+let lanServer = null;
+const LAN_PORT = 8088;
+
+function startLanServer() {
+  try {
+    const http = require('http');
+    const appPath = app.getAppPath();
+    const distPath = path.join(appPath, 'dist');
+    
+    if (!app.isPackaged || !fs.existsSync(distPath)) {
+      console.log('[LAN] Skipping LAN server (dev mode or dist not found)');
+      return;
+    }
+
+    lanServer = http.createServer((req, res) => {
+      // CORS headers para acesso remoto
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      let urlPath = req.url.split('?')[0].split('#')[0];
+      if (urlPath === '/') urlPath = '/index.html';
+      
+      const filePath = path.join(distPath, urlPath);
+      const safePath = path.resolve(filePath);
+      
+      // Segurança: não servir fora do dist
+      if (!safePath.startsWith(path.resolve(distPath))) {
+        res.writeHead(403);
+        res.end('Forbidden');
+        return;
+      }
+
+      const mimeTypes = {
+        '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
+        '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg',
+        '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
+        '.woff': 'font/woff', '.ttf': 'font/ttf',
+      };
+
+      if (fs.existsSync(safePath) && fs.statSync(safePath).isFile()) {
+        const ext = path.extname(safePath).toLowerCase();
+        res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+        fs.createReadStream(safePath).pipe(res);
+      } else {
+        // SPA fallback: serve index.html para rotas do React
+        const indexFile = path.join(distPath, 'index.html');
+        if (fs.existsSync(indexFile)) {
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          fs.createReadStream(indexFile).pipe(res);
+        } else {
+          res.writeHead(404);
+          res.end('Not Found');
+        }
+      }
+    });
+
+    lanServer.listen(LAN_PORT, '0.0.0.0', () => {
+      const os = require('os');
+      const interfaces = os.networkInterfaces();
+      const ips = [];
+      for (const iface of Object.values(interfaces)) {
+        for (const addr of iface) {
+          if (addr.family === 'IPv4' && !addr.internal) ips.push(addr.address);
+        }
+      }
+      console.log(`[LAN] ✓ Servidor LAN ativo na porta ${LAN_PORT}`);
+      console.log(`[LAN] 🌐 Acesse de qualquer dispositivo na rede:`);
+      ips.forEach(ip => console.log(`[LAN]    http://${ip}:${LAN_PORT}`));
+      
+      // Notifica o usuário
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          const lanUrl = ips.length > 0 ? `http://${ips[0]}:${LAN_PORT}` : `http://localhost:${LAN_PORT}`;
+          showNotification('🌐 Acesso Remoto Ativo', `Acesse via: ${lanUrl}`);
+        }
+      }, 3000);
+    });
+
+    lanServer.on('error', (err) => {
+      console.error(`[LAN] ✗ Erro ao iniciar servidor: ${err.message}`);
+      if (err.code === 'EADDRINUSE') {
+        console.log(`[LAN] Porta ${LAN_PORT} já em uso, tentando ${LAN_PORT + 1}...`);
+        lanServer.listen(LAN_PORT + 1, '0.0.0.0');
+      }
+    });
+  } catch (err) {
+    console.error('[LAN] Falha ao criar servidor:', err.message);
+  }
+}
+
 // =============== APP LIFECYCLE ===============
 app.whenReady().then(async () => {
   ensureDefaultFolders();
   createWindow();
   createTray();
   setupAutoUpdater();
+  startLanServer();
   
   // Check Python/pip availability
   const pythonStatus = await deemixModule.checkPythonAvailable();
@@ -570,6 +669,10 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   app.isQuitting = true;
   pythonMonitor.killMonitorProcess();
+  if (lanServer) {
+    try { lanServer.close(); } catch (e) {}
+    lanServer = null;
+  }
   if (tray && !tray.isDestroyed()) {
     tray.destroy();
     tray = null;
