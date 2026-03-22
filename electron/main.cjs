@@ -506,6 +506,13 @@ function startLanServer() {
     }
 
     lanServer = http.createServer((req, res) => {
+      // Route API requests to the LAN API router
+      const urlPath = req.url.split('?')[0];
+      if (urlPath.startsWith('/api/')) {
+        handleApiRequest(req, res, { getMainWindow: () => mainWindow });
+        return;
+      }
+
       // CORS headers para acesso remoto
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
