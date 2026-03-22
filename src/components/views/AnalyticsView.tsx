@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useDeferredRender } from '@/hooks/useDeferredRender';
 import { BarChart3, Loader2, RefreshCw, Clock, TrendingUp, Repeat } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
