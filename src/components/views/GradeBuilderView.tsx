@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useDeferredRender } from '@/hooks/useDeferredRender';
 import { FileText, Edit3, Save, RotateCcw, Eye, Code, Layers, ArrowRight, RefreshCw, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,6 +54,7 @@ interface SongPool {
 }
 
 export function GradeBuilderView() {
+  const isReady = useDeferredRender();
   const { programs, sequence, stations, rankingSongs, scheduledSequences, fixedContent, config } = useRadioStore();
   const { toast } = useToast();
   const [format, setFormat] = useState<GradeFormat>(defaultFormat);
@@ -516,6 +518,10 @@ export function GradeBuilderView() {
   }, {});
 
   const demoSongs = getDemoSongs();
+
+  if (!isReady) {
+    return <div className="h-full flex items-center justify-center"><div className="text-center space-y-2"><FileText className="w-8 h-8 text-primary/30 mx-auto animate-pulse" /><p className="text-sm text-muted-foreground/60">Carregando Grade Builder...</p></div></div>;
+  }
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">

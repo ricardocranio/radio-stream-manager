@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, memo, useRef } from 'react';
+  import { useDeferredRender } from '@/hooks/useDeferredRender';
   import { Radio, Music, TrendingUp, Timer, History, Trash2, Database, Clock, Zap, RefreshCw, Loader2, AlertTriangle, FileText, Play, FolderOpen, CheckCircle2, Calendar, SkipForward, Replace, Settings2, Minus, Plus, HardDrive, RotateCcw, Shield, Download, XCircle, ChevronDown, Eye, Tags, ArrowRightLeft } from 'lucide-react';
 import { useRadioStore, GradeHistoryEntry } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
@@ -38,6 +39,7 @@ interface DashboardViewProps {
 }
 
 export function DashboardView({ onNavigate }: DashboardViewProps) {
+  const isReady = useDeferredRender();
   // Use selectors to avoid re-rendering on unrelated store changes
   const stations = useRadioStore((s) => s.stations);
   const isRunning = useRadioStore((s) => s.isRunning);
@@ -404,6 +406,10 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       acc[normalizedName] += typeof count === 'number' ? count : 0;
       return acc;
     }, {});
+
+  if (!isReady) {
+    return <div className="h-full flex items-center justify-center"><div className="text-center space-y-2"><Radio className="w-8 h-8 text-primary/30 mx-auto animate-pulse" /><p className="text-sm text-muted-foreground/60">Carregando Dashboard...</p></div></div>;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-5 animate-fade-in">

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useDeferredRender } from '@/hooks/useDeferredRender';
 import { Music, Radio, Calendar, Filter, RefreshCw, Download, TrendingUp, Clock, Search, Loader2, Database, BarChart3, PieChart as PieChartIcon, Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -62,6 +63,7 @@ const REFRESH_INTERVAL_MS = 30_000;
 const METADATA_REFRESH_MS = 5 * 60 * 1000;
 
 export function CapturedSongsView() {
+  const isReady = useDeferredRender();
   const { toast } = useToast();
   const { applyRankingBatch, rankingSongs, deezerConfig, config } = useRadioStore();
   const [songs, setSongs] = useState<ScrapedSong[]>([]);
@@ -421,6 +423,10 @@ export function CapturedSongsView() {
 
   // Unique stations for timeline chart
   const uniqueStations = useMemo(() => [...new Set(songs.map(s => s.station_name))], [songs]);
+
+  if (!isReady) {
+    return <div className="h-full flex items-center justify-center"><div className="text-center space-y-2"><Music className="w-8 h-8 text-primary/30 mx-auto animate-pulse" /><p className="text-sm text-muted-foreground/60">Carregando Capturadas...</p></div></div>;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useDeferredRender } from '@/hooks/useDeferredRender';
 import { TrendingUp, Music, Crown, Medal, Award, BarChart3, RotateCcw, AlertTriangle, Search, Filter, Calendar, Download, FileJson } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -112,6 +113,7 @@ const getStyleColor = (style: string) => {
 };
 
 export function RankingView() {
+  const isReady = useDeferredRender();
   const { rankingSongs, clearRanking, setRankingSongs } = useRadioStore();
   const { toast } = useToast();
   const [selectedStyle, setSelectedStyle] = useState<string>('all');
@@ -286,6 +288,10 @@ export function RankingView() {
     const merged = new Set([...defaultStyles, ...fromData]);
     return Array.from(merged).filter(Boolean).sort();
   }, [currentRankingData]);
+
+  if (!isReady) {
+    return <div className="h-full flex items-center justify-center"><div className="text-center space-y-2"><TrendingUp className="w-8 h-8 text-primary/30 mx-auto animate-pulse" /><p className="text-sm text-muted-foreground/60">Carregando Ranking...</p></div></div>;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">

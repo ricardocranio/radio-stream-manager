@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useDeferredRender } from '@/hooks/useDeferredRender';
 import { BarChart3, Loader2, RefreshCw, Clock, TrendingUp, Repeat } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +33,7 @@ interface RenewalStats {
 }
 
 export function AnalyticsView() {
+  const isReady = useDeferredRender();
   const [heatmapData, setHeatmapData] = useState<HeatmapCell[]>([]);
   const [renewalData, setRenewalData] = useState<RenewalStats[]>([]);
   const [hourlyDistribution, setHourlyDistribution] = useState<{ hour: string; count: number }[]>([]);
@@ -126,6 +128,10 @@ export function AnalyticsView() {
   }, [loadAnalytics]);
 
   const maxHourCount = Math.max(...hourlyDistribution.map(h => h.count), 1);
+
+  if (!isReady) {
+    return <div className="h-full flex items-center justify-center"><div className="text-center space-y-2"><BarChart3 className="w-8 h-8 text-primary/30 mx-auto animate-pulse" /><p className="text-sm text-muted-foreground/60">Carregando Analytics...</p></div></div>;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-5 animate-fade-in">
