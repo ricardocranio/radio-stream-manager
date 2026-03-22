@@ -4,6 +4,7 @@
  */
 
 import { useEffect } from 'react';
+import { useDeferredRender } from '@/hooks/useDeferredRender';
 import { Swords, Loader2, RefreshCw, BarChart3, AlertTriangle, CheckCircle2, Music } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
