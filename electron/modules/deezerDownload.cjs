@@ -296,7 +296,7 @@ function register({ getMainWindow, showNotification, safeHandle }) {
               // Detect corrupted ID3 chars (encoding artifacts like Ø, ÿ in unexpected positions)
               const hasCorruptedChars = (str) => {
                 if (!str) return true;
-                const corruptPatterns = /[\x00-\x08\x0E-\x1F\x7F-\x9F]|Ã[€-¿]|Â[€-¿]/;
+                const corruptPatterns = /[\x00-\x08\x0E-\x1F\x7F-\x9F]|\u00C3[\u0080-\u00BF]|\u00C2[\u0080-\u00BF]/;
                 return corruptPatterns.test(str);
               };
 
