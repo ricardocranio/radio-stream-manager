@@ -789,10 +789,12 @@ export function StationsView() {
                           try {
                             const folder = await (window as any).electronAPI.selectFolder();
                             if (folder) {
+                              // Extrair apenas o nome da última pasta do caminho completo
+                              const folderName = folder.replace(/\\/g, '/').split('/').filter(Boolean).pop() || folder;
                               if (isEditing) {
-                                setEditForm((prev) => prev && { ...prev, downloadFolder: folder });
+                                setEditForm((prev) => prev && { ...prev, downloadFolder: folderName });
                               } else {
-                                updateStation(station.id, { downloadFolder: folder });
+                                updateStation(station.id, { downloadFolder: folderName });
                               }
                             }
                           } catch (err) {
