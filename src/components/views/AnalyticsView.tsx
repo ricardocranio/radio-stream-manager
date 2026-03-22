@@ -33,6 +33,7 @@ interface RenewalStats {
 }
 
 export function AnalyticsView() {
+  const isReady = useDeferredRender();
   const [heatmapData, setHeatmapData] = useState<HeatmapCell[]>([]);
   const [renewalData, setRenewalData] = useState<RenewalStats[]>([]);
   const [hourlyDistribution, setHourlyDistribution] = useState<{ hour: string; count: number }[]>([]);
