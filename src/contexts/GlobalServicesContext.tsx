@@ -66,7 +66,8 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   const dailyReportService = useDailyReport();
   const mapaBuilder = useAutoMapaBuilder();
 
-  // ============= INITIALIZATION (runs once) =============
+  // ============= DEFERRED INITIALIZATION =============
+  // Delay heavy services to let the UI render first (fixes black screen on Electron)
   useEffect(() => {
     if (isGlobalServicesRunning || isInitializedRef.current) {
       console.log('[GLOBAL-SVC] Already running, skipping');
@@ -75,52 +76,70 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
 
     isGlobalServicesRunning = true;
     isInitializedRef.current = true;
-    
-    const state = useRadioStore.getState();
-    const { deezerConfig, stations, config } = state;
-    const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl).length;
-    
-    console.log('╔══════════════════════════════════════════════════════════════╗');
-    console.log('║     🚀 SISTEMA AUTOMATIZADO - INICIANDO TODOS OS SERVIÇOS    ║');
-    console.log('╠══════════════════════════════════════════════════════════════╣');
-    console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras) - 15 min` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
-    console.log(`║ 🎵 Grade Builder: ✅ ATIVO (${gradeBuilder.minutesBeforeBlock || 10} min antes de cada bloco)`.padEnd(65) + '║');
-    console.log(`║ 📥 Downloads:     ${deezerConfig.autoDownload ? '✅ IMEDIATO (5s entre cada)' : '⏸️ MANUAL (ativar em Config)'}`.padEnd(65) + '║');
-    console.log(`║ 💾 Banco Musical: ${config.musicFolders?.length > 0 ? `✅ ${config.musicFolders.length} pastas` : '⚠️ Configurar pastas'}`.padEnd(65) + '║');
-    console.log(`║ 📊 Stats:         ✅ ATIVO - refresh 10 min`.padEnd(65) + '║');
-    console.log(`║ 🔄 Sync Cloud:    ✅ ATIVO (Realtime)`.padEnd(65) + '║');
-    console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
-    console.log(`║ 📻 Voz do Brasil: ✅ ATIVO (Seg-Sex 20:35)`.padEnd(65) + '║');
-    console.log(`║ 📰 Radioagência:  ✅ ATIVO (15 min polling)`.padEnd(65) + '║');
-    console.log(`║ 📥 Capturadas DL: ✅ AUTOMÁTICO (2 min polling)`.padEnd(65) + '║');
-    console.log(`║ 🎯 IA Classify:   ✅ ATIVO (30 min batches)`.padEnd(65) + '║');
-    console.log(`║ 🗜️ Compressão:    ✅ ATIVO (diário 4:00)`.padEnd(65) + '║');
-    console.log(`║ 🐕 Watchdog:      ✅ ATIVO (2 min check)`.padEnd(65) + '║');
-    console.log(`║ 📊 Relatório:     ✅ ATIVO (23:55 diário)`.padEnd(65) + '║');
-    console.log(`║ 💾 Cache Offline:  ✅ ATIVO (fallback 24h)`.padEnd(65) + '║');
-    console.log(`║ 🔄 Cross-Day:     ✅ ATIVO (buffer 4h)`.padEnd(65) + '║');
-    console.log(`║ 📉 Ranking Decay: ✅ ATIVO (5%/dia)`.padEnd(65) + '║');
-    console.log(`║ 🗺️ Mapas JIT:     ✅ ATIVO (20 min antes)`.padEnd(65) + '║');
-    console.log('╚══════════════════════════════════════════════════════════════╝');
 
-    // Start all services
-    const cleanupDownload = downloadService.start();
-    const cleanupCapturedDl = capturedDownloadService.start();
-    const cleanupScraping = scrapingService.start();
-    const cleanupVozBrasil = vozBrasilService.start();
-    const cleanupRadioagencia = radioagenciaService.start();
-    const cleanupMaintenance = maintenanceService.start();
+    let cleanups: (() => void)[] = [];
+    let cancelled = false;
 
-    console.log('[GLOBAL-SVC] ✅ Todos os serviços iniciados!');
+    // Boot services after UI has painted
+    const bootDelay = isElectron ? 3000 : 500;
+
+    const bootTimer = setTimeout(() => {
+      if (cancelled) return;
+
+      const state = useRadioStore.getState();
+      const { deezerConfig, stations, config } = state;
+      const enabledStations = stations.filter(s => s.enabled && s.scrapeUrl).length;
+      
+      console.log('╔══════════════════════════════════════════════════════════════╗');
+      console.log('║     🚀 SISTEMA AUTOMATIZADO - INICIANDO TODOS OS SERVIÇOS    ║');
+      console.log('╠══════════════════════════════════════════════════════════════╣');
+      console.log(`║ 📡 Scraping:      ${enabledStations > 0 ? `✅ ATIVO (${enabledStations} emissoras) - 15 min` : '⚠️ Sem emissoras'}`.padEnd(65) + '║');
+      console.log(`║ 🎵 Grade Builder: ✅ ATIVO (${gradeBuilder.minutesBeforeBlock || 10} min antes de cada bloco)`.padEnd(65) + '║');
+      console.log(`║ 📥 Downloads:     ${deezerConfig.autoDownload ? '✅ IMEDIATO (5s entre cada)' : '⏸️ MANUAL (ativar em Config)'}`.padEnd(65) + '║');
+      console.log(`║ 💾 Banco Musical: ${config.musicFolders?.length > 0 ? `✅ ${config.musicFolders.length} pastas` : '⚠️ Configurar pastas'}`.padEnd(65) + '║');
+      console.log(`║ 📊 Stats:         ✅ ATIVO - refresh 10 min`.padEnd(65) + '║');
+      console.log(`║ 🔄 Sync Cloud:    ✅ ATIVO (Realtime)`.padEnd(65) + '║');
+      console.log(`║ 🕐 Reset Diário:  ✅ ATIVO (20:00)`.padEnd(65) + '║');
+      console.log(`║ 📻 Voz do Brasil: ✅ ATIVO (Seg-Sex 20:35)`.padEnd(65) + '║');
+      console.log(`║ 📰 Radioagência:  ✅ ATIVO (15 min polling)`.padEnd(65) + '║');
+      console.log(`║ 📥 Capturadas DL: ✅ AUTOMÁTICO (2 min polling)`.padEnd(65) + '║');
+      console.log(`║ 🎯 IA Classify:   ✅ ATIVO (30 min batches)`.padEnd(65) + '║');
+      console.log(`║ 🗜️ Compressão:    ✅ ATIVO (diário 4:00)`.padEnd(65) + '║');
+      console.log(`║ 🐕 Watchdog:      ✅ ATIVO (2 min check)`.padEnd(65) + '║');
+      console.log(`║ 📊 Relatório:     ✅ ATIVO (23:55 diário)`.padEnd(65) + '║');
+      console.log(`║ 💾 Cache Offline:  ✅ ATIVO (fallback 24h)`.padEnd(65) + '║');
+      console.log(`║ 🔄 Cross-Day:     ✅ ATIVO (buffer 4h)`.padEnd(65) + '║');
+      console.log(`║ 📉 Ranking Decay: ✅ ATIVO (5%/dia)`.padEnd(65) + '║');
+      console.log(`║ 🗺️ Mapas JIT:     ✅ ATIVO (20 min antes)`.padEnd(65) + '║');
+      console.log('╚══════════════════════════════════════════════════════════════╝');
+
+      // Start services in staggered waves to avoid CPU spikes
+      cleanups.push(downloadService.start());
+      cleanups.push(capturedDownloadService.start());
+
+      // Wave 2: scraping + content services (500ms later)
+      const wave2 = setTimeout(() => {
+        if (cancelled) return;
+        cleanups.push(scrapingService.start());
+        cleanups.push(vozBrasilService.start());
+        cleanups.push(radioagenciaService.start());
+      }, 500);
+      cleanups.push(() => clearTimeout(wave2));
+
+      // Wave 3: maintenance (1s later)
+      const wave3 = setTimeout(() => {
+        if (cancelled) return;
+        cleanups.push(maintenanceService.start());
+        console.log('[GLOBAL-SVC] ✅ Todos os serviços iniciados!');
+      }, 1000);
+      cleanups.push(() => clearTimeout(wave3));
+    }, bootDelay);
 
     return () => {
+      cancelled = true;
+      clearTimeout(bootTimer);
       console.log('[GLOBAL-SVC] 🛑 Parando todos os serviços');
-      cleanupDownload();
-      cleanupCapturedDl();
-      cleanupScraping();
-      cleanupVozBrasil();
-      cleanupRadioagencia();
-      cleanupMaintenance();
+      cleanups.forEach(fn => { try { fn(); } catch {} });
       isGlobalServicesRunning = false;
       isInitializedRef.current = false;
     };
