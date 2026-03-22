@@ -506,16 +506,17 @@ function startLanServer() {
     }
 
     lanServer = http.createServer((req, res) => {
+      const reqPath = req.url.split('?')[0].split('#')[0];
+
       // Route API requests to the LAN API router
-      const urlPath = req.url.split('?')[0];
-      if (urlPath.startsWith('/api/')) {
+      if (reqPath.startsWith('/api/')) {
         handleApiRequest(req, res, { getMainWindow: () => mainWindow });
         return;
       }
 
       // CORS headers para acesso remoto
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
       
       if (req.method === 'OPTIONS') {
@@ -524,10 +525,8 @@ function startLanServer() {
         return;
       }
 
-      let urlPath = req.url.split('?')[0].split('#')[0];
-      if (urlPath === '/') urlPath = '/index.html';
-      
-      const filePath = path.join(distPath, urlPath);
+      const servePath = reqPath === '/' ? '/index.html' : reqPath;
+      const filePath = path.join(distPath, servePath);
       const safePath = path.resolve(filePath);
       
       // Segurança: não servir fora do dist
