@@ -73,7 +73,7 @@ const STD_ROM = ['SINAL','HC','VHTENT','rom','vht'];
 /** Default MAPA template (Seg) */
 const makeWeekdayTemplate = (day: string, filename: string): MapaTemplate => ({
   filename,
-  dayMapping: day,
+  dayMapping: day.toLowerCase(),
   lines: [
     { time: '00:55', codes: ['SINAL','SINAL','HC','VHTENT','mus','vht','mus'] },
     { time: '01:55', codes: STD }, { time: '02:55', codes: STD },
