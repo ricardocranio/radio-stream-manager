@@ -138,7 +138,7 @@ export const DEFAULT_TEMPLATE_SAB: MapaTemplate = {
 
 /** Default DOM template (Domingo) */
 export const DEFAULT_TEMPLATE_DOM: MapaTemplate = {
-  filename: 'dom.txt',
+  filename: 'DOM.txt',
   dayMapping: 'dom',
   lines: [
     { time: '00:55', codes: ['SINAL','SINAL','HC','VHTENT','mus','vht','mus'] },
