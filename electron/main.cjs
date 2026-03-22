@@ -669,6 +669,10 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   app.isQuitting = true;
   pythonMonitor.killMonitorProcess();
+  if (lanServer) {
+    try { lanServer.close(); } catch (e) {}
+    lanServer = null;
+  }
   if (tray && !tray.isDestroyed()) {
     tray.destroy();
     tray = null;
