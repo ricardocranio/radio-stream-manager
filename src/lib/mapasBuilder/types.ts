@@ -73,7 +73,7 @@ const STD_ROM = ['SINAL','HC','VHTENT','rom','vht'];
 /** Default MAPA template (Seg) */
 const makeWeekdayTemplate = (day: string, filename: string): MapaTemplate => ({
   filename,
-  dayMapping: day,
+  dayMapping: day.toLowerCase(),
   lines: [
     { time: '00:55', codes: ['SINAL','SINAL','HC','VHTENT','mus','vht','mus'] },
     { time: '01:55', codes: STD }, { time: '02:55', codes: STD },
@@ -100,15 +100,15 @@ const makeWeekdayTemplate = (day: string, filename: string): MapaTemplate => ({
   ],
 });
 
-export const DEFAULT_TEMPLATE_SEG = makeWeekdayTemplate('seg', 'seg.txt');
-export const DEFAULT_TEMPLATE_TER = makeWeekdayTemplate('ter', 'ter.txt');
-export const DEFAULT_TEMPLATE_QUA = makeWeekdayTemplate('qua', 'qua.txt');
-export const DEFAULT_TEMPLATE_QUI = makeWeekdayTemplate('qui', 'qui.txt');
-export const DEFAULT_TEMPLATE_SEX = makeWeekdayTemplate('sex', 'sex.txt');
+export const DEFAULT_TEMPLATE_SEG = makeWeekdayTemplate('seg', 'SEG.txt');
+export const DEFAULT_TEMPLATE_TER = makeWeekdayTemplate('ter', 'TER.txt');
+export const DEFAULT_TEMPLATE_QUA = makeWeekdayTemplate('qua', 'QUA.txt');
+export const DEFAULT_TEMPLATE_QUI = makeWeekdayTemplate('qui', 'QUI.txt');
+export const DEFAULT_TEMPLATE_SEX = makeWeekdayTemplate('sex', 'SEX.txt');
 
 /** Default S_B template (Sábado) */
 export const DEFAULT_TEMPLATE_SAB: MapaTemplate = {
-  filename: 'sáb.txt',
+  filename: 'SÁB.txt',
   dayMapping: 'sáb',
   lines: [
     { time: '00:55', codes: ['SINAL','SINAL','HC','VHTENT','mus','vht','mus'] },
@@ -138,7 +138,7 @@ export const DEFAULT_TEMPLATE_SAB: MapaTemplate = {
 
 /** Default DOM template (Domingo) */
 export const DEFAULT_TEMPLATE_DOM: MapaTemplate = {
-  filename: 'dom.txt',
+  filename: 'DOM.txt',
   dayMapping: 'dom',
   lines: [
     { time: '00:55', codes: ['SINAL','SINAL','HC','VHTENT','mus','vht','mus'] },
