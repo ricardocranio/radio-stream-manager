@@ -327,17 +327,7 @@ export function MapasView() {
   const [activeDay, setActiveDay] = useState(() => { const d = new Date().getDay(); return [0,1,2,3,4,5,6][d]; }); // 0=dom,1=seg...6=sab
   const [editingSlot, setEditingSlot] = useState<number | null>(null);
 
-  // Deferred rendering to prevent black screen freeze in Electron
-  const [isReady, setIsReady] = useState(false);
-  const readyRef = useRef(false);
-  if (!readyRef.current) {
-    readyRef.current = true;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setIsReady(true);
-      });
-    });
-  }
+  const isReady = useDeferredRender();
   const [editValue, setEditValue] = useState('');
   const [editTime, setEditTime] = useState('');
   const [showAdd, setShowAdd] = useState(false);
