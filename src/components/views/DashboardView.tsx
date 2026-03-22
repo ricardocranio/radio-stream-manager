@@ -39,6 +39,7 @@ interface DashboardViewProps {
 }
 
 export function DashboardView({ onNavigate }: DashboardViewProps) {
+  const isReady = useDeferredRender();
   // Use selectors to avoid re-rendering on unrelated store changes
   const stations = useRadioStore((s) => s.stations);
   const isRunning = useRadioStore((s) => s.isRunning);
