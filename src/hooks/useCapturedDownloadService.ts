@@ -15,6 +15,7 @@ import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
 import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 import { subHours } from 'date-fns';
 import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
+import { isStationAllowedForDownload } from '@/lib/allowedDownloadStations';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
