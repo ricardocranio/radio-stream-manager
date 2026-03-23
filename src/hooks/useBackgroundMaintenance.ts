@@ -55,72 +55,11 @@ export function useBackgroundMaintenance() {
     }
   }, []);
 
-  const purgeBlockedFiles = useCallback(async () => {
-    if (!isElectron || !window.electronAPI?.purgeBlockedFiles) return;
+  // purgeBlockedFiles REMOVIDO — proteção da biblioteca: exclusão automática de arquivos desativada
+  // O bloqueio agora age apenas impedindo downloads e inserção na grade, sem deletar arquivos existentes
 
-    try {
-      const { config, deezerConfig } = useRadioStore.getState();
-      const allFolders = [
-        ...config.musicFolders,
-        deezerConfig.downloadFolder,
-      ].filter(Boolean);
-
-      if (allFolders.length === 0) return;
-
-      const blockedSongs = config.blockedSongs || [];
-      const forbiddenWords = config.forbiddenWords || [];
-
-      if (blockedSongs.length === 0 && forbiddenWords.length === 0) return;
-
-      console.log('[MAINTENANCE] 🗑️ Verificando arquivos bloqueados no disco...');
-      const result = await window.electronAPI.purgeBlockedFiles({
-        musicFolders: allFolders,
-        blockedSongs,
-        forbiddenWords,
-      });
-
-      if (result.deletedCount > 0) {
-        console.log(`[MAINTENANCE] 🗑️ ${result.deletedCount} arquivo(s) bloqueado(s) removido(s) do disco`);
-      } else {
-        console.log('[MAINTENANCE] ✅ Nenhum arquivo bloqueado encontrado no disco');
-      }
-    } catch (error) {
-      console.error('[MAINTENANCE] Erro no purge automático:', error);
-    }
-  }, []);
-
-  const autoDeduplicateLibrary = useCallback(async () => {
-    if (!isElectron || !window.electronAPI?.scanDuplicates || !window.electronAPI?.deleteDuplicates) return;
-
-    try {
-      const { config, deezerConfig } = useRadioStore.getState();
-      const allFolders = [
-        ...config.musicFolders,
-        deezerConfig.downloadFolder,
-      ].filter(Boolean);
-
-      if (allFolders.length === 0) return;
-
-      console.log('[MAINTENANCE] 🔍 Escaneando duplicatas na biblioteca...');
-      const scanResult = await window.electronAPI.scanDuplicates({ musicFolders: allFolders });
-
-      if (!scanResult?.duplicates || scanResult.duplicates.length === 0) {
-        console.log('[MAINTENANCE] ✅ Nenhuma duplicata encontrada na biblioteca');
-        return;
-      }
-
-      console.log(`[MAINTENANCE] 🗑️ ${scanResult.duplicates.length} grupo(s) de duplicatas encontrado(s), removendo cópias de menor qualidade...`);
-      
-      const filesToDelete = scanResult.duplicates.flatMap((group: any) => 
-        group.remove.map((f: any) => f.path)
-      );
-
-      const deleteResult = await window.electronAPI.deleteDuplicates({ filePaths: filesToDelete });
-      console.log(`[MAINTENANCE] ✅ ${deleteResult.deleted} arquivo(s) duplicado(s) removido(s) automaticamente`);
-    } catch (error) {
-      console.error('[MAINTENANCE] Erro na deduplicação automática:', error);
-    }
-  }, []);
+  // autoDeduplicateLibrary REMOVIDO — proteção da biblioteca: deduplicação automática desativada
+  // O usuário mantém controle manual sobre a gestão de duplicatas
 
   const compressHistory = useCallback(async () => {
     try {
@@ -424,16 +363,6 @@ export function useBackgroundMaintenance() {
     // Initial classification after 2 minutes
     setTimeout(() => classifySongs(), 2 * 60 * 1000);
 
-    // Initial purge after 3 minutes
-    if (isElectron) {
-      setTimeout(() => purgeBlockedFiles(), 3 * 60 * 1000);
-    }
-
-    // Initial dedup after 10 minutes
-    if (isElectron) {
-      setTimeout(() => autoDeduplicateLibrary(), 10 * 60 * 1000);
-    }
-
     // Initial temp processing after 1 minute
     if (isElectron) {
       setTimeout(() => processTempFiles(), 60 * 1000);
@@ -459,18 +388,6 @@ export function useBackgroundMaintenance() {
         classifySongs();
       }
 
-      // Purge blocked files every 12 hours (Electron only)
-      if (isElectron && now - lastPurgeRef.current >= PURGE_INTERVAL_MS) {
-        lastPurgeRef.current = now;
-        purgeBlockedFiles();
-      }
-
-      // Auto-deduplicate every 24 hours (Electron only)
-      if (isElectron && now - lastDedupRef.current >= DEDUP_INTERVAL_MS) {
-        lastDedupRef.current = now;
-        autoDeduplicateLibrary();
-      }
-
       // Compress history once per day at ~4:00 AM
       const currentHour = new Date().getHours();
       const today = new Date().toDateString();
@@ -480,12 +397,12 @@ export function useBackgroundMaintenance() {
       }
     }, MAINTENANCE_CHECK_MS);
 
-    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, ID3 scan diário, purge 12h, dedup 24h, compressão 4h)');
+    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, ID3 scan diário, compressão 4h) — exclusão automática de arquivos DESATIVADA');
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary, processTempFiles, scanLibraryId3]);
+  }, [classifySongs, compressHistory, processTempFiles, scanLibraryId3]);
 
-  return { start, classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary, processTempFiles, scanLibraryId3 };
+  return { start, classifySongs, compressHistory, processTempFiles, scanLibraryId3 };
 }
