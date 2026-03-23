@@ -449,6 +449,11 @@ export function useBackgroundMaintenance() {
       setTimeout(() => scanLibraryId3(), 5 * 60 * 1000);
     }
 
+    // Initial purge of blocked files after 8 minutes
+    if (isElectron) {
+      setTimeout(() => purgeBlockedFiles(), 8 * 60 * 1000);
+    }
+
     intervalRef.current = setInterval(() => {
       const now = Date.now();
 
