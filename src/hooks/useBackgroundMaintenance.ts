@@ -475,6 +475,12 @@ export function useBackgroundMaintenance() {
         autoDeduplicateLibrary();
       }
 
+      // Purge blocked files every 12 hours (Electron only)
+      if (isElectron && now - lastPurgeRef.current >= PURGE_INTERVAL_MS) {
+        lastPurgeRef.current = now;
+        purgeBlockedFiles();
+      }
+
       // Compress history once per day at ~4:00 AM
       const currentHour = new Date().getHours();
       const today = new Date().toDateString();
