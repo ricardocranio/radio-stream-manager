@@ -3,11 +3,12 @@
  * 
  * Runs periodic tasks:
  * - AI song classification every 30 minutes
- * - Auto-purge blocked files from disk every 12 hours (Electron only)
  * - Auto-deduplicate music library every 24 hours (Electron only)
  * - Library ID3 metadata scan once per session (Electron only)
  * - History compression daily at 4:00 AM
+ * - _temp file processing every 2 minutes (Electron only)
  * 
+ * DISABLED: purgeBlockedFiles — bloqueio age apenas impedindo downloads, sem deletar arquivos
  * NOTE: ARL validation is handled by useGlobalDownloadService (every 15 min)
  */
 
@@ -58,8 +59,38 @@ export function useBackgroundMaintenance() {
   // purgeBlockedFiles REMOVIDO — proteção da biblioteca: exclusão automática de arquivos desativada
   // O bloqueio agora age apenas impedindo downloads e inserção na grade, sem deletar arquivos existentes
 
-  // autoDeduplicateLibrary REMOVIDO — proteção da biblioteca: deduplicação automática desativada
-  // O usuário mantém controle manual sobre a gestão de duplicatas
+  const autoDeduplicateLibrary = useCallback(async () => {
+    if (!isElectron || !window.electronAPI?.scanDuplicates || !window.electronAPI?.deleteDuplicates) return;
+
+    try {
+      const { config, deezerConfig } = useRadioStore.getState();
+      const allFolders = [
+        ...config.musicFolders,
+        deezerConfig.downloadFolder,
+      ].filter(Boolean);
+
+      if (allFolders.length === 0) return;
+
+      console.log('[MAINTENANCE] 🔍 Escaneando duplicatas na biblioteca...');
+      const scanResult = await window.electronAPI.scanDuplicates({ musicFolders: allFolders });
+
+      if (!scanResult?.duplicates || scanResult.duplicates.length === 0) {
+        console.log('[MAINTENANCE] ✅ Nenhuma duplicata encontrada na biblioteca');
+        return;
+      }
+
+      console.log(`[MAINTENANCE] 🗑️ ${scanResult.duplicates.length} grupo(s) de duplicatas encontrado(s), removendo cópias de menor qualidade...`);
+      
+      const filesToDelete = scanResult.duplicates.flatMap((group: any) => 
+        group.remove.map((f: any) => f.path)
+      );
+
+      const deleteResult = await window.electronAPI.deleteDuplicates({ filePaths: filesToDelete });
+      console.log(`[MAINTENANCE] ✅ ${deleteResult.deleted} arquivo(s) duplicado(s) removido(s) automaticamente`);
+    } catch (error) {
+      console.error('[MAINTENANCE] Erro na deduplicação automática:', error);
+    }
+  }, []);
 
   const compressHistory = useCallback(async () => {
     try {
@@ -363,6 +394,11 @@ export function useBackgroundMaintenance() {
     // Initial classification after 2 minutes
     setTimeout(() => classifySongs(), 2 * 60 * 1000);
 
+    // Initial dedup after 10 minutes
+    if (isElectron) {
+      setTimeout(() => autoDeduplicateLibrary(), 10 * 60 * 1000);
+    }
+
     // Initial temp processing after 1 minute
     if (isElectron) {
       setTimeout(() => processTempFiles(), 60 * 1000);
@@ -388,6 +424,12 @@ export function useBackgroundMaintenance() {
         classifySongs();
       }
 
+      // Auto-deduplicate every 24 hours (Electron only)
+      if (isElectron && now - lastDedupRef.current >= DEDUP_INTERVAL_MS) {
+        lastDedupRef.current = now;
+        autoDeduplicateLibrary();
+      }
+
       // Compress history once per day at ~4:00 AM
       const currentHour = new Date().getHours();
       const today = new Date().toDateString();
@@ -397,12 +439,12 @@ export function useBackgroundMaintenance() {
       }
     }, MAINTENANCE_CHECK_MS);
 
-    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, ID3 scan diário, compressão 4h) — exclusão automática de arquivos DESATIVADA');
+    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, ID3 scan diário, dedup 24h, compressão 4h) — purge de bloqueados DESATIVADO');
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [classifySongs, compressHistory, processTempFiles, scanLibraryId3]);
+  }, [classifySongs, compressHistory, autoDeduplicateLibrary, processTempFiles, scanLibraryId3]);
 
-  return { start, classifySongs, compressHistory, processTempFiles, scanLibraryId3 };
+  return { start, classifySongs, compressHistory, autoDeduplicateLibrary, processTempFiles, scanLibraryId3 };
 }
