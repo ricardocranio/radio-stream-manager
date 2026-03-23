@@ -58,8 +58,38 @@ export function useBackgroundMaintenance() {
   // purgeBlockedFiles REMOVIDO — proteção da biblioteca: exclusão automática de arquivos desativada
   // O bloqueio agora age apenas impedindo downloads e inserção na grade, sem deletar arquivos existentes
 
-  // autoDeduplicateLibrary REMOVIDO — proteção da biblioteca: deduplicação automática desativada
-  // O usuário mantém controle manual sobre a gestão de duplicatas
+  const autoDeduplicateLibrary = useCallback(async () => {
+    if (!isElectron || !window.electronAPI?.scanDuplicates || !window.electronAPI?.deleteDuplicates) return;
+
+    try {
+      const { config, deezerConfig } = useRadioStore.getState();
+      const allFolders = [
+        ...config.musicFolders,
+        deezerConfig.downloadFolder,
+      ].filter(Boolean);
+
+      if (allFolders.length === 0) return;
+
+      console.log('[MAINTENANCE] 🔍 Escaneando duplicatas na biblioteca...');
+      const scanResult = await window.electronAPI.scanDuplicates({ musicFolders: allFolders });
+
+      if (!scanResult?.duplicates || scanResult.duplicates.length === 0) {
+        console.log('[MAINTENANCE] ✅ Nenhuma duplicata encontrada na biblioteca');
+        return;
+      }
+
+      console.log(`[MAINTENANCE] 🗑️ ${scanResult.duplicates.length} grupo(s) de duplicatas encontrado(s), removendo cópias de menor qualidade...`);
+      
+      const filesToDelete = scanResult.duplicates.flatMap((group: any) => 
+        group.remove.map((f: any) => f.path)
+      );
+
+      const deleteResult = await window.electronAPI.deleteDuplicates({ filePaths: filesToDelete });
+      console.log(`[MAINTENANCE] ✅ ${deleteResult.deleted} arquivo(s) duplicado(s) removido(s) automaticamente`);
+    } catch (error) {
+      console.error('[MAINTENANCE] Erro na deduplicação automática:', error);
+    }
+  }, []);
 
   const compressHistory = useCallback(async () => {
     try {
