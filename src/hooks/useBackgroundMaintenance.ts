@@ -363,16 +363,6 @@ export function useBackgroundMaintenance() {
     // Initial classification after 2 minutes
     setTimeout(() => classifySongs(), 2 * 60 * 1000);
 
-    // Initial purge after 3 minutes
-    if (isElectron) {
-      setTimeout(() => purgeBlockedFiles(), 3 * 60 * 1000);
-    }
-
-    // Initial dedup after 10 minutes
-    if (isElectron) {
-      setTimeout(() => autoDeduplicateLibrary(), 10 * 60 * 1000);
-    }
-
     // Initial temp processing after 1 minute
     if (isElectron) {
       setTimeout(() => processTempFiles(), 60 * 1000);
@@ -398,18 +388,6 @@ export function useBackgroundMaintenance() {
         classifySongs();
       }
 
-      // Purge blocked files every 12 hours (Electron only)
-      if (isElectron && now - lastPurgeRef.current >= PURGE_INTERVAL_MS) {
-        lastPurgeRef.current = now;
-        purgeBlockedFiles();
-      }
-
-      // Auto-deduplicate every 24 hours (Electron only)
-      if (isElectron && now - lastDedupRef.current >= DEDUP_INTERVAL_MS) {
-        lastDedupRef.current = now;
-        autoDeduplicateLibrary();
-      }
-
       // Compress history once per day at ~4:00 AM
       const currentHour = new Date().getHours();
       const today = new Date().toDateString();
@@ -419,12 +397,12 @@ export function useBackgroundMaintenance() {
       }
     }, MAINTENANCE_CHECK_MS);
 
-    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, ID3 scan diário, purge 12h, dedup 24h, compressão 4h)');
+    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, ID3 scan diário, compressão 4h) — exclusão automática de arquivos DESATIVADA');
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary, processTempFiles, scanLibraryId3]);
+  }, [classifySongs, compressHistory, processTempFiles, scanLibraryId3]);
 
-  return { start, classifySongs, compressHistory, purgeBlockedFiles, autoDeduplicateLibrary, processTempFiles, scanLibraryId3 };
+  return { start, classifySongs, compressHistory, processTempFiles, scanLibraryId3 };
 }
