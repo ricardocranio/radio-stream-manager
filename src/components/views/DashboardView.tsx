@@ -201,28 +201,57 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         }
       }
 
-      // 3. Clear localStorage keys related to the system
-      console.log('[RESET] Clearing localStorage...');
-      const keysToPreserve = ['vozBrasilConfig', 'theme', 'supabase.auth.token']; 
+      // 3. Clear localStorage keys — but PRESERVE user configurations
+      console.log('[RESET] Clearing localStorage (preserving configs)...');
+      
+      // === CRITICAL: Preserve config, deezerConfig, songAliases, stations, fixedContent, etc. ===
+      // Save the current user configs BEFORE clearing
+      const storeState = useRadioStore.getState();
+      const preservedConfig = { ...storeState.config };          // musicFolders, blockedSongs, forbiddenWords, etc.
+      const preservedDeezerConfig = { ...storeState.deezerConfig }; // ARL, downloadFolder, genreRoutes, etc.
+      const preservedAliases = [...storeState.songAliases];      // Song corrections
+      const preservedStations = [...storeState.stations];        // Radio stations
+      const preservedFixedContent = [...storeState.fixedContent]; // Fixed content blocks
+      const preservedSequence = [...storeState.sequence];        // Sequence config
+      const preservedScheduledSeq = [...storeState.scheduledSequences]; // Scheduled sequences
+      const preservedPrograms = [...storeState.programs];        // Programs
+      const preservedMapasConfig = storeState.mapasConfig ? { ...storeState.mapasConfig } : undefined;
+      const preservedAutoScrape = storeState.autoScrapeEnabled;
+      
+      // Clear transient localStorage keys (caches, scan dates, etc.)
+      const keysToPreserve = ['vozBrasilConfig', 'theme', 'supabase.auth.token', 'pgm-radio-storage'];
       const allKeys = Object.keys(localStorage);
       let clearedKeys = 0;
       
       allKeys.forEach(key => {
-        // Preserve Supabase auth and user preferences
-        if (key.startsWith('supabase') || keysToPreserve.some(k => key.includes(k))) {
+        if (key.startsWith('supabase') || keysToPreserve.some(k => key === k || key.includes(k))) {
           return;
         }
-        // Clear app-specific keys - INCLUDING the main Zustand store
-        if (key.includes('radio') || key.includes('grade') || key.includes('similarity') || 
+        if (key.includes('grade') || key.includes('similarity') || 
             key.includes('stats') || key.includes('ranking') || key.includes('download') ||
-            key.includes('missing') || key.includes('captured') || key.includes('pgm-') ||
-            key === 'pgm-radio-storage' || key === 'auto-download-storage' || 
-            key === 'realtime-stats-storage' || key === 'similarity-log-storage') {
+            key.includes('missing') || key.includes('captured') ||
+            key === 'auto-download-storage' || 
+            key === 'realtime-stats-storage' || key === 'similarity-log-storage' ||
+            key === 'pgmr_last_id3_scan' || key === 'pgmr_lib_cache' || key === 'pgmr_offline_songs') {
           localStorage.removeItem(key);
           clearedKeys++;
         }
       });
-      console.log(`[RESET] Cleared ${clearedKeys} localStorage keys`);
+      console.log(`[RESET] Cleared ${clearedKeys} localStorage keys (configs preserved)`);
+      
+      // Restore preserved configs into the store (in case Zustand re-hydrated from empty)
+      useRadioStore.setState({
+        config: preservedConfig,
+        deezerConfig: preservedDeezerConfig,
+        songAliases: preservedAliases,
+        stations: preservedStations,
+        fixedContent: preservedFixedContent,
+        sequence: preservedSequence,
+        scheduledSequences: preservedScheduledSeq,
+        programs: preservedPrograms,
+        mapasConfig: preservedMapasConfig || storeState.mapasConfig,
+        autoScrapeEnabled: preservedAutoScrape,
+      });
 
       // 4. Clear the realtime stats store
       try {
