@@ -545,6 +545,13 @@ export function useGlobalDownloadService() {
           continue;
         }
 
+        // === STATION FILTER: only download from sequence/priority stations ===
+        if (song.urgency !== 'grade' && !isStationAllowedForDownload(song.station)) {
+          console.log(`[DL-SVC] ⏭️ Estação "${song.station}" não está na sequência/prioridade. Ignorando: ${song.artist} - ${song.title}`);
+          useRadioStore.getState().removeMissingSong(song.id);
+          continue;
+        }
+
         const downloadKey = getDownloadKey(song);
         processedSongsRef.current.add(downloadKey);
         

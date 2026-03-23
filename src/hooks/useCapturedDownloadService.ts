@@ -347,6 +347,8 @@ export function useCapturedDownloadService() {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
         if (seen.has(key) || processedRef.current.has(key)) continue;
         if (isBlocked(song.artist, song.title)) continue;
+        // === STATION FILTER: only download from sequence/priority stations ===
+        if (!isStationAllowedForDownload(song.station_name)) continue;
         seen.add(key);
         unique.push(song);
       }
