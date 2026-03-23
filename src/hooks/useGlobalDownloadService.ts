@@ -11,6 +11,7 @@ import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
+import { isStationAllowedForDownload } from '@/lib/allowedDownloadStations';
 
 // Shared ID3 genre utilities
 import { normalizeId3Genre as normalizeId3GenreForDl, genreToEnergy as genreToEnergyForDl, routeFileByGenre } from '@/lib/id3GenreUtils';
@@ -540,6 +541,13 @@ export function useGlobalDownloadService() {
         // Skip vinhetas/jingles at queue entry
         if (isVinhetaOrJingle(song.artist, song.title)) {
           console.log(`[DL-SVC] 🚫 Vinheta/jingle filtrada na fila: ${song.artist} - ${song.title}`);
+          useRadioStore.getState().removeMissingSong(song.id);
+          continue;
+        }
+
+        // === STATION FILTER: only download from sequence/priority stations ===
+        if (song.urgency !== 'grade' && !isStationAllowedForDownload(song.station)) {
+          console.log(`[DL-SVC] ⏭️ Estação "${song.station}" não está na sequência/prioridade. Ignorando: ${song.artist} - ${song.title}`);
           useRadioStore.getState().removeMissingSong(song.id);
           continue;
         }
