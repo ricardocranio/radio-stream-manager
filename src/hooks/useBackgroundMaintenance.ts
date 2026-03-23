@@ -490,12 +490,12 @@ export function useBackgroundMaintenance() {
       }
     }, MAINTENANCE_CHECK_MS);
 
-    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, ID3 scan diário, dedup 24h, compressão 4h) — purge de bloqueados DESATIVADO');
+    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, ID3 scan diário, dedup 24h, purge bloqueados 12h, compressão 4h)');
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [classifySongs, compressHistory, autoDeduplicateLibrary, processTempFiles, scanLibraryId3]);
+  }, [classifySongs, compressHistory, autoDeduplicateLibrary, purgeBlockedFiles, processTempFiles, scanLibraryId3]);
 
-  return { start, classifySongs, compressHistory, autoDeduplicateLibrary, processTempFiles, scanLibraryId3 };
+  return { start, classifySongs, compressHistory, autoDeduplicateLibrary, purgeBlockedFiles, processTempFiles, scanLibraryId3 };
 }
