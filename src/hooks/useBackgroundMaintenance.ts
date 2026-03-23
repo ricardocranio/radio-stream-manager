@@ -56,8 +56,48 @@ export function useBackgroundMaintenance() {
     }
   }, []);
 
-  // purgeBlockedFiles REMOVIDO — proteção da biblioteca: exclusão automática de arquivos desativada
-  // O bloqueio agora age apenas impedindo downloads e inserção na grade, sem deletar arquivos existentes
+  /**
+   * Purge blocked files from the library.
+   * ONLY deletes files that match blockedSongs or forbiddenWords exactly.
+   * Safe: does NOT delete anything that isn't explicitly blocked.
+   */
+  const purgeBlockedFiles = useCallback(async () => {
+    if (!isElectron || !window.electronAPI?.purgeBlockedFiles) return;
+
+    try {
+      const { config, deezerConfig } = useRadioStore.getState();
+      const { blockedSongs = [], forbiddenWords = [] } = config;
+
+      // Only run if there are actual blocked items
+      if (blockedSongs.length === 0 && forbiddenWords.length === 0) {
+        console.log('[MAINTENANCE] purgeBlockedFiles: nenhum bloqueio configurado, pulando');
+        return;
+      }
+
+      const allFolders = [
+        ...config.musicFolders,
+        deezerConfig.downloadFolder,
+      ].filter(Boolean);
+
+      if (allFolders.length === 0) return;
+
+      console.log(`[MAINTENANCE] 🗑️ Verificando arquivos bloqueados (${blockedSongs.length} bloqueios, ${forbiddenWords.length} palavras proibidas)...`);
+
+      const result = await window.electronAPI.purgeBlockedFiles({
+        musicFolders: allFolders,
+        blockedSongs,
+        forbiddenWords,
+      });
+
+      if (result?.deleted > 0) {
+        console.log(`[MAINTENANCE] 🗑️ ${result.deleted} arquivo(s) bloqueado(s) removido(s)`);
+      } else {
+        console.log('[MAINTENANCE] ✅ Nenhum arquivo bloqueado encontrado na biblioteca');
+      }
+    } catch (error) {
+      console.error('[MAINTENANCE] Erro ao purgar bloqueados:', error);
+    }
+  }, []);
 
   const autoDeduplicateLibrary = useCallback(async () => {
     if (!isElectron || !window.electronAPI?.scanDuplicates || !window.electronAPI?.deleteDuplicates) return;
