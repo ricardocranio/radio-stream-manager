@@ -23,6 +23,7 @@ export interface RadioStation {
   styles: string[];
   enabled: boolean;
   prioritizeDownloads?: boolean; // Force download priority for building local folder cache
+  autoDownloadEnabled?: boolean; // Enable automatic download of songs from this station
   monitoringSchedules?: MonitoringSchedule[]; // Horários específicos para monitoramento
   downloadFolder?: string; // Station-specific download subfolder (e.g. "hist", "sertanejo")
 }
