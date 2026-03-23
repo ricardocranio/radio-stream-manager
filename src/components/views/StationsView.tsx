@@ -739,10 +739,31 @@ export function StationsView() {
                   </CollapsibleContent>
                 </Collapsible>
 
+                {/* Auto Download Toggle */}
+                <div className="flex items-center justify-between py-1">
+                  <div className="flex items-center gap-2">
+                    <Download className="w-3.5 h-3.5 text-green-500" />
+                    <div>
+                      <span className="text-xs font-medium">Download Automático</span>
+                      <p className="text-[10px] text-muted-foreground">Baixar músicas desta emissora</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={data.autoDownloadEnabled || false}
+                    onCheckedChange={(checked) => {
+                      if (isEditing) {
+                        setEditForm((prev) => prev && { ...prev, autoDownloadEnabled: checked });
+                      } else {
+                        updateStation(station.id, { autoDownloadEnabled: checked });
+                      }
+                    }}
+                  />
+                </div>
+
                 {/* Priorizar Downloads Toggle */}
                 <div className="flex items-center justify-between py-1">
                   <div className="flex items-center gap-2">
-                    <Download className="w-3.5 h-3.5 text-muted-foreground" />
+                    <Zap className="w-3.5 h-3.5 text-muted-foreground" />
                     <div>
                       <span className="text-xs text-muted-foreground">Priorizar Downloads</span>
                     </div>

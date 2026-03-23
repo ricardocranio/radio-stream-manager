@@ -12,9 +12,9 @@ export function getAllowedDownloadStations(): Set<string> {
   const { stations, scheduledSequences, sequence } = state;
   const allowed = new Set<string>();
 
-  // 1. Stations with prioritizeDownloads flag
+  // 1. Stations with autoDownloadEnabled or prioritizeDownloads flag
   for (const s of stations) {
-    if (s.prioritizeDownloads) {
+    if (s.autoDownloadEnabled || s.prioritizeDownloads) {
       allowed.add(s.name.toLowerCase());
     }
   }
