@@ -55,39 +55,8 @@ export function useBackgroundMaintenance() {
     }
   }, []);
 
-  const purgeBlockedFiles = useCallback(async () => {
-    if (!isElectron || !window.electronAPI?.purgeBlockedFiles) return;
-
-    try {
-      const { config, deezerConfig } = useRadioStore.getState();
-      const allFolders = [
-        ...config.musicFolders,
-        deezerConfig.downloadFolder,
-      ].filter(Boolean);
-
-      if (allFolders.length === 0) return;
-
-      const blockedSongs = config.blockedSongs || [];
-      const forbiddenWords = config.forbiddenWords || [];
-
-      if (blockedSongs.length === 0 && forbiddenWords.length === 0) return;
-
-      console.log('[MAINTENANCE] 🗑️ Verificando arquivos bloqueados no disco...');
-      const result = await window.electronAPI.purgeBlockedFiles({
-        musicFolders: allFolders,
-        blockedSongs,
-        forbiddenWords,
-      });
-
-      if (result.deletedCount > 0) {
-        console.log(`[MAINTENANCE] 🗑️ ${result.deletedCount} arquivo(s) bloqueado(s) removido(s) do disco`);
-      } else {
-        console.log('[MAINTENANCE] ✅ Nenhum arquivo bloqueado encontrado no disco');
-      }
-    } catch (error) {
-      console.error('[MAINTENANCE] Erro no purge automático:', error);
-    }
-  }, []);
+  // purgeBlockedFiles REMOVIDO — proteção da biblioteca: exclusão automática de arquivos desativada
+  // O bloqueio agora age apenas impedindo downloads e inserção na grade, sem deletar arquivos existentes
 
   const autoDeduplicateLibrary = useCallback(async () => {
     if (!isElectron || !window.electronAPI?.scanDuplicates || !window.electronAPI?.deleteDuplicates) return;
