@@ -11,6 +11,7 @@ import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
+import { isStationAllowedForDownload } from '@/lib/allowedDownloadStations';
 
 // Shared ID3 genre utilities
 import { normalizeId3Genre as normalizeId3GenreForDl, genreToEnergy as genreToEnergyForDl, routeFileByGenre } from '@/lib/id3GenreUtils';
