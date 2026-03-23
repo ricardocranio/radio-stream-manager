@@ -89,8 +89,8 @@ export function useBackgroundMaintenance() {
         forbiddenWords,
       });
 
-      if (result?.deleted > 0) {
-        console.log(`[MAINTENANCE] 🗑️ ${result.deleted} arquivo(s) bloqueado(s) removido(s)`);
+      if (result?.deleted?.length > 0) {
+        console.log(`[MAINTENANCE] 🗑️ ${result.deleted.length} arquivo(s) bloqueado(s) removido(s)`);
       } else {
         console.log('[MAINTENANCE] ✅ Nenhum arquivo bloqueado encontrado na biblioteca');
       }
