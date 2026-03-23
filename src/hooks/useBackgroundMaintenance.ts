@@ -3,11 +3,12 @@
  * 
  * Runs periodic tasks:
  * - AI song classification every 30 minutes
- * - Auto-purge blocked files from disk every 12 hours (Electron only)
  * - Auto-deduplicate music library every 24 hours (Electron only)
  * - Library ID3 metadata scan once per session (Electron only)
  * - History compression daily at 4:00 AM
+ * - _temp file processing every 2 minutes (Electron only)
  * 
+ * DISABLED: purgeBlockedFiles — bloqueio age apenas impedindo downloads, sem deletar arquivos
  * NOTE: ARL validation is handled by useGlobalDownloadService (every 15 min)
  */
 
