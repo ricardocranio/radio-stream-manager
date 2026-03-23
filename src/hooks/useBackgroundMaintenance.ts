@@ -56,8 +56,48 @@ export function useBackgroundMaintenance() {
     }
   }, []);
 
-  // purgeBlockedFiles REMOVIDO — proteção da biblioteca: exclusão automática de arquivos desativada
-  // O bloqueio agora age apenas impedindo downloads e inserção na grade, sem deletar arquivos existentes
+  /**
+   * Purge blocked files from the library.
+   * ONLY deletes files that match blockedSongs or forbiddenWords exactly.
+   * Safe: does NOT delete anything that isn't explicitly blocked.
+   */
+  const purgeBlockedFiles = useCallback(async () => {
+    if (!isElectron || !window.electronAPI?.purgeBlockedFiles) return;
+
+    try {
+      const { config, deezerConfig } = useRadioStore.getState();
+      const { blockedSongs = [], forbiddenWords = [] } = config;
+
+      // Only run if there are actual blocked items
+      if (blockedSongs.length === 0 && forbiddenWords.length === 0) {
+        console.log('[MAINTENANCE] purgeBlockedFiles: nenhum bloqueio configurado, pulando');
+        return;
+      }
+
+      const allFolders = [
+        ...config.musicFolders,
+        deezerConfig.downloadFolder,
+      ].filter(Boolean);
+
+      if (allFolders.length === 0) return;
+
+      console.log(`[MAINTENANCE] 🗑️ Verificando arquivos bloqueados (${blockedSongs.length} bloqueios, ${forbiddenWords.length} palavras proibidas)...`);
+
+      const result = await window.electronAPI.purgeBlockedFiles({
+        musicFolders: allFolders,
+        blockedSongs,
+        forbiddenWords,
+      });
+
+      if (result?.deleted?.length > 0) {
+        console.log(`[MAINTENANCE] 🗑️ ${result.deleted.length} arquivo(s) bloqueado(s) removido(s)`);
+      } else {
+        console.log('[MAINTENANCE] ✅ Nenhum arquivo bloqueado encontrado na biblioteca');
+      }
+    } catch (error) {
+      console.error('[MAINTENANCE] Erro ao purgar bloqueados:', error);
+    }
+  }, []);
 
   const autoDeduplicateLibrary = useCallback(async () => {
     if (!isElectron || !window.electronAPI?.scanDuplicates || !window.electronAPI?.deleteDuplicates) return;
@@ -409,6 +449,11 @@ export function useBackgroundMaintenance() {
       setTimeout(() => scanLibraryId3(), 5 * 60 * 1000);
     }
 
+    // Initial purge of blocked files after 8 minutes
+    if (isElectron) {
+      setTimeout(() => purgeBlockedFiles(), 8 * 60 * 1000);
+    }
+
     intervalRef.current = setInterval(() => {
       const now = Date.now();
 
@@ -430,6 +475,12 @@ export function useBackgroundMaintenance() {
         autoDeduplicateLibrary();
       }
 
+      // Purge blocked files every 12 hours (Electron only)
+      if (isElectron && now - lastPurgeRef.current >= PURGE_INTERVAL_MS) {
+        lastPurgeRef.current = now;
+        purgeBlockedFiles();
+      }
+
       // Compress history once per day at ~4:00 AM
       const currentHour = new Date().getHours();
       const today = new Date().toDateString();
@@ -439,12 +490,12 @@ export function useBackgroundMaintenance() {
       }
     }, MAINTENANCE_CHECK_MS);
 
-    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, ID3 scan diário, dedup 24h, compressão 4h) — purge de bloqueados DESATIVADO');
+    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, ID3 scan diário, dedup 24h, purge bloqueados 12h, compressão 4h)');
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [classifySongs, compressHistory, autoDeduplicateLibrary, processTempFiles, scanLibraryId3]);
+  }, [classifySongs, compressHistory, autoDeduplicateLibrary, purgeBlockedFiles, processTempFiles, scanLibraryId3]);
 
-  return { start, classifySongs, compressHistory, autoDeduplicateLibrary, processTempFiles, scanLibraryId3 };
+  return { start, classifySongs, compressHistory, autoDeduplicateLibrary, purgeBlockedFiles, processTempFiles, scanLibraryId3 };
 }
