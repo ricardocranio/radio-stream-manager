@@ -359,14 +359,14 @@ export function MapasView() {
     if (autoSaveTimerRef.current[tmplIdx]) clearTimeout(autoSaveTimerRef.current[tmplIdx]);
     autoSaveTimerRef.current[tmplIdx] = setTimeout(async () => {
       const store = useRadioStore.getState();
-      const tmpl = store.mapasConfig.templates[tmplIdx];
+      const tmpl = store.mapasConfig.templates?.[tmplIdx];
       if (!tmpl) return;
       resetMapasPools();
       const cache = new Map<string, string[]>();
       const lines: string[] = [];
       try {
         for (const line of tmpl.lines) { const r = await resolveTemplateLine(line, store.mapasConfig, store.config.musicFolders, cache); lines.push(formatResolvedLine(r)); }
-        const result = await window.electronAPI!.saveGradeFile({ folder: store.mapasConfig.outputFolder, filename: tmpl.filename, content: lines.join('\n') });
+        const result = await window.electronAPI!.saveGradeFile({ folder: store.mapasConfig.outputFolder || safeOutputFolder, filename: tmpl.filename, content: lines.join('\n') });
         if (result.success) toast.success(`💾 ${tmpl.filename} salvo`, { duration: 1200 });
       } catch { /* silent */ }
     }, 1500);
