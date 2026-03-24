@@ -273,12 +273,8 @@ export async function selectSongForSlot(
     return true;
   };
 
-  // Build reverse alias map: corrected name → original name (for library fallback)
-  const songAliases = _allAliases;
-  const reverseAliasMap = new Map<string, { fromArtist: string; fromTitle: string }>();
-  for (const alias of songAliases) {
-    reverseAliasMap.set(toLibKey(alias.toArtist, alias.toTitle), { fromArtist: alias.fromArtist, fromTitle: alias.fromTitle });
-  }
+  // Centralized alias engine (replaces manual reverse map)
+  const _aliasEngine = buildAliasEngine(_allAliases);
 
   /**
    * Enhanced library lookup: tries corrected name first, then original alias name.
@@ -295,10 +291,10 @@ export async function selectSongForSlot(
       if (result.exists) return result;
     }
     // Fallback: try original (pre-alias) name on disk
-    const reverseAlias = reverseAliasMap.get(key);
-    if (reverseAlias) {
-      console.log(`[SONG-SELECT] 🔄 Alias fallback: "${artist} - ${title}" → tentando "${reverseAlias.fromArtist} - ${reverseAlias.fromTitle}" no disco`);
-      const fallbackResult = await ctx.findSongInLibrary(reverseAlias.fromArtist, reverseAlias.fromTitle);
+    const reverse = _aliasEngine.resolveReverse(artist, title);
+    if (reverse.artist !== artist || reverse.title !== title) {
+      console.log(`[SONG-SELECT] 🔄 Alias fallback: "${artist} - ${title}" → tentando "${reverse.artist} - ${reverse.title}" no disco`);
+      const fallbackResult = await ctx.findSongInLibrary(reverse.artist, reverse.title);
       if (fallbackResult.exists) {
         console.log(`[SONG-SELECT] ✅ Encontrado via alias reverso: ${fallbackResult.filename}`);
         return fallbackResult;
