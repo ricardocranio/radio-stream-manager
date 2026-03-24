@@ -396,6 +396,70 @@ function MapasViewInner() {
     }, 1500);
   }, []);
 
+  // Load templates from disk files
+  const [isLoading, setIsLoading] = useState(false);
+  const loadFromDisk = useCallback(async () => {
+    const folder = safeOutputFolder;
+    if (isElectron && window.electronAPI?.readGradeFile) {
+      setIsLoading(true);
+      let loaded = 0;
+      for (let i = 0; i < safeTemplates.length; i++) {
+        const tmpl = safeTemplates[i];
+        try {
+          const result = await window.electronAPI.readGradeFile({ folder, filename: tmpl.filename });
+          if (result.success && result.content) {
+            const parsed = result.content.split('\n').filter((l: string) => l.trim()).map((l: string) => {
+              const match = l.match(/^(\d{2}:\d{2})\s+(.+)$/);
+              if (!match) return null;
+              return { time: match[1], codes: match[2].split(',').map((c: string) => c.trim()).filter(Boolean) };
+            }).filter(Boolean) as Array<{ time: string; codes: string[] }>;
+            if (parsed.length > 0) {
+              // Update each line in the template
+              for (let li = 0; li < parsed.length; li++) {
+                updateMapaTemplateLine(i, li, parsed[li].codes);
+              }
+              // If file has more/fewer lines, we need to reset and rebuild
+              if (parsed.length !== tmpl.lines.length) {
+                // Use setMapasConfig to replace the full template lines
+                const store = useRadioStore.getState();
+                const newTemplates = [...store.mapasConfig.templates];
+                newTemplates[i] = { ...newTemplates[i], lines: parsed.map(p => ({ time: p.time, codes: p.codes })) };
+                setMapasConfig({ templates: newTemplates });
+              }
+              loaded++;
+            }
+          }
+        } catch { /* skip missing files */ }
+      }
+      setIsLoading(false);
+      if (loaded > 0) toast.success(`📂 ${loaded} mapas carregados do disco`);
+      else toast.info('Nenhum mapa encontrado no disco');
+    } else {
+      // Mock mode: parse from MOCK_FILES
+      let loaded = 0;
+      for (let i = 0; i < safeTemplates.length; i++) {
+        const tmpl = safeTemplates[i];
+        const mockContent = Object.entries(MOCK_FILES).find(([k]) => k.toLowerCase().replace(/[áàã]/g, 'a') === tmpl.filename.toLowerCase().replace(/[áàã]/g, 'a'))?.[1];
+        if (mockContent) {
+          const parsed = mockContent.split('\n').filter(l => l.trim()).map(l => {
+            const match = l.match(/^(\d{2}:\d{2})\s+(.+)$/);
+            if (!match) return null;
+            return { time: match[1], codes: match[2].split(',').map(c => c.trim()).filter(Boolean) };
+          }).filter(Boolean) as Array<{ time: string; codes: string[] }>;
+          if (parsed.length > 0) {
+            const store = useRadioStore.getState();
+            const newTemplates = [...store.mapasConfig.templates];
+            newTemplates[i] = { ...newTemplates[i], lines: parsed.map(p => ({ time: p.time, codes: p.codes })) };
+            setMapasConfig({ templates: newTemplates });
+            loaded++;
+          }
+        }
+      }
+      if (loaded > 0) toast.success(`📂 ${loaded} mapas carregados (mock)`);
+      else toast.info('Nenhum mock disponível');
+    }
+  }, [safeTemplates, safeOutputFolder, updateMapaTemplateLine, setMapasConfig]);
+
   // Each template now maps directly to its own file
   const buildAll = useCallback(async () => {
     if (!isElectron || !safeTemplates.length) return;
