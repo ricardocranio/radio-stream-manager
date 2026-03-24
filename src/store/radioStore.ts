@@ -903,11 +903,14 @@ export const useRadioStore = create<RadioState>()(
               timestamp: new Date(entry.timestamp),
             }));
           }
-          // Convert rankingSongs lastPlayed to Date objects
+          // Convert rankingSongs lastPlayed to number (UNIX ms) — migration from Date
           if (state.rankingSongs) {
             state.rankingSongs = state.rankingSongs.map((song) => ({
               ...song,
-              lastPlayed: new Date(song.lastPlayed),
+              lastPlayed: typeof song.lastPlayed === 'number' ? song.lastPlayed : new Date(song.lastPlayed).getTime(),
+              firstPlayed: song.firstPlayed ? (typeof song.firstPlayed === 'number' ? song.firstPlayed : new Date(song.firstPlayed).getTime()) : undefined,
+              peakPosition: song.peakPosition ?? 999,
+              previousPosition: song.previousPosition ?? 999,
             }));
           }
           // Convert gradeHistory timestamps
