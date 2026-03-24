@@ -311,106 +311,216 @@ export async function selectSongForSlot(
   const MAX_MISSING_MARKS_PER_PRIORITY = 10;
 
   // ============================================================
-  // PRIORITY 1: Station Pool (primary source — the configured radio)
-  // STRATEGY: First scan ALL candidates for one that EXISTS in library.
-  // Only attempt JIT downloads if NO candidate from this station is available.
-  // This ensures missing songs are instantly replaced by another from the SAME radio.
+  // PRIORITY 1: Station Pool — top4 (últimas 4 capturas) primeiro,
+  //             expansão para pool completo se necessário.
+  //             Limite: máx 4 músicas desta estação no bloco de 30min.
   // ============================================================
   if (!selectedSong) {
-    const freshnessSorted = [...stationSongs].sort((a, b) => {
-      if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
-      if (a.scrapedAt) return -1;
-      if (b.scrapedAt) return 1;
-      return 0;
-    });
 
-    const smartSorted = applySmartScoring(freshnessSorted, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
-    const p1Candidates = smartSorted.filter(c => isValidCandidate(c.title, c.artist));
+    // Recupera o top4 exposto pelo buildSongsByStation
+    const top4Map     = (selCtx.songsByStation as any).__top4__ as Record<string, SongEntry[]> | undefined;
+    const stationTop4 = top4Map?.[stationName] ?? [];
 
-    const p1Map = p1Candidates.length
-      ? await ctx.batchFindSongsInLibrary(p1Candidates.map(c => ({ artist: c.artist, title: c.title })))
-      : new Map();
+    // === CONTROLE DE LIMITE: máx 4 por estação no bloco ===
+    const MAX_PER_STATION_IN_BLOCK = 4;
+    const allStationKeys = new Set(
+      (selCtx.songsByStation[stationName] || []).map(
+        (s: SongEntry) => `${s.title.toLowerCase()}-${s.artist.toLowerCase()}`
+      )
+    );
+    const stationUsedCount = Array.from(usedInBlock).filter(k => allStationKeys.has(k)).length;
 
-    // PHASE 1: Pick the first candidate that ALREADY exists in library (instant, no download)
-    const missingFromStation: SongEntry[] = [];
-    for (const candidate of p1Candidates) {
-      const libraryResult = await findWithAliasFallback(candidate.artist, candidate.title, p1Map as Map<string, any>);
+    if (stationUsedCount >= MAX_PER_STATION_IN_BLOCK) {
+      console.log(
+        `[P1] "${stationName}" já usou ${stationUsedCount}/${MAX_PER_STATION_IN_BLOCK} músicas no bloco — ` +
+        `indo para carry-over / DNA match`
+      );
+    } else {
+      const remainingSlots = MAX_PER_STATION_IN_BLOCK - stationUsedCount;
 
-      if (libraryResult?.exists) {
-        const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-        selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-        selCtx.previousEnergy = (candidate as any).ai_energy || null;
-        selCtx.previousBpm = (candidate as any).bpm || null;
-        logs.push({
-          blockTime: timeStr,
-          type: 'used',
-          title: candidate.title,
-          artist: candidate.artist,
-          station: candidate.station,
-          style: candidate.style,
-          reason: `[P1] Pool da estação "${stationName}" (resolvedBy: ${resolvedBy}) [smart/batch]`,
-        });
-        break;
-      } else {
-        missingFromStation.push(candidate);
-      }
-    }
+      // ── FASE A: TOP4 — as 4 capturas mais recentes da emissora ──────────────
+      const top4Valid = stationTop4
+        .filter(c => isValidCandidate(c.title, c.artist))
+        .slice(0, remainingSlots);
 
-    // PHASE 2: No song from this station exists in library — try JIT download for the top candidates
-    if (!selectedSong && missingFromStation.length > 0) {
-      let jitAttemptsP1 = 0;
-      const maxJitAttemptsP1 = 8;
-      let missingMarks = 0;
+      if (top4Valid.length > 0) {
+        const top4BatchMap = await ctx.batchFindSongsInLibrary(
+          top4Valid.map(c => ({ artist: c.artist, title: c.title }))
+        );
 
-      console.log(`[SONG-SELECT] ⚠️ [P1] Nenhuma música de "${stationName}" na biblioteca (${missingFromStation.length} candidatas). Tentando JIT...`);
+        for (const candidate of top4Valid) {
+          const libraryResult = await findWithAliasFallback(
+            candidate.artist, candidate.title, top4BatchMap as Map<string, any>
+          );
 
-      for (const candidate of missingFromStation) {
-        if (jitAttemptsP1 >= maxJitAttemptsP1) break;
+          if (libraryResult?.exists) {
+            const correctFilename = libraryResult.filename
+              || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
 
-        jitAttemptsP1++;
-        console.log(`[SONG-SELECT] 🔍 [P1] "${candidate.artist} - ${candidate.title}" ausente, tentativa JIT ${jitAttemptsP1}/${maxJitAttemptsP1}...`);
-        const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
-        if (downloaded) {
-          const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
-          if (recheck.exists) {
-            const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
             selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+            selCtx.previousEnergy = (candidate as any).ai_energy || null;
+            selCtx.previousBpm    = (candidate as any).bpm    || null;
+
             logs.push({
               blockTime: timeStr,
-              type: 'used',
-              title: candidate.title,
-              artist: candidate.artist,
-              station: candidate.station,
-              style: candidate.style,
-              reason: `[P1] Baixada JIT de "${stationName}" (tentativa ${jitAttemptsP1})`,
+              type:      'used',
+              title:     candidate.title,
+              artist:    candidate.artist,
+              station:   candidate.station,
+              style:     candidate.style,
+              reason:    `[P1-TOP4] Última(s) 4 de "${stationName}" — ` +
+                         `${candidate.scrapedAt ? new Date(candidate.scrapedAt).toLocaleTimeString('pt-BR') : 'sem hora'} ` +
+                         `(${stationUsedCount + 1}/${MAX_PER_STATION_IN_BLOCK})`,
             });
             break;
           }
         }
-        console.log(`[SONG-SELECT] ⚠️ [P1] JIT ${jitAttemptsP1}/${maxJitAttemptsP1} falhou, continuando...`);
 
-        // Mark missing + carry-over (capped)
-        if (missingMarks < MAX_MISSING_MARKS_PER_PRIORITY) {
-          missingMarks++;
-          if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
-            ctx.addMissingSong({
-              id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              title: candidate.title,
-              artist: candidate.artist,
-              station: stationName || 'UNKNOWN',
-              timestamp: new Date(),
-              status: 'missing',
-              dna: stationStyle,
-              urgency: 'grade',
-            });
+        // Loga as do top4 que estão faltando na biblioteca (diagnóstico)
+        if (selectedSong) {
+          const missingFromTop4 = top4Valid.filter(c =>
+            `${c.title.toLowerCase()}-${c.artist.toLowerCase()}` !==
+            `${selectedSong!.title.toLowerCase()}-${selectedSong!.artist.toLowerCase()}`
+          );
+          if (missingFromTop4.length > 0) {
+            console.log(
+              `[P1-TOP4] "${stationName}": ${missingFromTop4.length} do top4 faltando na biblioteca — ` +
+              missingFromTop4.map(c => `"${c.artist} - ${c.title}"`).join(', ')
+            );
           }
-          ctx.addCarryOverSong({
-            title: candidate.title,
-            artist: candidate.artist,
-            station: stationName || 'UNKNOWN',
-            style: stationStyle,
-            targetBlock: timeStr,
-          });
+        }
+      }
+
+      // ── FASE B: Pool expandido da mesma estação ──────────────────────────────
+      if (!selectedSong) {
+        const top4Keys = new Set(
+          stationTop4.map(c => `${c.title.toLowerCase()}-${c.artist.toLowerCase()}`)
+        );
+
+        const expandedPool = stationSongs
+          .filter(c => !top4Keys.has(`${c.title.toLowerCase()}-${c.artist.toLowerCase()}`))
+          .slice(0, remainingSlots * 6);
+
+        const freshnessSorted = [...expandedPool].sort((a, b) => {
+          if (a.scrapedAt && b.scrapedAt)
+            return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
+          if (a.scrapedAt) return -1;
+          if (b.scrapedAt) return 1;
+          return 0;
+        });
+
+        const smartSorted  = applySmartScoring(freshnessSorted, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
+        const p1Candidates = smartSorted.filter(c => isValidCandidate(c.title, c.artist));
+
+        const p1Map = p1Candidates.length
+          ? await ctx.batchFindSongsInLibrary(p1Candidates.map(c => ({ artist: c.artist, title: c.title })))
+          : new Map();
+
+        // FASE B1: Já existe na biblioteca (sem download)
+        const missingFromStation: SongEntry[] = [];
+        for (const candidate of p1Candidates) {
+          const libraryResult = await findWithAliasFallback(
+            candidate.artist, candidate.title, p1Map as Map<string, any>
+          );
+
+          if (libraryResult?.exists) {
+            const correctFilename = libraryResult.filename
+              || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+
+            selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+            selCtx.previousEnergy = (candidate as any).ai_energy || null;
+            selCtx.previousBpm    = (candidate as any).bpm    || null;
+
+            logs.push({
+              blockTime: timeStr,
+              type:      'used',
+              title:     candidate.title,
+              artist:    candidate.artist,
+              station:   candidate.station,
+              style:     candidate.style,
+              reason:    `[P1-POOL] Pool expandido de "${stationName}" ` +
+                         `(resolvedBy: ${resolvedBy}) ` +
+                         `(${stationUsedCount + 1}/${MAX_PER_STATION_IN_BLOCK}) [batch]`,
+            });
+            break;
+          } else {
+            missingFromStation.push(candidate);
+          }
+        }
+
+        // FASE B2: JIT download — só se nada do pool existe localmente
+        if (!selectedSong && missingFromStation.length > 0) {
+          let jitAttemptsP1 = 0;
+          const maxJitAttemptsP1 = 8;
+          let missingMarks = 0;
+
+          console.log(
+            `[SONG-SELECT] ⚠️ [P1] Nenhuma música de "${stationName}" na biblioteca ` +
+            `(top4: ${stationTop4.length}, pool: ${missingFromStation.length} candidatas). Tentando JIT...`
+          );
+
+          for (const candidate of missingFromStation) {
+            if (jitAttemptsP1 >= maxJitAttemptsP1) break;
+            jitAttemptsP1++;
+
+            console.log(
+              `[SONG-SELECT] 🔍 [P1] "${candidate.artist} - ${candidate.title}" ` +
+              `ausente, tentativa JIT ${jitAttemptsP1}/${maxJitAttemptsP1}...`
+            );
+
+            const downloaded = await tryDownloadAndWait(
+              candidate.artist, candidate.title, ctx, downloadTimeoutMs
+            );
+
+            if (downloaded) {
+              const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+              if (recheck.exists) {
+                const correctFilename = recheck.filename
+                  || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+
+                selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+                logs.push({
+                  blockTime: timeStr,
+                  type:      'used',
+                  title:     candidate.title,
+                  artist:    candidate.artist,
+                  station:   candidate.station,
+                  style:     candidate.style,
+                  reason:    `[P1-JIT] Baixada JIT de "${stationName}" (tentativa ${jitAttemptsP1}) ` +
+                             `(${stationUsedCount + 1}/${MAX_PER_STATION_IN_BLOCK})`,
+                });
+                break;
+              }
+            }
+
+            console.log(
+              `[SONG-SELECT] ⚠️ [P1] JIT ${jitAttemptsP1}/${maxJitAttemptsP1} falhou, continuando...`
+            );
+
+            // Marca como missing + carry-over (limitado)
+            if (missingMarks < MAX_MISSING_MARKS_PER_PRIORITY) {
+              missingMarks++;
+              if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
+                ctx.addMissingSong({
+                  id:        `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                  title:     candidate.title,
+                  artist:    candidate.artist,
+                  station:   stationName || 'UNKNOWN',
+                  timestamp: new Date(),
+                  status:    'missing',
+                  dna:       stationStyle,
+                  urgency:   'grade',
+                });
+              }
+              ctx.addCarryOverSong({
+                title:       candidate.title,
+                artist:      candidate.artist,
+                station:     stationName || 'UNKNOWN',
+                style:       stationStyle,
+                targetBlock: timeStr,
+              });
+            }
+          }
         }
       }
     }

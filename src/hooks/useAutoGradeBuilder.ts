@@ -609,58 +609,148 @@ export function useAutoGradeBuilder() {
   }, [stations]);
 
   // Helper to build songsByStation from raw data
-  const buildSongsByStation = useCallback((data: Array<{ title: string; artist: string; station_name: string; scraped_at: string; ai_genre?: string | null; ai_energy?: string | null }>, maxPerStation = 50): Record<string, SongEntry[]> => {
+  const buildSongsByStation = useCallback((
+    data: Array<{
+      title: string;
+      artist: string;
+      station_name: string;
+      scraped_at: string;
+      ai_genre?: string | null;
+      ai_energy?: string | null;
+    }>,
+    maxPerStation = 50
+  ): Record<string, SongEntry[]> => {
     const songsByStation: Record<string, SongEntry[]> = {};
     const stationNameToStyle: Record<string, string> = {};
     const seenSongs = new Set<string>();
 
-    // Build blocked songs matching with wildcard support
-    const blockedList = (config.blockedSongs || []).map(s => s.toLowerCase().trim());
-    const blockedExact = new Set<string>(blockedList.filter(s => !s.endsWith(' - *')));
+    // === FRESCOR ===
+    // Cada estação contribui com no máximo 4 músicas por bloco de 30min
+    const FRESHNESS_WINDOW_MS  = 20 * 60 * 1000; // 20 minutos
+    const FALLBACK_WINDOW_MS   = 60 * 60 * 1000; // 60 minutos (fallback por estação)
+    const FRESH_THRESHOLD      = 4;               // Mínimo de frescas para usar janela de 20min
+    const MAX_SONGS_PER_STATION_PER_BLOCK = 4;     // Limite real por estação por bloco
+    const now = Date.now();
+
+    // Conta frescas por estação
+    const freshCountByStation: Record<string, number> = {};
+    for (const song of data) {
+      if (!song.scraped_at) continue;
+      const age = now - new Date(song.scraped_at).getTime();
+      if (age <= FRESHNESS_WINDOW_MS) {
+        freshCountByStation[song.station_name] = (freshCountByStation[song.station_name] || 0) + 1;
+      }
+    }
+
+    const freshLog = Object.entries(freshCountByStation)
+      .map(([name, count]) => `${name}(${count})`)
+      .join(', ');
+    console.log(`[AUTO-GRADE] 🕐 Frescas 20min por estação: ${freshLog || 'nenhuma — usando janela de 60min'}`);
+
+    // Blocked songs
+    const blockedList            = (config.blockedSongs || []).map(s => s.toLowerCase().trim());
+    const blockedExact           = new Set<string>(blockedList.filter(s => !s.endsWith(' - *')));
     const blockedWildcardArtists = blockedList
       .filter(s => s.endsWith(' - *'))
       .map(s => s.replace(/ - \*$/, ''));
-    
-    // Also include forbiddenWords for artist/title filtering
     const forbiddenLower = (config.forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
-    
+
     const isBlocked = (artist: string, title: string): boolean => {
-      const key = `${artist.trim()} - ${title.trim()}`.toLowerCase();
+      const key       = `${artist.trim()} - ${title.trim()}`.toLowerCase();
+      const artistLow = artist.trim().toLowerCase();
+      const titleLow  = title.trim().toLowerCase();
       if (blockedExact.has(key)) return true;
-      const artistLower = artist.trim().toLowerCase();
-      const titleLower = title.trim().toLowerCase();
-      if (blockedWildcardArtists.some(blocked => artistLower === blocked || artistLower.includes(blocked))) return true;
-      // Check forbiddenWords against artist AND title
-      if (forbiddenLower.some(word => artistLower.includes(word) || titleLower.includes(word))) return true;
+      if (blockedWildcardArtists.some(b => artistLow === b || artistLow.includes(b))) return true;
+      if (forbiddenLower.some(w => artistLow.includes(w) || titleLow.includes(w))) return true;
       return false;
     };
 
     stations.forEach(s => {
-      stationNameToStyle[s.name] = s.styles?.[0] || 'POP/VARIADO';
+      stationNameToStyle[s.name]               = s.styles?.[0] || 'POP/VARIADO';
       stationNameToStyle[s.name.toLowerCase()] = s.styles?.[0] || 'POP/VARIADO';
-      stationNameToStyle[s.id] = s.styles?.[0] || 'POP/VARIADO';
+      stationNameToStyle[s.id]                 = s.styles?.[0] || 'POP/VARIADO';
     });
-    data.forEach(song => {
-      const songKey = `${song.title.toLowerCase()}-${song.artist.toLowerCase()}`;
-      if (seenSongs.has(songKey)) return;
-      seenSongs.add(songKey);
 
-      // Check if song is blocked (exact or wildcard)
-      if (isBlocked(song.artist, song.title)) return;
-      if (!songsByStation[song.station_name]) songsByStation[song.station_name] = [];
-      if (songsByStation[song.station_name].length < maxPerStation) {
-        const style = stationNameToStyle[song.station_name] || stationNameToStyle[song.station_name.toLowerCase()] || 'POP/VARIADO';
-        songsByStation[song.station_name].push({
-          title: song.title, artist: song.artist, station: song.station_name,
-          style, filename: sanitizeFilename(`${song.artist} - ${song.title}.mp3`),
-          scrapedAt: song.scraped_at, // Preserve for freshness sorting
-          ...(song.ai_genre ? { ai_genre: song.ai_genre } : {}),
-          ...(song.ai_energy ? { ai_energy: song.ai_energy } : {}),
-        } as SongEntry);
+    // Ordena por scraped_at DESC — mais recentes primeiro
+    const sorted = [...data].sort((a, b) =>
+      new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime()
+    );
+
+    // Dois pools por estação:
+    //   top4:  as 4 músicas mais recentes — pool preferencial P1
+    //   pool:  até maxPerStation — pool de expansão P1 quando top4 não basta
+    const stationTop4: Record<string, SongEntry[]> = {};
+    const stationPool: Record<string, SongEntry[]> = {};
+
+    for (const song of sorted) {
+      if (!song.scraped_at) continue;
+      const age = now - new Date(song.scraped_at).getTime();
+
+      // Janela por estação: 20min se tem >= FRESH_THRESHOLD frescas, senão 60min
+      const stationHasFresh = (freshCountByStation[song.station_name] || 0) >= FRESH_THRESHOLD;
+      const windowMs        = stationHasFresh ? FRESHNESS_WINDOW_MS : FALLBACK_WINDOW_MS;
+      if (age > windowMs) continue;
+
+      const songKeyStr = `${song.title.toLowerCase()}-${song.artist.toLowerCase()}`;
+      if (seenSongs.has(songKeyStr)) continue;
+      seenSongs.add(songKeyStr);
+      if (isBlocked(song.artist, song.title)) continue;
+
+      const style = stationNameToStyle[song.station_name]
+        || stationNameToStyle[song.station_name.toLowerCase()]
+        || 'POP/VARIADO';
+
+      const entry: SongEntry = {
+        title:     song.title,
+        artist:    song.artist,
+        station:   song.station_name,
+        style,
+        filename:  sanitizeFilename(`${song.artist} - ${song.title}.mp3`),
+        scrapedAt: song.scraped_at,
+        ...(song.ai_genre  ? { ai_genre: song.ai_genre }   : {}),
+        ...(song.ai_energy ? { ai_energy: song.ai_energy } : {}),
+      } as SongEntry;
+
+      // top4: as 4 mais recentes por estação (limite real por bloco)
+      if (!stationTop4[song.station_name]) stationTop4[song.station_name] = [];
+      if (stationTop4[song.station_name].length < MAX_SONGS_PER_STATION_PER_BLOCK) {
+        stationTop4[song.station_name].push(entry);
       }
-    });
-    const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
-    console.log(`[AUTO-GRADE] Pool: ${stationList}`);
+
+      // pool: até maxPerStation (para expansão quando top4 não basta)
+      if (!stationPool[song.station_name]) stationPool[song.station_name] = [];
+      if (stationPool[song.station_name].length < maxPerStation) {
+        stationPool[song.station_name].push(entry);
+      }
+    }
+
+    // Mescla: top4 primeiro, depois restante do pool sem duplicatas
+    for (const stationName of new Set([
+      ...Object.keys(stationTop4),
+      ...Object.keys(stationPool),
+    ])) {
+      const top4     = stationTop4[stationName] || [];
+      const full     = stationPool[stationName] || [];
+      const top4Keys = new Set(top4.map(s => `${s.title.toLowerCase()}-${s.artist.toLowerCase()}`));
+
+      songsByStation[stationName] = [
+        ...top4,
+        ...full.filter(s => !top4Keys.has(`${s.title.toLowerCase()}-${s.artist.toLowerCase()}`)),
+      ];
+    }
+
+    // Expõe o top4 via chave especial para o selectSongForSlot
+    (songsByStation as any).__top4__ = stationTop4;
+
+    const stationList = Object.keys(songsByStation)
+      .filter(k => k !== '__top4__')
+      .map(name => {
+        const top4count = (stationTop4[name] || []).length;
+        return `${name}(top4:${top4count}/pool:${songsByStation[name].length})`;
+      })
+      .join(', ');
+
+    console.log(`[AUTO-GRADE] 🎵 Pool por estação: ${stationList}`);
     return songsByStation;
   }, [stations, config.blockedSongs, config.forbiddenWords]);
 
