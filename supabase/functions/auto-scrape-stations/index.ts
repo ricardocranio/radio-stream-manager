@@ -544,9 +544,10 @@ async function processStation(
       .gte('scraped_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
       .limit(1);
     if (!existing || existing.length === 0) {
+      const ns = normalizeForDedup(song.artist, song.title);
       const { error: insertError } = await supabase.from('scraped_songs').insert({
         station_id: station.id, station_name: station.name,
-        title: song.title, artist: song.artist,
+        title: ns.title, artist: ns.artist,
         is_now_playing: false, source: sourceUsed,
       });
       if (!insertError) songsInserted++;
