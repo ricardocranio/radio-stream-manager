@@ -25,6 +25,8 @@ import type { SongEntry, BlockLogItem, BlockStats, GradeContext, CarryOverSong }
 import { STATION_ID_TO_DB_NAME } from './constants';
 import type { WeekDay, SequenceConfig } from '@/types/radio';
 import { getGenreScore, getEnergyTransitionPenalty, getBpmTransitionPenalty, isGenreCompatible } from './smartGrade';
+import { buildBlockedEngine } from '@/lib/blockedSongsEngine';
+import { buildAliasEngine } from '@/lib/aliasEngine';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 

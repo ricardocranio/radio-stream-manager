@@ -2,6 +2,21 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule, ScheduledSequence } from '@/types/radio';
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
+import { buildBlockedEngine, type BlockedEngine } from '@/lib/blockedSongsEngine';
+
+// Cached blocked engine — invalidated when blockedSongs/forbiddenWords/aliases change
+let _blockedEngine: BlockedEngine | null = null;
+function getBlockedEngine(state: { config: SystemConfig; songAliases?: SongAlias[] }): BlockedEngine {
+  if (!_blockedEngine) {
+    _blockedEngine = buildBlockedEngine(
+      state.config.blockedSongs ?? [],
+      state.config.forbiddenWords ?? [],
+      state.songAliases ?? []
+    );
+  }
+  return _blockedEngine;
+}
+function invalidateBlockedEngine() { _blockedEngine = null; }
 import type { MapasConfig, MapaCodeConfig } from '@/lib/mapasBuilder/types';
 import { DEFAULT_MAPAS_CONFIG, DEFAULT_CODE_CONFIGS, DEFAULT_TEMPLATES } from '@/lib/mapasBuilder/types';
 
