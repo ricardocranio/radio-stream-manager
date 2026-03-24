@@ -144,8 +144,9 @@ export function RankingView() {
     
     // Apply date filter
     if (getDateThreshold) {
+      const thresholdMs = getDateThreshold.getTime();
       filtered = filtered.filter(song => 
-        song.lastPlayed && new Date(song.lastPlayed) >= getDateThreshold
+        song.lastPlayed && song.lastPlayed >= thresholdMs
       );
     }
     
