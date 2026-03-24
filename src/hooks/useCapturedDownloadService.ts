@@ -45,18 +45,12 @@ export function useCapturedDownloadService() {
     const { deezerConfig, config, addDownloadHistory, songAliases } = useRadioStore.getState();
 
     // === Apply alias correction: use "Para" (correct) name, block "De" (wrong) ===
-    let dlArtist = song.artist;
-    let dlTitle = song.title;
-    if (songAliases?.length) {
-      for (const alias of songAliases) {
-        if (song.artist.trim().toLowerCase() === alias.fromArtist.toLowerCase().trim() &&
-            song.title.trim().toLowerCase() === alias.fromTitle.toLowerCase().trim()) {
-          console.log(`[CAP-DL] 🔄 Alias: "${song.artist} - ${song.title}" → "${alias.toArtist} - ${alias.toTitle}"`);
-          dlArtist = alias.toArtist;
-          dlTitle = alias.toTitle;
-          break;
-        }
-      }
+    const aliasEng = buildAliasEngine(songAliases ?? []);
+    const resolved = aliasEng.resolve(song.artist, song.title);
+    let dlArtist = resolved.artist;
+    let dlTitle = resolved.title;
+    if (dlArtist !== song.artist || dlTitle !== song.title) {
+      console.log(`[CAP-DL] 🔄 Alias: "${song.artist} - ${song.title}" → "${dlArtist} - ${dlTitle}"`);
     }
 
     // Check library first (using corrected name)
