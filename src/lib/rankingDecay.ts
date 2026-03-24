@@ -11,6 +11,7 @@
 
 const DECAY_PER_DAY = 0.05;
 const MIN_DECAY = 0.5;
+const MS_PER_DAY = 86_400_000;
 
 export interface RankedSong {
   id: string;
@@ -19,7 +20,7 @@ export interface RankedSong {
   plays: number;
   style: string;
   trend: 'up' | 'down' | 'stable';
-  lastPlayed: Date;
+  lastPlayed: Date | number;
 }
 
 export function applyTemporalDecay(songs: RankedSong[]): RankedSong[] {
@@ -32,9 +33,54 @@ export function applyTemporalDecay(songs: RankedSong[]): RankedSong[] {
   });
 }
 
-function getWeightedScore(song: RankedSong, nowMs: number): number {
-  const ageMs = nowMs - new Date(song.lastPlayed).getTime();
-  const ageDays = Math.max(0, ageMs / (24 * 60 * 60 * 1000));
+/**
+ * Score ponderado pelo tempo desde a última reprodução.
+ * Aceita lastPlayed como Date ou number (UNIX ms).
+ */
+export function getWeightedScore(
+  song: { plays: number; lastPlayed: Date | number },
+  nowMs: number = Date.now()
+): number {
+  const lastMs = song.lastPlayed instanceof Date
+    ? song.lastPlayed.getTime()
+    : typeof song.lastPlayed === 'number'
+      ? song.lastPlayed
+      : new Date(song.lastPlayed).getTime();
+  const ageMs = nowMs - lastMs;
+  const ageDays = Math.max(0, ageMs / MS_PER_DAY);
   const decayFactor = Math.max(MIN_DECAY, 1.0 - (ageDays * DECAY_PER_DAY));
   return song.plays * decayFactor;
+}
+
+/**
+ * Retorna apenas o decayFactor (útil para exibição na UI).
+ */
+export function getDecayFactor(
+  lastPlayed: Date | number,
+  nowMs: number = Date.now()
+): number {
+  const lastMs = lastPlayed instanceof Date
+    ? lastPlayed.getTime()
+    : typeof lastPlayed === 'number'
+      ? lastPlayed
+      : new Date(lastPlayed).getTime();
+  const ageDays = Math.max(0, (nowMs - lastMs) / MS_PER_DAY);
+  return Math.max(MIN_DECAY, 1.0 - (ageDays * DECAY_PER_DAY));
+}
+
+/**
+ * Quantos dias faltam para a música atingir o fator mínimo de 0.5.
+ */
+export function daysUntilMinDecay(
+  lastPlayed: Date | number,
+  nowMs: number = Date.now()
+): number {
+  const lastMs = lastPlayed instanceof Date
+    ? lastPlayed.getTime()
+    : typeof lastPlayed === 'number'
+      ? lastPlayed
+      : new Date(lastPlayed).getTime();
+  const ageDays = (nowMs - lastMs) / MS_PER_DAY;
+  const daysToMin = (1.0 - MIN_DECAY) / DECAY_PER_DAY; // = 10 dias
+  return Math.max(0, Math.ceil(daysToMin - ageDays));
 }
