@@ -140,6 +140,7 @@ export function RankingView() {
   // Also filter by date if dateRange is set
   const currentRankingData = useMemo(() => {
     let filtered = rankingSongs;
+    const now = Date.now();
     
     // Apply date filter
     if (getDateThreshold) {
@@ -156,6 +157,8 @@ export function RankingView() {
       style: song.style,
       trend: song.trend,
       lastPlayed: song.lastPlayed,
+      decayFactor: getDecayFactor(song.lastPlayed, now),
+      weightedScore: getWeightedScore(song, now),
     }));
   }, [rankingSongs, getDateThreshold]);
   
