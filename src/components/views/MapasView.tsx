@@ -651,7 +651,7 @@ export function MapasView() {
                     <div className="flex gap-2 flex-wrap">
                       {line.codes.map((code, j) => {
                         const colors = getCodeColor(code);
-                        const ccfg = mapasConfig.codeConfigs.find(c => c.code.toLowerCase() === code.toLowerCase());
+                        const ccfg = safeCodeConfigs.find(c => c.code.toLowerCase() === code.toLowerCase());
                         return (
                           <div key={j} className={`rounded-xl border-2 ${colors.border} ${colors.bg} ${colors.glow} px-4 py-3 flex flex-col items-center gap-1 min-w-[80px] transition-all hover:scale-105`}>
                             <span className={colors.text}>{CODE_ICONS[ccfg?.type || 'literal'] || CODE_ICONS.literal}</span>
