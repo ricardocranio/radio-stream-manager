@@ -9,6 +9,7 @@ import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeId3Genre, genreToEnergy } from '@/lib/id3GenreUtils';
+import { normalizeForDedup } from '@/lib/normalizeForDedup';
 
 interface FixProgress {
   scanned: number;
@@ -175,9 +176,10 @@ export function Id3ActivityCard() {
         const genre = libData.genre || null;
         if (!genre && !libData.year) continue; // skip if no useful data
 
+        const normalized = normalizeForDedup(artist, title);
         toInsert.push({
-          artist,
-          title,
+          artist: normalized.artist,
+          title: normalized.title,
           ai_genre: genre || 'OUTRO',
           ai_energy: genre ? genreToEnergy(genre) : 'MEDIUM',
           year: libData.year || null,
