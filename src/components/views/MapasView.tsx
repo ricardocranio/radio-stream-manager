@@ -339,12 +339,15 @@ export function MapasView() {
   const [comercialFiles, setComercialFiles] = useState<Record<string, string[]>>({});
   const autoSaveTimerRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
-  const dayLabels: Record<string, string> = { dom: 'Dom', seg: 'Seg', ter: 'Ter', qua: 'Qua', qui: 'Qui', sex: 'Sex', sab: 'Sáb', weekdays: 'Seg-Sex', saturday: 'Sáb', sunday: 'Dom' };
-  const template = mapasConfig.templates?.[activeDay];
+  const safeTemplates = Array.isArray(mapasConfig?.templates) ? mapasConfig.templates : [];
+  const safeCodeConfigs = Array.isArray(mapasConfig?.codeConfigs) ? mapasConfig.codeConfigs : [];
+  const safeOutputFolder = mapasConfig?.outputFolder || 'C:\\Playlist\\pgm\\Mapas';
+  const dayLabels: Record<string, string> = { dom: 'Dom', seg: 'Seg', ter: 'Ter', qua: 'Qua', qui: 'Qui', sex: 'Sex', sab: 'Sáb', 'sáb': 'Sáb', weekdays: 'Seg-Sex', saturday: 'Sáb', sunday: 'Dom' };
+  const template = safeTemplates[activeDay];
   const stdPattern = 'SINAL,HC,VHTENT,mus,vht,mus';
 
   const getCodeColor = (code: string) => {
-    const cc = mapasConfig.codeConfigs.find(c => c.code.toLowerCase() === code.toLowerCase());
+    const cc = safeCodeConfigs.find(c => c.code.toLowerCase() === code.toLowerCase());
     if (!cc) return CODE_COLORS.literal;
     return CODE_COLORS[cc.type] || CODE_COLORS.literal;
   };
