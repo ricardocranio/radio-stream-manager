@@ -606,6 +606,11 @@ export function RankingView() {
                             </span>
                           </div>
                         </div>
+                        {song.peakPosition != null && song.peakPosition <= 10 && song.peakPosition < 999 && (
+                          <span className="text-xs text-yellow-400 shrink-0" title={`Melhor posição: #${song.peakPosition}`}>
+                            🏆{song.peakPosition}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
