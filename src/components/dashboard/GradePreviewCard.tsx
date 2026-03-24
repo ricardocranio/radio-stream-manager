@@ -362,7 +362,6 @@ export function GradePreviewCard() {
 
   // Use centralized normalizeKeyForMap from songUtils
   const normalizeKey = useCallback((str: string) => {
-    const { normalizeKeyForMap } = require('@/lib/songUtils');
     return normalizeKeyForMap(str);
   }, []);
 
