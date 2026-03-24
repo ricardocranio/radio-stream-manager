@@ -14,7 +14,7 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+const isElectron = typeof window !== 'undefined' && (window.electronAPI?.isElectron ?? false);
 
 const MOCK_FILES: Record<string, string> = {
   'MAPA.txt': `00:55 SINAL,SINAL,HC,VHTENT,mus,vht,mus
