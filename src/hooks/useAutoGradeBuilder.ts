@@ -76,6 +76,14 @@ async function getAvgVhtDuration(vinhetasFolder: string): Promise<number> {
   return VHT_FALLBACK;
 }
 
+function cloneMap<K, V>(source?: Map<K, V> | null): Map<K, V> {
+  return new Map(source ? Array.from(source.entries()) : []);
+}
+
+function cloneSet<T>(source?: Set<T> | null): Set<T> {
+  return new Set(source ? Array.from(source) : []);
+}
+
 interface AutoGradeState {
   isBuilding: boolean;
   lastBuildTime: Date | null;
@@ -1714,7 +1722,7 @@ export function useAutoGradeBuilder() {
           if (timeMatch) fullDayLineMap.set(timeMatch[1], line);
         }
         // Persist full-day grade to localStorage
-        const allBlockKeys = new Set(fullDayLineMap.keys());
+        const allBlockKeys = cloneSet(new Set(Array.from(fullDayLineMap.keys())));
         saveGradeToStorage(fullDayLineMap, allBlockKeys, dayCode);
         setState(prev => ({
           ...prev, isBuilding: false, lastBuildTime: new Date(), lastSavedFile: filename,
@@ -1842,7 +1850,7 @@ export function useAutoGradeBuilder() {
       let thirdLocked = builtBlocksRef.current.has(thirdTimeKey);
 
       // Start from pending in-memory map to preserve already assembled lines (web + desktop)
-      const lineMap = new Map<string, string>(pendingGradeRef.current?.lineMap || []);
+      const lineMap = cloneMap(pendingGradeRef.current?.lineMap);
 
       // Read existing file and overlay into lineMap (Electron only)
       let existingContent = '';
@@ -1950,7 +1958,7 @@ export function useAutoGradeBuilder() {
           lastBuildTime: new Date(),
           currentBlock: currentTimeKey,
           nextBlock: nextTimeKey,
-          pendingGradeLines: new Map(lineMap),
+          pendingGradeLines: cloneMap(lineMap),
         }));
         return;
       }
@@ -1997,7 +2005,7 @@ export function useAutoGradeBuilder() {
         enrichSongsWithBpmCache(songs as any[]);
       }
 
-      const durationMap = new Map(state.pendingBlockDurations);
+      const durationMap = cloneMap(state.pendingBlockDurations);
       if (shouldBuildCurrent) {
         const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats, false, targetDay);
         const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
@@ -2091,8 +2099,8 @@ export function useAutoGradeBuilder() {
         currentBlock: currentTimeKey, nextBlock: nextTimeKey,
         blocksGenerated: prev.blocksGenerated + (shouldBuildCurrent ? 1 : 0) + (shouldBuildNext ? 1 : 0) + (shouldBuildThird ? 1 : 0),
         skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
-        pendingGradeLines: new Map(lineMap),
-        pendingBlockDurations: new Map(durationMap),
+        pendingGradeLines: cloneMap(lineMap),
+        pendingBlockDurations: cloneMap(durationMap),
       }));
 
       console.log(`[AUTO-GRADE] 📋 Grade montada em memória e persistida${isWebOnly ? ' (modo web - preview only)' : ' (aguardando janela de 10min para escrita)'}`);
@@ -2103,6 +2111,7 @@ export function useAutoGradeBuilder() {
       }
 
     } catch (error) {
+      console.error('[AUTO-GRADE] ❌ Erro bruto no buildGrade:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       logSystemError('GRADE', 'error', 'Erro ao atualizar grade', errorMessage);
       setState(prev => ({ ...prev, isBuilding: false, error: errorMessage }));
