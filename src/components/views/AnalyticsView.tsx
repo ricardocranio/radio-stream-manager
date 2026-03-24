@@ -4,20 +4,22 @@
  * Provides:
  * - Heatmap of peak capture hours per station
  * - Weekly renewal vs repetition rate
- * - Top artists trend over time
+ * - Capture-to-grade utilization rate
+ * - Period filter (7d/14d/30d)
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDeferredRender } from '@/hooks/useDeferredRender';
-import { BarChart3, Loader2, RefreshCw, Clock, TrendingUp, Repeat } from 'lucide-react';
+import { BarChart3, Loader2, RefreshCw, Clock, TrendingUp, Repeat, Target } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
-import { format, subDays, startOfDay } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { useRadioStore } from '@/store/radioStore';
 
 interface HeatmapCell {
   hour: number;
@@ -32,6 +34,8 @@ interface RenewalStats {
   renewalRate: number;
 }
 
+type PeriodDays = 7 | 14 | 30;
+
 export function AnalyticsView() {
   const isReady = useDeferredRender();
   const [heatmapData, setHeatmapData] = useState<HeatmapCell[]>([]);
@@ -39,23 +43,29 @@ export function AnalyticsView() {
   const [hourlyDistribution, setHourlyDistribution] = useState<{ hour: string; count: number }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [periodDays, setPeriodDays] = useState<PeriodDays>(7);
+  const [gradeUtilization, setGradeUtilization] = useState<{
+    totalCaptured: number;
+    usedInGrade: number;
+    utilizationRate: number;
+  } | null>(null);
 
-  const loadAnalytics = useCallback(async () => {
+  const loadAnalytics = useCallback(async (days: PeriodDays = periodDays) => {
     setIsLoading(true);
     try {
-      const cutoff7d = subDays(new Date(), 7).toISOString();
+      const cutoff = subDays(new Date(), days).toISOString();
 
-      // Fetch last 7 days of data
+      // Fetch data for selected period
       const { data: songs, error } = await supabase
         .from('scraped_songs')
         .select('station_name, scraped_at, artist, title')
-        .gte('scraped_at', cutoff7d)
+        .gte('scraped_at', cutoff)
         .order('scraped_at', { ascending: false })
         .limit(5000);
 
       if (error || !songs) return;
 
-      // Hourly distribution (heatmap simplified as bar chart)
+      // Hourly distribution
       const hourCounts: Record<number, number> = {};
       const stationHourCounts: Record<string, Record<number, number>> = {};
 
@@ -67,7 +77,6 @@ export function AnalyticsView() {
         stationHourCounts[song.station_name][hour] = (stationHourCounts[song.station_name][hour] || 0) + 1;
       }
 
-      // Build hourly distribution for chart
       const hourlyDist = Array.from({ length: 24 }, (_, h) => ({
         hour: `${h.toString().padStart(2, '0')}h`,
         count: hourCounts[h] || 0,
@@ -87,14 +96,16 @@ export function AnalyticsView() {
       const dailySongs: Record<string, { all: Set<string>; new: Set<string> }> = {};
       const globalSeen = new Set<string>();
 
-      // Sort chronologically for renewal calculation
       const sorted = [...songs].sort((a, b) => 
         new Date(a.scraped_at).getTime() - new Date(b.scraped_at).getTime()
       );
 
+      const capturedArtistTitleKeys = new Set<string>();
+
       for (const song of sorted) {
         const day = format(new Date(song.scraped_at), 'yyyy-MM-dd');
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
+        capturedArtistTitleKeys.add(key);
 
         if (!dailySongs[day]) dailySongs[day] = { all: new Set(), new: new Set() };
         dailySongs[day].all.add(key);
@@ -115,17 +126,57 @@ export function AnalyticsView() {
         }));
       setRenewalData(renewal);
 
+      // Grade utilization: cross-reference captures with pending grade lines from global services
+      try {
+        const storeState = useRadioStore.getState();
+        let usedInGrade = 0;
+
+        // Check download history as proxy for "utilized" songs
+        const downloadHistory = (storeState as any).downloadHistory || [];
+        const downloadedKeys = new Set(
+          downloadHistory
+            .filter((h: any) => h.status === 'success' || h.status === 'success_fallback')
+            .map((h: any) => `${(h.artist || '').toLowerCase().trim()}|${(h.title || '').toLowerCase().trim()}`)
+        );
+
+        for (const capturedKey of capturedArtistTitleKeys) {
+          if (downloadedKeys.has(capturedKey)) usedInGrade++;
+        }
+
+        // Also check missingSongs that were resolved (downloaded)
+        const missingSongs = (storeState as any).missingSongs || [];
+        const resolvedKeys = new Set(
+          missingSongs
+            .filter((m: any) => m.status === 'downloaded')
+            .map((m: any) => `${(m.artist || '').toLowerCase().trim()}|${(m.title || '').toLowerCase().trim()}`)
+        );
+
+        for (const capturedKey of capturedArtistTitleKeys) {
+          if (resolvedKeys.has(capturedKey) && !downloadedKeys.has(capturedKey)) usedInGrade++;
+        }
+
+        setGradeUtilization({
+          totalCaptured: capturedArtistTitleKeys.size,
+          usedInGrade,
+          utilizationRate: capturedArtistTitleKeys.size > 0
+            ? Math.round((usedInGrade / capturedArtistTitleKeys.size) * 100)
+            : 0,
+        });
+      } catch {
+        setGradeUtilization(null);
+      }
+
       setLastUpdate(new Date());
     } catch (err) {
       console.error('[ANALYTICS] Error:', err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [periodDays]);
 
   useEffect(() => {
-    loadAnalytics();
-  }, [loadAnalytics]);
+    loadAnalytics(periodDays);
+  }, [periodDays]);
 
   const maxHourCount = Math.max(...hourlyDistribution.map(h => h.count), 1);
 
@@ -143,21 +194,58 @@ export function AnalyticsView() {
           </div>
           <div>
             <h2 className="text-lg font-bold text-foreground">Analytics Avançado</h2>
-            <p className="text-xs text-muted-foreground">Análise de padrões de monitoramento — últimos 7 dias</p>
+            <p className="text-xs text-muted-foreground">Análise de padrões — últimos {periodDays} dias</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Period Filter */}
+          <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
+            {([7, 14, 30] as PeriodDays[]).map(days => (
+              <Button
+                key={days}
+                variant={periodDays === days ? 'default' : 'ghost'}
+                size="sm"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setPeriodDays(days)}
+              >
+                {days}d
+              </Button>
+            ))}
+          </div>
           {lastUpdate && (
             <span className="text-[10px] text-muted-foreground">
               {format(lastUpdate, 'HH:mm', { locale: ptBR })}
             </span>
           )}
-          <Button variant="outline" size="sm" onClick={loadAnalytics} disabled={isLoading} className="gap-2">
+          <Button variant="outline" size="sm" onClick={() => loadAnalytics(periodDays)} disabled={isLoading} className="gap-2">
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             Atualizar
           </Button>
         </div>
       </div>
+
+      {/* Grade Utilization Card */}
+      {gradeUtilization && (
+        <Card className="glass-card border-primary/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Target className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">Taxa de Aproveitamento</p>
+                <p className="text-xs text-muted-foreground">
+                  {gradeUtilization.usedInGrade} de {gradeUtilization.totalCaptured} capturas únicas foram escaladas na grade
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-primary font-mono">{gradeUtilization.utilizationRate}%</p>
+                <p className="text-[10px] text-muted-foreground">capturas → grade</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Hourly Distribution Chart */}
       <Card className="glass-card">
@@ -171,15 +259,16 @@ export function AnalyticsView() {
           <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={hourlyDistribution}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(225 15% 20%)" />
-                <XAxis dataKey="hour" tick={{ fontSize: 10, fill: 'hsl(225 10% 50%)' }} />
-                <YAxis tick={{ fontSize: 10, fill: 'hsl(225 10% 50%)' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="hour" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
                 <Tooltip
                   contentStyle={{
-                    background: 'hsl(225 25% 10%)',
-                    border: '1px solid hsl(225 15% 20%)',
+                    background: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                     fontSize: '12px',
+                    color: 'hsl(var(--foreground))',
                   }}
                 />
                 <Bar dataKey="count" radius={[4, 4, 0, 0]}>
@@ -209,19 +298,20 @@ export function AnalyticsView() {
             <div className="h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={renewalData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(225 15% 20%)" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'hsl(225 10% 50%)' }} />
-                  <YAxis tick={{ fontSize: 10, fill: 'hsl(225 10% 50%)' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+                  <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
                   <Tooltip
                     contentStyle={{
-                      background: 'hsl(225 25% 10%)',
-                      border: '1px solid hsl(225 15% 20%)',
+                      background: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
                       borderRadius: '8px',
                       fontSize: '12px',
+                      color: 'hsl(var(--foreground))',
                     }}
                   />
                   <Bar dataKey="newSongs" name="Novas" fill="hsl(155 85% 42%)" radius={[4, 4, 0, 0]} stackId="a" />
-                  <Bar dataKey="repeatedSongs" name="Repetidas" fill="hsl(225 15% 35%)" radius={[4, 4, 0, 0]} stackId="a" />
+                  <Bar dataKey="repeatedSongs" name="Repetidas" fill="hsl(var(--muted))" radius={[4, 4, 0, 0]} stackId="a" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -272,7 +362,7 @@ export function AnalyticsView() {
                               style={{
                                 background: intensity > 0
                                   ? `hsl(185 100% 48% / ${0.1 + intensity * 0.8})`
-                                  : 'hsl(225 15% 10%)',
+                                  : 'hsl(var(--muted) / 0.3)',
                               }}
                               title={`${station} ${h}h: ${cell?.count || 0} capturas`}
                             />
@@ -298,15 +388,15 @@ export function AnalyticsView() {
             const bestDay = renewalData.reduce((best, d) => d.renewalRate > best.renewalRate ? d : best, renewalData[0]);
 
             return [
-              { label: 'Taxa Renovação Média', value: `${avgRenewal}%`, color: '155 85% 42%' },
-              { label: 'Músicas Novas (7d)', value: totalNew, color: '210 100% 60%' },
-              { label: 'Repetições (7d)', value: totalRepeated, color: '225 15% 50%' },
-              { label: 'Melhor Dia', value: `${bestDay.date} (${bestDay.renewalRate}%)`, color: '45 100% 50%' },
+              { label: 'Taxa Renovação Média', value: `${avgRenewal}%`, color: 'hsl(155 85% 42%)' },
+              { label: `Músicas Novas (${periodDays}d)`, value: totalNew, color: 'hsl(210 100% 60%)' },
+              { label: `Repetições (${periodDays}d)`, value: totalRepeated, color: 'hsl(var(--muted-foreground))' },
+              { label: 'Melhor Dia', value: `${bestDay.date} (${bestDay.renewalRate}%)`, color: 'hsl(45 100% 50%)' },
             ].map((stat, i) => (
               <div key={i} className="glass-card p-3">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{stat.label}</p>
-                <p className="text-lg font-bold text-foreground font-mono tabular-nums mt-1"
-                  style={{ color: `hsl(${stat.color})` }}>{stat.value}</p>
+                <p className="text-lg font-bold font-mono tabular-nums mt-1"
+                  style={{ color: stat.color }}>{stat.value}</p>
               </div>
             ));
           })()}
