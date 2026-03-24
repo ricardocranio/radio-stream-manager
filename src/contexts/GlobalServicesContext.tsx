@@ -13,7 +13,7 @@
  * - Background Cache Cleanup (via useBackgroundCacheCleanup)
  */
 
-import React, { createContext, useContext, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useCallback } from 'react';
 import { useRadioStore } from '@/store/radioStore';
 import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
 import { useBackgroundCacheCleanup } from '@/hooks/useBackgroundCacheCleanup';
