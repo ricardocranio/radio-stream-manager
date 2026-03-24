@@ -474,7 +474,7 @@ export function MapasView() {
             <button onClick={() => setLeftPanel('codes')}
               className={`px-3 py-1 rounded-md text-[10px] font-semibold transition-all ${leftPanel === 'codes' ? 'bg-primary/15 text-primary border border-primary/30' : 'text-muted-foreground hover:text-foreground'}`}>
               <Settings2 className="w-3 h-3 inline mr-1" />Códigos
-              <Badge variant="secondary" className="text-[8px] h-3.5 ml-1">{mapasConfig.codeConfigs.length}</Badge>
+              <Badge variant="secondary" className="text-[8px] h-3.5 ml-1">{safeCodeConfigs.length}</Badge>
             </button>
             <div className="flex-1" />
             {leftPanel === 'timeline' && (
