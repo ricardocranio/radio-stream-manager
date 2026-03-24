@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, Component, type ErrorInfo, type ReactNode } from 'react';
 import { useDeferredRender } from '@/hooks/useDeferredRender';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
