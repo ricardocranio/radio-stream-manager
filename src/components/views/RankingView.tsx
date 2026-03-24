@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useDeferredRender } from '@/hooks/useDeferredRender';
-import { TrendingUp, Music, Crown, Medal, Award, BarChart3, RotateCcw, AlertTriangle, Search, Filter, Calendar, Download, FileJson } from 'lucide-react';
+import { TrendingUp, Music, Crown, Medal, Award, BarChart3, RotateCcw, AlertTriangle, Search, Filter, Calendar, Download, FileJson, Timer } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useRadioStore } from '@/store/radioStore';
+import { getDecayFactor, getWeightedScore } from '@/lib/rankingDecay';
 import {
   AlertDialog,
   AlertDialogAction,
