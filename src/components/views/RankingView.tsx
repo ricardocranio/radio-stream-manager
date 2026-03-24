@@ -699,41 +699,69 @@ export function RankingView() {
               </CardContent>
             </Card>
 
-            {/* Weekly Trend */}
+            {/* Weekly Trend — dynamic from lastPlayed data */}
             <Card className="glass-card">
               <CardHeader className="border-b border-border">
-                <CardTitle>Reproduções Semanais</CardTitle>
+                <CardTitle>Distribuição por Dia da Semana</CardTitle>
               </CardHeader>
               <CardContent className="p-4">
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={weeklyTrend}>
-                      <defs>
-                        <linearGradient id="colorPlays" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 20%, 18%)" />
-                      <XAxis dataKey="day" stroke="hsl(215, 15%, 55%)" fontSize={12} />
-                      <YAxis stroke="hsl(215, 15%, 55%)" fontSize={12} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(220, 18%, 11%)',
-                          border: '1px solid hsl(220, 20%, 18%)',
-                          borderRadius: '8px',
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="plays"
-                        stroke="hsl(190, 95%, 50%)"
-                        fillOpacity={1}
-                        fill="url(#colorPlays)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                {(() => {
+                  const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+                  const dayCounts = [0, 0, 0, 0, 0, 0, 0];
+                  currentRankingData.forEach(s => {
+                    if (s.lastPlayed) {
+                      const day = new Date(s.lastPlayed).getDay();
+                      dayCounts[day] += s.plays;
+                    }
+                  });
+                  // Reorder to start on Monday
+                  const dynamicWeekly = [1, 2, 3, 4, 5, 6, 0].map(i => ({
+                    day: dayNames[i],
+                    plays: dayCounts[i],
+                  }));
+                  
+                  const hasData = dynamicWeekly.some(d => d.plays > 0);
+                  
+                  if (!hasData) {
+                    return (
+                      <div className="h-80 flex items-center justify-center">
+                        <p className="text-muted-foreground text-sm">Sem dados para exibir</p>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <div className="h-80">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={dynamicWeekly}>
+                          <defs>
+                            <linearGradient id="colorPlays" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 20%, 18%)" />
+                          <XAxis dataKey="day" stroke="hsl(215, 15%, 55%)" fontSize={12} />
+                          <YAxis stroke="hsl(215, 15%, 55%)" fontSize={12} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: 'hsl(220, 18%, 11%)',
+                              border: '1px solid hsl(220, 20%, 18%)',
+                              borderRadius: '8px',
+                            }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="plays"
+                            stroke="hsl(190, 95%, 50%)"
+                            fillOpacity={1}
+                            fill="url(#colorPlays)"
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>
