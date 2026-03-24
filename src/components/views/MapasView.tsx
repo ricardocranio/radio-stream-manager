@@ -339,12 +339,15 @@ export function MapasView() {
   const [comercialFiles, setComercialFiles] = useState<Record<string, string[]>>({});
   const autoSaveTimerRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
-  const dayLabels: Record<string, string> = { dom: 'Dom', seg: 'Seg', ter: 'Ter', qua: 'Qua', qui: 'Qui', sex: 'Sex', sab: 'Sáb', weekdays: 'Seg-Sex', saturday: 'Sáb', sunday: 'Dom' };
-  const template = mapasConfig.templates?.[activeDay];
+  const safeTemplates = Array.isArray(mapasConfig?.templates) ? mapasConfig.templates : [];
+  const safeCodeConfigs = Array.isArray(mapasConfig?.codeConfigs) ? mapasConfig.codeConfigs : [];
+  const safeOutputFolder = mapasConfig?.outputFolder || 'C:\\Playlist\\pgm\\Mapas';
+  const dayLabels: Record<string, string> = { dom: 'Dom', seg: 'Seg', ter: 'Ter', qua: 'Qua', qui: 'Qui', sex: 'Sex', sab: 'Sáb', 'sáb': 'Sáb', weekdays: 'Seg-Sex', saturday: 'Sáb', sunday: 'Dom' };
+  const template = safeTemplates[activeDay];
   const stdPattern = 'SINAL,HC,VHTENT,mus,vht,mus';
 
   const getCodeColor = (code: string) => {
-    const cc = mapasConfig.codeConfigs.find(c => c.code.toLowerCase() === code.toLowerCase());
+    const cc = safeCodeConfigs.find(c => c.code.toLowerCase() === code.toLowerCase());
     if (!cc) return CODE_COLORS.literal;
     return CODE_COLORS[cc.type] || CODE_COLORS.literal;
   };
@@ -356,14 +359,14 @@ export function MapasView() {
     if (autoSaveTimerRef.current[tmplIdx]) clearTimeout(autoSaveTimerRef.current[tmplIdx]);
     autoSaveTimerRef.current[tmplIdx] = setTimeout(async () => {
       const store = useRadioStore.getState();
-      const tmpl = store.mapasConfig.templates[tmplIdx];
+      const tmpl = store.mapasConfig.templates?.[tmplIdx];
       if (!tmpl) return;
       resetMapasPools();
       const cache = new Map<string, string[]>();
       const lines: string[] = [];
       try {
         for (const line of tmpl.lines) { const r = await resolveTemplateLine(line, store.mapasConfig, store.config.musicFolders, cache); lines.push(formatResolvedLine(r)); }
-        const result = await window.electronAPI!.saveGradeFile({ folder: store.mapasConfig.outputFolder, filename: tmpl.filename, content: lines.join('\n') });
+        const result = await window.electronAPI!.saveGradeFile({ folder: store.mapasConfig.outputFolder || safeOutputFolder, filename: tmpl.filename, content: lines.join('\n') });
         if (result.success) toast.success(`💾 ${tmpl.filename} salvo`, { duration: 1200 });
       } catch { /* silent */ }
     }, 1500);
@@ -371,17 +374,17 @@ export function MapasView() {
 
   // Each template now maps directly to its own file
   const buildAll = useCallback(async () => {
-    if (!isElectron || !mapasConfig.templates?.length) return;
+    if (!isElectron || !safeTemplates.length) return;
     setIsBuilding(true); let built = 0;
-    for (const tmpl of mapasConfig.templates) {
+    for (const tmpl of safeTemplates) {
       resetMapasPools(); const cache = new Map<string, string[]>(); const lines: string[] = [];
       try {
         for (const line of tmpl.lines) { const r = await resolveTemplateLine(line, mapasConfig, config.musicFolders, cache); lines.push(formatResolvedLine(r)); }
-        await window.electronAPI!.saveGradeFile({ folder: mapasConfig.outputFolder, filename: tmpl.filename, content: lines.join('\n') }); built++;
+        await window.electronAPI!.saveGradeFile({ folder: safeOutputFolder, filename: tmpl.filename, content: lines.join('\n') }); built++;
       } catch { /* skip */ }
     }
     toast.success(`${built} mapas construídos!`); setIsBuilding(false);
-  }, [mapasConfig, config.musicFolders]);
+  }, [safeTemplates, mapasConfig, config.musicFolders, safeOutputFolder]);
 
   const saveSlotEdit = (lineIdx: number) => {
     const codes = editValue.split(',').map(c => c.trim()).filter(Boolean);
@@ -403,8 +406,8 @@ export function MapasView() {
     'Dom': { tab: 'border-border/20 text-muted-foreground hover:text-violet-400', activeTab: 'bg-violet-500/15 border-violet-500/40 text-violet-400 shadow-[0_0_10px_rgba(139,92,246,0.15)]', accent: 'text-violet-400', headerBg: 'from-violet-500/10 to-transparent' },
   };
 
-  const currentDayLabel = template ? (dayLabels[template.dayMapping] || template.filename) : '';
-  const currentColors = dayColors[currentDayLabel] || dayColors['Seg-Sex'];
+  const currentDayLabel = template ? (dayLabels[template.dayMapping] || template.filename) : 'Seg';
+  const currentColors = dayColors[currentDayLabel] || dayColors['Seg'];
 
   if (!isReady) {
     return (
@@ -435,10 +438,10 @@ export function MapasView() {
           </div>
           <div className="flex items-center gap-2">
             {/* Day tabs */}
-            {(mapasConfig.templates || []).map((t, i) => {
+            {safeTemplates.map((t, i) => {
               const label = dayLabels[t.dayMapping] || t.filename;
               const isActive = activeDay === i;
-              const dc = dayColors[label] || dayColors['Seg-Sex'];
+              const dc = dayColors[label] || dayColors['Seg'];
               return (
                 <button key={t.filename} onClick={() => { setActiveDay(i); setEditingSlot(null); }}
                   className={`px-4 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-200 ${isActive ? dc.activeTab : dc.tab}`}>
@@ -471,7 +474,7 @@ export function MapasView() {
             <button onClick={() => setLeftPanel('codes')}
               className={`px-3 py-1 rounded-md text-[10px] font-semibold transition-all ${leftPanel === 'codes' ? 'bg-primary/15 text-primary border border-primary/30' : 'text-muted-foreground hover:text-foreground'}`}>
               <Settings2 className="w-3 h-3 inline mr-1" />Códigos
-              <Badge variant="secondary" className="text-[8px] h-3.5 ml-1">{mapasConfig.codeConfigs.length}</Badge>
+              <Badge variant="secondary" className="text-[8px] h-3.5 ml-1">{safeCodeConfigs.length}</Badge>
             </button>
             <div className="flex-1" />
             {leftPanel === 'timeline' && (
@@ -582,7 +585,7 @@ export function MapasView() {
                     {(newCode.type === 'vinheta' || newCode.type === 'comercial') && <Input className="h-6 text-[10px] bg-background/50 font-mono" placeholder="C:\Playlist\..." value={newCode.vinhetaFolder} onChange={(e) => setNewCode(p => ({ ...p, vinhetaFolder: e.target.value }))} />}
                     <div className="flex gap-1">
                       <Button size="sm" className="h-6 text-[9px] flex-1" disabled={!newCode.code.trim() || !newCode.label.trim()} onClick={() => {
-                        if (mapasConfig.codeConfigs.some(c => c.code.toLowerCase() === newCode.code.toLowerCase())) { toast.error('Já existe'); return; }
+                        if (safeCodeConfigs.some(c => c.code.toLowerCase() === newCode.code.toLowerCase())) { toast.error('Já existe'); return; }
                         addMapaCodeConfig({ code: newCode.code.trim(), label: newCode.label.trim(), type: newCode.type,
                           ...(newCode.type === 'monitored' ? { stationSource: newCode.stationSource } : {}),
                           ...(newCode.type === 'genre' ? { genreFilter: newCode.genreFilter.split(',').map(g => g.trim().toUpperCase()).filter(Boolean) } : {}),
@@ -596,9 +599,9 @@ export function MapasView() {
                   </div>
                 )}
                 <DndContext sensors={sensors} collisionDetection={closestCenter}
-                  onDragEnd={(event: DragEndEvent) => { const { active, over } = event; if (!over || active.id === over.id) return; const o = mapasConfig.codeConfigs.findIndex(c => c.code === active.id); const n = mapasConfig.codeConfigs.findIndex(c => c.code === over.id); if (o >= 0 && n >= 0) reorderMapaCodeConfigs(o, n); }}>
-                  <SortableContext items={mapasConfig.codeConfigs.map(c => c.code)} strategy={verticalListSortingStrategy}>
-                    {mapasConfig.codeConfigs.map(cc => <SortableCodePill key={cc.code} cc={cc} stations={stations} updateMapaCodeConfig={updateMapaCodeConfig} removeMapaCodeConfig={removeMapaCodeConfig} comercialFiles={comercialFiles} setComercialFiles={setComercialFiles} />)}
+                  onDragEnd={(event: DragEndEvent) => { const { active, over } = event; if (!over || active.id === over.id) return; const o = safeCodeConfigs.findIndex(c => c.code === active.id); const n = safeCodeConfigs.findIndex(c => c.code === over.id); if (o >= 0 && n >= 0) reorderMapaCodeConfigs(o, n); }}>
+                  <SortableContext items={safeCodeConfigs.map(c => c.code)} strategy={verticalListSortingStrategy}>
+                    {safeCodeConfigs.map(cc => <SortableCodePill key={cc.code} cc={cc} stations={stations} updateMapaCodeConfig={updateMapaCodeConfig} removeMapaCodeConfig={removeMapaCodeConfig} comercialFiles={comercialFiles} setComercialFiles={setComercialFiles} />)}
                   </SortableContext>
                 </DndContext>
                 {/* Output folder */}
@@ -648,7 +651,7 @@ export function MapasView() {
                     <div className="flex gap-2 flex-wrap">
                       {line.codes.map((code, j) => {
                         const colors = getCodeColor(code);
-                        const ccfg = mapasConfig.codeConfigs.find(c => c.code.toLowerCase() === code.toLowerCase());
+                        const ccfg = safeCodeConfigs.find(c => c.code.toLowerCase() === code.toLowerCase());
                         return (
                           <div key={j} className={`rounded-xl border-2 ${colors.border} ${colors.bg} ${colors.glow} px-4 py-3 flex flex-col items-center gap-1 min-w-[80px] transition-all hover:scale-105`}>
                             <span className={colors.text}>{CODE_ICONS[ccfg?.type || 'literal'] || CODE_ICONS.literal}</span>
@@ -688,7 +691,7 @@ export function MapasView() {
                   <div className="mt-4 rounded-xl border border-border/15 bg-card/20 p-4">
                     <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider font-medium mb-2 block">Inserir código rápido</span>
                     <div className="flex gap-1.5 flex-wrap">
-                      {mapasConfig.codeConfigs.map(cc => {
+                      {safeCodeConfigs.map(cc => {
                         const colors = CODE_COLORS[cc.type] || CODE_COLORS.literal;
                         return (
                           <button key={cc.code} onClick={() => setEditValue(prev => prev ? `${prev},${cc.code}` : cc.code)}
