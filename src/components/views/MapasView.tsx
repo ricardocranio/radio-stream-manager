@@ -438,10 +438,10 @@ export function MapasView() {
           </div>
           <div className="flex items-center gap-2">
             {/* Day tabs */}
-            {(mapasConfig.templates || []).map((t, i) => {
+            {safeTemplates.map((t, i) => {
               const label = dayLabels[t.dayMapping] || t.filename;
               const isActive = activeDay === i;
-              const dc = dayColors[label] || dayColors['Seg-Sex'];
+              const dc = dayColors[label] || dayColors['Seg'];
               return (
                 <button key={t.filename} onClick={() => { setActiveDay(i); setEditingSlot(null); }}
                   className={`px-4 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-200 ${isActive ? dc.activeTab : dc.tab}`}>
