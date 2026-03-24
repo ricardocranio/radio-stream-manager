@@ -599,9 +599,9 @@ export function MapasView() {
                   </div>
                 )}
                 <DndContext sensors={sensors} collisionDetection={closestCenter}
-                  onDragEnd={(event: DragEndEvent) => { const { active, over } = event; if (!over || active.id === over.id) return; const o = mapasConfig.codeConfigs.findIndex(c => c.code === active.id); const n = mapasConfig.codeConfigs.findIndex(c => c.code === over.id); if (o >= 0 && n >= 0) reorderMapaCodeConfigs(o, n); }}>
-                  <SortableContext items={mapasConfig.codeConfigs.map(c => c.code)} strategy={verticalListSortingStrategy}>
-                    {mapasConfig.codeConfigs.map(cc => <SortableCodePill key={cc.code} cc={cc} stations={stations} updateMapaCodeConfig={updateMapaCodeConfig} removeMapaCodeConfig={removeMapaCodeConfig} comercialFiles={comercialFiles} setComercialFiles={setComercialFiles} />)}
+                  onDragEnd={(event: DragEndEvent) => { const { active, over } = event; if (!over || active.id === over.id) return; const o = safeCodeConfigs.findIndex(c => c.code === active.id); const n = safeCodeConfigs.findIndex(c => c.code === over.id); if (o >= 0 && n >= 0) reorderMapaCodeConfigs(o, n); }}>
+                  <SortableContext items={safeCodeConfigs.map(c => c.code)} strategy={verticalListSortingStrategy}>
+                    {safeCodeConfigs.map(cc => <SortableCodePill key={cc.code} cc={cc} stations={stations} updateMapaCodeConfig={updateMapaCodeConfig} removeMapaCodeConfig={removeMapaCodeConfig} comercialFiles={comercialFiles} setComercialFiles={setComercialFiles} />)}
                   </SortableContext>
                 </DndContext>
                 {/* Output folder */}
