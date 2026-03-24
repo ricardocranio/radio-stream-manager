@@ -516,7 +516,7 @@ export function useGlobalDownloadService() {
     if (newToQueue.length > 0) {
       const rankingMap = new Map<string, number>();
       rankingSongs.forEach((song, index) => {
-        const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
+        const key = `${song.artist.toLowerCase().trim()}::${song.title.toLowerCase().trim()}`;
         rankingMap.set(key, 50 - index);
       });
 
