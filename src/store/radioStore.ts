@@ -641,7 +641,7 @@ export const useRadioStore = create<RadioState>()(
       addRankingPlay: (songId) =>
         set((state) => ({
           rankingSongs: state.rankingSongs.map((s) =>
-            s.id === songId ? { ...s, plays: s.plays + 1, lastPlayed: new Date() } : s
+            s.id === songId ? { ...s, plays: s.plays + 1, lastPlayed: Date.now() } : s
           ),
         })),
       // Optimized: processes batch updates from rankingBatcher
@@ -649,6 +649,7 @@ export const useRadioStore = create<RadioState>()(
         set((state) => {
           const normalizedTitle = title.toLowerCase().trim();
           const normalizedArtist = artist.toLowerCase().trim();
+          const now = Date.now();
           
           // Find existing song
           let existingIndex = -1;
@@ -670,7 +671,7 @@ export const useRadioStore = create<RadioState>()(
             updatedSongs[existingIndex] = {
               ...existing,
               plays: newPlays,
-              lastPlayed: new Date(),
+              lastPlayed: now,
               trend: newPlays > 5 ? 'up' : existing.trend,
               ...(shouldUpdateStyle ? { style } : {}),
             };
@@ -683,13 +684,16 @@ export const useRadioStore = create<RadioState>()(
             return { rankingSongs: updatedSongs };
           } else {
             const newSong: RankingSong = {
-              id: `r-${Date.now()}`,
+              id: `r-${now}`,
               title: title.trim(),
               artist: artist.trim(),
               plays: 1,
               style: style || 'POP/VARIADO',
               trend: 'stable',
-              lastPlayed: new Date(),
+              lastPlayed: now,
+              firstPlayed: now,
+              peakPosition: 999,
+              previousPosition: 999,
             };
             
             // Limit ranking to 25 songs for memory optimization
@@ -706,11 +710,19 @@ export const useRadioStore = create<RadioState>()(
       // Batch update: applies multiple ranking updates at once (from batcher)
       applyRankingBatch: (updates: Array<{ title: string; artist: string; style: string; count: number }>) =>
         set((state) => {
+          const now = Date.now();
           let updatedSongs = [...state.rankingSongs];
+          
+          // Snapshot positions for trend calculation
+          const positionSnapshot = new Map<string, number>();
+          updatedSongs.forEach((song, idx) => {
+            positionSnapshot.set(`${song.title.toLowerCase().trim()}::${song.artist.toLowerCase().trim()}`, idx + 1);
+          });
           
           for (const update of updates) {
             const normalizedTitle = update.title.toLowerCase().trim();
             const normalizedArtist = update.artist.toLowerCase().trim();
+            const key = `${normalizedTitle}::${normalizedArtist}`;
             
             let existingIndex = -1;
             for (let i = 0; i < updatedSongs.length; i++) {
@@ -724,33 +736,56 @@ export const useRadioStore = create<RadioState>()(
             
             if (existingIndex >= 0) {
               const existing = updatedSongs[existingIndex];
-              // Update style if new value is more specific (from AI) than generic station style
               const shouldUpdateStyle = update.style && update.style !== 'POP/VARIADO' && 
                 (existing.style === 'POP/VARIADO' || existing.style !== update.style);
               updatedSongs[existingIndex] = {
                 ...existing,
                 plays: existing.plays + update.count,
-                lastPlayed: new Date(),
-                trend: existing.plays + update.count > 5 ? 'up' : existing.trend,
+                lastPlayed: now,
                 ...(shouldUpdateStyle ? { style: update.style } : {}),
               };
             } else {
               updatedSongs.push({
-                id: `r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                id: `r-${now}-${Math.random().toString(36).slice(2, 6)}`,
                 title: update.title,
                 artist: update.artist,
                 plays: update.count,
                 style: update.style,
                 trend: 'stable',
-                lastPlayed: new Date(),
+                lastPlayed: now,
+                firstPlayed: now,
+                peakPosition: 999,
+                previousPosition: 999,
               });
             }
           }
           
-          // Sort once after all updates
-          updatedSongs.sort((a, b) => b.plays - a.plays);
+          // Sort by weighted score (decay-aware)
+          updatedSongs.sort((a, b) => {
+            const scoreA = a.plays * Math.max(0.5, 1.0 - ((now - a.lastPlayed) / 86_400_000) * 0.05);
+            const scoreB = b.plays * Math.max(0.5, 1.0 - ((now - b.lastPlayed) / 86_400_000) * 0.05);
+            return scoreB - scoreA;
+          });
           
-          return { rankingSongs: updatedSongs.slice(0, 25) };
+          // Trim to 25, then update trends and peak positions
+          updatedSongs = updatedSongs.slice(0, 25).map((song, idx) => {
+            const currentPos = idx + 1;
+            const key = `${song.title.toLowerCase().trim()}::${song.artist.toLowerCase().trim()}`;
+            const oldPos = positionSnapshot.get(key) ?? currentPos;
+            
+            let trend: RankingSong['trend'] = 'stable';
+            if (currentPos < oldPos) trend = 'up';
+            else if (currentPos > oldPos) trend = 'down';
+            
+            return {
+              ...song,
+              trend,
+              previousPosition: oldPos,
+              peakPosition: Math.min(song.peakPosition ?? 999, currentPos),
+            };
+          });
+          
+          return { rankingSongs: updatedSongs };
         }),
       clearRanking: () => set({ rankingSongs: [] }),
 
