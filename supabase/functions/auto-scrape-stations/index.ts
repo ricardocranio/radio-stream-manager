@@ -520,11 +520,12 @@ async function processStation(
       .limit(1);
 
     if (!existing || existing.length === 0) {
+      const np = normalizeForDedup(parsed.nowPlaying.artist, parsed.nowPlaying.title);
       const { error: insertError } = await supabase.from('scraped_songs').insert({
         station_id: station.id,
         station_name: station.name,
-        title: parsed.nowPlaying.title,
-        artist: parsed.nowPlaying.artist,
+        title: np.title,
+        artist: np.artist,
         is_now_playing: true,
         source: sourceUsed,
       });
