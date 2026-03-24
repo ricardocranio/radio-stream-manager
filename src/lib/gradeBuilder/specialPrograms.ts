@@ -1,738 +1,56 @@
 /**
- * Special Program Generators & Thematic Song Finders
+ * Special Program Generators
  * 
- * Architecture: Library-First with O(1) Index Lookups
- * - LibraryIndex: Pre-built Maps (byGenre, byDecade, byGenreDecade, byArtistTitle)
- * - Strategy: Local Library (ID3) → DB (enrichment/cross-ref) → Fallback
- * - Genre synonyms: exact map, no includes() — avoids false positives
- * - DB enrichment: non-blocking background updates for discovered years
+ * Each function generates a complete block for a specific radio program:
+ * - Voz do Brasil (21:00 weekdays)
+ * - Misturadão (20:00 and 20:30 weekdays)
+ * - Madrugada (00:00-04:30)
+ * - Sertanejo Nossa (05:00-07:30)
+ * - TOP50 (19:00-19:30)
  */
 
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import type { SongEntry, BlockResult, BlockLogItem, BlockStats, GradeContext } from './types';
 import type { WeekDay } from '@/types/radio';
 import { applyTemporalDecay } from '@/lib/rankingDecay';
-import { supabase } from '@/integrations/supabase/client';
 
-// ---------------------------------------------------------------------------
-// TYPES
-// ---------------------------------------------------------------------------
-
-interface SongMeta {
-  filename: string;
-  artist: string;
-  title: string;
-  genre: string;
-  year: string;
-  bpm?: string;
-}
-
-interface LibraryIndex {
-  byGenre: Map<string, SongMeta[]>;
-  byDecade: Map<string, SongMeta[]>;
-  byGenreDecade: Map<string, SongMeta[]>;
-  byArtistTitle: Map<string, SongMeta>;
-  allSongs: SongMeta[];
-  builtAt: number;
-}
-
-// ---------------------------------------------------------------------------
-// CACHE + INDEX
-// ---------------------------------------------------------------------------
-
-let _metadataCacheResult: SongMeta[] | null = null;
+// === Session cache for scanLibraryMetadata to avoid re-scanning 3000+ files per position ===
+let _metadataCacheResult: any = null;
 let _metadataCacheTime = 0;
-let _libraryIndex: LibraryIndex | null = null;
 const METADATA_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-// ---------------------------------------------------------------------------
-// GENRE SYNONYMS — exact match map, no includes()
-// ---------------------------------------------------------------------------
-
-const GENRE_SYNONYMS: Record<string, string> = {
-  'HARD ROCK': 'ROCK',
-  'CLASSIC ROCK': 'ROCK',
-  'SOFT ROCK': 'ROCK',
-  'ALTERNATIVE ROCK': 'ROCK',
-  'POP ROCK': 'ROCK',
-  'INDIE ROCK': 'ROCK',
-  'PROG ROCK': 'ROCK',
-  'PROGRESSIVE ROCK': 'ROCK',
-  'BLUES ROCK': 'ROCK',
-  'FOLK ROCK': 'ROCK',
-  'GARAGE ROCK': 'ROCK',
-  'SOUTHERN ROCK': 'ROCK',
-  'PSYCHEDELIC ROCK': 'ROCK',
-  'STONER ROCK': 'ROCK',
-  'GRUNGE': 'ROCK',
-  'PUNK': 'ROCK',
-  'PUNK ROCK': 'ROCK',
-  'POST-PUNK': 'ROCK',
-  'NEW WAVE': 'ROCK',
-  'BRITPOP': 'ROCK',
-  'EMO': 'ROCK',
-  'POP PUNK': 'ROCK',
-  'SKA': 'ROCK',
-  'ALTERNATIVE': 'ROCK',
-  'POP DANCE': 'POP',
-  'DANCE POP': 'POP',
-  'TEEN POP': 'POP',
-  'SYNTH POP': 'POP',
-  'ELECTROPOP': 'POP',
-  'INDIE POP': 'POP',
-  'ART POP': 'POP',
-  'DREAM POP': 'POP',
-  'K-POP': 'POP',
-  'J-POP': 'POP',
-  'HEAVY METAL': 'METAL',
-  'DEATH METAL': 'METAL',
-  'THRASH METAL': 'METAL',
-  'POWER METAL': 'METAL',
-  'BLACK METAL': 'METAL',
-  'DOOM METAL': 'METAL',
-  'SYMPHONIC METAL': 'METAL',
-  'NU METAL': 'METAL',
-  'NU-METAL': 'METAL',
-  'METALCORE': 'METAL',
-  'PROGRESSIVE METAL': 'METAL',
-  'GOTHIC METAL': 'METAL',
-  'FOLK METAL': 'METAL',
-  'SPEED METAL': 'METAL',
-  'GROOVE METAL': 'METAL',
-  'INDUSTRIAL METAL': 'METAL',
-  'MELODIC DEATH METAL': 'METAL',
-  'DEATHCORE': 'METAL',
-  'DJENT': 'METAL',
-  'HARDCORE': 'METAL',
-  'SERTANEJO UNIVERSITÁRIO': 'SERTANEJO',
-  'SERTANEJO UNIVERSITARIO': 'SERTANEJO',
-  'SERTANEJO RAIZ': 'SERTANEJO',
-  'SERTANEJO ROMÂNTICO': 'SERTANEJO',
-  'SERTANEJO POP': 'SERTANEJO',
-  'MÚSICA SERTANEJA': 'SERTANEJO',
-  'MUSICA SERTANEJA': 'SERTANEJO',
-  'COUNTRY BRASILEIRO': 'SERTANEJO',
-  'PAGODE ROMÂNTICO': 'PAGODE',
-  'SAMBA PAGODE': 'PAGODE',
-  'SAMBA': 'PAGODE',
-  'SAMBA ROCK': 'PAGODE',
-  'SAMBA DE RODA': 'PAGODE',
-  'PARTIDO ALTO': 'PAGODE',
-  'RAP': 'HIP HOP',
-  'TRAP': 'HIP HOP',
-  'HIP-HOP': 'HIP HOP',
-  'RAP/HIP-HOP': 'HIP HOP',
-  'RAP BRASILEIRO': 'HIP HOP',
-  'BOOM BAP': 'HIP HOP',
-  'FUNK CARIOCA': 'FUNK',
-  'FUNK MELODY': 'FUNK',
-  'FUNK OSTENTAÇÃO': 'FUNK',
-  'FUNK OSTENTACAO': 'FUNK',
-  'FUNK BRASILEIRO': 'FUNK',
-  'BAILE FUNK': 'FUNK',
-  'FUNK POP': 'FUNK',
-  'BREGA FUNK': 'FUNK',
-  'ELETRÔNICA': 'ELETRONICA',
-  'ELECTRONIC': 'ELETRONICA',
-  'TECHNO': 'ELETRONICA',
-  'HOUSE': 'ELETRONICA',
-  'DEEP HOUSE': 'ELETRONICA',
-  'TRANCE': 'ELETRONICA',
-  'EDM': 'ELETRONICA',
-  'DANCE': 'ELETRONICA',
-  'DUBSTEP': 'ELETRONICA',
-  'DRUM AND BASS': 'ELETRONICA',
-  'DRUM & BASS': 'ELETRONICA',
-  'DNB': 'ELETRONICA',
-  'AMBIENT': 'ELETRONICA',
-  'SYNTHWAVE': 'ELETRONICA',
-  'DISCO': 'ELETRONICA',
-  'PROGRESSIVE HOUSE': 'ELETRONICA',
-  'TROPICAL HOUSE': 'ELETRONICA',
-  'FORRÓ UNIVERSITÁRIO': 'FORRÓ',
-  'FORRÓ ELETRÔNICO': 'FORRÓ',
-  'FORRO ELETRONICO': 'FORRÓ',
-  'FORRO': 'FORRÓ',
-  'ARROCHA': 'FORRÓ',
-  'PISEIRO': 'FORRÓ',
-  'PISADINHA': 'FORRÓ',
-  'BREGA': 'FORRÓ',
-  'TECNOBREGA': 'FORRÓ',
-  'LAMBADA': 'FORRÓ',
-  'AXÉ': 'AXE',
-  'AXÉ MUSIC': 'AXE',
-  'AXEMUSIC': 'AXE',
-  'R&B': 'RNB',
-  'RHYTHM AND BLUES': 'RNB',
-  'SOUL': 'RNB',
-  'NEO SOUL': 'RNB',
-  'NEO-SOUL': 'RNB',
-  'CONTEMPORARY R&B': 'RNB',
-  'MOTOWN': 'RNB',
-  'ROMÂNTICO': 'ROMANTICO',
-  'ROMANTICA': 'ROMANTICO',
-  'BALADA': 'ROMANTICO',
-  'GOSPEL': 'GOSPEL',
-  'MÚSICAS GOSPEL': 'GOSPEL',
-  'MÚSICA CRISTÃ': 'GOSPEL',
-  'MUSICA GOSPEL': 'GOSPEL',
-  'CCM': 'GOSPEL',
-  'CHRISTIAN': 'GOSPEL',
-  'WORSHIP': 'GOSPEL',
-  'PRAISE': 'GOSPEL',
-  'MPB': 'MPB',
-  'MÚSICA POPULAR BRASILEIRA': 'MPB',
-  'MUSICA POPULAR BRASILEIRA': 'MPB',
-  'BOSSA NOVA': 'MPB',
-  'TROPICALIA': 'MPB',
-  'TROPICÁLIA': 'MPB',
-  'MANGUEBEAT': 'MPB',
-  'REGGAE': 'REGGAE',
-  'ROOTS REGGAE': 'REGGAE',
-  'DUB': 'REGGAE',
-  'DANCEHALL': 'REGGAE',
-  'REGGAETON': 'REGGAETON',
-  'REGGAETÓN': 'REGGAETON',
-  'LATIN': 'LATIN',
-  'LATINA': 'LATIN',
-  'LATIN POP': 'LATIN',
-  'LATIN URBAN': 'LATIN',
-  'BACHATA': 'LATIN',
-  'SALSA': 'LATIN',
-  'CUMBIA': 'LATIN',
-  'MERENGUE': 'LATIN',
-  'COUNTRY': 'COUNTRY',
-  'COUNTRY POP': 'COUNTRY',
-  'AMERICANA': 'COUNTRY',
-  'BLUEGRASS': 'COUNTRY',
-  'JAZZ': 'JAZZ',
-  'SMOOTH JAZZ': 'JAZZ',
-  'JAZZ FUSION': 'JAZZ',
-  'ACID JAZZ': 'JAZZ',
-  'CLASSICAL': 'CLASSICA',
-  'CLÁSSICA': 'CLASSICA',
-  'CLASSICA': 'CLASSICA',
-  'ERUDITA': 'CLASSICA',
-  'OPERA': 'CLASSICA',
-  'ÓPERA': 'CLASSICA',
-  'INDIE': 'INDIE',
-  'INDIE FOLK': 'INDIE',
-  'INDIE ELECTRONIC': 'INDIE',
-};
-
-const DECADE_RANGES: Record<string, [number, number]> = {
-  '60s':   [1960, 1969],
-  '70s':   [1970, 1979],
-  '80s':   [1980, 1989],
-  '90s':   [1990, 1999],
-  '2000s': [2000, 2009],
-  '2010s': [2010, 2019],
-  '2020s': [2020, 2030],
-};
-
-// ---------------------------------------------------------------------------
-// NORMALIZATION
-// ---------------------------------------------------------------------------
-
-export function normalizeId3Genre(raw: string | undefined | null): string | null {
-  if (!raw) return null;
-  const upper = raw.trim().toUpperCase();
-  return GENRE_SYNONYMS[upper] ?? upper;
-}
-
-function yearToDecadeKey(year: number): string | null {
-  for (const [key, [min, max]] of Object.entries(DECADE_RANGES)) {
-    if (year >= min && year <= max) return key;
-  }
-  return null;
-}
-
-function atKey(artist: string, title: string): string {
-  return `${artist.toLowerCase().trim()}::${title.toLowerCase().trim()}`;
-}
-
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-// ---------------------------------------------------------------------------
-// METADATA CACHE
-// ---------------------------------------------------------------------------
-
-async function getCachedLibraryMetadata(): Promise<SongMeta[]> {
+async function getCachedLibraryMetadata(): Promise<any[] | null> {
   const now = Date.now();
-  if (_metadataCacheResult && now - _metadataCacheTime < METADATA_CACHE_TTL) {
+  if (_metadataCacheResult && (now - _metadataCacheTime) < METADATA_CACHE_TTL) {
     return _metadataCacheResult;
   }
-
+  
   const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
-  if (!isElectron || !(window as any).electronAPI?.scanLibraryMetadata) return [];
-
+  if (!isElectron || !(window as any).electronAPI?.scanLibraryMetadata) return null;
+  
   try {
     const { useRadioStore } = await import('@/store/radioStore');
     const { config } = useRadioStore.getState();
     const allFolders = config.musicFolders?.filter(Boolean) || [];
-    if (allFolders.length === 0) return [];
-
+    if (allFolders.length === 0) return null;
+    
     console.log('[META-CACHE] 📂 Escaneando biblioteca para cache de metadados...');
     const scanResult = await (window as any).electronAPI.scanLibraryMetadata({ musicFolders: allFolders });
-
     if (scanResult?.success && scanResult.songs?.length) {
       _metadataCacheResult = scanResult.songs;
       _metadataCacheTime = now;
-      _libraryIndex = null; // Invalidate index
       console.log(`[META-CACHE] ✅ Cache criado: ${scanResult.songs.length} músicas`);
-      return _metadataCacheResult!;
+      return _metadataCacheResult;
     }
   } catch (e) {
     console.warn('[META-CACHE] Erro ao escanear:', e);
   }
-  return [];
-}
-
-export function invalidateLibraryCache(): void {
-  _metadataCacheResult = null;
-  _metadataCacheTime = 0;
-  _libraryIndex = null;
-}
-
-// ---------------------------------------------------------------------------
-// LIBRARY INDEX — built once per cache cycle, O(1) lookups
-// ---------------------------------------------------------------------------
-
-async function getLibraryIndex(): Promise<LibraryIndex> {
-  if (_libraryIndex) return _libraryIndex;
-
-  const raw = await getCachedLibraryMetadata();
-
-  const byGenre       = new Map<string, SongMeta[]>();
-  const byDecade      = new Map<string, SongMeta[]>();
-  const byGenreDecade = new Map<string, SongMeta[]>();
-  const byArtistTitle = new Map<string, SongMeta>();
-
-  for (const song of raw) {
-    if (!song.artist || song.artist === 'Desconhecido') continue;
-
-    byArtistTitle.set(atKey(song.artist, song.title), song);
-
-    const genre   = normalizeId3Genre(song.genre);
-    const yearNum = parseInt(song.year, 10);
-    const decade  = !isNaN(yearNum) ? yearToDecadeKey(yearNum) : null;
-
-    if (genre) {
-      if (!byGenre.has(genre)) byGenre.set(genre, []);
-      byGenre.get(genre)!.push(song);
-    }
-
-    if (decade) {
-      if (!byDecade.has(decade)) byDecade.set(decade, []);
-      byDecade.get(decade)!.push(song);
-    }
-
-    if (genre && decade) {
-      const key = `${genre}_${decade}`;
-      if (!byGenreDecade.has(key)) byGenreDecade.set(key, []);
-      byGenreDecade.get(key)!.push(song);
-    }
-  }
-
-  _libraryIndex = { byGenre, byDecade, byGenreDecade, byArtistTitle, allSongs: raw, builtAt: Date.now() };
-
-  console.log(
-    `[LibraryIndex] ✅ ${raw.length} músicas indexadas | ` +
-    `${byGenre.size} gêneros | ${byDecade.size} décadas | ` +
-    `${byArtistTitle.size} artist::title lookups`
-  );
-
-  return _libraryIndex;
-}
-
-// ---------------------------------------------------------------------------
-// GENRE VARIANT RESOLUTION — normalized + reverse synonyms
-// ---------------------------------------------------------------------------
-
-function resolveGenreVariants(genres: string[]): string[] {
-  const normalized = new Set<string>();
-  for (const g of genres) {
-    const n = normalizeId3Genre(g);
-    if (!n) continue;
-    normalized.add(n);
-    // Add all synonyms that map to this canonical genre
-    for (const [synonym, canonical] of Object.entries(GENRE_SYNONYMS)) {
-      if (canonical === n) normalized.add(synonym);
-    }
-  }
-  return Array.from(normalized);
-}
-
-function dbGenreVariants(genres: string[]): string[] {
-  const variants = new Set<string>();
-  for (const g of [...genres, ...resolveGenreVariants(genres)]) {
-    variants.add(g.toUpperCase());
-    variants.add(g.toLowerCase());
-    variants.add(g.charAt(0).toUpperCase() + g.slice(1).toLowerCase());
-  }
-  return Array.from(variants);
-}
-
-// ---------------------------------------------------------------------------
-// ANTI-REPETITION VALIDATION
-// ---------------------------------------------------------------------------
-
-function isValidCandidate(
-  song: SongMeta,
-  usedInBlock: Set<string>,
-  usedArtistsInBlock: Set<string>,
-  ctx: GradeContext,
-  timeStr: string,
-  isFullDay: boolean = false,
-): boolean {
-  const key        = atKey(song.artist, song.title);
-  const artistNorm = song.artist.toLowerCase().trim();
-  if (usedInBlock.has(key)) return false;
-  if (usedArtistsInBlock.has(artistNorm)) return false;
-  if (ctx.isRecentlyUsed(song.title, song.artist, timeStr, isFullDay)) return false;
-  return true;
-}
-
-function markAsUsed(
-  song: SongMeta,
-  usedInBlock: Set<string>,
-  usedArtistsInBlock: Set<string>,
-  ctx: GradeContext,
-  timeStr: string,
-): void {
-  usedInBlock.add(atKey(song.artist, song.title));
-  usedArtistsInBlock.add(song.artist.toLowerCase().trim());
-  ctx.markSongAsUsed(song.title, song.artist, timeStr);
-}
-
-// ---------------------------------------------------------------------------
-// CROSS-REFERENCE: DB candidates → library matches via index (no IPC)
-// ---------------------------------------------------------------------------
-
-function matchDbCandidatesInLibrary(
-  dbCandidates: { artist: string; title: string }[],
-  index: LibraryIndex,
-): SongMeta[] {
-  const results: SongMeta[] = [];
-  const addedKeys = new Set<string>();
-
-  for (const c of dbCandidates) {
-    const artistNorm = c.artist.toLowerCase().trim();
-    const titleNorm  = c.title.toLowerCase().trim();
-    const key = `${artistNorm}::${titleNorm}`;
-
-    if (addedKeys.has(key)) continue;
-
-    // O(1) exact lookup
-    const exact = index.byArtistTitle.get(key);
-    if (exact) {
-      results.push(exact);
-      addedKeys.add(key);
-      continue;
-    }
-
-    // Fuzzy fallback: contains match (only if exact fails)
-    for (const [mapKey, song] of index.byArtistTitle) {
-      if (addedKeys.has(mapKey)) continue;
-      const [kA, kT] = mapKey.split('::');
-      if (
-        (kA.includes(artistNorm) || artistNorm.includes(kA)) &&
-        (kT.includes(titleNorm)  || titleNorm.includes(kT))
-      ) {
-        results.push(song);
-        addedKeys.add(mapKey);
-        break;
-      }
-    }
-  }
-
-  return results;
-}
-
-// ---------------------------------------------------------------------------
-// DB ENRICHMENT — background, non-blocking
-// ---------------------------------------------------------------------------
-
-async function enrichDbWithLocalYears(songs: SongMeta[]): Promise<void> {
-  const songsWithYear = songs.filter(s => s.year && parseInt(s.year, 10) > 0).slice(0, 100);
-  let updated = 0;
-
-  for (const song of songsWithYear) {
-    try {
-      const { data } = await supabase
-        .from('scraped_songs')
-        .select('id')
-        .ilike('artist', song.artist.trim())
-        .ilike('title', song.title.trim())
-        .is('year', null)
-        .limit(5);
-
-      if (data?.length) {
-        for (const row of data) {
-          await supabase.from('scraped_songs').update({ year: String(song.year) }).eq('id', row.id);
-          updated++;
-        }
-      }
-    } catch {
-      // best-effort
-    }
-  }
-
-  if (updated > 0) {
-    console.log(`[DB-ENRICH] 📅 ${updated} músicas no DB atualizadas com year do ID3`);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// findSongByGenre
-// Strategy 1: Library local (ID3 indexed) ← PRIMARY
-// Strategy 2: DB enrichment → cross-ref with library
-// ---------------------------------------------------------------------------
-
-export async function findSongByGenre(
-  genres: string[],
-  timeStr: string,
-  usedInBlock: Set<string>,
-  usedArtistsInBlock: Set<string>,
-  ctx: GradeContext,
-  isFullDay: boolean = false,
-): Promise<{ filename: string; artist: string; title: string; genre: string } | null> {
-
-  const index    = await getLibraryIndex();
-  const variants = resolveGenreVariants(genres);
-
-  // === Strategy 1: Library local — indexed O(1) ===
-  const localCandidates: SongMeta[] = [];
-  for (const variant of variants) {
-    localCandidates.push(...(index.byGenre.get(variant) ?? []));
-  }
-
-  const deduped = shuffle([
-    ...new Map(localCandidates.map(s => [atKey(s.artist, s.title), s])).values(),
-  ]);
-
-  for (const song of deduped) {
-    if (!isValidCandidate(song, usedInBlock, usedArtistsInBlock, ctx, timeStr, isFullDay)) continue;
-    markAsUsed(song, usedInBlock, usedArtistsInBlock, ctx, timeStr);
-    return { filename: song.filename, artist: song.artist, title: song.title, genre: song.genre };
-  }
-
-  // === Strategy 2: DB → cross-ref with library ===
-  try {
-    const { data: dbData } = await supabase
-      .from('scraped_songs')
-      .select('artist, title, station_name, ai_genre')
-      .in('ai_genre', dbGenreVariants(genres))
-      .order('scraped_at', { ascending: false })
-      .limit(300);
-
-    if (dbData?.length) {
-      const fromDb = matchDbCandidatesInLibrary(dbData, index);
-      for (const song of shuffle(fromDb)) {
-        if (!isValidCandidate(song, usedInBlock, usedArtistsInBlock, ctx, timeStr, isFullDay)) continue;
-        markAsUsed(song, usedInBlock, usedArtistsInBlock, ctx, timeStr);
-        return { filename: song.filename, artist: song.artist, title: song.title, genre: song.genre };
-      }
-    }
-  } catch (e) {
-    console.warn(`[findSongByGenre] DB query failed:`, e);
-  }
-
-  console.warn(`[findSongByGenre] Sem match para gêneros: [${genres.join(', ')}]`);
   return null;
 }
-
-// ---------------------------------------------------------------------------
-// findSongByYear
-// Strategy 1: Library local — ID3 year indexed by decade ← PRIMARY
-// Strategy 2: DB with year filter → cross-ref with library
-// Bonus: enriches DB with locally discovered years (non-blocking)
-// ---------------------------------------------------------------------------
-
-export async function findSongByYear(
-  yearMin: number,
-  yearMax: number,
-  timeStr: string,
-  usedInBlock: Set<string>,
-  usedArtistsInBlock: Set<string>,
-  ctx: GradeContext,
-  isFullDay: boolean = false,
-): Promise<{ filename: string; artist: string; title: string; yearRange: string } | null> {
-
-  const index = await getLibraryIndex();
-
-  const relevantDecades = Object.entries(DECADE_RANGES)
-    .filter(([, [min, max]]) => max >= yearMin && min <= yearMax)
-    .map(([key]) => key);
-
-  // === Strategy 1: Library local — ID3 year indexed ===
-  const localCandidates: SongMeta[] = [];
-  for (const decade of relevantDecades) {
-    const songs = index.byDecade.get(decade) ?? [];
-    localCandidates.push(...songs.filter(s => {
-      const yr = parseInt(s.year, 10);
-      return !isNaN(yr) && yr >= yearMin && yr <= yearMax;
-    }));
-  }
-
-  const deduped = shuffle([
-    ...new Map(localCandidates.map(s => [atKey(s.artist, s.title), s])).values(),
-  ]);
-
-  for (const song of deduped) {
-    if (!isValidCandidate(song, usedInBlock, usedArtistsInBlock, ctx, timeStr, isFullDay)) continue;
-    markAsUsed(song, usedInBlock, usedArtistsInBlock, ctx, timeStr);
-    // Enrich DB in background
-    enrichDbWithLocalYears(localCandidates).catch(() => {});
-    return { filename: song.filename, artist: song.artist, title: song.title, yearRange: `${yearMin}-${yearMax}` };
-  }
-
-  // === Strategy 2: DB → cross-ref with library ===
-  try {
-    const { data: dbData } = await supabase
-      .from('scraped_songs')
-      .select('artist, title, station_name, year')
-      .not('year', 'is', null)
-      .gte('year', String(yearMin))
-      .lte('year', String(yearMax))
-      .order('scraped_at', { ascending: false })
-      .limit(300);
-
-    if (dbData?.length) {
-      const fromDb = matchDbCandidatesInLibrary(dbData, index);
-      for (const song of shuffle(fromDb)) {
-        if (!isValidCandidate(song, usedInBlock, usedArtistsInBlock, ctx, timeStr, isFullDay)) continue;
-        markAsUsed(song, usedInBlock, usedArtistsInBlock, ctx, timeStr);
-        return { filename: song.filename, artist: song.artist, title: song.title, yearRange: `${yearMin}-${yearMax}` };
-      }
-    }
-  } catch (e) {
-    console.warn(`[findSongByYear] DB query failed:`, e);
-  }
-
-  // Enrich even without match — improves future lookups
-  if (localCandidates.length > 0) {
-    enrichDbWithLocalYears(localCandidates).catch(() => {});
-  }
-
-  console.warn(`[findSongByYear] Sem match na biblioteca para ${yearMin}-${yearMax}`);
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// findSongByGenreAndYear
-// Strategy 1: Library local — byGenreDecade index (O(1)) ← PRIMARY
-// Strategy 2: DB with both filters → cross-ref with library
-// Strategy 3: Fallback genre-only (explicit warning)
-// ---------------------------------------------------------------------------
-
-export async function findSongByGenreAndYear(
-  genres: string[],
-  yearMin: number,
-  yearMax: number,
-  timeStr: string,
-  usedInBlock: Set<string>,
-  usedArtistsInBlock: Set<string>,
-  ctx: GradeContext,
-  isFullDay: boolean = false,
-): Promise<{ filename: string; artist: string; title: string; genre: string; yearRange: string } | null> {
-
-  const index    = await getLibraryIndex();
-  const variants = resolveGenreVariants(genres);
-
-  const relevantDecades = Object.entries(DECADE_RANGES)
-    .filter(([, [min, max]]) => max >= yearMin && min <= yearMax)
-    .map(([key]) => key);
-
-  // === Strategy 1: Library local — byGenreDecade O(1) ===
-  const localCandidates: SongMeta[] = [];
-  for (const variant of variants) {
-    for (const decade of relevantDecades) {
-      const key   = `${variant}_${decade}`;
-      const songs = index.byGenreDecade.get(key) ?? [];
-      localCandidates.push(...songs.filter(s => {
-        const yr = parseInt(s.year, 10);
-        return !isNaN(yr) && yr >= yearMin && yr <= yearMax;
-      }));
-    }
-  }
-
-  const deduped = shuffle([
-    ...new Map(localCandidates.map(s => [atKey(s.artist, s.title), s])).values(),
-  ]);
-
-  for (const song of deduped) {
-    if (!isValidCandidate(song, usedInBlock, usedArtistsInBlock, ctx, timeStr, isFullDay)) continue;
-    markAsUsed(song, usedInBlock, usedArtistsInBlock, ctx, timeStr);
-    return {
-      filename:  song.filename,
-      artist:    song.artist,
-      title:     song.title,
-      genre:     song.genre,
-      yearRange: `${yearMin}-${yearMax}`,
-    };
-  }
-
-  // === Strategy 2: DB → cross-ref with library ===
-  try {
-    const { data: dbData } = await supabase
-      .from('scraped_songs')
-      .select('artist, title, station_name, ai_genre, year')
-      .in('ai_genre', dbGenreVariants(genres))
-      .not('year', 'is', null)
-      .gte('year', String(yearMin))
-      .lte('year', String(yearMax))
-      .order('scraped_at', { ascending: false })
-      .limit(300);
-
-    if (dbData?.length) {
-      const fromDb = matchDbCandidatesInLibrary(dbData, index);
-      for (const song of shuffle(fromDb)) {
-        if (!isValidCandidate(song, usedInBlock, usedArtistsInBlock, ctx, timeStr, isFullDay)) continue;
-        markAsUsed(song, usedInBlock, usedArtistsInBlock, ctx, timeStr);
-        return {
-          filename:  song.filename,
-          artist:    song.artist,
-          title:     song.title,
-          genre:     song.genre,
-          yearRange: `${yearMin}-${yearMax}`,
-        };
-      }
-    }
-  } catch (e) {
-    console.warn(`[findSongByGenreAndYear] DB query failed:`, e);
-  }
-
-  // === Strategy 3: Fallback — genre only (explicit warning) ===
-  console.warn(
-    `[findSongByGenreAndYear] FALLBACK — Sem match para [${genres.join(', ')}] em ${yearMin}-${yearMax}. ` +
-    `Buscando só por gênero. Verifique: (1) ID3 year preenchido, (2) DB possui year.`
-  );
-
-  const genreOnly = await findSongByGenre(genres, timeStr, usedInBlock, usedArtistsInBlock, ctx, isFullDay);
-  if (genreOnly) {
-    return { ...genreOnly, yearRange: `${yearMin}-${yearMax} (fallback — ano ignorado)` };
-  }
-
-  console.error(
-    `[findSongByGenreAndYear] FALHA TOTAL — Nenhuma música para [${genres.join(', ')}] em ${yearMin}-${yearMax}.`
-  );
-  return null;
-}
-
-// =========================================================================
-// EXISTING GENERATORS — preserved with minor improvements
-// =========================================================================
 
 /**
  * Generate the Voz do Brasil block (21:00 weekdays).
+ * Hardcoded format - never goes through sanitization.
  */
 export function generateVozDoBrasil(timeStr: string): BlockResult {
   return {
@@ -750,6 +68,7 @@ export function generateVozDoBrasil(timeStr: string): BlockResult {
 
 /**
  * Generate Misturadão block (20:00 or 20:30 weekdays).
+ * Uses real ranking songs with library verification.
  */
 export async function generateMisturadao(
   hour: number,
@@ -763,7 +82,12 @@ export async function generateMisturadao(
   const logs: BlockLogItem[] = [];
   const usedPositions = new Set<number>();
 
+  /**
+   * Get the real filename from ranking at preferred position.
+   * Falls back to any available ranking song, then coringa.
+   */
   const getRankingFilename = async (preferredPosition: number): Promise<string> => {
+    // Try preferred position first, then nearby positions
     const positionsToTry: number[] = [preferredPosition];
     for (let offset = 1; offset <= sortedRanking.length; offset++) {
       if (preferredPosition + offset <= sortedRanking.length) positionsToTry.push(preferredPosition + offset);
@@ -795,6 +119,7 @@ export async function generateMisturadao(
       }
     }
 
+    // All ranking songs exhausted or missing from library → coringa
     console.warn(`[MISTURADAO] ⚠️ Nenhuma música do ranking disponível para posição ${preferredPosition}, usando coringa`);
     logs.push({
       blockTime: timeStr,
@@ -841,6 +166,7 @@ export async function generateMisturadao(
       reason: `Formato especial com ranking (posições usadas: ${[...usedPositions].join(', ') || 'nenhuma'})`,
     });
     
+    // posicao01 é a ÚLTIMA música do bloco (grand finale)
     return {
       line: ctx.sanitizeGradeLine(`${timeStr} (ID=MISTURADAO) "${misturadao03}",vht,"${posicao02}",vht,"${misturadao04}",vht,"${posicao01}"`),
       logs,
@@ -850,6 +176,10 @@ export async function generateMisturadao(
 
 /**
  * Generate TOP50 block (19:00/19:30 weekdays).
+ * Uses 20 positions from the ranking in reverse order:
+ *  - 19:00 → positions 20 down to 11 (least to mid)
+ *  - 19:30 → positions 10 down to 01 (mid to top)
+ * Each song is verified in the local music library.
  */
 export async function generateTop50Block(
   hour: number,
@@ -861,15 +191,19 @@ export async function generateTop50Block(
   const logs: BlockLogItem[] = [];
   const SONGS_PER_BLOCK = 10;
   
+  // Sort ranking by plays descending → index 0 = position 1 (most played)
   const sorted = applyTemporalDecay([...ctx.rankingSongs]);
   
+  // 19:00 block: positions 20→11 (indices 19→10)
+  // 19:30 block: positions 10→01 (indices 9→0)
   const isFirstBlock = minute === 0;
-  const startIndex = isFirstBlock ? 19 : 9;
-  const endIndex = isFirstBlock ? 10 : 0;
+  const startIndex = isFirstBlock ? 19 : 9;  // position 20 or 10
+  const endIndex = isFirstBlock ? 10 : 0;    // position 11 or 01
 
   const top50Songs: string[] = [];
   const usedPositions: number[] = [];
 
+  // Walk from startIndex down to endIndex (reverse order)
   for (let i = startIndex; i >= endIndex && top50Songs.length < SONGS_PER_BLOCK; i--) {
     if (i >= sorted.length) continue;
     
@@ -881,7 +215,7 @@ export async function generateTop50Block(
       const realFilename = libraryResult.filename || sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
       top50Songs.push(realFilename);
       ctx.markSongAsUsed(song.title, song.artist, timeStr);
-      usedPositions.push(i + 1);
+      usedPositions.push(i + 1); // human-readable position (1-based)
       
       logs.push({
         blockTime: timeStr,
@@ -892,6 +226,7 @@ export async function generateTop50Block(
         reason: `TOP50 posição ${i + 1}`,
       });
     } else {
+      // Song not in library → use coringa and log
       top50Songs.push(ctx.coringaCode);
       logs.push({
         blockTime: timeStr,
@@ -904,6 +239,7 @@ export async function generateTop50Block(
     }
   }
 
+  // Fill remaining slots with coringa if ranking has fewer than needed
   while (top50Songs.length < SONGS_PER_BLOCK) {
     top50Songs.push(ctx.coringaCode);
     logs.push({
@@ -948,13 +284,15 @@ export async function generateMadrugada(
   const logs: BlockLogItem[] = [];
   const TARGET_SONGS = 10;
 
+  // Build flattened pool and shuffle
   const allPool: SongEntry[] = [];
   for (const stationSongs of Object.values(songsByStation)) {
     allPool.push(...stationSongs);
   }
   const shuffled = [...allPool].sort(() => Math.random() - 0.5);
 
-  const candidatesToCheck = shuffled.slice(0, 30);
+  // Pre-check library existence in batch for candidates
+  const candidatesToCheck = shuffled.slice(0, 30); // Check more than needed for filtering
   const batchResults = await ctx.batchFindSongsInLibrary(
     candidatesToCheck.map(s => ({ artist: s.artist, title: s.title }))
   );
@@ -972,6 +310,7 @@ export async function generateMadrugada(
     if (mixUsedKeys.has(key) || mixUsedArtists.has(normalizedArtist)) continue;
     if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
     
+    // Use batch result if available, otherwise check individually
     const batchKey = `${candidate.artist.toLowerCase().trim()}|${candidate.title.toLowerCase().trim()}`;
     const libraryResult = batchResults.get(batchKey) || await ctx.findSongInLibrary(candidate.artist, candidate.title);
     
@@ -994,6 +333,7 @@ export async function generateMadrugada(
     }
   }
 
+  // Fill remaining with coringa
   while (mixSongs.length < TARGET_SONGS) {
     mixSongs.push(ctx.coringaCode);
     stats.missing++;
@@ -1014,7 +354,13 @@ export async function generateMadrugada(
 }
 
 /**
- * Generate Rock & Metal block — now uses LibraryIndex + DB cross-ref.
+ * Generate Sertanejo Nossa block (05:00-07:30).
+ * Alternates Liberdade FM and Positiva FM. Coringa: clas.
+ */
+/**
+ * Generate Rock & Metal block (19:00/19:30 weekdays).
+ * Pulls 10 songs from the database filtered by ai_genre = ROCK or METAL,
+ * then verifies they exist in the local library before adding to the grade.
  */
 export async function generateRockMetal(
   hour: number,
@@ -1025,43 +371,87 @@ export async function generateRockMetal(
   const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
   const logs: BlockLogItem[] = [];
   const TARGET_SONGS = 10;
-  const usedInBlock = new Set<string>();
-  const usedArtistsInBlock = new Set<string>();
 
+  // Fetch Rock and Metal songs from the database by ai_genre
+  let dbGenreSongs: Array<{ artist: string; title: string; station_name: string; ai_genre: string }> = [];
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { data, error } = await supabase
+      .from('scraped_songs')
+      .select('artist, title, station_name, ai_genre')
+      .in('ai_genre', ['ROCK', 'METAL', 'Rock', 'Metal'])
+      .order('scraped_at', { ascending: false })
+      .limit(500);
+
+    if (!error && data) {
+      dbGenreSongs = data as typeof dbGenreSongs;
+    }
+  } catch (e) {
+    console.warn('[ROCK-METAL] Falha ao buscar músicas por gênero:', e);
+  }
+
+  // Deduplicate by artist+title
+  const seen = new Set<string>();
+  const candidates: Array<{ artist: string; title: string; station: string; genre: string }> = [];
+  for (const s of dbGenreSongs) {
+    const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ artist: s.artist, title: s.title, station: s.station_name, genre: s.ai_genre });
+  }
+
+  // Shuffle for variety
+  candidates.sort(() => Math.random() - 0.5);
+
+  // Select songs, checking library and anti-repetition
   const selectedSongs: string[] = [];
+  const usedArtists = new Set<string>();
 
-  for (let i = 0; i < TARGET_SONGS; i++) {
-    const result = await findSongByGenre(['ROCK', 'METAL'], timeStr, usedInBlock, usedArtistsInBlock, ctx, false);
-    if (result) {
-      selectedSongs.push(`"${result.filename}"`);
+  for (const candidate of candidates) {
+    if (selectedSongs.length >= TARGET_SONGS) break;
+
+    const normalizedArtist = candidate.artist.toLowerCase().trim();
+    if (usedArtists.has(normalizedArtist)) continue;
+    if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr)) continue;
+
+    const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+    if (libraryResult.exists) {
+      const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+      selectedSongs.push(`"${filename}"`);
+      usedArtists.add(normalizedArtist);
+      ctx.markSongAsUsed(candidate.title, candidate.artist, timeStr);
+
       logs.push({
         blockTime: timeStr,
         type: 'used',
-        title: result.title,
-        artist: result.artist,
-        station: result.genre.toUpperCase(),
-        reason: `Rock/Metal por gênero (${result.genre})`,
-      });
-    } else {
-      selectedSongs.push(ctx.coringaCode);
-      logs.push({
-        blockTime: timeStr,
-        type: 'substituted',
-        title: ctx.coringaCode,
-        artist: 'CORINGA',
-        station: 'FALLBACK',
-        reason: 'Pool Rock/Metal esgotado',
+        title: candidate.title,
+        artist: candidate.artist,
+        station: candidate.genre.toUpperCase(),
+        reason: `Rock/Metal por gênero (ai_genre=${candidate.genre})`,
       });
     }
+  }
+
+  // Fill remaining with coringa
+  while (selectedSongs.length < TARGET_SONGS) {
+    selectedSongs.push(ctx.coringaCode);
+    logs.push({
+      blockTime: timeStr,
+      type: 'substituted',
+      title: ctx.coringaCode,
+      artist: 'CORINGA',
+      station: 'FALLBACK',
+      reason: 'Pool Rock/Metal por gênero esgotado',
+    });
   }
 
   logs.push({
     blockTime: timeStr,
     type: 'fixed',
     title: 'Rock & Metal Mix',
-    artist: `${selectedSongs.filter(s => s !== ctx.coringaCode).length} músicas`,
+    artist: `${selectedSongs.length} músicas (pool: ${candidates.length} candidatos por gênero)`,
     station: 'ROCK/METAL',
-    reason: `10 músicas filtradas por gênero ROCK/METAL via LibraryIndex + DB`,
+    reason: `10 músicas filtradas por ai_genre ROCK/METAL intercaladas com vhtn`,
   });
 
   return {
@@ -1073,7 +463,208 @@ export async function generateRockMetal(
 }
 
 /**
- * Generate TOP10 Década block.
+ * Generic genre-based song finder for sequence positions.
+ * Pulls a single song from the database filtered by ai_genre.
+ * Used by sequence positions with source "genre_SERTANEJO", "genre_PAGODE", etc.
+ */
+export async function findSongByGenre(
+  genres: string[],
+  timeStr: string,
+  usedInBlock: Set<string>,
+  usedArtistsInBlock: Set<string>,
+  ctx: GradeContext,
+  isFullDay: boolean = false,
+): Promise<{ filename: string; artist: string; title: string; genre: string } | null> {
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const genreVariants = genres.flatMap(g => [
+      g.toUpperCase(), g, g.charAt(0).toUpperCase() + g.slice(1).toLowerCase()
+    ]);
+    const uniqueVariants = [...new Set(genreVariants)];
+    
+    const { data, error } = await supabase
+      .from('scraped_songs')
+      .select('artist, title, station_name, ai_genre')
+      .in('ai_genre', uniqueVariants)
+      .order('scraped_at', { ascending: false })
+      .limit(300);
+
+    if (error || !data || data.length === 0) return null;
+
+    const seen = new Set<string>();
+    const candidates: Array<{ artist: string; title: string; station: string; genre: string }> = [];
+    for (const s of data) {
+      const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      candidates.push({ artist: s.artist, title: s.title, station: s.station_name, genre: s.ai_genre || genres[0] });
+    }
+    candidates.sort(() => Math.random() - 0.5);
+
+    for (const candidate of candidates) {
+      const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+      const normalizedArtist = candidate.artist.toLowerCase().trim();
+      if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+      if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
+
+      const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+      if (libraryResult.exists) {
+        const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+        return { filename, artist: candidate.artist, title: candidate.title, genre: candidate.genre };
+      }
+    }
+  } catch (e) {
+    console.warn(`[GENRE-BLOCK] Falha ao buscar por gênero ${genres.join('/')}:`, e);
+  }
+
+  // === Strategy 2: Fallback — local library ID3 tags (CACHED) ===
+  const librarySongs = await getCachedLibraryMetadata();
+  if (librarySongs && librarySongs.length > 0) {
+    console.log(`[GENRE-BLOCK] 📂 DB sem resultados para ${genres.join('/')}, usando cache local (${librarySongs.length} músicas)...`);
+    const { normalizeId3Genre } = await import('@/lib/id3GenreUtils');
+    const genresNorm = genres.map(g => g.toUpperCase());
+    
+    const filtered = librarySongs
+      .filter((s: any) => {
+        if (!s.genre || !s.artist || s.artist === 'Desconhecido') return false;
+        const norm = normalizeId3Genre(s.genre)?.toUpperCase();
+        return norm && genresNorm.some(g => norm === g || norm.includes(g));
+      })
+      .sort(() => Math.random() - 0.5);
+
+    console.log(`[GENRE-BLOCK] 📂 Encontradas ${filtered.length} músicas ${genres.join('/')} na biblioteca`);
+
+    for (const song of filtered) {
+      const key = `${(song.title || '').toLowerCase()}-${(song.artist || '').toLowerCase()}`;
+      const normalizedArtist = (song.artist || '').toLowerCase().trim();
+      if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+      if (ctx.isRecentlyUsed(song.title || '', song.artist || '', timeStr, isFullDay)) continue;
+      
+      return {
+        filename: song.filename,
+        artist: song.artist || 'Desconhecido',
+        title: song.title || song.filename,
+        genre: genres[0],
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Generic year-based song finder for sequence positions.
+ * Pulls a single song from the database filtered by year range.
+ * Used by sequence positions with source "year_80s", "year_90s", etc.
+ */
+export async function findSongByYear(
+  yearMin: number,
+  yearMax: number,
+  timeStr: string,
+  usedInBlock: Set<string>,
+  usedArtistsInBlock: Set<string>,
+  ctx: GradeContext,
+  isFullDay: boolean = false,
+): Promise<{ filename: string; artist: string; title: string; yearRange: string } | null> {
+  // === Strategy 1: Query DB for year-tagged songs ===
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    
+    const { data, error } = await supabase
+      .from('scraped_songs')
+      .select('artist, title, station_name, year')
+      .not('year', 'is', null)
+      .gte('year', String(yearMin))
+      .lte('year', String(yearMax))
+      .order('scraped_at', { ascending: false })
+      .limit(300);
+
+    if (!error && data && data.length > 0) {
+      const seen = new Set<string>();
+      const candidates: Array<{ artist: string; title: string; station: string }> = [];
+      for (const s of data) {
+        const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        candidates.push({ artist: s.artist, title: s.title, station: s.station_name });
+      }
+      candidates.sort(() => Math.random() - 0.5);
+
+      for (const candidate of candidates) {
+        const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+        const normalizedArtist = candidate.artist.toLowerCase().trim();
+        if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+        if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
+
+        const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+        if (libraryResult.exists) {
+          const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+          return { filename, artist: candidate.artist, title: candidate.title, yearRange: `${yearMin}-${yearMax}` };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[YEAR-BLOCK] Falha ao buscar por ano ${yearMin}-${yearMax} no DB:`, e);
+  }
+
+  // === Strategy 2: Fallback — scan local library ID3 tags for year (CACHED) ===
+  const librarySongs = await getCachedLibraryMetadata();
+  if (librarySongs && librarySongs.length > 0) {
+    console.log(`[YEAR-BLOCK] 📂 DB sem resultados para ${yearMin}-${yearMax}, usando cache local (${librarySongs.length} músicas)...`);
+    
+    // Filter songs by year range from ID3 tags
+    const yearFiltered = librarySongs
+      .filter((s: any) => {
+        if (!s.year) return false;
+        const yr = parseInt(s.year, 10);
+        return !isNaN(yr) && yr >= yearMin && yr <= yearMax && s.artist && s.artist !== 'Desconhecido';
+      })
+      .sort(() => Math.random() - 0.5);
+
+    console.log(`[YEAR-BLOCK] 📂 Encontradas ${yearFiltered.length} músicas dos anos ${yearMin}-${yearMax} na biblioteca`);
+
+    // Also batch-update DB with discovered years (async, non-blocking)
+    if (yearFiltered.length > 0) {
+      const { supabase } = await import('@/integrations/supabase/client');
+      Promise.resolve().then(async () => {
+        let updated = 0;
+        for (const song of yearFiltered.slice(0, 100)) {
+          try {
+            const { data: matchedSongs } = await supabase
+              .from('scraped_songs')
+              .select('id')
+              .ilike('artist', song.artist.trim())
+              .ilike('title', song.title.trim())
+              .is('year', null)
+              .limit(5);
+            if (matchedSongs?.length) {
+              for (const ms of matchedSongs) {
+                await supabase.from('scraped_songs').update({ year: String(song.year) }).eq('id', ms.id);
+                updated++;
+              }
+            }
+          } catch { /* non-critical */ }
+        }
+        if (updated > 0) console.log(`[YEAR-BLOCK] 📅 Atualizadas ${updated} músicas no DB com ano do ID3`);
+      });
+    }
+
+    for (const song of yearFiltered) {
+      const key = `${(song.title || '').toLowerCase().trim()}-${(song.artist || '').toLowerCase().trim()}`;
+      const normalizedArtist = (song.artist || '').toLowerCase().trim();
+      if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+      if (ctx.isRecentlyUsed(song.title || '', song.artist || '', timeStr, isFullDay)) continue;
+
+      const filename = song.filename || sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
+      return { filename, artist: song.artist, title: song.title, yearRange: `${yearMin}-${yearMax}` };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Pulls 10 songs from years 2000-2010, intercalated with vhtn.
  */
 export async function generateTop10Decada(
   hour: number,
@@ -1086,45 +677,93 @@ export async function generateTop10Decada(
   const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
   const logs: BlockLogItem[] = [];
   const TARGET_SONGS = 10;
-  const usedInBlock = new Set<string>();
-  const usedArtistsInBlock = new Set<string>();
+
+  // Fetch songs from DB filtered by year range
+  let dbYearSongs: Array<{ artist: string; title: string; station_name: string; year: string }> = [];
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { data, error } = await supabase
+      .from('scraped_songs')
+      .select('artist, title, station_name, year')
+      .not('year', 'is', null)
+      .gte('year', String(yearMin))
+      .lte('year', String(yearMax))
+      .order('scraped_at', { ascending: false })
+      .limit(300);
+
+    if (!error && data) {
+      dbYearSongs = data as typeof dbYearSongs;
+    }
+  } catch (e) {
+    console.warn('[TOP10-DECADA] Falha ao buscar músicas por ano:', e);
+  }
+
+  // Deduplicate and shuffle
+  const seen = new Set<string>();
+  const candidates: Array<{ artist: string; title: string; station: string }> = [];
+  for (const s of dbYearSongs) {
+    const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ artist: s.artist, title: s.title, station: s.station_name });
+  }
+  candidates.sort(() => Math.random() - 0.5);
+
+  // Batch check library
+  const batchResults = await ctx.batchFindSongsInLibrary(
+    candidates.slice(0, 60).map(c => ({ artist: c.artist, title: c.title }))
+  );
 
   const decadeSongs: string[] = [];
+  const usedArtists = new Set<string>();
 
-  for (let i = 0; i < TARGET_SONGS; i++) {
-    const result = await findSongByYear(yearMin, yearMax, timeStr, usedInBlock, usedArtistsInBlock, ctx, false);
-    if (result) {
-      decadeSongs.push(`"${result.filename}"`);
-      usedInBlock.add(atKey(result.artist, result.title));
-      usedArtistsInBlock.add(result.artist.toLowerCase().trim());
+  for (const candidate of candidates) {
+    if (decadeSongs.length >= TARGET_SONGS) break;
+
+    const normalizedArtist = candidate.artist.toLowerCase().trim();
+    if (usedArtists.has(normalizedArtist)) continue;
+    if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr)) continue;
+
+    const batchKey = `${normalizedArtist}|${candidate.title.toLowerCase().trim()}`;
+    const libraryResult = batchResults.get(batchKey) || await ctx.findSongInLibrary(candidate.artist, candidate.title);
+
+    if (libraryResult.exists) {
+      const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+      decadeSongs.push(`"${filename}"`);
+      usedArtists.add(normalizedArtist);
+      ctx.markSongAsUsed(candidate.title, candidate.artist, timeStr);
+
       logs.push({
         blockTime: timeStr,
         type: 'used',
-        title: result.title,
-        artist: result.artist,
-        station: 'DÉCADA',
+        title: candidate.title,
+        artist: candidate.artist,
+        station: candidate.station,
         reason: `TOP10 Década ${yearMin}-${yearMax}`,
       });
-    } else {
-      decadeSongs.push(ctx.coringaCode);
-      logs.push({
-        blockTime: timeStr,
-        type: 'substituted',
-        title: ctx.coringaCode,
-        artist: 'CORINGA',
-        station: 'FALLBACK',
-        reason: `Pool década ${yearMin}-${yearMax} esgotado`,
-      });
     }
+  }
+
+  // Fill remaining with coringa
+  while (decadeSongs.length < TARGET_SONGS) {
+    decadeSongs.push(ctx.coringaCode);
+    logs.push({
+      blockTime: timeStr,
+      type: 'substituted',
+      title: ctx.coringaCode,
+      artist: 'CORINGA',
+      station: 'FALLBACK',
+      reason: `Pool década ${yearMin}-${yearMax} esgotado`,
+    });
   }
 
   logs.push({
     blockTime: timeStr,
     type: 'fixed',
     title: `TOP10 Década ${yearMin}-${yearMax}`,
-    artist: `${decadeSongs.filter(s => s !== ctx.coringaCode).length} músicas`,
+    artist: `${decadeSongs.length} músicas`,
     station: 'DÉCADA',
-    reason: `10 músicas de ${yearMin} a ${yearMax} via LibraryIndex + DB`,
+    reason: `10 músicas de ${yearMin} a ${yearMax} intercaladas com vhtn`,
   });
 
   return {
@@ -1137,6 +776,7 @@ export async function generateTop10Decada(
 
 /**
  * Generate TOP10 block (18:30 weekdays).
+ * Fixed template with sports news and music mix blocks.
  */
 export async function generateTop10Block(
   hour: number,
@@ -1153,6 +793,7 @@ export async function generateTop10Block(
   const top10_01 = `TOP_10_MIX_BLOCO01_${dayName}.MP3`;
   const top10_02 = `TOP_10_MIX_BLOCO02_${dayName}.MP3`;
 
+  // Get real ranking songs for the 2 music slots (positions 1 and 2)
   const sortedRanking = applyTemporalDecay([...ctx.rankingSongs]);
   const usedPositions = new Set<number>();
 
@@ -1214,9 +855,6 @@ export async function generateTop10Block(
   };
 }
 
-/**
- * Generate Sertanejo Nossa block (05:00-07:30).
- */
 export async function generateSertanejoNossa(
   hour: number,
   minute: number,
@@ -1231,12 +869,14 @@ export async function generateSertanejoNossa(
   const TARGET_SONGS = 10;
   const CORINGA = 'clas';
 
+  // Collect songs per station
   const stationPools: Record<string, SongEntry[]> = {};
   for (const stName of SERTANEJO_STATIONS) {
     const directPool = songsByStation[stName] || [];
     if (directPool.length > 0) {
       stationPools[stName] = [...directPool].sort(() => Math.random() - 0.5);
     } else {
+      // Try flexible matching
       for (const [poolName, poolSongs] of Object.entries(songsByStation)) {
         const norm1 = poolName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const norm2 = stName.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1249,6 +889,7 @@ export async function generateSertanejoNossa(
     if (!stationPools[stName]) stationPools[stName] = [];
   }
 
+  // Pre-check library in batch
   const allCandidates: Array<{ artist: string; title: string }> = [];
   for (const pool of Object.values(stationPools)) {
     for (const song of pool) {
@@ -1322,7 +963,19 @@ export async function generateSertanejoNossa(
 }
 
 /**
- * Generate Raridades block — now uses findSongByYear with LibraryIndex.
+ * Generate Raridades block — filters songs by year range (e.g. 1990-2000).
+ * Uses a fixed template with intercalated fixed content and decade songs.
+ *
+ * 12:00 template:
+ *   NOTICIA_DA_HORA_12HORAS_{DIA}, vht, RARIDADES_BLOCO01_{DIA},
+ *   AS_ULTIMAS_DO_ESPORTE_EDICAO01_{DIA}, vht, FATOS_E_BOATOS_EDICAO01_{DIA},
+ *   RARIDADES_BLOCO02_{DIA}, vht, (década), vht, (década)
+ *
+ * 12:30 template:
+ *   NOTICIA_DA_HORA_10HORAS_{DIA}, vht, RARIDADES_BLOCO03_{DIA},
+ *   PATRULHA_DO_CONSUMIDOR_{DIA}, vht, AS_ULTIMAS_DO_ESPORTE_EDICAO02_{DIA},
+ *   vht, FATOS_E_BOATOS_EDICAO04_{DIA}, RARIDADES_BLOCO04_{DIA},
+ *   vht, (década), vht, (década)
  */
 export async function generateRaridades(
   hour: number,
@@ -1341,43 +994,92 @@ export async function generateRaridades(
   const dayName = ctx.getFullDayName(targetDay);
   const logs: BlockLogItem[] = [];
   const DECADE_SONGS_NEEDED = 2;
-  const usedInBlock = new Set<string>();
-  const usedArtistsInBlock = new Set<string>();
 
-  // Select decade songs using the upgraded finder
+  // === Fetch decade songs from DB ===
+  let dbYearSongs: Array<{ artist: string; title: string; station_name: string; year: string }> = [];
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { data, error } = await supabase
+      .from('scraped_songs')
+      .select('artist, title, station_name, year')
+      .not('year', 'is', null)
+      .gte('year', String(yearMin))
+      .lte('year', String(yearMax))
+      .order('scraped_at', { ascending: false })
+      .limit(200);
+
+    if (!error && data) {
+      dbYearSongs = data as typeof dbYearSongs;
+    }
+  } catch (e) {
+    console.warn('[RARIDADES] Falha ao buscar músicas por ano:', e);
+  }
+
+  // Deduplicate and shuffle
+  const seen = new Set<string>();
+  const candidates: Array<{ artist: string; title: string; station: string }> = [];
+  for (const s of dbYearSongs) {
+    const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ artist: s.artist, title: s.title, station: s.station_name });
+  }
+  candidates.sort(() => Math.random() - 0.5);
+
+  // Batch check library
+  const batchResults = await ctx.batchFindSongsInLibrary(
+    candidates.slice(0, 50).map(c => ({ artist: c.artist, title: c.title }))
+  );
+
+  // Select decade songs
   const decadeSongs: string[] = [];
-  for (let i = 0; i < DECADE_SONGS_NEEDED; i++) {
-    const result = await findSongByYear(yearMin, yearMax, timeStr, usedInBlock, usedArtistsInBlock, ctx, isFullDay);
-    if (result) {
-      decadeSongs.push(`"${result.filename}"`);
-      usedInBlock.add(atKey(result.artist, result.title));
-      usedArtistsInBlock.add(result.artist.toLowerCase().trim());
+  const usedArtists = new Set<string>();
+
+  for (const candidate of candidates) {
+    if (decadeSongs.length >= DECADE_SONGS_NEEDED) break;
+    const normArtist = candidate.artist.toLowerCase().trim();
+    if (usedArtists.has(normArtist)) continue;
+    if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
+
+    const batchKey = `${normArtist}|${candidate.title.toLowerCase().trim()}`;
+    const libraryResult = batchResults.get(batchKey) || await ctx.findSongInLibrary(candidate.artist, candidate.title);
+
+    if (libraryResult.exists) {
+      const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+      decadeSongs.push(`"${filename}"`);
+      usedArtists.add(normArtist);
+      ctx.markSongAsUsed(candidate.title, candidate.artist, timeStr);
+
       logs.push({
         blockTime: timeStr,
         type: 'used',
-        title: result.title,
-        artist: result.artist,
-        station: 'DÉCADA',
+        title: candidate.title,
+        artist: candidate.artist,
+        station: candidate.station,
         reason: `Raridades (ano ${yearMin}-${yearMax})`,
-      });
-    } else {
-      decadeSongs.push(ctx.coringaCode);
-      stats.missing++;
-      logs.push({
-        blockTime: timeStr,
-        type: 'substituted',
-        title: ctx.coringaCode,
-        artist: 'CORINGA',
-        station: 'FALLBACK',
-        reason: `Pool de raridades ${yearMin}-${yearMax} esgotado`,
       });
     }
   }
 
-  // Build template line
+  // Fill remaining decade slots with coringa
+  while (decadeSongs.length < DECADE_SONGS_NEEDED) {
+    decadeSongs.push(ctx.coringaCode);
+    stats.missing++;
+    logs.push({
+      blockTime: timeStr,
+      type: 'substituted',
+      title: ctx.coringaCode,
+      artist: 'CORINGA',
+      station: 'FALLBACK',
+      reason: `Pool de raridades ${yearMin}-${yearMax} esgotado`,
+    });
+  }
+
+  // === Build template line ===
   let line: string;
 
   if (minute === 0) {
+    // 12:00 block
     const noticia = `NOTICIA_DA_HORA_12HORAS_${dayName}.MP3`;
     const rarBloco01 = `RARIDADES_BLOCO01_${dayName}.mp3`;
     const esporte01 = `AS_ULTIMAS_DO_ESPORTE_EDICAO01_${dayName}.MP3`;
@@ -1395,6 +1097,7 @@ export async function generateRaridades(
       reason: `Template Raridades 12:00 com ${decadeSongs.filter(s => s !== ctx.coringaCode).length} músicas da década ${yearMin}-${yearMax}`,
     });
   } else {
+    // 12:30 block
     const noticia = `NOTICIA_DA_HORA_10HORAS_${dayName}.MP3`;
     const rarBloco03 = `RARIDADES_BLOCO03_${dayName}.mp3`;
     const patrulha = `PATRULHA_DO_CONSUMIDOR_${dayName}.mp3`;
@@ -1418,4 +1121,110 @@ export async function generateRaridades(
     line: ctx.sanitizeGradeLine(line),
     logs,
   };
+}
+
+/**
+ * Combined genre + year song finder for sequence positions.
+ * Pulls a single song from the database filtered by BOTH ai_genre AND year range.
+ * Used by sequence positions with source "genreyear_POP_90s", "genreyear_ROCK_80s", etc.
+ */
+export async function findSongByGenreAndYear(
+  genres: string[],
+  yearMin: number,
+  yearMax: number,
+  timeStr: string,
+  usedInBlock: Set<string>,
+  usedArtistsInBlock: Set<string>,
+  ctx: GradeContext,
+  isFullDay: boolean = false,
+): Promise<{ filename: string; artist: string; title: string; genre: string; yearRange: string } | null> {
+  // === Strategy 1: Query DB for genre + year tagged songs ===
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const genreVariants = genres.flatMap(g => [
+      g.toUpperCase(), g, g.charAt(0).toUpperCase() + g.slice(1).toLowerCase()
+    ]);
+    const uniqueVariants = [...new Set(genreVariants)];
+
+    const { data, error } = await supabase
+      .from('scraped_songs')
+      .select('artist, title, station_name, ai_genre, year')
+      .in('ai_genre', uniqueVariants)
+      .not('year', 'is', null)
+      .gte('year', String(yearMin))
+      .lte('year', String(yearMax))
+      .order('scraped_at', { ascending: false })
+      .limit(300);
+
+    if (!error && data && data.length > 0) {
+      const seen = new Set<string>();
+      const candidates: Array<{ artist: string; title: string; station: string; genre: string }> = [];
+      for (const s of data) {
+        const key = `${s.artist.toLowerCase().trim()}|${s.title.toLowerCase().trim()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        candidates.push({ artist: s.artist, title: s.title, station: s.station_name, genre: s.ai_genre || genres[0] });
+      }
+      candidates.sort(() => Math.random() - 0.5);
+
+      for (const candidate of candidates) {
+        const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+        const normalizedArtist = candidate.artist.toLowerCase().trim();
+        if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+        if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr, isFullDay)) continue;
+
+        const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+        if (libraryResult.exists) {
+          const filename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+          return { filename, artist: candidate.artist, title: candidate.title, genre: candidate.genre, yearRange: `${yearMin}-${yearMax}` };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[GENRE-YEAR] Falha ao buscar ${genres.join('/')} ${yearMin}-${yearMax} no DB:`, e);
+  }
+
+  // === Strategy 2: Fallback — scan local library for genre + year (CACHED) ===
+  const librarySongs = await getCachedLibraryMetadata();
+  if (librarySongs && librarySongs.length > 0) {
+    console.log(`[GENRE-YEAR] 📂 DB sem resultados para ${genres.join('/')} ${yearMin}-${yearMax}, usando cache local (${librarySongs.length} músicas)...`);
+    const { normalizeId3Genre } = await import('@/lib/id3GenreUtils');
+    const genresNorm = genres.map(g => g.toUpperCase());
+    
+    const filtered = librarySongs
+      .filter((s: any) => {
+        if (!s.year || !s.genre) return false;
+        const yr = parseInt(s.year, 10);
+        if (isNaN(yr) || yr < yearMin || yr > yearMax) return false;
+        const norm = normalizeId3Genre(s.genre)?.toUpperCase();
+        return norm && genresNorm.some(g => norm.includes(g));
+      })
+      .sort(() => Math.random() - 0.5);
+
+    console.log(`[GENRE-YEAR] 📂 Encontradas ${filtered.length} músicas ${genres.join('/')} dos anos ${yearMin}-${yearMax}`);
+
+    for (const song of filtered) {
+      const key = `${(song.title || '').toLowerCase()}-${(song.artist || '').toLowerCase()}`;
+      const normalizedArtist = (song.artist || '').toLowerCase().trim();
+      if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) continue;
+      if (ctx.isRecentlyUsed(song.title || '', song.artist || '', timeStr, isFullDay)) continue;
+      
+      return {
+        filename: song.filename,
+        artist: song.artist || 'Desconhecido',
+        title: song.title || song.filename,
+        genre: genres[0],
+        yearRange: `${yearMin}-${yearMax}`,
+      };
+    }
+  }
+
+  // === Strategy 3: Try genre-only (ignore year) as last resort ===
+  console.log(`[GENRE-YEAR] Sem resultados para ${genres.join('/')} ${yearMin}-${yearMax}, tentando só gênero...`);
+  const genreResult = await findSongByGenre(genres, timeStr, usedInBlock, usedArtistsInBlock, ctx, isFullDay);
+  if (genreResult) {
+    return { ...genreResult, yearRange: `${yearMin}-${yearMax} (fallback)` };
+  }
+
+  return null;
 }
