@@ -691,7 +691,7 @@ export function MapasView() {
                   <div className="mt-4 rounded-xl border border-border/15 bg-card/20 p-4">
                     <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider font-medium mb-2 block">Inserir código rápido</span>
                     <div className="flex gap-1.5 flex-wrap">
-                      {mapasConfig.codeConfigs.map(cc => {
+                      {safeCodeConfigs.map(cc => {
                         const colors = CODE_COLORS[cc.type] || CODE_COLORS.literal;
                         return (
                           <button key={cc.code} onClick={() => setEditValue(prev => prev ? `${prev},${cc.code}` : cc.code)}
