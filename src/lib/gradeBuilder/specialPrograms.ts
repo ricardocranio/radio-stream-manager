@@ -498,9 +498,9 @@ export async function findSongByYear(
     }));
   }
 
-  const deduped = shuffle([
-    ...new Map(localCandidates.map(s => [atKey(s.artist, s.title), s])).values(),
-  ]);
+  const deduped = shuffle(
+    Array.from(new Map(localCandidates.map(s => [atKey(s.artist, s.title), s])).values())
+  );
 
   for (const song of deduped) {
     if (!isValidLibraryCandidate(song, usedInBlock, usedArtistsInBlock, ctx, timeStr)) continue;
