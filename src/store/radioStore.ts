@@ -104,7 +104,10 @@ export interface RankingSong {
   plays: number;
   style: string;
   trend: 'up' | 'down' | 'stable';
-  lastPlayed: Date;
+  lastPlayed: number;       // UNIX ms — safe for JSON persist
+  firstPlayed?: number;     // UNIX ms — when first entered ranking
+  peakPosition?: number;    // best position achieved (1-indexed)
+  previousPosition?: number; // position before last batch
 }
 
 export interface SongAlias {

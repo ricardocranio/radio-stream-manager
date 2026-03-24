@@ -62,7 +62,7 @@ class RankingBatcher {
     // Guard against empty inputs
     if (!title || !artist) return;
     
-    const key = `${title.toLowerCase().trim()}|${artist.toLowerCase().trim()}`;
+    const key = `${title.toLowerCase().trim()}::${artist.toLowerCase().trim()}`;
     
     const existing = this.pendingUpdates.get(key);
     if (existing) {
