@@ -747,4 +747,12 @@ function MapasViewInner() {
   );
 }
 
+export function MapasView() {
+  return (
+    <MapasErrorBoundary>
+      <MapasViewInner />
+    </MapasErrorBoundary>
+  );
+}
+
 export default MapasView;
