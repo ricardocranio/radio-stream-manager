@@ -9,6 +9,7 @@ import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeId3Genre, genreToEnergy } from '@/lib/id3GenreUtils';
+import { normalizeForDedup } from '@/lib/normalizeForDedup';
 
 interface FixProgress {
   scanned: number;
