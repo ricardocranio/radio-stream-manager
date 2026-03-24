@@ -406,8 +406,8 @@ export function MapasView() {
     'Dom': { tab: 'border-border/20 text-muted-foreground hover:text-violet-400', activeTab: 'bg-violet-500/15 border-violet-500/40 text-violet-400 shadow-[0_0_10px_rgba(139,92,246,0.15)]', accent: 'text-violet-400', headerBg: 'from-violet-500/10 to-transparent' },
   };
 
-  const currentDayLabel = template ? (dayLabels[template.dayMapping] || template.filename) : '';
-  const currentColors = dayColors[currentDayLabel] || dayColors['Seg-Sex'];
+  const currentDayLabel = template ? (dayLabels[template.dayMapping] || template.filename) : 'Seg';
+  const currentColors = dayColors[currentDayLabel] || dayColors['Seg'];
 
   if (!isReady) {
     return (
