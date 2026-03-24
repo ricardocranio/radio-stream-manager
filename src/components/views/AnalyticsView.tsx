@@ -126,42 +126,33 @@ export function AnalyticsView() {
         }));
       setRenewalData(renewal);
 
-      // Grade utilization: cross-reference captures with pendingGradeLines
+      // Grade utilization: cross-reference captures with pending grade lines from global services
       try {
         const storeState = useRadioStore.getState();
-        const gradeLines = storeState.gradeBuilder?.pendingGradeLines;
         let usedInGrade = 0;
 
-        if (gradeLines && gradeLines.size > 0) {
-          const gradeKeys = new Set<string>();
-          for (const line of gradeLines.values()) {
-            const matches = line.matchAll(/"([^"]+)"/g);
-            for (const match of matches) {
-              const filename = match[1].replace(/\.mp3$/i, '');
-              const parts = filename.split(' - ');
-              if (parts.length >= 2) {
-                const artist = parts[0].toLowerCase().trim();
-                const title = parts.slice(1).join(' - ').toLowerCase().trim();
-                gradeKeys.add(`${artist}|${title}`);
-              }
-            }
-          }
-          
-          for (const capturedKey of capturedArtistTitleKeys) {
-            if (gradeKeys.has(capturedKey)) usedInGrade++;
-          }
-        }
-
-        // Also check download history as proxy for "used" songs
-        const downloadHistory = storeState.downloadHistory || [];
+        // Check download history as proxy for "utilized" songs
+        const downloadHistory = (storeState as any).downloadHistory || [];
         const downloadedKeys = new Set(
           downloadHistory
-            .filter(h => h.status === 'success' || h.status === 'success_fallback')
-            .map(h => `${h.artist.toLowerCase().trim()}|${h.title.toLowerCase().trim()}`)
+            .filter((h: any) => h.status === 'success' || h.status === 'success_fallback')
+            .map((h: any) => `${(h.artist || '').toLowerCase().trim()}|${(h.title || '').toLowerCase().trim()}`)
         );
 
         for (const capturedKey of capturedArtistTitleKeys) {
-          if (downloadedKeys.has(capturedKey) && !gradeLines?.size) usedInGrade++;
+          if (downloadedKeys.has(capturedKey)) usedInGrade++;
+        }
+
+        // Also check missingSongs that were resolved (downloaded)
+        const missingSongs = (storeState as any).missingSongs || [];
+        const resolvedKeys = new Set(
+          missingSongs
+            .filter((m: any) => m.status === 'downloaded')
+            .map((m: any) => `${(m.artist || '').toLowerCase().trim()}|${(m.title || '').toLowerCase().trim()}`)
+        );
+
+        for (const capturedKey of capturedArtistTitleKeys) {
+          if (resolvedKeys.has(capturedKey) && !downloadedKeys.has(capturedKey)) usedInGrade++;
         }
 
         setGradeUtilization({
