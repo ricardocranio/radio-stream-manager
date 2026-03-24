@@ -19,18 +19,24 @@ function normalizeTitle(title: string): string {
   return title
     .replace(/\s*\((?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^)]*|ft\.?[^)]*)\)/gi, '')
     .replace(/\s*\[(?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^]]*|ft\.?[^]]*)\]/gi, '')
+    // Unify feat/ft/&/e conjunctions for dedup matching
+    .replace(/\b(?:feat\.?|ft\.?|Feat\.?|Ft\.?|featuring|part\.?)\b/gi, 'feat')
+    .replace(/\s*&\s*/g, ' feat ')
+    .replace(/\s+e\s+/gi, ' feat ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 /**
  * Normalize artist name for comparison.
- * IMPORTANT: Do NOT strip & because it's part of duo names (e.g., "Diego & Victor Hugo").
- * Only strip feat/ft suffixes which are truly secondary.
+ * Unifies feat/ft/&/e conjunctions into "feat" for consistent matching.
  */
 function normalizeArtist(artist: string): string {
   return artist
     .replace(/\s*(?:feat\.?|ft\.?|featuring|part\.?|c\/)\s*.+$/gi, '')
+    // Unify & and "e" (Portuguese conjunction) to "feat" for dedup
+    .replace(/\s*&\s*/g, ' feat ')
+    .replace(/\s+e\s+/gi, ' feat ')
     .replace(/\s+/g, ' ')
     .trim();
 }
