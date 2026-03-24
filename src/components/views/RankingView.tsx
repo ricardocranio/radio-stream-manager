@@ -331,7 +331,12 @@ export function RankingView() {
           
           <Button variant="outline" size="sm" className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10" onClick={handleExportJSON}>
             <FileJson className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Exportar</span>
+            <span className="hidden sm:inline">JSON</span>
+          </Button>
+          
+          <Button variant="outline" size="sm" className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10" onClick={handleExportCSV}>
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">CSV</span>
           </Button>
           
           <AlertDialog>
