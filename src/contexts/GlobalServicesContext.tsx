@@ -13,7 +13,7 @@
  * - Background Cache Cleanup (via useBackgroundCacheCleanup)
  */
 
-import React, { createContext, useContext, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useCallback } from 'react';
 import { useRadioStore } from '@/store/radioStore';
 import { useAutoGradeBuilder } from '@/hooks/useAutoGradeBuilder';
 import { useBackgroundCacheCleanup } from '@/hooks/useBackgroundCacheCleanup';
@@ -26,6 +26,7 @@ import { useBackgroundMaintenance } from '@/hooks/useBackgroundMaintenance';
 import { useServiceWatchdog } from '@/hooks/useServiceWatchdog';
 import { useDailyReport } from '@/hooks/useDailyReport';
 import { useAutoMapaBuilder } from '@/hooks/useAutoMapaBuilder';
+import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -133,6 +134,84 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         console.log('[GLOBAL-SVC] ✅ Todos os serviços iniciados!');
       }, 1000);
       cleanups.push(() => clearTimeout(wave3));
+
+      // Early ARL validation (5 min after boot, independent of download service)
+      const arlBootCheck = setTimeout(async () => {
+        if (cancelled) return;
+        const { deezerConfig } = useRadioStore.getState();
+        if (!deezerConfig.enabled || !deezerConfig.arl) return;
+        
+        try {
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+          const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+          if (!supabaseUrl || !supabaseKey) return;
+
+          console.log('[ARL] 🔑 Validação inicial do token Deezer ARL...');
+          const resp = await fetch(`${supabaseUrl}/functions/v1/validate-deezer-arl`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+              'apikey': supabaseKey,
+            },
+            body: JSON.stringify({ arl: deezerConfig.arl }),
+          });
+
+          const data = await resp.json();
+          const valid = data?.valid === true;
+          useAutoDownloadStore.getState().setArlStatus(valid);
+
+          if (valid) {
+            console.log(`[ARL] ✅ Token válido — Usuário: ${data.name || 'OK'}`);
+          } else {
+            console.warn('[ARL] ⚠️ Token ARL INVÁLIDO! Downloads pausados.');
+            if (isElectron && window.electronAPI?.showNotification) {
+              window.electronAPI.showNotification('⚠️ ARL Deezer Inválida', 'O token ARL expirou ou é inválido. Configure um novo em Configurações.');
+            }
+          }
+        } catch (err) {
+          console.warn('[ARL] Falha na validação inicial:', (err as Error).message);
+        }
+      }, 5 * 60 * 1000); // 5 minutes after boot
+      cleanups.push(() => clearTimeout(arlBootCheck));
+
+      // Hourly ARL recheck
+      const arlHourlyCheck = setInterval(async () => {
+        if (cancelled) return;
+        const { deezerConfig } = useRadioStore.getState();
+        if (!deezerConfig.enabled || !deezerConfig.arl) return;
+        
+        try {
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+          const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+          if (!supabaseUrl || !supabaseKey) return;
+
+          const resp = await fetch(`${supabaseUrl}/functions/v1/validate-deezer-arl`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+              'apikey': supabaseKey,
+            },
+            body: JSON.stringify({ arl: deezerConfig.arl }),
+          });
+
+          const data = await resp.json();
+          const valid = data?.valid === true;
+          const prevValid = useAutoDownloadStore.getState().arlValid;
+          useAutoDownloadStore.getState().setArlStatus(valid);
+
+          if (!valid && prevValid) {
+            console.warn('[ARL] ⚠️ Token ARL expirou!');
+            if (isElectron && window.electronAPI?.showNotification) {
+              window.electronAPI.showNotification('⚠️ ARL Deezer Expirou', 'Configure um novo token em Configurações.');
+            }
+          } else if (valid && !prevValid) {
+            console.log('[ARL] ✅ Token ARL restaurado!');
+          }
+        } catch { /* silent */ }
+      }, 60 * 60 * 1000); // Every hour
+      cleanups.push(() => clearInterval(arlHourlyCheck));
     }, bootDelay);
 
     return () => {
