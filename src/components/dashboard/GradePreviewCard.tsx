@@ -417,8 +417,8 @@ export function GradePreviewCard() {
 
     const songsToCheck = displaySongs.filter(s => !s.isSpecial);
 
-    for (let i = 0; i < songsToCheck.length; i += 3) {
-      const batch = songsToCheck.slice(i, i + 3);
+    for (let i = 0; i < songsToCheck.length; i += 5) {
+      const batch = songsToCheck.slice(i, i + 5);
       const results = await Promise.all(
         batch.map(async (song) => {
           const key = song.filename.toLowerCase();

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, Music, Radio, Zap, RefreshCw, Loader2, Calendar, Award, Disc3 } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { BarChart3, TrendingUp, Music, Radio, Zap, RefreshCw, Loader2, Calendar, Award, Disc3, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -69,35 +69,60 @@ const ENERGY_LABELS: Record<string, string> = {
   VERY_HIGH: 'Muito Alta',
 };
 
+type PeriodDays = 7 | 14 | 30;
+
+// Local cache for edge function responses — avoids re-calling on every tab switch
+const _reportCache = new Map<PeriodDays, { report: WeeklyReport; fetchedAt: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 export function TrendsView() {
   const [report, setReport] = useState<WeeklyReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [periodDays, setPeriodDays] = useState<PeriodDays>(7);
   const { toast } = useToast();
 
-  const fetchReport = async () => {
+  const fetchReport = useCallback(async (days: PeriodDays = periodDays, forceRefresh = false) => {
+    // Check cache first
+    if (!forceRefresh) {
+      const cached = _reportCache.get(days);
+      if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+        setReport(cached.report);
+        setIsLoading(false);
+        return;
+      }
+    }
+
     setIsLoading(true);
     setError(null);
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('weekly-report');
+      const { data, error: fnError } = await supabase.functions.invoke('weekly-report', {
+        body: { days },
+      });
       if (fnError) throw fnError;
       if (data?.error) throw new Error(data.error);
       setReport(data);
+      // Save to cache
+      _reportCache.set(days, { report: data, fetchedAt: Date.now() });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Erro ao carregar relatório';
       setError(msg);
       toast({ title: '❌ Erro', description: msg, variant: 'destructive' });
     }
     setIsLoading(false);
-  };
+  }, [periodDays, toast]);
 
-  useEffect(() => { fetchReport(); }, []);
+  useEffect(() => { fetchReport(periodDays); }, [periodDays]);
+
+  const handlePeriodChange = (days: PeriodDays) => {
+    setPeriodDays(days);
+  };
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <span className="ml-3 text-muted-foreground">Gerando relatório semanal...</span>
+        <span className="ml-3 text-muted-foreground">Gerando relatório ({periodDays} dias)...</span>
       </div>
     );
   }
@@ -108,7 +133,7 @@ export function TrendsView() {
         <Card className="glass-card border-destructive/30">
           <CardContent className="p-6 text-center space-y-3">
             <p className="text-destructive">{error || 'Relatório indisponível'}</p>
-            <Button onClick={fetchReport} variant="outline">
+            <Button onClick={() => fetchReport(periodDays, true)} variant="outline">
               <RefreshCw className="w-4 h-4 mr-2" /> Tentar novamente
             </Button>
           </CardContent>
@@ -123,7 +148,7 @@ export function TrendsView() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-3">
             <BarChart3 className="w-7 h-7 text-primary" />
@@ -133,12 +158,26 @@ export function TrendsView() {
             Período: {format(new Date(report.period.start), "dd/MM", { locale: ptBR })} — {format(new Date(report.period.end), "dd/MM/yyyy", { locale: ptBR })}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Period Filter */}
+          <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
+            {([7, 14, 30] as PeriodDays[]).map(days => (
+              <Button
+                key={days}
+                variant={periodDays === days ? 'default' : 'ghost'}
+                size="sm"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => handlePeriodChange(days)}
+              >
+                {days}d
+              </Button>
+            ))}
+          </div>
           <Badge variant="outline" className="text-xs gap-1">
             <Calendar className="w-3 h-3" />
             Gerado {format(new Date(report.generatedAt), "HH:mm dd/MM", { locale: ptBR })}
           </Badge>
-          <Button variant="outline" size="sm" onClick={fetchReport} disabled={isLoading}>
+          <Button variant="outline" size="sm" onClick={() => fetchReport(periodDays, true)} disabled={isLoading}>
             <RefreshCw className={`w-4 h-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
             Atualizar
           </Button>
@@ -260,7 +299,7 @@ export function TrendsView() {
                   label={({ year, percent }) => `${year} ${(percent * 100).toFixed(0)}%`}
                   labelLine={false}
                 >
-                  {report.yearDistribution.map((entry, i) => {
+                  {report.yearDistribution.map((entry) => {
                     const yearNum = parseInt(entry.year);
                     let color = '#94a3b8';
                     if (yearNum >= 2024) color = '#10b981';
@@ -287,7 +326,7 @@ export function TrendsView() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <Award className="w-4 h-4 text-purple-500" />
-              Top Artistas da Semana
+              Top Artistas ({periodDays}d)
             </CardTitle>
           </CardHeader>
           <CardContent>
