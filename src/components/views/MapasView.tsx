@@ -585,7 +585,7 @@ export function MapasView() {
                     {(newCode.type === 'vinheta' || newCode.type === 'comercial') && <Input className="h-6 text-[10px] bg-background/50 font-mono" placeholder="C:\Playlist\..." value={newCode.vinhetaFolder} onChange={(e) => setNewCode(p => ({ ...p, vinhetaFolder: e.target.value }))} />}
                     <div className="flex gap-1">
                       <Button size="sm" className="h-6 text-[9px] flex-1" disabled={!newCode.code.trim() || !newCode.label.trim()} onClick={() => {
-                        if (mapasConfig.codeConfigs.some(c => c.code.toLowerCase() === newCode.code.toLowerCase())) { toast.error('Já existe'); return; }
+                        if (safeCodeConfigs.some(c => c.code.toLowerCase() === newCode.code.toLowerCase())) { toast.error('Já existe'); return; }
                         addMapaCodeConfig({ code: newCode.code.trim(), label: newCode.label.trim(), type: newCode.type,
                           ...(newCode.type === 'monitored' ? { stationSource: newCode.stationSource } : {}),
                           ...(newCode.type === 'genre' ? { genreFilter: newCode.genreFilter.split(',').map(g => g.trim().toUpperCase()).filter(Boolean) } : {}),
