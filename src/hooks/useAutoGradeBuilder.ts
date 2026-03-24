@@ -40,6 +40,7 @@ import { saveOfflineSongCache, loadOfflineSongCache } from '@/lib/offlineSongCac
 import { saveCrossDayBuffer, loadCrossDayBuffer } from '@/lib/crossDayRepetition';
 import { loadBpmCacheFromDisk, enrichSongsWithBpmCache } from '@/lib/bpmCacheBridge';
 import { reportServiceHeartbeat } from '@/hooks/useServiceWatchdog';
+import { buildAliasEngine } from '@/lib/aliasEngine';
 
 // === MODULE-LEVEL VHT DURATION CACHE ===
 let _cachedAvgVhtDurationSec: number | null = null;
