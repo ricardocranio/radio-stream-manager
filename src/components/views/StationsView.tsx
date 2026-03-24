@@ -772,9 +772,9 @@ export function StationsView() {
                     checked={data.prioritizeDownloads || false}
                     onCheckedChange={(checked) => {
                       if (isEditing) {
-                        setEditForm((prev) => prev && { ...prev, prioritizeDownloads: checked });
+                        setEditForm((prev) => prev && { ...prev, prioritizeDownloads: checked, ...(checked ? { autoDownloadEnabled: true } : {}) });
                       } else {
-                        updateStation(station.id, { prioritizeDownloads: checked });
+                        updateStation(station.id, { prioritizeDownloads: checked, ...(checked ? { autoDownloadEnabled: true } : {}) });
                       }
                     }}
                   />
