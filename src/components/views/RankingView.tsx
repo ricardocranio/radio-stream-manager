@@ -577,11 +577,16 @@ export function RankingView() {
                         <div className="w-32 hidden md:block">
                           <Progress value={(song.plays / maxPlays) * 100} className="h-2" />
                         </div>
-                        <div className="text-right min-w-16">
+                        <div className="text-right min-w-20">
                           <p className="font-mono font-bold text-foreground">{song.plays}</p>
-                          <p className={`text-xs ${getTrendColor(song.trend)}`}>
-                            {song.trend === 'up' ? '↑' : song.trend === 'down' ? '↓' : '→'}
-                          </p>
+                          <div className="flex items-center gap-1 justify-end">
+                            <span className={`text-xs ${getTrendColor(song.trend)}`}>
+                              {song.trend === 'up' ? '↑' : song.trend === 'down' ? '↓' : '→'}
+                            </span>
+                            <span className="text-xs text-muted-foreground font-mono" title={`Decay: ×${song.decayFactor.toFixed(2)}`}>
+                              ×{song.decayFactor.toFixed(2)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     ))}
