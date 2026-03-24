@@ -373,8 +373,9 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         if (!artist || !title || artist === 'desconhecido') continue;
         const genre = libData.genre || null;
         if (!genre && !libData.year) continue;
+        const normalized = normalizeForDedup(artist, title);
         toInsert.push({
-          artist, title,
+          artist: normalized.artist, title: normalized.title,
           ai_genre: genre || 'OUTRO',
           ai_energy: genre ? genreToEnergy(genre) : 'medium',
           year: libData.year || null,

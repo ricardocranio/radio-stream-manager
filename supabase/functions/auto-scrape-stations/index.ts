@@ -584,9 +584,10 @@ async function processSpecialMonitoring(
       .gte('scraped_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
       .limit(1);
     if (!existing || existing.length === 0) {
+      const nsp = normalizeForDedup(parsed.nowPlaying.artist, parsed.nowPlaying.title);
       const { error: insertError } = await supabase.from('scraped_songs').insert({
         station_name: schedule.station_name,
-        title: parsed.nowPlaying.title, artist: parsed.nowPlaying.artist,
+        title: nsp.title, artist: nsp.artist,
         is_now_playing: true, source: 'onlineradiobox',
       });
       if (!insertError) {

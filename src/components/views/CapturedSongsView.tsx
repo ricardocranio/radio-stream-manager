@@ -268,12 +268,12 @@ export function CapturedSongsView() {
     let filtered = songs;
     
     if (searchTerm) {
-      const term = searchTerm.toLowerCase();
+      const normalizedSearch = normalizeArtistForDedup(searchTerm).toLowerCase();
       filtered = filtered.filter(
         song =>
-          song.title.toLowerCase().includes(term) ||
-          song.artist.toLowerCase().includes(term) ||
-          song.station_name.toLowerCase().includes(term)
+          normalizeTitleForDedup(song.title).toLowerCase().includes(normalizedSearch) ||
+          normalizeArtistForDedup(song.artist).toLowerCase().includes(normalizedSearch) ||
+          song.station_name.toLowerCase().includes(normalizedSearch)
       );
     }
     
