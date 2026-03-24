@@ -10,6 +10,7 @@ import { useGradeLogStore } from '@/store/gradeLogStore';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { normalizeKeyForMap } from '@/lib/songUtils';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -359,15 +360,9 @@ export function GradePreviewCard() {
     return [];
   }, [gradeBuilder.pendingGradeLines, nextBlockTime, mockSongs]);
 
-  // Normalize string: lowercase, strip accents, collapse whitespace
+  // Use centralized normalizeKeyForMap from songUtils
   const normalizeKey = useCallback((str: string) => {
-    return str
-      .toLowerCase()
-      .trim()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // remove accents
-      .replace(/[^a-z0-9 ]/g, '')     // remove special chars
-      .replace(/\s+/g, ' ');
+    return normalizeKeyForMap(str);
   }, []);
 
   // Build a map of song key -> station from block logs

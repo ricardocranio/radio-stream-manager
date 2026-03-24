@@ -27,3 +27,18 @@ export function normalizeStr(s: string): string {
 export function songKey(artist: string, title: string): string {
   return `${normalizeStr(artist)}|||${normalizeStr(title)}`;
 }
+
+/**
+ * Normalização de chave para mapeamento de emissoras/estação.
+ * Remove acentos, caracteres especiais e colapsa espaços.
+ * Centralizada aqui para evitar duplicação inline.
+ */
+export function normalizeKeyForMap(str: string): string {
+  return str
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 ]/g, '')
+    .replace(/\s+/g, ' ');
+}
