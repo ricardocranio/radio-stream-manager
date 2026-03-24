@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, Component, type ErrorInfo, type ReactNode } from 'react';
 import { useDeferredRender } from '@/hooks/useDeferredRender';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -320,8 +320,32 @@ function SortableCodePill({ cc, stations, updateMapaCodeConfig, removeMapaCodeCo
   );
 }
 
+// ─── Error Boundary ───
+class MapasErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error('[MapasView] Crash:', error, info); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="h-full flex items-center justify-center p-8">
+          <div className="text-center space-y-4 max-w-md">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-destructive/10 border border-destructive/20 flex items-center justify-center">
+              <MapIcon className="w-8 h-8 text-destructive/60" />
+            </div>
+            <h2 className="text-lg font-bold text-foreground">Erro ao carregar Mapas</h2>
+            <p className="text-sm text-muted-foreground">{this.state.error.message}</p>
+            <button onClick={() => this.setState({ error: null })} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium">Tentar novamente</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ─── Main View ───
-export function MapasView() {
+function MapasViewInner() {
   const { mapasConfig, setMapasConfig, updateMapaCodeConfig, addMapaCodeConfig, removeMapaCodeConfig, resetMapaCodeConfigs, reorderMapaCodeConfigs, resetMapaTemplates, updateMapaTemplateLine, removeMapaTemplateLine, addMapaTemplateLine, config, stations } = useRadioStore();
   const [isBuilding, setIsBuilding] = useState(false);
   const [activeDay, setActiveDay] = useState(() => { const d = new Date().getDay(); return [0,1,2,3,4,5,6][d]; }); // 0=dom,1=seg...6=sab
@@ -720,6 +744,14 @@ export function MapasView() {
         </div>
       </div>
     </div>
+  );
+}
+
+export function MapasView() {
+  return (
+    <MapasErrorBoundary>
+      <MapasViewInner />
+    </MapasErrorBoundary>
   );
 }
 
