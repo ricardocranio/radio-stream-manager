@@ -7,7 +7,18 @@
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { STATION_ID_TO_DB_NAME } from '@/lib/gradeBuilder/constants';
 
+// Cache memoizado com TTL de 30s — evita recalcular a cada item da fila
+let _allowedCache: Set<string> | null = null;
+let _allowedCacheAt = 0;
+const ALLOWED_CACHE_TTL_MS = 30_000;
+
 export function getAllowedDownloadStations(): Set<string> {
+  const now = Date.now();
+
+  if (_allowedCache && now - _allowedCacheAt < ALLOWED_CACHE_TTL_MS) {
+    return _allowedCache;
+  }
+
   const state = useRadioStore.getState();
   const { stations, scheduledSequences, sequence } = state;
   const allowed = new Set<string>();
@@ -25,7 +36,6 @@ export function getAllowedDownloadStations(): Set<string> {
     if (dbName) {
       allowed.add(dbName.toLowerCase());
     }
-    // Also try matching by UUID or exact station name
     const station = stations.find(s => s.id === seq.radioSource || s.name.toLowerCase() === seq.radioSource.toLowerCase());
     if (station) {
       allowed.add(station.name.toLowerCase());
@@ -47,7 +57,18 @@ export function getAllowedDownloadStations(): Set<string> {
     }
   }
 
+  _allowedCache = allowed;
+  _allowedCacheAt = now;
+
   return allowed;
+}
+
+/**
+ * Invalida o cache manualmente (chamar quando stations/sequences mudarem).
+ */
+export function invalidateAllowedStationsCache(): void {
+  _allowedCache = null;
+  _allowedCacheAt = 0;
 }
 
 /**

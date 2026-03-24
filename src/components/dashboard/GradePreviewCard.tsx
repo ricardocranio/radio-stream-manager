@@ -359,15 +359,10 @@ export function GradePreviewCard() {
     return [];
   }, [gradeBuilder.pendingGradeLines, nextBlockTime, mockSongs]);
 
-  // Normalize string: lowercase, strip accents, collapse whitespace
+  // Use centralized normalizeKeyForMap from songUtils
   const normalizeKey = useCallback((str: string) => {
-    return str
-      .toLowerCase()
-      .trim()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // remove accents
-      .replace(/[^a-z0-9 ]/g, '')     // remove special chars
-      .replace(/\s+/g, ' ');
+    const { normalizeKeyForMap } = require('@/lib/songUtils');
+    return normalizeKeyForMap(str);
   }, []);
 
   // Build a map of song key -> station from block logs

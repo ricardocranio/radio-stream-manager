@@ -118,9 +118,10 @@ export function useCompetitorAnalysis() {
         }
       }
 
-      // Check library — batch check via Electron or simple store check
+      // Check library — snapshot store once to avoid divergent reads in async callbacks
       const gaps: CompetitorGap[] = [];
-      const { config } = useRadioStore.getState();
+      const storeSnapshot = useRadioStore.getState();
+      const { config } = storeSnapshot;
       
       let librarySet: Set<string> | null = null;
       
@@ -133,7 +134,7 @@ export function useCompetitorAnalysis() {
               const exists = await window.electronAPI!.checkSongExists!({
                 artist: entry.artist,
                 title: entry.title,
-                musicFolders: config.musicFolders,
+                musicFolders: storeSnapshot.config.musicFolders,
               });
               return { key, exists: !!exists };
             } catch {
