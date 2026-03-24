@@ -2,6 +2,21 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule, ScheduledSequence } from '@/types/radio';
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
+import { buildBlockedEngine, type BlockedEngine } from '@/lib/blockedSongsEngine';
+
+// Cached blocked engine — invalidated when blockedSongs/forbiddenWords/aliases change
+let _blockedEngine: BlockedEngine | null = null;
+function getBlockedEngine(state: { config: SystemConfig; songAliases?: SongAlias[] }): BlockedEngine {
+  if (!_blockedEngine) {
+    _blockedEngine = buildBlockedEngine(
+      state.config.blockedSongs ?? [],
+      state.config.forbiddenWords ?? [],
+      state.songAliases ?? []
+    );
+  }
+  return _blockedEngine;
+}
+function invalidateBlockedEngine() { _blockedEngine = null; }
 import type { MapasConfig, MapaCodeConfig } from '@/lib/mapasBuilder/types';
 import { DEFAULT_MAPAS_CONFIG, DEFAULT_CODE_CONFIGS, DEFAULT_TEMPLATES } from '@/lib/mapasBuilder/types';
 
@@ -498,8 +513,13 @@ export const useRadioStore = create<RadioState>()(
       clearCapturedSongs: () => set({ capturedSongs: [] }),
 
       config: defaultConfig,
-      setConfig: (config) =>
-        set((state) => ({ config: { ...state.config, ...config } })),
+      setConfig: (config) => {
+        // Invalidate blocked engine cache when relevant config changes
+        if ('blockedSongs' in config || 'forbiddenWords' in config) {
+          invalidateBlockedEngine();
+        }
+        set((state) => ({ config: { ...state.config, ...config } }));
+      },
 
       deezerConfig: defaultDeezerConfig,
       setDeezerConfig: (config) =>
@@ -542,19 +562,8 @@ export const useRadioStore = create<RadioState>()(
             return state;
           }
           // 🚫 Block check — blocked songs must NEVER enter the missing/download queue
-          const { blockedSongs = [], forbiddenWords = [] } = state.config;
-          const artistL = (song.artist || '').trim().toLowerCase();
-          const titleL = (song.title || '').trim().toLowerCase();
-          const songKey = `${artistL} - ${titleL}`;
-          const blockedList = blockedSongs.map(s => s.toLowerCase().trim());
-          const blockedExact = new Set(blockedList.filter(s => !s.endsWith(' - *')));
-          const blockedWild = blockedList.filter(s => s.endsWith(' - *')).map(s => s.replace(/ - \*$/, ''));
-          const forbiddenLower = forbiddenWords.map(w => w.toLowerCase().trim()).filter(Boolean);
-          if (
-            blockedExact.has(songKey) ||
-            blockedWild.some(b => artistL === b || artistL.includes(b)) ||
-            forbiddenLower.some(w => artistL.includes(w) || titleL.includes(w))
-          ) {
+          const engine = getBlockedEngine(state);
+          if (engine.isBlocked(song.artist || '', song.title || '')) {
             console.log(`[STORE] 🚫 Música bloqueada, não adicionada: ${song.artist} - ${song.title}`);
             return state;
           }
@@ -754,12 +763,12 @@ export const useRadioStore = create<RadioState>()(
         { id: 'default-4', fromArtist: 'x-terra', fromTitle: 'i will survive', toArtist: 'Léo Santana', toTitle: 'Desliza (Olhinho No Corpinho)' },
         { id: 'default-5', fromArtist: 'PROMESSA D', fromTitle: 'PEDIDO DE SOCORRO', toArtist: 'Gustavo Mioto', toTitle: 'Pedido De Socorro (Ao Vivo)' },
       ],
-      setSongAliases: (songAliases) => set({ songAliases }),
-      addSongAlias: (alias) => set((state) => ({ songAliases: [...state.songAliases, alias] })),
-      removeSongAlias: (id) => set((state) => ({ songAliases: state.songAliases.filter(a => a.id !== id) })),
-      updateSongAlias: (id, updates) => set((state) => ({
+      setSongAliases: (songAliases) => { invalidateBlockedEngine(); set({ songAliases }); },
+      addSongAlias: (alias) => { invalidateBlockedEngine(); set((state) => ({ songAliases: [...state.songAliases, alias] })); },
+      removeSongAlias: (id) => { invalidateBlockedEngine(); set((state) => ({ songAliases: state.songAliases.filter(a => a.id !== id) })); },
+      updateSongAlias: (id, updates) => { invalidateBlockedEngine(); set((state) => ({
         songAliases: state.songAliases.map(a => a.id === id ? { ...a, ...updates } : a),
-      })),
+      })); },
 
       // Mapas Config
       mapasConfig: DEFAULT_MAPAS_CONFIG,

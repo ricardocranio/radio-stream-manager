@@ -25,6 +25,8 @@ import type { SongEntry, BlockLogItem, BlockStats, GradeContext, CarryOverSong }
 import { STATION_ID_TO_DB_NAME } from './constants';
 import type { WeekDay, SequenceConfig } from '@/types/radio';
 import { getGenreScore, getEnergyTransitionPenalty, getBpmTransitionPenalty, isGenreCompatible } from './smartGrade';
+import { buildBlockedEngine } from '@/lib/blockedSongsEngine';
+import { buildAliasEngine } from '@/lib/aliasEngine';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -240,40 +242,16 @@ export async function selectSongForSlot(
   const { useRadioStore } = await import('@/store/radioStore');
   const _storeState = useRadioStore.getState();
 
-  // Pre-compute blocked songs sets (read once, reuse for all candidates)
-  const storeConfig = _storeState.config;
-  const _blockedList = (storeConfig.blockedSongs || []).map(s => s.toLowerCase().trim());
-  const _blockedExact = new Set<string>(_blockedList.filter(s => !s.endsWith(' - *')));
-  const _blockedWildcardArtists = _blockedList
-    .filter(s => s.endsWith(' - *'))
-    .map(s => s.replace(/ - \*$/, ''));
-  const _forbiddenLower = (storeConfig.forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
-
-  // Also build alias map so we can check BOTH original and corrected names against the block list
+  // Centralized blocked songs engine (replaces duplicated logic)
   const _allAliases = _storeState.songAliases || [];
+  const _blockedEngine = buildBlockedEngine(
+    _storeState.config.blockedSongs || [],
+    _storeState.config.forbiddenWords || [],
+    _allAliases
+  );
 
-  const isBlockedSong = (artist: string, title: string): boolean => {
-    const artistL = artist.trim().toLowerCase();
-    const titleL = title.trim().toLowerCase();
-    const songKey = `${artistL} - ${titleL}`;
-    if (_blockedExact.has(songKey)) return true;
-    if (_blockedWildcardArtists.some(b => artistL === b || artistL.includes(b))) return true;
-    if (_forbiddenLower.some(w => artistL.includes(w) || titleL.includes(w))) return true;
-
-    // Also check the ALIASED (corrected) name against the block list
-    for (const alias of _allAliases) {
-      if (artistL === alias.fromArtist.toLowerCase().trim() && titleL === alias.fromTitle.toLowerCase().trim()) {
-        const aliasArtistL = alias.toArtist.toLowerCase().trim();
-        const aliasTitleL = alias.toTitle.toLowerCase().trim();
-        const aliasKey = `${aliasArtistL} - ${aliasTitleL}`;
-        if (_blockedExact.has(aliasKey)) return true;
-        if (_blockedWildcardArtists.some(b => aliasArtistL === b || aliasArtistL.includes(b))) return true;
-        if (_forbiddenLower.some(w => aliasArtistL.includes(w) || aliasTitleL.includes(w))) return true;
-        break;
-      }
-    }
-    return false;
-  };
+  const isBlockedSong = (artist: string, title: string): boolean =>
+    _blockedEngine.isBlocked(artist, title);
 
   const isValidCandidate = (title: string, artist: string) => {
     const key = `${title.toLowerCase()}-${artist.toLowerCase()}`;
@@ -297,12 +275,8 @@ export async function selectSongForSlot(
     return true;
   };
 
-  // Build reverse alias map: corrected name → original name (for library fallback)
-  const songAliases = _allAliases;
-  const reverseAliasMap = new Map<string, { fromArtist: string; fromTitle: string }>();
-  for (const alias of songAliases) {
-    reverseAliasMap.set(toLibKey(alias.toArtist, alias.toTitle), { fromArtist: alias.fromArtist, fromTitle: alias.fromTitle });
-  }
+  // Centralized alias engine (replaces manual reverse map)
+  const _aliasEngine = buildAliasEngine(_allAliases);
 
   /**
    * Enhanced library lookup: tries corrected name first, then original alias name.
@@ -319,10 +293,10 @@ export async function selectSongForSlot(
       if (result.exists) return result;
     }
     // Fallback: try original (pre-alias) name on disk
-    const reverseAlias = reverseAliasMap.get(key);
-    if (reverseAlias) {
-      console.log(`[SONG-SELECT] 🔄 Alias fallback: "${artist} - ${title}" → tentando "${reverseAlias.fromArtist} - ${reverseAlias.fromTitle}" no disco`);
-      const fallbackResult = await ctx.findSongInLibrary(reverseAlias.fromArtist, reverseAlias.fromTitle);
+    const reverse = _aliasEngine.resolveReverse(artist, title);
+    if (reverse.artist !== artist || reverse.title !== title) {
+      console.log(`[SONG-SELECT] 🔄 Alias fallback: "${artist} - ${title}" → tentando "${reverse.artist} - ${reverse.title}" no disco`);
+      const fallbackResult = await ctx.findSongInLibrary(reverse.artist, reverse.title);
       if (fallbackResult.exists) {
         console.log(`[SONG-SELECT] ✅ Encontrado via alias reverso: ${fallbackResult.filename}`);
         return fallbackResult;
