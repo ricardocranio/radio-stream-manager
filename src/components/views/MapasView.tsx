@@ -539,6 +539,9 @@ function MapasViewInner() {
               );
             })}
             <div className="w-px h-6 bg-border/20 mx-1" />
+            <Button size="sm" variant="outline" className="h-7 text-[10px] border-border/30" onClick={loadFromDisk} disabled={isLoading}>
+              <FolderOpen className="w-3 h-3 mr-1" /> {isLoading ? 'Lendo...' : 'Carregar'}
+            </Button>
             <Button size="sm" variant="outline" className="h-7 text-[10px] border-border/30" onClick={() => { resetMapaTemplates(); toast.success('Templates restaurados'); }}>
               <RotateCcw className="w-3 h-3 mr-1" /> Reset
             </Button>
