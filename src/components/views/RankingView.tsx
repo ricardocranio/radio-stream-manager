@@ -57,23 +57,7 @@ const top50Data = rankingData.slice(0, 10).map((item, index) => ({
   fill: index < 3 ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
 }));
 
-const styleDistribution = [
-  { name: 'Sertanejo', value: 45, color: 'hsl(190, 95%, 50%)' },
-  { name: 'Pagode', value: 20, color: 'hsl(25, 95%, 55%)' },
-  { name: 'Pop/Variado', value: 20, color: 'hsl(150, 80%, 45%)' },
-  { name: 'Dance', value: 10, color: 'hsl(280, 70%, 55%)' },
-  { name: 'Agronejo', value: 5, color: 'hsl(40, 95%, 55%)' },
-];
-
-const weeklyTrend = [
-  { day: 'Seg', plays: 120 },
-  { day: 'Ter', plays: 145 },
-  { day: 'Qua', plays: 132 },
-  { day: 'Qui', plays: 178 },
-  { day: 'Sex', plays: 210 },
-  { day: 'Sáb', plays: 189 },
-  { day: 'Dom', plays: 156 },
-];
+// (static styleDistribution and weeklyTrend removed — now computed dynamically)
 
 const getMedalIcon = (position: number) => {
   if (position === 1) return <Crown className="w-5 h-5 text-yellow-400" />;
