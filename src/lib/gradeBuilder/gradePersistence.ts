@@ -43,7 +43,7 @@ export function loadGradeFromStorage(currentDayCode: string): {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const data: PersistedGrade = JSON.parse(raw);
+    const data: Partial<PersistedGrade> = JSON.parse(raw);
 
     // Invalidate if day changed
     if (data.dayCode !== currentDayCode) {
@@ -52,17 +52,33 @@ export function loadGradeFromStorage(currentDayCode: string): {
     }
 
     // Invalidate if older than 6 hours
-    const age = Date.now() - new Date(data.savedAt).getTime();
+    const savedAt = typeof data.savedAt === 'string' ? new Date(data.savedAt).getTime() : NaN;
+    const age = Date.now() - savedAt;
     if (age > 6 * 60 * 60 * 1000) {
       localStorage.removeItem(STORAGE_KEY);
       return null;
     }
 
+    if (!Array.isArray(data.lines) || !Array.isArray(data.lockedBlocks)) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+
+    const safeLines = data.lines.filter(
+      (entry): entry is [string, string] =>
+        Array.isArray(entry) && entry.length === 2 && typeof entry[0] === 'string' && typeof entry[1] === 'string'
+    );
+
+    const safeLockedBlocks = data.lockedBlocks.filter(
+      (entry): entry is string => typeof entry === 'string'
+    );
+
     return {
-      lineMap: new Map(data.lines),
-      lockedBlocks: new Set(data.lockedBlocks),
+      lineMap: new Map(safeLines),
+      lockedBlocks: new Set(safeLockedBlocks),
     };
   } catch {
+    localStorage.removeItem(STORAGE_KEY);
     return null;
   }
 }
