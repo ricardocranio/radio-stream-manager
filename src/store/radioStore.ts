@@ -758,12 +758,12 @@ export const useRadioStore = create<RadioState>()(
         { id: 'default-4', fromArtist: 'x-terra', fromTitle: 'i will survive', toArtist: 'Léo Santana', toTitle: 'Desliza (Olhinho No Corpinho)' },
         { id: 'default-5', fromArtist: 'PROMESSA D', fromTitle: 'PEDIDO DE SOCORRO', toArtist: 'Gustavo Mioto', toTitle: 'Pedido De Socorro (Ao Vivo)' },
       ],
-      setSongAliases: (songAliases) => set({ songAliases }),
-      addSongAlias: (alias) => set((state) => ({ songAliases: [...state.songAliases, alias] })),
-      removeSongAlias: (id) => set((state) => ({ songAliases: state.songAliases.filter(a => a.id !== id) })),
-      updateSongAlias: (id, updates) => set((state) => ({
+      setSongAliases: (songAliases) => { invalidateBlockedEngine(); set({ songAliases }); },
+      addSongAlias: (alias) => { invalidateBlockedEngine(); set((state) => ({ songAliases: [...state.songAliases, alias] })); },
+      removeSongAlias: (id) => { invalidateBlockedEngine(); set((state) => ({ songAliases: state.songAliases.filter(a => a.id !== id) })); },
+      updateSongAlias: (id, updates) => { invalidateBlockedEngine(); set((state) => ({
         songAliases: state.songAliases.map(a => a.id === id ? { ...a, ...updates } : a),
-      })),
+      })); },
 
       // Mapas Config
       mapasConfig: DEFAULT_MAPAS_CONFIG,
