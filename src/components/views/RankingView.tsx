@@ -57,23 +57,7 @@ const top50Data = rankingData.slice(0, 10).map((item, index) => ({
   fill: index < 3 ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
 }));
 
-const styleDistribution = [
-  { name: 'Sertanejo', value: 45, color: 'hsl(190, 95%, 50%)' },
-  { name: 'Pagode', value: 20, color: 'hsl(25, 95%, 55%)' },
-  { name: 'Pop/Variado', value: 20, color: 'hsl(150, 80%, 45%)' },
-  { name: 'Dance', value: 10, color: 'hsl(280, 70%, 55%)' },
-  { name: 'Agronejo', value: 5, color: 'hsl(40, 95%, 55%)' },
-];
-
-const weeklyTrend = [
-  { day: 'Seg', plays: 120 },
-  { day: 'Ter', plays: 145 },
-  { day: 'Qua', plays: 132 },
-  { day: 'Qui', plays: 178 },
-  { day: 'Sex', plays: 210 },
-  { day: 'Sáb', plays: 189 },
-  { day: 'Dom', plays: 156 },
-];
+// (static styleDistribution and weeklyTrend removed — now computed dynamically)
 
 const getMedalIcon = (position: number) => {
   if (position === 1) return <Crown className="w-5 h-5 text-yellow-400" />;
@@ -144,8 +128,9 @@ export function RankingView() {
     
     // Apply date filter
     if (getDateThreshold) {
+      const thresholdMs = getDateThreshold.getTime();
       filtered = filtered.filter(song => 
-        song.lastPlayed && new Date(song.lastPlayed) >= getDateThreshold
+        song.lastPlayed && song.lastPlayed >= thresholdMs
       );
     }
     
@@ -157,6 +142,9 @@ export function RankingView() {
       style: song.style,
       trend: song.trend,
       lastPlayed: song.lastPlayed,
+      peakPosition: song.peakPosition,
+      previousPosition: song.previousPosition,
+      firstPlayed: song.firstPlayed,
       decayFactor: getDecayFactor(song.lastPlayed, now),
       weightedScore: getWeightedScore(song, now),
     }));
@@ -235,6 +223,7 @@ export function RankingView() {
 
   // Load demo data into ranking if empty (first time)
   const handleLoadDemoData = () => {
+    const now = Date.now();
     const demoSongs = rankingData.map((song, index) => ({
       id: `demo-${index}`,
       title: song.title,
@@ -242,7 +231,10 @@ export function RankingView() {
       plays: song.plays,
       style: song.style,
       trend: song.trend as 'up' | 'down' | 'stable',
-      lastPlayed: new Date(),
+      lastPlayed: now - index * 3_600_000, // stagger by 1h each
+      firstPlayed: now - (10 + index) * 86_400_000,
+      peakPosition: index + 1,
+      previousPosition: index + 1,
     }));
     setRankingSongs(demoSongs);
     toast({
@@ -255,11 +247,7 @@ export function RankingView() {
     const exportData = {
       exportDate: new Date().toISOString(),
       totalSongs: filteredRanking.length,
-      filters: {
-        style: selectedStyle,
-        dateRange: dateRange,
-        searchTerm: searchTerm,
-      },
+      filters: { style: selectedStyle, dateRange, searchTerm },
       ranking: filteredRanking.map((song, index) => ({
         position: index + 1,
         title: song.title,
@@ -267,11 +255,13 @@ export function RankingView() {
         plays: song.plays,
         style: song.style,
         trend: song.trend,
-        // File format for grade: POSICAO{N}.MP3
+        decayFactor: song.decayFactor,
+        weightedScore: Math.round(song.weightedScore * 100) / 100,
+        peakPosition: song.peakPosition ?? '-',
         gradeFileName: `POSICAO${index + 1}.MP3`,
+        lastPlayed: new Date(song.lastPlayed).toISOString(),
       })),
     };
-
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -279,11 +269,34 @@ export function RankingView() {
     a.download = `ranking_top25_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    toast({ title: '📥 Exportação JSON concluída!', description: `${filteredRanking.length} músicas exportadas.` });
+  };
 
-    toast({
-      title: '📥 Exportação concluída!',
-      description: `${filteredRanking.length} músicas exportadas para JSON.`,
-    });
+  const handleExportCSV = () => {
+    const header = 'Posição;Título;Artista;Estilo;Reproduções;Score;Decay;Trend;Melhor Posição;Última Reprodução';
+    const rows = filteredRanking.map((song, index) =>
+      [
+        index + 1,
+        `"${song.title}"`,
+        `"${song.artist}"`,
+        song.style,
+        song.plays,
+        Math.round(song.weightedScore * 100) / 100,
+        song.decayFactor.toFixed(2),
+        song.trend,
+        song.peakPosition && song.peakPosition < 999 ? song.peakPosition : '-',
+        new Date(song.lastPlayed).toLocaleString('pt-BR'),
+      ].join(';')
+    );
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ranking_top25_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: '📥 Exportação CSV concluída!', description: `${filteredRanking.length} músicas exportadas.` });
   };
 
   const allStyles = useMemo(() => {
@@ -318,7 +331,12 @@ export function RankingView() {
           
           <Button variant="outline" size="sm" className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10" onClick={handleExportJSON}>
             <FileJson className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Exportar</span>
+            <span className="hidden sm:inline">JSON</span>
+          </Button>
+          
+          <Button variant="outline" size="sm" className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10" onClick={handleExportCSV}>
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">CSV</span>
           </Button>
           
           <AlertDialog>
@@ -588,6 +606,11 @@ export function RankingView() {
                             </span>
                           </div>
                         </div>
+                        {song.peakPosition != null && song.peakPosition <= 10 && song.peakPosition < 999 && (
+                          <span className="text-xs text-yellow-400 shrink-0" title={`Melhor posição: #${song.peakPosition}`}>
+                            🏆{song.peakPosition}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -683,41 +706,69 @@ export function RankingView() {
               </CardContent>
             </Card>
 
-            {/* Weekly Trend */}
+            {/* Weekly Trend — dynamic from lastPlayed data */}
             <Card className="glass-card">
               <CardHeader className="border-b border-border">
-                <CardTitle>Reproduções Semanais</CardTitle>
+                <CardTitle>Distribuição por Dia da Semana</CardTitle>
               </CardHeader>
               <CardContent className="p-4">
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={weeklyTrend}>
-                      <defs>
-                        <linearGradient id="colorPlays" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 20%, 18%)" />
-                      <XAxis dataKey="day" stroke="hsl(215, 15%, 55%)" fontSize={12} />
-                      <YAxis stroke="hsl(215, 15%, 55%)" fontSize={12} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(220, 18%, 11%)',
-                          border: '1px solid hsl(220, 20%, 18%)',
-                          borderRadius: '8px',
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="plays"
-                        stroke="hsl(190, 95%, 50%)"
-                        fillOpacity={1}
-                        fill="url(#colorPlays)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                {(() => {
+                  const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+                  const dayCounts = [0, 0, 0, 0, 0, 0, 0];
+                  currentRankingData.forEach(s => {
+                    if (s.lastPlayed) {
+                      const day = new Date(s.lastPlayed).getDay();
+                      dayCounts[day] += s.plays;
+                    }
+                  });
+                  // Reorder to start on Monday
+                  const dynamicWeekly = [1, 2, 3, 4, 5, 6, 0].map(i => ({
+                    day: dayNames[i],
+                    plays: dayCounts[i],
+                  }));
+                  
+                  const hasData = dynamicWeekly.some(d => d.plays > 0);
+                  
+                  if (!hasData) {
+                    return (
+                      <div className="h-80 flex items-center justify-center">
+                        <p className="text-muted-foreground text-sm">Sem dados para exibir</p>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <div className="h-80">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={dynamicWeekly}>
+                          <defs>
+                            <linearGradient id="colorPlays" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 20%, 18%)" />
+                          <XAxis dataKey="day" stroke="hsl(215, 15%, 55%)" fontSize={12} />
+                          <YAxis stroke="hsl(215, 15%, 55%)" fontSize={12} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: 'hsl(220, 18%, 11%)',
+                              border: '1px solid hsl(220, 20%, 18%)',
+                              borderRadius: '8px',
+                            }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="plays"
+                            stroke="hsl(190, 95%, 50%)"
+                            fillOpacity={1}
+                            fill="url(#colorPlays)"
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>
