@@ -729,65 +729,76 @@ export function RankingView() {
               <CardTitle>Análise de Tendências</CardTitle>
             </CardHeader>
             <CardContent className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="p-4 rounded-lg bg-success/10 border border-success/20">
-                  <h4 className="font-medium text-success mb-3">🔥 Em Alta</h4>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-success" />
-                      <span className="text-foreground">Atrasadinha</span>
-                      <span className="text-success ml-auto">+23%</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-success" />
-                      <span className="text-foreground">Medo Bobo</span>
-                      <span className="text-success ml-auto">+18%</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-success" />
-                      <span className="text-foreground">Deixa Eu Te Amar</span>
-                      <span className="text-success ml-auto">+15%</span>
-                    </li>
-                  </ul>
-                </div>
+              {(() => {
+                const upSongs = currentRankingData.filter(s => s.trend === 'up');
+                const stableSongs = currentRankingData.filter(s => s.trend === 'stable');
+                const downSongs = currentRankingData.filter(s => s.trend === 'down');
+                
+                if (currentRankingData.length === 0) {
+                  return (
+                    <div className="text-center py-8">
+                      <TrendingUp className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />
+                      <p className="text-muted-foreground">Sem dados de tendência</p>
+                      <p className="text-xs text-muted-foreground/70 mt-1">As tendências são calculadas a partir dos dados reais do ranking</p>
+                    </div>
+                  );
+                }
+                
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="p-4 rounded-lg bg-success/10 border border-success/20">
+                      <h4 className="font-medium text-success mb-3">🔥 Em Alta ({upSongs.length})</h4>
+                      <ul className="space-y-2 text-sm">
+                        {upSongs.length === 0 ? (
+                          <li className="text-muted-foreground text-xs">Nenhuma em alta no momento</li>
+                        ) : (
+                          upSongs.map((s) => (
+                            <li key={`up-${s.title}-${s.artist}`} className="flex items-center gap-2">
+                              <TrendingUp className="w-4 h-4 text-success shrink-0" />
+                              <span className="text-foreground truncate">{s.title}</span>
+                              <span className="text-success ml-auto shrink-0 font-bold">{s.plays}</span>
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    </div>
 
-                <div className="p-4 rounded-lg bg-muted/30 border border-border">
-                  <h4 className="font-medium text-muted-foreground mb-3">→ Estáveis</h4>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-center gap-2">
-                      <span className="w-4 h-4 text-center text-muted-foreground">—</span>
-                      <span className="text-foreground">Hear Me Now</span>
-                      <span className="text-muted-foreground ml-auto">0%</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="w-4 h-4 text-center text-muted-foreground">—</span>
-                      <span className="text-foreground">Shallow</span>
-                      <span className="text-muted-foreground ml-auto">0%</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="w-4 h-4 text-center text-muted-foreground">—</span>
-                      <span className="text-foreground">Esse Cara Sou Eu</span>
-                      <span className="text-muted-foreground ml-auto">0%</span>
-                    </li>
-                  </ul>
-                </div>
+                    <div className="p-4 rounded-lg bg-muted/30 border border-border">
+                      <h4 className="font-medium text-muted-foreground mb-3">→ Estáveis ({stableSongs.length})</h4>
+                      <ul className="space-y-2 text-sm">
+                        {stableSongs.length === 0 ? (
+                          <li className="text-muted-foreground text-xs">Nenhuma estável no momento</li>
+                        ) : (
+                          stableSongs.map((s) => (
+                            <li key={`stable-${s.title}-${s.artist}`} className="flex items-center gap-2">
+                              <span className="w-4 h-4 text-center text-muted-foreground shrink-0">—</span>
+                              <span className="text-foreground truncate">{s.title}</span>
+                              <span className="text-muted-foreground ml-auto shrink-0">{s.plays}</span>
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    </div>
 
-                <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
-                  <h4 className="font-medium text-destructive mb-3">📉 Em Queda</h4>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-destructive rotate-180" />
-                      <span className="text-foreground">Propaganda</span>
-                      <span className="text-destructive ml-auto">-8%</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-destructive rotate-180" />
-                      <span className="text-foreground">Blinding Lights</span>
-                      <span className="text-destructive ml-auto">-5%</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
+                    <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+                      <h4 className="font-medium text-destructive mb-3">📉 Em Queda ({downSongs.length})</h4>
+                      <ul className="space-y-2 text-sm">
+                        {downSongs.length === 0 ? (
+                          <li className="text-muted-foreground text-xs">Nenhuma em queda no momento</li>
+                        ) : (
+                          downSongs.map((s) => (
+                            <li key={`down-${s.title}-${s.artist}`} className="flex items-center gap-2">
+                              <TrendingUp className="w-4 h-4 text-destructive rotate-180 shrink-0" />
+                              <span className="text-foreground truncate">{s.title}</span>
+                              <span className="text-destructive ml-auto shrink-0 font-bold">{s.plays}</span>
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
