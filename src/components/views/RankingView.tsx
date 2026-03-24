@@ -235,6 +235,7 @@ export function RankingView() {
 
   // Load demo data into ranking if empty (first time)
   const handleLoadDemoData = () => {
+    const now = Date.now();
     const demoSongs = rankingData.map((song, index) => ({
       id: `demo-${index}`,
       title: song.title,
@@ -242,7 +243,10 @@ export function RankingView() {
       plays: song.plays,
       style: song.style,
       trend: song.trend as 'up' | 'down' | 'stable',
-      lastPlayed: new Date(),
+      lastPlayed: now - index * 3_600_000, // stagger by 1h each
+      firstPlayed: now - (10 + index) * 86_400_000,
+      peakPosition: index + 1,
+      previousPosition: index + 1,
     }));
     setRankingSongs(demoSongs);
     toast({
