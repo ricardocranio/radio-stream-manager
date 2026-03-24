@@ -244,11 +244,7 @@ export function RankingView() {
     const exportData = {
       exportDate: new Date().toISOString(),
       totalSongs: filteredRanking.length,
-      filters: {
-        style: selectedStyle,
-        dateRange: dateRange,
-        searchTerm: searchTerm,
-      },
+      filters: { style: selectedStyle, dateRange, searchTerm },
       ranking: filteredRanking.map((song, index) => ({
         position: index + 1,
         title: song.title,
@@ -256,11 +252,13 @@ export function RankingView() {
         plays: song.plays,
         style: song.style,
         trend: song.trend,
-        // File format for grade: POSICAO{N}.MP3
+        decayFactor: song.decayFactor,
+        weightedScore: Math.round(song.weightedScore * 100) / 100,
+        peakPosition: song.peakPosition ?? '-',
         gradeFileName: `POSICAO${index + 1}.MP3`,
+        lastPlayed: new Date(song.lastPlayed).toISOString(),
       })),
     };
-
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -268,11 +266,34 @@ export function RankingView() {
     a.download = `ranking_top25_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    toast({ title: '📥 Exportação JSON concluída!', description: `${filteredRanking.length} músicas exportadas.` });
+  };
 
-    toast({
-      title: '📥 Exportação concluída!',
-      description: `${filteredRanking.length} músicas exportadas para JSON.`,
-    });
+  const handleExportCSV = () => {
+    const header = 'Posição;Título;Artista;Estilo;Reproduções;Score;Decay;Trend;Melhor Posição;Última Reprodução';
+    const rows = filteredRanking.map((song, index) =>
+      [
+        index + 1,
+        `"${song.title}"`,
+        `"${song.artist}"`,
+        song.style,
+        song.plays,
+        Math.round(song.weightedScore * 100) / 100,
+        song.decayFactor.toFixed(2),
+        song.trend,
+        song.peakPosition && song.peakPosition < 999 ? song.peakPosition : '-',
+        new Date(song.lastPlayed).toLocaleString('pt-BR'),
+      ].join(';')
+    );
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ranking_top25_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: '📥 Exportação CSV concluída!', description: `${filteredRanking.length} músicas exportadas.` });
   };
 
   const allStyles = useMemo(() => {
