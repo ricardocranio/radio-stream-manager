@@ -513,8 +513,13 @@ export const useRadioStore = create<RadioState>()(
       clearCapturedSongs: () => set({ capturedSongs: [] }),
 
       config: defaultConfig,
-      setConfig: (config) =>
-        set((state) => ({ config: { ...state.config, ...config } })),
+      setConfig: (config) => {
+        // Invalidate blocked engine cache when relevant config changes
+        if ('blockedSongs' in config || 'forbiddenWords' in config) {
+          invalidateBlockedEngine();
+        }
+        set((state) => ({ config: { ...state.config, ...config } }));
+      },
 
       deezerConfig: defaultDeezerConfig,
       setDeezerConfig: (config) =>
