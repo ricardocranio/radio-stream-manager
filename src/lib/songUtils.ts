@@ -18,6 +18,10 @@ export function normalizeStr(s: string): string {
     .trim()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    // Unifica conectores de artistas: feat. / feat / ft. / ft / & / e (conjunção) → "feat"
+    .replace(/\s*(?:feat\.?|ft\.?)\s*/gi, ' feat ')
+    .replace(/\s+&\s+/g, ' feat ')
+    .replace(/\s+e\s+/g, ' feat ')
     .replace(/\s+/g, ' ');
 }
 
