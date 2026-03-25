@@ -16,8 +16,6 @@ import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 import { subHours } from 'date-fns';
 import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 import { isStationAllowedForDownload } from '@/lib/allowedDownloadStations';
-import { buildBlockedEngine } from '@/lib/blockedSongsEngine';
-import { buildAliasEngine } from '@/lib/aliasEngine';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -45,12 +43,18 @@ export function useCapturedDownloadService() {
     const { deezerConfig, config, addDownloadHistory, songAliases } = useRadioStore.getState();
 
     // === Apply alias correction: use "Para" (correct) name, block "De" (wrong) ===
-    const aliasEng = buildAliasEngine(songAliases ?? []);
-    const resolved = aliasEng.resolve(song.artist, song.title);
-    let dlArtist = resolved.artist;
-    let dlTitle = resolved.title;
-    if (dlArtist !== song.artist || dlTitle !== song.title) {
-      console.log(`[CAP-DL] 🔄 Alias: "${song.artist} - ${song.title}" → "${dlArtist} - ${dlTitle}"`);
+    let dlArtist = song.artist;
+    let dlTitle = song.title;
+    if (songAliases?.length) {
+      for (const alias of songAliases) {
+        if (song.artist.trim().toLowerCase() === alias.fromArtist.toLowerCase().trim() &&
+            song.title.trim().toLowerCase() === alias.fromTitle.toLowerCase().trim()) {
+          console.log(`[CAP-DL] 🔄 Alias: "${song.artist} - ${song.title}" → "${alias.toArtist} - ${alias.toTitle}"`);
+          dlArtist = alias.toArtist;
+          dlTitle = alias.toTitle;
+          break;
+        }
+      }
     }
 
     // Check library first (using corrected name)
@@ -305,18 +309,44 @@ export function useCapturedDownloadService() {
 
       // Deduplicate by artist+title and filter blocked songs (checking BOTH original and aliased names)
       const storeState = useRadioStore.getState();
-      const blockedEng = buildBlockedEngine(
-        storeState.config.blockedSongs ?? [],
-        storeState.config.forbiddenWords ?? [],
-        storeState.songAliases ?? []
-      );
+      const blockedList = (storeState.config.blockedSongs || []).map(s => s.toLowerCase().trim());
+      const blockedExact = new Set<string>(blockedList.filter(s => !s.endsWith(' - *')));
+      const blockedWildcardArtists = blockedList
+        .filter(s => s.endsWith(' - *'))
+        .map(s => s.replace(/ - \*$/, ''));
+      const forbiddenLower = (storeState.config.forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
+      const songAliases = storeState.songAliases || [];
+      
+      const isBlockedCheck = (artist: string, title: string): boolean => {
+        const artistLower = artist.trim().toLowerCase();
+        const titleLower = title.trim().toLowerCase();
+        const key = `${artistLower} - ${titleLower}`;
+        if (blockedExact.has(key)) return true;
+        if (blockedWildcardArtists.some(blocked => artistLower === blocked || artistLower.includes(blocked))) return true;
+        if (forbiddenLower.some(word => artistLower.includes(word) || titleLower.includes(word))) return true;
+        return false;
+      };
+      
+      const isBlocked = (artist: string, title: string): boolean => {
+        // Check original name
+        if (isBlockedCheck(artist, title)) return true;
+        // Check aliased (corrected) name too
+        for (const alias of songAliases) {
+          if (artist.trim().toLowerCase() === alias.fromArtist.toLowerCase().trim() &&
+              title.trim().toLowerCase() === alias.fromTitle.toLowerCase().trim()) {
+            if (isBlockedCheck(alias.toArtist, alias.toTitle)) return true;
+            break;
+          }
+        }
+        return false;
+      };
       
       const seen = new Set<string>();
       const unique: CapturedQueueItem[] = [];
       for (const song of data) {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
         if (seen.has(key) || processedRef.current.has(key)) continue;
-        if (blockedEng.isBlocked(song.artist, song.title)) continue;
+        if (isBlocked(song.artist, song.title)) continue;
         // === STATION FILTER: only download from sequence/priority stations ===
         if (!isStationAllowedForDownload(song.station_name)) continue;
         seen.add(key);

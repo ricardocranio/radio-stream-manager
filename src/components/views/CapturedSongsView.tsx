@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { normalizeArtistForDedup, normalizeTitleForDedup } from '@/lib/normalizeForDedup';
 import { useDeferredRender } from '@/hooks/useDeferredRender';
 import { Music, Radio, Calendar, Filter, RefreshCw, Download, TrendingUp, Clock, Search, Loader2, Database, BarChart3, PieChart as PieChartIcon, Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -268,12 +267,12 @@ export function CapturedSongsView() {
     let filtered = songs;
     
     if (searchTerm) {
-      const normalizedSearch = normalizeArtistForDedup(searchTerm).toLowerCase();
+      const term = searchTerm.toLowerCase();
       filtered = filtered.filter(
         song =>
-          normalizeTitleForDedup(song.title).toLowerCase().includes(normalizedSearch) ||
-          normalizeArtistForDedup(song.artist).toLowerCase().includes(normalizedSearch) ||
-          song.station_name.toLowerCase().includes(normalizedSearch)
+          song.title.toLowerCase().includes(term) ||
+          song.artist.toLowerCase().includes(term) ||
+          song.station_name.toLowerCase().includes(term)
       );
     }
     

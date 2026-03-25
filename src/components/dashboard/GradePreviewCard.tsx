@@ -10,7 +10,6 @@ import { useGradeLogStore } from '@/store/gradeLogStore';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { normalizeKeyForMap } from '@/lib/songUtils';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -360,9 +359,15 @@ export function GradePreviewCard() {
     return [];
   }, [gradeBuilder.pendingGradeLines, nextBlockTime, mockSongs]);
 
-  // Use centralized normalizeKeyForMap from songUtils
+  // Normalize string: lowercase, strip accents, collapse whitespace
   const normalizeKey = useCallback((str: string) => {
-    return normalizeKeyForMap(str);
+    return str
+      .toLowerCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // remove accents
+      .replace(/[^a-z0-9 ]/g, '')     // remove special chars
+      .replace(/\s+/g, ' ');
   }, []);
 
   // Build a map of song key -> station from block logs
@@ -417,8 +422,8 @@ export function GradePreviewCard() {
 
     const songsToCheck = displaySongs.filter(s => !s.isSpecial);
 
-    for (let i = 0; i < songsToCheck.length; i += 5) {
-      const batch = songsToCheck.slice(i, i + 5);
+    for (let i = 0; i < songsToCheck.length; i += 3) {
+      const batch = songsToCheck.slice(i, i + 3);
       const results = await Promise.all(
         batch.map(async (song) => {
           const key = song.filename.toLowerCase();

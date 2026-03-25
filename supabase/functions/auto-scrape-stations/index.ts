@@ -1,5 +1,4 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { normalizeForDedup } from '../_shared/normalizeForDedup.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -520,12 +519,11 @@ async function processStation(
       .limit(1);
 
     if (!existing || existing.length === 0) {
-      const np = normalizeForDedup(parsed.nowPlaying.artist, parsed.nowPlaying.title);
       const { error: insertError } = await supabase.from('scraped_songs').insert({
         station_id: station.id,
         station_name: station.name,
-        title: np.title,
-        artist: np.artist,
+        title: parsed.nowPlaying.title,
+        artist: parsed.nowPlaying.artist,
         is_now_playing: true,
         source: sourceUsed,
       });
@@ -544,10 +542,9 @@ async function processStation(
       .gte('scraped_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
       .limit(1);
     if (!existing || existing.length === 0) {
-      const ns = normalizeForDedup(song.artist, song.title);
       const { error: insertError } = await supabase.from('scraped_songs').insert({
         station_id: station.id, station_name: station.name,
-        title: ns.title, artist: ns.artist,
+        title: song.title, artist: song.artist,
         is_now_playing: false, source: sourceUsed,
       });
       if (!insertError) songsInserted++;
@@ -584,10 +581,9 @@ async function processSpecialMonitoring(
       .gte('scraped_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
       .limit(1);
     if (!existing || existing.length === 0) {
-      const nsp = normalizeForDedup(parsed.nowPlaying.artist, parsed.nowPlaying.title);
       const { error: insertError } = await supabase.from('scraped_songs').insert({
         station_name: schedule.station_name,
-        title: nsp.title, artist: nsp.artist,
+        title: parsed.nowPlaying.title, artist: parsed.nowPlaying.artist,
         is_now_playing: true, source: 'onlineradiobox',
       });
       if (!insertError) {

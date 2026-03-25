@@ -10,17 +10,14 @@ interface PendingUpdate {
   count: number;
 }
 
-const GENERIC_STYLES = ['POP/VARIADO', 'VARIADO', 'POP', ''];
-
 class RankingBatcher {
   private pendingUpdates: Map<string, PendingUpdate> = new Map();
   private lastFlush: number = Date.now();
   private flushIntervalId: ReturnType<typeof setTimeout> | null = null;
-  private visibilityHandler: (() => void) | null = null;
   
+  // Flush interval in ms (6 hours = 21600000ms, but we'll use 30 min for practical testing)
   private readonly FLUSH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
-  private readonly MAX_PENDING = 500;
-  private readonly MIN_VISIBILITY_WAIT = 60 * 1000; // 1 minute
+  private readonly MAX_PENDING = 500; // Max pending updates before force flush
   
   private flushCallback: ((updates: PendingUpdate[]) => void) | null = null;
 
@@ -28,7 +25,6 @@ class RankingBatcher {
    * Initialize the batcher with a callback to apply accumulated updates
    */
   init(onFlush: (updates: PendingUpdate[]) => void) {
-    if (this.flushCallback) return; // prevent accidental re-init
     this.flushCallback = onFlush;
     
     // Set up periodic flush
@@ -40,18 +36,17 @@ class RankingBatcher {
       this.flush();
     }, this.FLUSH_INTERVAL_MS);
     
-    // Flush on visibility change (when user returns to tab)
+    // Also flush on visibility change (when user returns to tab)
     if (typeof document !== 'undefined') {
-      this.visibilityHandler = () => {
-        if (document.visibilityState !== 'visible') return;
-        if (this.pendingUpdates.size > 0) {
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && this.pendingUpdates.size > 0) {
+          // Only flush if there are pending updates and enough time has passed
           const timeSinceLastFlush = Date.now() - this.lastFlush;
-          if (timeSinceLastFlush > this.MIN_VISIBILITY_WAIT) {
+          if (timeSinceLastFlush > 60000) { // At least 1 minute
             this.flush();
           }
         }
-      };
-      document.addEventListener('visibilitychange', this.visibilityHandler);
+      });
     }
   }
 
@@ -59,19 +54,11 @@ class RankingBatcher {
    * Queue a ranking update (batched, not immediate)
    */
   queueUpdate(title: string, artist: string, style: string) {
-    // Guard against empty inputs
-    if (!title || !artist) return;
-    
-    const key = `${title.toLowerCase().trim()}::${artist.toLowerCase().trim()}`;
+    const key = `${title.toLowerCase().trim()}|${artist.toLowerCase().trim()}`;
     
     const existing = this.pendingUpdates.get(key);
     if (existing) {
       existing.count++;
-      // Upgrade style if incoming is more specific than generic
-      if (style && !GENERIC_STYLES.includes(style.toUpperCase().trim()) &&
-          GENERIC_STYLES.includes(existing.style.toUpperCase().trim())) {
-        existing.style = style;
-      }
     } else {
       this.pendingUpdates.set(key, {
         title: title.trim(),
@@ -97,16 +84,13 @@ class RankingBatcher {
     this.pendingUpdates.clear();
     this.lastFlush = Date.now();
     
+    // Log only summary
     if (updates.length > 0) {
       console.log(`[RANKING-BATCH] Aplicando ${updates.length} atualizações acumuladas`);
     }
     
     if (this.flushCallback) {
-      try {
-        this.flushCallback(updates);
-      } catch (err) {
-        console.error('[RANKING-BATCH] Erro no flush:', err);
-      }
+      this.flushCallback(updates);
     }
   }
 
@@ -131,11 +115,6 @@ class RankingBatcher {
     if (this.flushIntervalId) {
       clearInterval(this.flushIntervalId);
       this.flushIntervalId = null;
-    }
-    // Remove visibility listener properly
-    if (this.visibilityHandler && typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', this.visibilityHandler);
-      this.visibilityHandler = null;
     }
     this.flush(); // Final flush
     this.flushCallback = null;

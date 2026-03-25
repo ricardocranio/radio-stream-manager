@@ -12,7 +12,7 @@ on:
       version:
         description: 'Tag da versão (ex: v5.2.0)'
         required: true
-        default: 'v11.0.0'
+        default: 'v5.2.0'
 
 jobs:
   build-windows:
@@ -46,13 +46,6 @@ jobs:
       # 5. Instala Electron e electron-builder como devDependencies
       - name: Instalar Electron + Builder
         run: npm install --save-dev electron electron-builder
-
-      - name: Sincronizar versão do app com a tag/release
-        shell: bash
-        run: |
-          RAW_VERSION="${{ github.event.inputs.version || github.ref_name }}"
-          APP_VERSION="${RAW_VERSION#v}"
-          node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); pkg.version=process.argv[1]; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)+'\n'); console.log('package.json version =>', pkg.version);" "$APP_VERSION"
 
       # 6. Gera o build do Vite (bundle React → dist/)
       - name: Build Vite (produção)

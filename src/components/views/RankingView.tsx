@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useDeferredRender } from '@/hooks/useDeferredRender';
-import { TrendingUp, Music, Crown, Medal, Award, BarChart3, RotateCcw, AlertTriangle, Search, Filter, Calendar, Download, FileJson, Timer } from 'lucide-react';
+import { TrendingUp, Music, Crown, Medal, Award, BarChart3, RotateCcw, AlertTriangle, Search, Filter, Calendar, Download, FileJson } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -8,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useRadioStore } from '@/store/radioStore';
-import { getDecayFactor, getWeightedScore } from '@/lib/rankingDecay';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,7 +56,23 @@ const top50Data = rankingData.slice(0, 10).map((item, index) => ({
   fill: index < 3 ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
 }));
 
-// (static styleDistribution and weeklyTrend removed — now computed dynamically)
+const styleDistribution = [
+  { name: 'Sertanejo', value: 45, color: 'hsl(190, 95%, 50%)' },
+  { name: 'Pagode', value: 20, color: 'hsl(25, 95%, 55%)' },
+  { name: 'Pop/Variado', value: 20, color: 'hsl(150, 80%, 45%)' },
+  { name: 'Dance', value: 10, color: 'hsl(280, 70%, 55%)' },
+  { name: 'Agronejo', value: 5, color: 'hsl(40, 95%, 55%)' },
+];
+
+const weeklyTrend = [
+  { day: 'Seg', plays: 120 },
+  { day: 'Ter', plays: 145 },
+  { day: 'Qua', plays: 132 },
+  { day: 'Qui', plays: 178 },
+  { day: 'Sex', plays: 210 },
+  { day: 'Sáb', plays: 189 },
+  { day: 'Dom', plays: 156 },
+];
 
 const getMedalIcon = (position: number) => {
   if (position === 1) return <Crown className="w-5 h-5 text-yellow-400" />;
@@ -124,13 +139,11 @@ export function RankingView() {
   // Also filter by date if dateRange is set
   const currentRankingData = useMemo(() => {
     let filtered = rankingSongs;
-    const now = Date.now();
     
     // Apply date filter
     if (getDateThreshold) {
-      const thresholdMs = getDateThreshold.getTime();
       filtered = filtered.filter(song => 
-        song.lastPlayed && song.lastPlayed >= thresholdMs
+        song.lastPlayed && new Date(song.lastPlayed) >= getDateThreshold
       );
     }
     
@@ -142,11 +155,6 @@ export function RankingView() {
       style: song.style,
       trend: song.trend,
       lastPlayed: song.lastPlayed,
-      peakPosition: song.peakPosition,
-      previousPosition: song.previousPosition,
-      firstPlayed: song.firstPlayed,
-      decayFactor: getDecayFactor(song.lastPlayed, now),
-      weightedScore: getWeightedScore(song, now),
     }));
   }, [rankingSongs, getDateThreshold]);
   
@@ -223,7 +231,6 @@ export function RankingView() {
 
   // Load demo data into ranking if empty (first time)
   const handleLoadDemoData = () => {
-    const now = Date.now();
     const demoSongs = rankingData.map((song, index) => ({
       id: `demo-${index}`,
       title: song.title,
@@ -231,10 +238,7 @@ export function RankingView() {
       plays: song.plays,
       style: song.style,
       trend: song.trend as 'up' | 'down' | 'stable',
-      lastPlayed: now - index * 3_600_000, // stagger by 1h each
-      firstPlayed: now - (10 + index) * 86_400_000,
-      peakPosition: index + 1,
-      previousPosition: index + 1,
+      lastPlayed: new Date(),
     }));
     setRankingSongs(demoSongs);
     toast({
@@ -247,7 +251,11 @@ export function RankingView() {
     const exportData = {
       exportDate: new Date().toISOString(),
       totalSongs: filteredRanking.length,
-      filters: { style: selectedStyle, dateRange, searchTerm },
+      filters: {
+        style: selectedStyle,
+        dateRange: dateRange,
+        searchTerm: searchTerm,
+      },
       ranking: filteredRanking.map((song, index) => ({
         position: index + 1,
         title: song.title,
@@ -255,13 +263,11 @@ export function RankingView() {
         plays: song.plays,
         style: song.style,
         trend: song.trend,
-        decayFactor: song.decayFactor,
-        weightedScore: Math.round(song.weightedScore * 100) / 100,
-        peakPosition: song.peakPosition ?? '-',
+        // File format for grade: POSICAO{N}.MP3
         gradeFileName: `POSICAO${index + 1}.MP3`,
-        lastPlayed: new Date(song.lastPlayed).toISOString(),
       })),
     };
+
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -269,34 +275,11 @@ export function RankingView() {
     a.download = `ranking_top25_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: '📥 Exportação JSON concluída!', description: `${filteredRanking.length} músicas exportadas.` });
-  };
 
-  const handleExportCSV = () => {
-    const header = 'Posição;Título;Artista;Estilo;Reproduções;Score;Decay;Trend;Melhor Posição;Última Reprodução';
-    const rows = filteredRanking.map((song, index) =>
-      [
-        index + 1,
-        `"${song.title}"`,
-        `"${song.artist}"`,
-        song.style,
-        song.plays,
-        Math.round(song.weightedScore * 100) / 100,
-        song.decayFactor.toFixed(2),
-        song.trend,
-        song.peakPosition && song.peakPosition < 999 ? song.peakPosition : '-',
-        new Date(song.lastPlayed).toLocaleString('pt-BR'),
-      ].join(';')
-    );
-    const csv = [header, ...rows].join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ranking_top25_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: '📥 Exportação CSV concluída!', description: `${filteredRanking.length} músicas exportadas.` });
+    toast({
+      title: '📥 Exportação concluída!',
+      description: `${filteredRanking.length} músicas exportadas para JSON.`,
+    });
   };
 
   const allStyles = useMemo(() => {
@@ -331,12 +314,7 @@ export function RankingView() {
           
           <Button variant="outline" size="sm" className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10" onClick={handleExportJSON}>
             <FileJson className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">JSON</span>
-          </Button>
-          
-          <Button variant="outline" size="sm" className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10" onClick={handleExportCSV}>
-            <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">CSV</span>
+            <span className="hidden sm:inline">Exportar</span>
           </Button>
           
           <AlertDialog>
@@ -595,22 +573,12 @@ export function RankingView() {
                         <div className="w-32 hidden md:block">
                           <Progress value={(song.plays / maxPlays) * 100} className="h-2" />
                         </div>
-                        <div className="text-right min-w-20">
+                        <div className="text-right min-w-16">
                           <p className="font-mono font-bold text-foreground">{song.plays}</p>
-                          <div className="flex items-center gap-1 justify-end">
-                            <span className={`text-xs ${getTrendColor(song.trend)}`}>
-                              {song.trend === 'up' ? '↑' : song.trend === 'down' ? '↓' : '→'}
-                            </span>
-                            <span className="text-xs text-muted-foreground font-mono" title={`Decay: ×${song.decayFactor.toFixed(2)}`}>
-                              ×{song.decayFactor.toFixed(2)}
-                            </span>
-                          </div>
+                          <p className={`text-xs ${getTrendColor(song.trend)}`}>
+                            {song.trend === 'up' ? '↑' : song.trend === 'down' ? '↓' : '→'}
+                          </p>
                         </div>
-                        {song.peakPosition != null && song.peakPosition <= 10 && song.peakPosition < 999 && (
-                          <span className="text-xs text-yellow-400 shrink-0" title={`Melhor posição: #${song.peakPosition}`}>
-                            🏆{song.peakPosition}
-                          </span>
-                        )}
                       </div>
                     ))}
                   </div>
@@ -706,69 +674,41 @@ export function RankingView() {
               </CardContent>
             </Card>
 
-            {/* Weekly Trend — dynamic from lastPlayed data */}
+            {/* Weekly Trend */}
             <Card className="glass-card">
               <CardHeader className="border-b border-border">
-                <CardTitle>Distribuição por Dia da Semana</CardTitle>
+                <CardTitle>Reproduções Semanais</CardTitle>
               </CardHeader>
               <CardContent className="p-4">
-                {(() => {
-                  const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-                  const dayCounts = [0, 0, 0, 0, 0, 0, 0];
-                  currentRankingData.forEach(s => {
-                    if (s.lastPlayed) {
-                      const day = new Date(s.lastPlayed).getDay();
-                      dayCounts[day] += s.plays;
-                    }
-                  });
-                  // Reorder to start on Monday
-                  const dynamicWeekly = [1, 2, 3, 4, 5, 6, 0].map(i => ({
-                    day: dayNames[i],
-                    plays: dayCounts[i],
-                  }));
-                  
-                  const hasData = dynamicWeekly.some(d => d.plays > 0);
-                  
-                  if (!hasData) {
-                    return (
-                      <div className="h-80 flex items-center justify-center">
-                        <p className="text-muted-foreground text-sm">Sem dados para exibir</p>
-                      </div>
-                    );
-                  }
-                  
-                  return (
-                    <div className="h-80">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={dynamicWeekly}>
-                          <defs>
-                            <linearGradient id="colorPlays" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0.3} />
-                              <stop offset="95%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 20%, 18%)" />
-                          <XAxis dataKey="day" stroke="hsl(215, 15%, 55%)" fontSize={12} />
-                          <YAxis stroke="hsl(215, 15%, 55%)" fontSize={12} />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: 'hsl(220, 18%, 11%)',
-                              border: '1px solid hsl(220, 20%, 18%)',
-                              borderRadius: '8px',
-                            }}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="plays"
-                            stroke="hsl(190, 95%, 50%)"
-                            fillOpacity={1}
-                            fill="url(#colorPlays)"
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  );
-                })()}
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={weeklyTrend}>
+                      <defs>
+                        <linearGradient id="colorPlays" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="hsl(190, 95%, 50%)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 20%, 18%)" />
+                      <XAxis dataKey="day" stroke="hsl(215, 15%, 55%)" fontSize={12} />
+                      <YAxis stroke="hsl(215, 15%, 55%)" fontSize={12} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(220, 18%, 11%)',
+                          border: '1px solid hsl(220, 20%, 18%)',
+                          borderRadius: '8px',
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="plays"
+                        stroke="hsl(190, 95%, 50%)"
+                        fillOpacity={1}
+                        fill="url(#colorPlays)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -780,76 +720,65 @@ export function RankingView() {
               <CardTitle>Análise de Tendências</CardTitle>
             </CardHeader>
             <CardContent className="p-6">
-              {(() => {
-                const upSongs = currentRankingData.filter(s => s.trend === 'up');
-                const stableSongs = currentRankingData.filter(s => s.trend === 'stable');
-                const downSongs = currentRankingData.filter(s => s.trend === 'down');
-                
-                if (currentRankingData.length === 0) {
-                  return (
-                    <div className="text-center py-8">
-                      <TrendingUp className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />
-                      <p className="text-muted-foreground">Sem dados de tendência</p>
-                      <p className="text-xs text-muted-foreground/70 mt-1">As tendências são calculadas a partir dos dados reais do ranking</p>
-                    </div>
-                  );
-                }
-                
-                return (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="p-4 rounded-lg bg-success/10 border border-success/20">
-                      <h4 className="font-medium text-success mb-3">🔥 Em Alta ({upSongs.length})</h4>
-                      <ul className="space-y-2 text-sm">
-                        {upSongs.length === 0 ? (
-                          <li className="text-muted-foreground text-xs">Nenhuma em alta no momento</li>
-                        ) : (
-                          upSongs.map((s) => (
-                            <li key={`up-${s.title}-${s.artist}`} className="flex items-center gap-2">
-                              <TrendingUp className="w-4 h-4 text-success shrink-0" />
-                              <span className="text-foreground truncate">{s.title}</span>
-                              <span className="text-success ml-auto shrink-0 font-bold">{s.plays}</span>
-                            </li>
-                          ))
-                        )}
-                      </ul>
-                    </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="p-4 rounded-lg bg-success/10 border border-success/20">
+                  <h4 className="font-medium text-success mb-3">🔥 Em Alta</h4>
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-success" />
+                      <span className="text-foreground">Atrasadinha</span>
+                      <span className="text-success ml-auto">+23%</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-success" />
+                      <span className="text-foreground">Medo Bobo</span>
+                      <span className="text-success ml-auto">+18%</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-success" />
+                      <span className="text-foreground">Deixa Eu Te Amar</span>
+                      <span className="text-success ml-auto">+15%</span>
+                    </li>
+                  </ul>
+                </div>
 
-                    <div className="p-4 rounded-lg bg-muted/30 border border-border">
-                      <h4 className="font-medium text-muted-foreground mb-3">→ Estáveis ({stableSongs.length})</h4>
-                      <ul className="space-y-2 text-sm">
-                        {stableSongs.length === 0 ? (
-                          <li className="text-muted-foreground text-xs">Nenhuma estável no momento</li>
-                        ) : (
-                          stableSongs.map((s) => (
-                            <li key={`stable-${s.title}-${s.artist}`} className="flex items-center gap-2">
-                              <span className="w-4 h-4 text-center text-muted-foreground shrink-0">—</span>
-                              <span className="text-foreground truncate">{s.title}</span>
-                              <span className="text-muted-foreground ml-auto shrink-0">{s.plays}</span>
-                            </li>
-                          ))
-                        )}
-                      </ul>
-                    </div>
+                <div className="p-4 rounded-lg bg-muted/30 border border-border">
+                  <h4 className="font-medium text-muted-foreground mb-3">→ Estáveis</h4>
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex items-center gap-2">
+                      <span className="w-4 h-4 text-center text-muted-foreground">—</span>
+                      <span className="text-foreground">Hear Me Now</span>
+                      <span className="text-muted-foreground ml-auto">0%</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-4 h-4 text-center text-muted-foreground">—</span>
+                      <span className="text-foreground">Shallow</span>
+                      <span className="text-muted-foreground ml-auto">0%</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-4 h-4 text-center text-muted-foreground">—</span>
+                      <span className="text-foreground">Esse Cara Sou Eu</span>
+                      <span className="text-muted-foreground ml-auto">0%</span>
+                    </li>
+                  </ul>
+                </div>
 
-                    <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
-                      <h4 className="font-medium text-destructive mb-3">📉 Em Queda ({downSongs.length})</h4>
-                      <ul className="space-y-2 text-sm">
-                        {downSongs.length === 0 ? (
-                          <li className="text-muted-foreground text-xs">Nenhuma em queda no momento</li>
-                        ) : (
-                          downSongs.map((s) => (
-                            <li key={`down-${s.title}-${s.artist}`} className="flex items-center gap-2">
-                              <TrendingUp className="w-4 h-4 text-destructive rotate-180 shrink-0" />
-                              <span className="text-foreground truncate">{s.title}</span>
-                              <span className="text-destructive ml-auto shrink-0 font-bold">{s.plays}</span>
-                            </li>
-                          ))
-                        )}
-                      </ul>
-                    </div>
-                  </div>
-                );
-              })()}
+                <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+                  <h4 className="font-medium text-destructive mb-3">📉 Em Queda</h4>
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-destructive rotate-180" />
+                      <span className="text-foreground">Propaganda</span>
+                      <span className="text-destructive ml-auto">-8%</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-destructive rotate-180" />
+                      <span className="text-foreground">Blinding Lights</span>
+                      <span className="text-destructive ml-auto">-5%</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

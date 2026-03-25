@@ -3,15 +3,11 @@
  * 
  * Compares the local music library against monitored stations' repertoire.
  * Identifies gaps (songs they play that we don't have) and opportunities.
- * 
- * Uses batchFindSongsInLibrary for O(batch) parallel library checks
- * instead of individual sequential checkSongExists calls.
  */
 
 import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useRadioStore } from '@/store/radioStore';
-import { batchFindSongsInLibrary } from '@/lib/gradeBuilder/batchLibrary';
 
 export interface CompetitorGap {
   title: string;
@@ -122,38 +118,30 @@ export function useCompetitorAnalysis() {
         }
       }
 
-      // Snapshot store once to avoid divergent reads in async callbacks
-      const storeSnapshot = useRadioStore.getState();
-      const { config } = storeSnapshot;
-
+      // Check library — batch check via Electron or simple store check
       const gaps: CompetitorGap[] = [];
+      const { config } = useRadioStore.getState();
+      
       let librarySet: Set<string> | null = null;
       
-      if (isElectron && config.musicFolders?.length > 0) {
-        // Use batchFindSongsInLibrary for parallel batch checking (5x faster)
+      if (isElectron && window.electronAPI?.checkSongExists && config.musicFolders?.length > 0) {
+        // Batch check: sample up to 500 songs
         const toCheck = [...songMap.entries()].slice(0, 500);
-        const songsForBatch = toCheck.map(([_, entry]) => ({
-          artist: entry.artist,
-          title: entry.title,
-        }));
-
-        console.log(`[COMPETITOR] 🔍 Verificando ${songsForBatch.length} músicas via batch...`);
-        const batchResults = await batchFindSongsInLibrary(
-          songsForBatch,
-          config.musicFolders,
-          config.similarityThreshold || 0.75,
+        const results = await Promise.all(
+          toCheck.map(async ([key, entry]) => {
+            try {
+              const exists = await window.electronAPI!.checkSongExists!({
+                artist: entry.artist,
+                title: entry.title,
+                musicFolders: config.musicFolders,
+              });
+              return { key, exists: !!exists };
+            } catch {
+              return { key, exists: false };
+            }
+          })
         );
-
-        // Map batch results back to songMap keys
-        librarySet = new Set<string>();
-        for (const [key, entry] of toCheck) {
-          const batchKey = `${entry.artist.toLowerCase().trim()}|${entry.title.toLowerCase().trim()}`;
-          const result = batchResults.get(batchKey);
-          if (result?.exists) {
-            librarySet.add(key);
-          }
-        }
-        console.log(`[COMPETITOR] ✅ Batch: ${librarySet.size}/${toCheck.length} encontradas`);
+        librarySet = new Set(results.filter(r => r.exists).map(r => r.key));
       }
 
       // Build gap list

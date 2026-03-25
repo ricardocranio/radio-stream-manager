@@ -40,7 +40,6 @@ import { saveOfflineSongCache, loadOfflineSongCache } from '@/lib/offlineSongCac
 import { saveCrossDayBuffer, loadCrossDayBuffer } from '@/lib/crossDayRepetition';
 import { loadBpmCacheFromDisk, enrichSongsWithBpmCache } from '@/lib/bpmCacheBridge';
 import { reportServiceHeartbeat } from '@/hooks/useServiceWatchdog';
-import { buildAliasEngine } from '@/lib/aliasEngine';
 
 // === MODULE-LEVEL VHT DURATION CACHE ===
 let _cachedAvgVhtDurationSec: number | null = null;
@@ -74,26 +73,6 @@ async function getAvgVhtDuration(vinhetasFolder: string): Promise<number> {
     console.warn('[AUTO-GRADE] ⚠️ Falha ao ler duração das vinhetas, usando fallback 7s:', e);
   }
   return VHT_FALLBACK;
-}
-
-function cloneMap<K, V>(source?: Map<K, V> | null): Map<K, V> {
-  return new Map(source ? Array.from(source.entries()) : []);
-}
-
-function cloneSet<T>(source?: Set<T> | null): Set<T> {
-  return new Set(source ? Array.from(source) : []);
-}
-
-function mapEntriesArray<K, V>(source?: Map<K, V> | null): [K, V][] {
-  return source ? Array.from(source.entries()) : [];
-}
-
-function mapKeysArray<K, V>(source?: Map<K, V> | null): K[] {
-  return source ? Array.from(source.keys()) : [];
-}
-
-function mapValuesArray<K, V>(source?: Map<K, V> | null): V[] {
-  return source ? Array.from(source.values()) : [];
 }
 
 interface AutoGradeState {
@@ -357,7 +336,7 @@ export function useAutoGradeBuilder() {
 
     if (toCheck.length > 0) {
       const checked = await batchFindSongsInLibrary(toCheck, config.musicFolders, similarityThreshold);
-      for (const [key, r] of mapEntriesArray(checked)) {
+      for (const [key, r] of checked.entries()) {
         results.set(key, r);
         const [artist, title] = key.split('|');
         // We only have normalized key components here; cache is best-effort
@@ -566,18 +545,22 @@ export function useAutoGradeBuilder() {
 
       const deduplicated = Array.from(seen.values());
 
-      // Apply song aliases (corrections) via centralized engine
+      // Apply song aliases (corrections)
       const { songAliases } = useRadioStore.getState();
       if (songAliases && songAliases.length > 0) {
-        const aliasEng = buildAliasEngine(songAliases);
         let aliasCount = 0;
         for (const song of deduplicated) {
-          const resolved = aliasEng.resolve(song.artist, song.title);
-          if (resolved.artist !== song.artist || resolved.title !== song.title) {
-            console.log(`[AUTO-GRADE] 🔄 Alias: "${song.artist} - ${song.title}" → "${resolved.artist} - ${resolved.title}"`);
-            song.artist = resolved.artist;
-            song.title = resolved.title;
-            aliasCount++;
+          for (const alias of songAliases) {
+            if (
+              song.artist.toLowerCase().trim() === alias.fromArtist.toLowerCase().trim() &&
+              song.title.toLowerCase().trim() === alias.fromTitle.toLowerCase().trim()
+            ) {
+              console.log(`[AUTO-GRADE] 🔄 Alias: "${song.artist} - ${song.title}" → "${alias.toArtist} - ${alias.toTitle}"`);
+              song.artist = alias.toArtist;
+              song.title = alias.toTitle;
+              aliasCount++;
+              break;
+            }
           }
         }
         if (aliasCount > 0) {
@@ -593,7 +576,7 @@ export function useAutoGradeBuilder() {
           }
           const beforeCount = deduplicated.length;
           deduplicated.length = 0;
-          deduplicated.push(...mapValuesArray(postAliasSeen));
+          deduplicated.push(...postAliasSeen.values());
           if (deduplicated.length < beforeCount) {
             console.log(`[AUTO-GRADE] 🔄 Re-dedup pós-alias: ${beforeCount} → ${deduplicated.length} (${beforeCount - deduplicated.length} duplicatas removidas)`);
           }
@@ -629,150 +612,58 @@ export function useAutoGradeBuilder() {
   }, [stations]);
 
   // Helper to build songsByStation from raw data
-  const buildSongsByStation = useCallback((
-    data: Array<{
-      title: string;
-      artist: string;
-      station_name: string;
-      scraped_at: string;
-      ai_genre?: string | null;
-      ai_energy?: string | null;
-    }>,
-    maxPerStation = 50
-  ): Record<string, SongEntry[]> => {
+  const buildSongsByStation = useCallback((data: Array<{ title: string; artist: string; station_name: string; scraped_at: string; ai_genre?: string | null; ai_energy?: string | null }>, maxPerStation = 50): Record<string, SongEntry[]> => {
     const songsByStation: Record<string, SongEntry[]> = {};
     const stationNameToStyle: Record<string, string> = {};
     const seenSongs = new Set<string>();
 
-    // === FRESCOR ===
-    // Cada estação contribui com no máximo 4 músicas por bloco de 30min
-    const FRESHNESS_WINDOW_MS  = 20 * 60 * 1000; // 20 minutos
-    const FALLBACK_WINDOW_MS   = 60 * 60 * 1000; // 60 minutos (fallback por estação)
-    const FRESH_THRESHOLD      = 4;               // Mínimo de frescas para usar janela de 20min
-    const MAX_SONGS_PER_STATION_PER_BLOCK = 4;     // Limite real por estação por bloco
-    const now = Date.now();
-
-    // Conta frescas por estação
-    const freshCountByStation: Record<string, number> = {};
-    for (const song of data) {
-      if (!song.scraped_at) continue;
-      const age = now - new Date(song.scraped_at).getTime();
-      if (age <= FRESHNESS_WINDOW_MS) {
-        freshCountByStation[song.station_name] = (freshCountByStation[song.station_name] || 0) + 1;
-      }
-    }
-
-    const freshLog = Object.entries(freshCountByStation)
-      .map(([name, count]) => `${name}(${count})`)
-      .join(', ');
-    console.log(`[AUTO-GRADE] 🕐 Frescas 20min por estação: ${freshLog || 'nenhuma — usando janela de 60min'}`);
-
-    // Blocked songs
-    const blockedList            = (config.blockedSongs || []).map(s => s.toLowerCase().trim());
-    const blockedExact           = new Set<string>(blockedList.filter(s => !s.endsWith(' - *')));
+    // Build blocked songs matching with wildcard support
+    const blockedList = (config.blockedSongs || []).map(s => s.toLowerCase().trim());
+    const blockedExact = new Set<string>(blockedList.filter(s => !s.endsWith(' - *')));
     const blockedWildcardArtists = blockedList
       .filter(s => s.endsWith(' - *'))
       .map(s => s.replace(/ - \*$/, ''));
+    
+    // Also include forbiddenWords for artist/title filtering
     const forbiddenLower = (config.forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
-
+    
     const isBlocked = (artist: string, title: string): boolean => {
-      const key       = `${artist.trim()} - ${title.trim()}`.toLowerCase();
-      const artistLow = artist.trim().toLowerCase();
-      const titleLow  = title.trim().toLowerCase();
+      const key = `${artist.trim()} - ${title.trim()}`.toLowerCase();
       if (blockedExact.has(key)) return true;
-      if (blockedWildcardArtists.some(b => artistLow === b || artistLow.includes(b))) return true;
-      if (forbiddenLower.some(w => artistLow.includes(w) || titleLow.includes(w))) return true;
+      const artistLower = artist.trim().toLowerCase();
+      const titleLower = title.trim().toLowerCase();
+      if (blockedWildcardArtists.some(blocked => artistLower === blocked || artistLower.includes(blocked))) return true;
+      // Check forbiddenWords against artist AND title
+      if (forbiddenLower.some(word => artistLower.includes(word) || titleLower.includes(word))) return true;
       return false;
     };
 
     stations.forEach(s => {
-      stationNameToStyle[s.name]               = s.styles?.[0] || 'POP/VARIADO';
+      stationNameToStyle[s.name] = s.styles?.[0] || 'POP/VARIADO';
       stationNameToStyle[s.name.toLowerCase()] = s.styles?.[0] || 'POP/VARIADO';
-      stationNameToStyle[s.id]                 = s.styles?.[0] || 'POP/VARIADO';
+      stationNameToStyle[s.id] = s.styles?.[0] || 'POP/VARIADO';
     });
+    data.forEach(song => {
+      const songKey = `${song.title.toLowerCase()}-${song.artist.toLowerCase()}`;
+      if (seenSongs.has(songKey)) return;
+      seenSongs.add(songKey);
 
-    // Ordena por scraped_at DESC — mais recentes primeiro
-    const sorted = [...data].sort((a, b) =>
-      new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime()
-    );
-
-    // Dois pools por estação:
-    //   top4:  as 4 músicas mais recentes — pool preferencial P1
-    //   pool:  até maxPerStation — pool de expansão P1 quando top4 não basta
-    const stationTop4: Record<string, SongEntry[]> = {};
-    const stationPool: Record<string, SongEntry[]> = {};
-
-    for (const song of sorted) {
-      if (!song.scraped_at) continue;
-      const age = now - new Date(song.scraped_at).getTime();
-
-      // Janela por estação: 20min se tem >= FRESH_THRESHOLD frescas, senão 60min
-      const stationHasFresh = (freshCountByStation[song.station_name] || 0) >= FRESH_THRESHOLD;
-      const windowMs        = stationHasFresh ? FRESHNESS_WINDOW_MS : FALLBACK_WINDOW_MS;
-      if (age > windowMs) continue;
-
-      const songKeyStr = `${song.title.toLowerCase()}-${song.artist.toLowerCase()}`;
-      if (seenSongs.has(songKeyStr)) continue;
-      seenSongs.add(songKeyStr);
-      if (isBlocked(song.artist, song.title)) continue;
-
-      const style = stationNameToStyle[song.station_name]
-        || stationNameToStyle[song.station_name.toLowerCase()]
-        || 'POP/VARIADO';
-
-      const entry: SongEntry = {
-        title:     song.title,
-        artist:    song.artist,
-        station:   song.station_name,
-        style,
-        filename:  sanitizeFilename(`${song.artist} - ${song.title}.mp3`),
-        scrapedAt: song.scraped_at,
-        ...(song.ai_genre  ? { ai_genre: song.ai_genre }   : {}),
-        ...(song.ai_energy ? { ai_energy: song.ai_energy } : {}),
-      } as SongEntry;
-
-      // top4: as 4 mais recentes por estação (limite real por bloco)
-      if (!stationTop4[song.station_name]) stationTop4[song.station_name] = [];
-      if (stationTop4[song.station_name].length < MAX_SONGS_PER_STATION_PER_BLOCK) {
-        stationTop4[song.station_name].push(entry);
+      // Check if song is blocked (exact or wildcard)
+      if (isBlocked(song.artist, song.title)) return;
+      if (!songsByStation[song.station_name]) songsByStation[song.station_name] = [];
+      if (songsByStation[song.station_name].length < maxPerStation) {
+        const style = stationNameToStyle[song.station_name] || stationNameToStyle[song.station_name.toLowerCase()] || 'POP/VARIADO';
+        songsByStation[song.station_name].push({
+          title: song.title, artist: song.artist, station: song.station_name,
+          style, filename: sanitizeFilename(`${song.artist} - ${song.title}.mp3`),
+          scrapedAt: song.scraped_at, // Preserve for freshness sorting
+          ...(song.ai_genre ? { ai_genre: song.ai_genre } : {}),
+          ...(song.ai_energy ? { ai_energy: song.ai_energy } : {}),
+        } as SongEntry);
       }
-
-      // pool: até maxPerStation (para expansão quando top4 não basta)
-      if (!stationPool[song.station_name]) stationPool[song.station_name] = [];
-      if (stationPool[song.station_name].length < maxPerStation) {
-        stationPool[song.station_name].push(entry);
-      }
-    }
-
-    // Mescla: top4 primeiro, depois restante do pool sem duplicatas
-    const stationNames = Array.from(new Set([
-      ...Object.keys(stationTop4),
-      ...Object.keys(stationPool),
-    ]));
-
-    for (const stationName of stationNames) {
-      const top4     = stationTop4[stationName] || [];
-      const full     = stationPool[stationName] || [];
-      const top4Keys = new Set(top4.map(s => `${s.title.toLowerCase()}-${s.artist.toLowerCase()}`));
-
-      songsByStation[stationName] = [
-        ...top4,
-        ...full.filter(s => !top4Keys.has(`${s.title.toLowerCase()}-${s.artist.toLowerCase()}`)),
-      ];
-    }
-
-    // Expõe o top4 via chave especial para o selectSongForSlot
-    (songsByStation as any).__top4__ = stationTop4;
-
-    const stationList = Object.keys(songsByStation)
-      .filter(k => k !== '__top4__')
-      .map(name => {
-        const top4count = (stationTop4[name] || []).length;
-        return `${name}(top4:${top4count}/pool:${songsByStation[name].length})`;
-      })
-      .join(', ');
-
-    console.log(`[AUTO-GRADE] 🎵 Pool por estação: ${stationList}`);
+    });
+    const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
+    console.log(`[AUTO-GRADE] Pool: ${stationList}`);
     return songsByStation;
   }, [stations, config.blockedSongs, config.forbiddenWords]);
 
@@ -1736,7 +1627,7 @@ export function useAutoGradeBuilder() {
           if (timeMatch) fullDayLineMap.set(timeMatch[1], line);
         }
         // Persist full-day grade to localStorage
-        const allBlockKeys = cloneSet(new Set(Array.from(fullDayLineMap.keys())));
+        const allBlockKeys = new Set(fullDayLineMap.keys());
         saveGradeToStorage(fullDayLineMap, allBlockKeys, dayCode);
         setState(prev => ({
           ...prev, isBuilding: false, lastBuildTime: new Date(), lastSavedFile: filename,
@@ -1864,7 +1755,7 @@ export function useAutoGradeBuilder() {
       let thirdLocked = builtBlocksRef.current.has(thirdTimeKey);
 
       // Start from pending in-memory map to preserve already assembled lines (web + desktop)
-      const lineMap = cloneMap(pendingGradeRef.current?.lineMap);
+      const lineMap = new Map<string, string>(pendingGradeRef.current?.lineMap || []);
 
       // Read existing file and overlay into lineMap (Electron only)
       let existingContent = '';
@@ -1972,7 +1863,7 @@ export function useAutoGradeBuilder() {
           lastBuildTime: new Date(),
           currentBlock: currentTimeKey,
           nextBlock: nextTimeKey,
-          pendingGradeLines: cloneMap(lineMap),
+          pendingGradeLines: new Map(lineMap),
         }));
         return;
       }
@@ -1983,7 +1874,7 @@ export function useAutoGradeBuilder() {
       // This prevents the builder from selecting songs that are already
       // in other blocks (manually placed or previously generated).
       let prePopulatedCount = 0;
-      for (const [timeKey, line] of mapEntriesArray(lineMap)) {
+      for (const [timeKey, line] of lineMap.entries()) {
         // Skip the blocks we're about to regenerate
         if ((shouldBuildCurrent && timeKey === currentTimeKey) || (shouldBuildNext && timeKey === nextTimeKey) || (shouldBuildThird && timeKey === thirdTimeKey)) continue;
         // Extract quoted filenames like "ARTIST - TITLE.MP3"
@@ -2019,7 +1910,7 @@ export function useAutoGradeBuilder() {
         enrichSongsWithBpmCache(songs as any[]);
       }
 
-      const durationMap = cloneMap(state.pendingBlockDurations);
+      const durationMap = new Map(state.pendingBlockDurations);
       if (shouldBuildCurrent) {
         const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats, false, targetDay);
         const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
@@ -2113,8 +2004,8 @@ export function useAutoGradeBuilder() {
         currentBlock: currentTimeKey, nextBlock: nextTimeKey,
         blocksGenerated: prev.blocksGenerated + (shouldBuildCurrent ? 1 : 0) + (shouldBuildNext ? 1 : 0) + (shouldBuildThird ? 1 : 0),
         skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
-        pendingGradeLines: cloneMap(lineMap),
-        pendingBlockDurations: cloneMap(durationMap),
+        pendingGradeLines: new Map(lineMap),
+        pendingBlockDurations: new Map(durationMap),
       }));
 
       console.log(`[AUTO-GRADE] 📋 Grade montada em memória e persistida${isWebOnly ? ' (modo web - preview only)' : ' (aguardando janela de 10min para escrita)'}`);
@@ -2125,7 +2016,6 @@ export function useAutoGradeBuilder() {
       }
 
     } catch (error) {
-      console.error('[AUTO-GRADE] ❌ Erro bruto no buildGrade:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       logSystemError('GRADE', 'error', 'Erro ao atualizar grade', errorMessage);
       setState(prev => ({ ...prev, isBuilding: false, error: errorMessage }));
@@ -2150,11 +2040,10 @@ export function useAutoGradeBuilder() {
       const currentDay = dayMap[new Date().getDay()];
       const isWeekdayNow = isWeekday(currentDay);
       
-      const sortedContent = mapKeysArray(pending.lineMap)
+      const sortedContent = Array.from(pending.lineMap.keys())
         .filter(t => !(isWeekdayNow && t === '21:30'))
         .sort()
-        .map(t => pending.lineMap.get(t) ?? '')
-        .filter(Boolean)
+        .map(t => pending.lineMap.get(t))
         .join('\n');
       await renameFilesInGradeContent(sortedContent);
 
@@ -2178,9 +2067,7 @@ export function useAutoGradeBuilder() {
         throw new Error(result.error || 'Erro ao salvar');
       }
     } catch (error) {
-      const errorMessage = error instanceof Error
-        ? `${error.message}${error.stack ? `\n${error.stack}` : ''}`
-        : 'Erro desconhecido';
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       logSystemError('GRADE', 'error', 'Erro ao escrever grade no disco', errorMessage);
       toast({ title: '❌ Erro na escrita', description: errorMessage, variant: 'destructive' });
     }
