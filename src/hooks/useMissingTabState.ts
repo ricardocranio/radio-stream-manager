@@ -4,6 +4,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { useToast } from '@/hooks/use-toast';
+import { normalizeArtistForDedup, normalizeTitleForDedup } from '@/lib/normalizeForDedup';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
