@@ -82,21 +82,32 @@ async function tryDownloadAndWait(
   }
 }
 
-function finalizeGradeFilename(
+/**
+ * CRITICAL SEQUENCE: Validate → Rename on disk → Write clean name to grade
+ * 1. Check if filename has accents/special chars
+ * 2. If yes, rename the physical file on disk FIRST
+ * 3. Only AFTER renaming, use the sanitized name in the grade
+ */
+async function finalizeGradeFilename(
   currentFilename: string,
   artist: string,
   title: string,
   musicFolders: string[],
   filterChars?: string[]
-) {
-  // CRITICAL: Use the REAL filename from library lookup (currentFilename) when available.
-  // Only fall back to canonical name if no real filename was found.
-  // This preserves suffixes like "(LIVE 1990 2019 REMASTER)" that exist on disk.
-  if (currentFilename) {
-    return ensureFileMatchesGradeName(currentFilename, currentFilename, musicFolders, filterChars);
+): Promise<string> {
+  const filenameToUse = currentFilename || sanitizeFilename(`${artist} - ${title}.mp3`);
+  
+  // Step 1: Check if file needs sanitization (accents, apostrophes, special chars)
+  if (filenameNeedsSanitization(filenameToUse)) {
+    // Step 2: Rename the physical file on disk FIRST
+    console.log(`[SANITIZE] 📝 Arquivo precisa sanitização: "${filenameToUse}"`);
+    const sanitized = await ensureFileRenamedOnDisk(filenameToUse, musicFolders, filterChars);
+    // Step 3: Return the clean name for the grade .TXT
+    return sanitized;
   }
-  const canonicalFilename = sanitizeFilename(`${artist} - ${title}.mp3`);
-  return ensureFileMatchesGradeName(canonicalFilename, canonicalFilename, musicFolders, filterChars);
+  
+  // No special chars — just apply standard grade formatting (uppercase, filter chars)
+  return ensureFileMatchesGradeName(filenameToUse, filenameToUse, musicFolders, filterChars);
 }
 
 interface SelectionContext {
