@@ -28,6 +28,7 @@ interface LibraryIndex {
   byDecade: Map<string, SongMeta[]>;
   byGenreDecade: Map<string, SongMeta[]>;
   byArtistTitle: Map<string, SongMeta>; // "artist::title" → SongMeta — lookup O(1)
+  filenameSet: Set<string>;
   allSongs: SongMeta[];
   builtAt: number;
 }
