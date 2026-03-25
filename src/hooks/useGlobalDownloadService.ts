@@ -128,9 +128,10 @@ export function useGlobalDownloadService() {
       return false;
     }
 
+    // Use cached engines instead of rebuilding every call
+    const { blockedEng, aliasEng } = getDlEngines();
+
     // Apply song aliases (corrections) before download
-    const aliases = storeState.songAliases || [];
-    const aliasEng = buildAliasEngine(aliases);
     const resolved = aliasEng.resolve(song.artist, song.title);
     let dlArtist = resolved.artist;
     let dlTitle = resolved.title;
@@ -139,11 +140,6 @@ export function useGlobalDownloadService() {
     }
 
     // Block check before downloading (checks both original and aliased names)
-    const blockedEng = buildBlockedEngine(
-      storeState.config.blockedSongs ?? [],
-      storeState.config.forbiddenWords ?? [],
-      aliases
-    );
     if (blockedEng.isBlocked(song.artist, song.title)) {
       console.log(`[DL-SVC] 🚫 Bloqueada, não será baixada: ${dlArtist} - ${dlTitle}`);
       useRadioStore.getState().removeMissingSong(song.id);
