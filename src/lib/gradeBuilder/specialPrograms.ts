@@ -171,7 +171,20 @@ async function getCachedLibraryMetadata(): Promise<SongMeta[]> {
   let songs: SongMeta[] = [];
   try {
     const scanResult = await (window as any).electronAPI.scanLibraryMetadata({ musicFolders });
-    songs = scanResult?.songs ?? [];
+    const rawSongs = Array.isArray(scanResult)
+      ? scanResult
+      : Array.isArray(scanResult?.songs)
+        ? scanResult.songs
+        : [];
+
+    songs = rawSongs.filter((song): song is SongMeta => (
+      !!song &&
+      typeof song.filename === 'string' &&
+      typeof song.artist === 'string' &&
+      typeof song.title === 'string' &&
+      typeof song.genre === 'string' &&
+      typeof song.year === 'string'
+    ));
   } catch (e) {
     console.warn('[specialPrograms] scanLibraryMetadata falhou:', e);
     return _metadataCacheResult ?? [];
