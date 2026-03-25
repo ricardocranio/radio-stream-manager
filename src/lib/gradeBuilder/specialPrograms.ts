@@ -562,7 +562,11 @@ export async function findSongByYear(
 
   if (dbData?.length) {
     const fromDb = matchDbCandidatesInLibrary(dbData, index);
-    for (const song of shuffle(fromDb)) {
+    const dedupedFromDb = shuffle(
+      Array.from(new Map(fromDb.map(song => [atKey(song.artist, song.title), song])).values())
+    );
+
+    for (const song of dedupedFromDb) {
       if (!isValidLibraryCandidate(song, usedInBlock, usedArtistsInBlock, ctx, timeStr)) continue;
 
       const libResult = await ctx.findSongInLibrary(song.artist, song.title);
