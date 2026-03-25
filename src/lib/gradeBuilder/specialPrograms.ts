@@ -364,6 +364,8 @@ function matchDbCandidatesInLibrary(
   index: LibraryIndex,
 ): SongMeta[] {
   const results: SongMeta[] = [];
+  const artistTitleEntries = Array.from(index.byArtistTitle.entries());
+  const librarySongs = Array.from(index.byArtistTitle.values());
 
   for (const c of dbCandidates) {
     const artistNorm = c.artist.toLowerCase().trim();
@@ -371,14 +373,27 @@ function matchDbCandidatesInLibrary(
 
     // Tentativa 1: lookup exato O(1)
     const exact = index.byArtistTitle.get(`${artistNorm}::${titleNorm}`);
-    if (exact) { results.push(exact); continue; }
+    if (exact) {
+      results.push(exact);
+      continue;
+    }
 
-    // Tentativa 2: fuzzy por contains (só se exato falhar)
-    for (const [key, song] of index.byArtistTitle) {
+    // Tentativa 2: match por nome de arquivo normalizado
+    const normalizedFilename = `${artistNorm} - ${titleNorm}`;
+    const filenameMatch = index.filenameSet.has(normalizedFilename)
+      ? librarySongs.find(song => song.filename.toLowerCase().trim() === normalizedFilename) ?? null
+      : null;
+    if (filenameMatch) {
+      results.push(filenameMatch);
+      continue;
+    }
+
+    // Tentativa 3: fuzzy por contains (sem iterar Map diretamente no build)
+    for (const [key, song] of artistTitleEntries) {
       const [kA, kT] = key.split('::');
       if (
         (kA.includes(artistNorm) || artistNorm.includes(kA)) &&
-        (kT.includes(titleNorm)  || titleNorm.includes(kT))
+        (kT.includes(titleNorm) || titleNorm.includes(kT))
       ) {
         results.push(song);
         break;
