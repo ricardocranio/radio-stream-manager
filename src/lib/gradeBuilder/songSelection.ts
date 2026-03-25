@@ -960,7 +960,7 @@ export async function handleSpecialSequenceType(
         station: `${result.genre} ${yearKey.toUpperCase()}`,
         reason: `Gênero ${genres.join('/')} + Anos ${range[0]}-${range[1]}`,
       });
-      const sanitizedFilename = finalizeGradeFilename(result.filename, result.artist, result.title, ctx.musicFolders, ctx.filterChars);
+      const sanitizedFilename = await finalizeGradeFilename(result.filename, result.artist, result.title, ctx.musicFolders, ctx.filterChars);
       return `"${sanitizedFilename}"`;
     }
     logs.push({
