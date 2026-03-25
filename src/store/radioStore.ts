@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule, ScheduledSequence } from '@/types/radio';
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
+import { buildBlockedEngine, type BlockedEngine } from '@/lib/blockedSongsEngine';
 import type { MapasConfig, MapaCodeConfig } from '@/lib/mapasBuilder/types';
 import { DEFAULT_MAPAS_CONFIG, DEFAULT_CODE_CONFIGS, DEFAULT_TEMPLATES } from '@/lib/mapasBuilder/types';
 
