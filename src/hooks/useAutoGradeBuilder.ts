@@ -33,7 +33,6 @@ import { isRomanceBlock, generateRomanceBlock } from '@/lib/gradeBuilder/folderP
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
-import { mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
 import { saveGradeToStorage, loadGradeFromStorage, clearGradeStorage } from '@/lib/gradeBuilder/gradePersistence';
 import { resolveVinhetasInLine, resolveVinhetasInGrade, resetVinhetaPool } from '@/lib/gradeBuilder/vinhetaResolver';
 import { saveOfflineSongCache, loadOfflineSongCache } from '@/lib/offlineSongCache';
@@ -94,6 +93,10 @@ function mapKeysArray<K, V>(source?: Map<K, V> | null): K[] {
 
 function mapValuesArray<K, V>(source?: Map<K, V> | null): V[] {
   return source ? Array.from(source.values()) : [];
+}
+
+function ensureStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0) : [];
 }
 
 interface AutoGradeState {
@@ -1021,6 +1024,10 @@ export function useAutoGradeBuilder() {
     const programName = getProgramForHour(hour);
     const fixedItems = getFixedContentForTime(hour, minute, targetDay);
     const ctx = buildGradeContext();
+    const safeMusicFolders = ensureStringArray(config.musicFolders);
+    const durationLookupFolders = [...safeMusicFolders, config.contentFolder, config.gradeFolder].filter(
+      (folder): folder is string => typeof folder === 'string' && folder.length > 0,
+    );
 
     // === DURATION FILL HELPER (applies to ALL block types including specials) ===
     const MIN_DUR_SEC = 29 * 60;
@@ -1053,7 +1060,7 @@ export function useAutoGradeBuilder() {
           if (getIsElectronEnv() && window.electronAPI?.getFileDuration) {
             const cleanName = token.replace(/^"|"$/g, '');
             try {
-              const dr = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: [...config.musicFolders, config.contentFolder, config.gradeFolder].filter(Boolean) });
+              const dr = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: durationLookupFolders });
               estimatedSec += (dr.success && dr.duration > 0) ? dr.duration : DEFAULT_SONG_DUR;
             } catch { estimatedSec += DEFAULT_SONG_DUR; }
           } else {
@@ -1318,8 +1325,7 @@ export function useAutoGradeBuilder() {
       if (getIsElectronEnv() && window.electronAPI?.getFileDuration) {
         try {
           const cleanName = fixedContentFile.replace(/^"|"$/g, '');
-          const allFolders = [...config.musicFolders, config.contentFolder, config.gradeFolder].filter(Boolean);
-          const durResult = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: allFolders });
+          const durResult = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: durationLookupFolders });
           if (durResult.success && durResult.duration > 0) {
             fixedDuration = durResult.duration;
           }
@@ -1335,7 +1341,7 @@ export function useAutoGradeBuilder() {
       if (!songStr.startsWith('"')) return DEFAULT_SONG_DURATION_SEC;
       const cleanName = songStr.replace(/^"|"$/g, '');
       try {
-        const durResult = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: config.musicFolders });
+        const durResult = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: safeMusicFolders });
         if (durResult.success && durResult.duration > 0) return durResult.duration;
       } catch (e) { /* fallback */ }
       return DEFAULT_SONG_DURATION_SEC;
@@ -2024,9 +2030,7 @@ export function useAutoGradeBuilder() {
         const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats, false, targetDay);
         const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
         const forceReplaceCurrent = forceRegenerate || currentSaturdayMismatch || currentSundayMismatch || currentCoveredBySchedule;
-        const mergedCurrentLine = currentExistingLine && !forceReplaceCurrent
-          ? mergeGradeLinePreservingResolved(currentExistingLine, resolvedCurrentLine, coringaCode)
-          : resolvedCurrentLine;
+        const mergedCurrentLine = resolvedCurrentLine;
         lineMap.set(currentTimeKey, mergedCurrentLine);
         if (currentResult.durationMinutes) durationMap.set(currentTimeKey, currentResult.durationMinutes);
         allLogs.push(...currentResult.logs);
@@ -2045,9 +2049,7 @@ export function useAutoGradeBuilder() {
         const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats, false, targetDay);
         const resolvedNextLine = await resolveVinhetasInLine(nextResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
         const forceReplaceNext = forceRegenerate || nextSaturdayMismatch || nextSundayMismatch || nextCoveredBySchedule;
-        const mergedNextLine = nextExistingLine && !forceReplaceNext
-          ? mergeGradeLinePreservingResolved(nextExistingLine, resolvedNextLine, coringaCode)
-          : resolvedNextLine;
+        const mergedNextLine = resolvedNextLine;
         lineMap.set(nextTimeKey, mergedNextLine);
         if (nextResult.durationMinutes) durationMap.set(nextTimeKey, nextResult.durationMinutes);
         allLogs.push(...nextResult.logs);
@@ -2066,9 +2068,7 @@ export function useAutoGradeBuilder() {
         const thirdResult = await generateBlockLine(blocks.third.hour, blocks.third.minute, fullPool, stats, false, targetDay);
         const resolvedThirdLine = await resolveVinhetasInLine(thirdResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
         const forceReplaceThird = forceRegenerate || thirdSaturdayMismatch || thirdSundayMismatch || thirdCoveredBySchedule;
-        const mergedThirdLine = thirdExistingLine && !forceReplaceThird
-          ? mergeGradeLinePreservingResolved(thirdExistingLine, resolvedThirdLine, coringaCode)
-          : resolvedThirdLine;
+        const mergedThirdLine = resolvedThirdLine;
         lineMap.set(thirdTimeKey, mergedThirdLine);
         if (thirdResult.durationMinutes) durationMap.set(thirdTimeKey, thirdResult.durationMinutes);
         allLogs.push(...thirdResult.logs);
