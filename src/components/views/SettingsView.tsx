@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music, Loader2, CheckCircle2, XCircle, BarChart3, ArrowRightLeft, Plus } from 'lucide-react';
+import { Settings, RotateCcw, Clock, Shield, Music2, FolderOpen, Eye, EyeOff, HardDrive, FolderPlus, Trash2, Music, Loader2, CheckCircle2, XCircle, BarChart3, ArrowRightLeft, Plus, Download, Upload } from 'lucide-react';
 import { useRadioStore } from '@/store/radioStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1079,7 +1079,70 @@ export function SettingsView() {
             </div>
 
             <div>
-              <Label className="text-sm">🚫 Músicas Bloqueadas</Label>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-sm">🚫 Músicas Bloqueadas</Label>
+                <div className="flex gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      const parsedBlocked = blockedSongs.split('\n').map(s => s.trim()).filter(Boolean);
+                      const blob = new Blob([JSON.stringify({ blockedSongs: parsedBlocked }, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `bloqueadas_${new Date().toISOString().slice(0, 10)}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      toast({ title: '📥 Exportado', description: `${parsedBlocked.length} músicas bloqueadas exportadas.` });
+                    }}
+                  >
+                    <Download className="w-3 h-3 mr-1" />
+                    Exportar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = '.json,.txt';
+                      input.onchange = async (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0];
+                        if (!file) return;
+                        const text = await file.text();
+                        try {
+                          if (file.name.endsWith('.json')) {
+                            const data = JSON.parse(text);
+                            const imported = data.blockedSongs || data;
+                            if (Array.isArray(imported)) {
+                              const current = blockedSongs.split('\n').map(s => s.trim()).filter(Boolean);
+                              const merged = [...new Set([...current, ...imported.map((s: string) => s.trim()).filter(Boolean)])];
+                              setBlockedSongs(merged.join('\n'));
+                              toast({ title: '📤 Importado', description: `${imported.length} músicas importadas (${merged.length} total sem duplicatas).` });
+                            }
+                          } else {
+                            // TXT: one per line
+                            const lines = text.split('\n').map((s: string) => s.trim()).filter(Boolean);
+                            const current = blockedSongs.split('\n').map(s => s.trim()).filter(Boolean);
+                            const merged = [...new Set([...current, ...lines])];
+                            setBlockedSongs(merged.join('\n'));
+                            toast({ title: '📤 Importado', description: `${lines.length} músicas importadas (${merged.length} total).` });
+                          }
+                        } catch {
+                          toast({ title: '❌ Erro', description: 'Arquivo inválido.', variant: 'destructive' });
+                        }
+                      };
+                      input.click();
+                    }}
+                  >
+                    <Upload className="w-3 h-3 mr-1" />
+                    Importar
+                  </Button>
+                </div>
+              </div>
               <Textarea
                 value={blockedSongs}
                 onChange={(e) => setBlockedSongs(e.target.value)}
@@ -1117,7 +1180,7 @@ export function SettingsView() {
                       if (result.deletedCount > 0) {
                         toast({ 
                           title: `🗑️ ${result.deletedCount} arquivo(s) removido(s)`, 
-                          description: result.deleted.slice(0, 3).map(f => f.split('\\').pop()).join(', ') + (result.deletedCount > 3 ? ` e mais ${result.deletedCount - 3}...` : ''),
+                          description: result.deleted.slice(0, 3).map((f: string) => f.split('\\').pop()).join(', ') + (result.deletedCount > 3 ? ` e mais ${result.deletedCount - 3}...` : ''),
                         });
                       } else {
                         toast({ title: '✅ Nenhum arquivo bloqueado encontrado', description: 'As pastas estão limpas.' });
@@ -1237,13 +1300,75 @@ export function SettingsView() {
         {/* Song Aliases / Corrections */}
         <Card className="glass-card border-orange-500/20 lg:col-span-2">
           <CardHeader className="border-b border-border">
-            <CardTitle className="flex items-center gap-2">
-              <ArrowRightLeft className="w-5 h-5 text-orange-500" />
-              Correções de Músicas (Aliases)
-              <span className="ml-2 px-2 py-0.5 text-xs bg-orange-500/10 text-orange-500 rounded-full">
-                {songAliases.length} {songAliases.length === 1 ? 'correção' : 'correções'}
-              </span>
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <ArrowRightLeft className="w-5 h-5 text-orange-500" />
+                Correções de Músicas (Aliases)
+                <span className="ml-2 px-2 py-0.5 text-xs bg-orange-500/10 text-orange-500 rounded-full">
+                  {songAliases.length} {songAliases.length === 1 ? 'correção' : 'correções'}
+                </span>
+              </CardTitle>
+              <div className="flex gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    const blob = new Blob([JSON.stringify({ songAliases }, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `aliases_${new Date().toISOString().slice(0, 10)}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast({ title: '📥 Exportado', description: `${songAliases.length} correções exportadas.` });
+                  }}
+                >
+                  <Download className="w-3 h-3 mr-1" />
+                  Exportar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.json';
+                    input.onchange = async (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (!file) return;
+                      try {
+                        const data = JSON.parse(await file.text());
+                        const imported = data.songAliases || data;
+                        if (Array.isArray(imported)) {
+                          let added = 0;
+                          for (const alias of imported) {
+                            if (alias.fromArtist && alias.fromTitle && alias.toArtist && alias.toTitle) {
+                              addSongAlias({
+                                id: `alias-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                                fromArtist: alias.fromArtist,
+                                fromTitle: alias.fromTitle,
+                                toArtist: alias.toArtist,
+                                toTitle: alias.toTitle,
+                              });
+                              added++;
+                            }
+                          }
+                          toast({ title: '📤 Importado', description: `${added} correções importadas com sucesso.` });
+                        }
+                      } catch {
+                        toast({ title: '❌ Erro', description: 'Arquivo JSON inválido.', variant: 'destructive' });
+                      }
+                    };
+                    input.click();
+                  }}
+                >
+                  <Upload className="w-3 h-3 mr-1" />
+                  Importar
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="p-6 space-y-4">
             <p className="text-sm text-muted-foreground">
