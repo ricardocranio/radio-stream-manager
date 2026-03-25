@@ -84,6 +84,18 @@ function cloneSet<T>(source?: Set<T> | null): Set<T> {
   return new Set(source ? Array.from(source) : []);
 }
 
+function mapEntriesArray<K, V>(source?: Map<K, V> | null): [K, V][] {
+  return source ? Array.from(source.entries()) : [];
+}
+
+function mapKeysArray<K, V>(source?: Map<K, V> | null): K[] {
+  return source ? Array.from(source.keys()) : [];
+}
+
+function mapValuesArray<K, V>(source?: Map<K, V> | null): V[] {
+  return source ? Array.from(source.values()) : [];
+}
+
 interface AutoGradeState {
   isBuilding: boolean;
   lastBuildTime: Date | null;
@@ -345,7 +357,7 @@ export function useAutoGradeBuilder() {
 
     if (toCheck.length > 0) {
       const checked = await batchFindSongsInLibrary(toCheck, config.musicFolders, similarityThreshold);
-      for (const [key, r] of checked.entries()) {
+      for (const [key, r] of mapEntriesArray(checked)) {
         results.set(key, r);
         const [artist, title] = key.split('|');
         // We only have normalized key components here; cache is best-effort
@@ -581,7 +593,7 @@ export function useAutoGradeBuilder() {
           }
           const beforeCount = deduplicated.length;
           deduplicated.length = 0;
-          deduplicated.push(...postAliasSeen.values());
+          deduplicated.push(...mapValuesArray(postAliasSeen));
           if (deduplicated.length < beforeCount) {
             console.log(`[AUTO-GRADE] 🔄 Re-dedup pós-alias: ${beforeCount} → ${deduplicated.length} (${beforeCount - deduplicated.length} duplicatas removidas)`);
           }
@@ -733,10 +745,12 @@ export function useAutoGradeBuilder() {
     }
 
     // Mescla: top4 primeiro, depois restante do pool sem duplicatas
-    for (const stationName of new Set([
+    const stationNames = Array.from(new Set([
       ...Object.keys(stationTop4),
       ...Object.keys(stationPool),
-    ])) {
+    ]));
+
+    for (const stationName of stationNames) {
       const top4     = stationTop4[stationName] || [];
       const full     = stationPool[stationName] || [];
       const top4Keys = new Set(top4.map(s => `${s.title.toLowerCase()}-${s.artist.toLowerCase()}`));
@@ -1969,7 +1983,7 @@ export function useAutoGradeBuilder() {
       // This prevents the builder from selecting songs that are already
       // in other blocks (manually placed or previously generated).
       let prePopulatedCount = 0;
-      for (const [timeKey, line] of lineMap.entries()) {
+      for (const [timeKey, line] of mapEntriesArray(lineMap)) {
         // Skip the blocks we're about to regenerate
         if ((shouldBuildCurrent && timeKey === currentTimeKey) || (shouldBuildNext && timeKey === nextTimeKey) || (shouldBuildThird && timeKey === thirdTimeKey)) continue;
         // Extract quoted filenames like "ARTIST - TITLE.MP3"
@@ -2136,10 +2150,11 @@ export function useAutoGradeBuilder() {
       const currentDay = dayMap[new Date().getDay()];
       const isWeekdayNow = isWeekday(currentDay);
       
-      const sortedContent = Array.from(pending.lineMap.keys())
+      const sortedContent = mapKeysArray(pending.lineMap)
         .filter(t => !(isWeekdayNow && t === '21:30'))
         .sort()
-        .map(t => pending.lineMap.get(t))
+        .map(t => pending.lineMap.get(t) ?? '')
+        .filter(Boolean)
         .join('\n');
       await renameFilesInGradeContent(sortedContent);
 
@@ -2163,7 +2178,9 @@ export function useAutoGradeBuilder() {
         throw new Error(result.error || 'Erro ao salvar');
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      const errorMessage = error instanceof Error
+        ? `${error.message}${error.stack ? `\n${error.stack}` : ''}`
+        : 'Erro desconhecido';
       logSystemError('GRADE', 'error', 'Erro ao escrever grade no disco', errorMessage);
       toast({ title: '❌ Erro na escrita', description: errorMessage, variant: 'destructive' });
     }
