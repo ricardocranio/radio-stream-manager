@@ -560,7 +560,6 @@ export function useAutoGradeBuilder() {
             aliasCount++;
           }
         }
-        }
         if (aliasCount > 0) {
           console.log(`[AUTO-GRADE] 🔄 ${aliasCount} aliases aplicados`);
           // Re-deduplicate after aliases to merge entries that now have the same artist+title
