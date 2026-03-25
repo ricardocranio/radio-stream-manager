@@ -99,6 +99,18 @@ function ensureStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0) : [];
 }
 
+function ensureArtistBlackoutsArray(value: unknown): Array<{ artist: string; startHour: number; endHour: number }> {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (entry): entry is { artist: string; startHour: number; endHour: number } =>
+      !!entry &&
+      typeof entry === 'object' &&
+      typeof (entry as { artist?: unknown }).artist === 'string' &&
+      typeof (entry as { startHour?: unknown }).startHour === 'number' &&
+      typeof (entry as { endHour?: unknown }).endHour === 'number'
+  );
+}
+
 interface AutoGradeState {
   isBuilding: boolean;
   lastBuildTime: Date | null;
@@ -328,7 +340,8 @@ export function useAutoGradeBuilder() {
       return { exists: cached.exists, filename: cached.matchedFile };
     }
 
-    const result = await findSongInLibraryFn(artist, title, config.musicFolders, similarityThreshold);
+    const safeMusicFolders = ensureStringArray(config.musicFolders);
+    const result = await findSongInLibraryFn(artist, title, safeMusicFolders, similarityThreshold);
 
     setCachedVerification(artist, title, {
       exists: result.exists,
@@ -345,6 +358,7 @@ export function useAutoGradeBuilder() {
   const batchFind = useCallback(async (songs: Array<{ artist: string; title: string }>) => {
     const results = new Map<string, { exists: boolean; filename?: string }>();
     const toCheck: Array<{ artist: string; title: string }> = [];
+    const safeMusicFolders = ensureStringArray(config.musicFolders);
 
     for (const s of songs) {
       const cached = getCachedVerification(s.artist, s.title);
@@ -359,7 +373,7 @@ export function useAutoGradeBuilder() {
     }
 
     if (toCheck.length > 0) {
-      const checked = await batchFindSongsInLibrary(toCheck, config.musicFolders, similarityThreshold);
+      const checked = await batchFindSongsInLibrary(toCheck, safeMusicFolders, similarityThreshold);
       for (const [key, r] of mapEntriesArray(checked)) {
         results.set(key, r);
         const [artist, title] = key.split('|');
@@ -419,6 +433,8 @@ export function useAutoGradeBuilder() {
 
   const buildGradeContext = useCallback((): GradeContext => {
     const lineSanitizer = createLineSanitizer(filterChars);
+    const safeMusicFolders = ensureStringArray(config.musicFolders);
+    const safeArtistBlackouts = ensureArtistBlackoutsArray(config.artistBlackouts);
     return {
       isRecentlyUsed,
       findSongInLibrary,
@@ -438,8 +454,8 @@ export function useAutoGradeBuilder() {
       filterChars,
       fixedContent: fixedContent as GradeContext['fixedContent'],
       stations: stations.map(s => ({ id: s.id, name: s.name, styles: s.styles })),
-      musicFolders: config.musicFolders,
-      artistBlackouts: config.artistBlackouts,
+      musicFolders: safeMusicFolders,
+      artistBlackouts: safeArtistBlackouts,
     };
   }, [
     isRecentlyUsed, findSongInLibrary, batchFind, markSongAsUsed,
