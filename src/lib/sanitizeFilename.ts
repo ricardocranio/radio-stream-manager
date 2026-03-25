@@ -31,9 +31,9 @@ export function sanitizeFilename(filename: string): string {
   // Replace & with "e"
   result = result.replace(/&/g, 'e');
   
-  // Replace "feat.", "ft." variations with " e "
-  result = result.replace(/\s*feat\.?\s*/gi, ' e ');
-  result = result.replace(/\s*ft\.?\s*/gi, ' e ');
+  // Replace "feat." and "ft." (WITH dot only) — preserves bare "feat" in filenames
+  result = result.replace(/\s*feat\.\s*/gi, ' e ');
+  result = result.replace(/\s*ft\.\s*/gi, ' e ');
   
   // PRESERVE parentheses and their content: (Ao Vivo), (Acústico), etc.
   // These match the actual filenames on disk and are needed by the automation system
