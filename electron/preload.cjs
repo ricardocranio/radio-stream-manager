@@ -107,6 +107,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('download-progress', (_, progress) => callback(progress));
   },
   
+  // Download warnings (ARL issues, quality fallback, etc.)
+  onDownloadWarning: (callback) => {
+    ipcRenderer.removeAllListeners('download-warning');
+    ipcRenderer.on('download-warning', (_, warning) => callback(warning));
+  },
+
   // Python/Deemix status notifications
   onPythonStatus: (callback) => {
     ipcRenderer.removeAllListeners('python-status');
