@@ -28,6 +28,7 @@ interface LibraryIndex {
   byDecade: Map<string, SongMeta[]>;
   byGenreDecade: Map<string, SongMeta[]>;
   byArtistTitle: Map<string, SongMeta>; // "artist::title" → SongMeta — lookup O(1)
+  filenameSet: Set<string>;
   allSongs: SongMeta[];
   builtAt: number;
 }
@@ -170,7 +171,20 @@ async function getCachedLibraryMetadata(): Promise<SongMeta[]> {
   let songs: SongMeta[] = [];
   try {
     const scanResult = await (window as any).electronAPI.scanLibraryMetadata({ musicFolders });
-    songs = scanResult?.songs ?? [];
+    const rawSongs = Array.isArray(scanResult)
+      ? scanResult
+      : Array.isArray(scanResult?.songs)
+        ? scanResult.songs
+        : [];
+
+    songs = rawSongs.filter((song): song is SongMeta => (
+      !!song &&
+      typeof song.filename === 'string' &&
+      typeof song.artist === 'string' &&
+      typeof song.title === 'string' &&
+      typeof song.genre === 'string' &&
+      typeof song.year === 'string'
+    ));
   } catch (e) {
     console.warn('[specialPrograms] scanLibraryMetadata falhou:', e);
     return _metadataCacheResult ?? [];
@@ -204,9 +218,11 @@ async function getLibraryIndex(): Promise<LibraryIndex> {
   const byDecade      = new Map<string, SongMeta[]>();
   const byGenreDecade = new Map<string, SongMeta[]>();
   const byArtistTitle = new Map<string, SongMeta>();
+  const filenameSet   = new Set<string>();
 
   for (const song of raw) {
     byArtistTitle.set(atKey(song.artist, song.title), song);
+    filenameSet.add(song.filename.toLowerCase().trim());
 
     const genre   = normalizeId3Genre(song.genre);
     const yearNum = parseInt(song.year, 10);
@@ -234,6 +250,7 @@ async function getLibraryIndex(): Promise<LibraryIndex> {
     byDecade,
     byGenreDecade,
     byArtistTitle,
+    filenameSet,
     allSongs: raw,
     builtAt: Date.now(),
   };
@@ -347,6 +364,8 @@ function matchDbCandidatesInLibrary(
   index: LibraryIndex,
 ): SongMeta[] {
   const results: SongMeta[] = [];
+  const artistTitleEntries = Array.from(index.byArtistTitle.entries());
+  const librarySongs = Array.from(index.byArtistTitle.values());
 
   for (const c of dbCandidates) {
     const artistNorm = c.artist.toLowerCase().trim();
@@ -354,14 +373,27 @@ function matchDbCandidatesInLibrary(
 
     // Tentativa 1: lookup exato O(1)
     const exact = index.byArtistTitle.get(`${artistNorm}::${titleNorm}`);
-    if (exact) { results.push(exact); continue; }
+    if (exact) {
+      results.push(exact);
+      continue;
+    }
 
-    // Tentativa 2: fuzzy por contains (só se exato falhar)
-    for (const [key, song] of index.byArtistTitle) {
+    // Tentativa 2: match por nome de arquivo normalizado
+    const normalizedFilename = `${artistNorm} - ${titleNorm}`;
+    const filenameMatch = index.filenameSet.has(normalizedFilename)
+      ? librarySongs.find(song => song.filename.toLowerCase().trim() === normalizedFilename) ?? null
+      : null;
+    if (filenameMatch) {
+      results.push(filenameMatch);
+      continue;
+    }
+
+    // Tentativa 3: fuzzy por contains (sem iterar Map diretamente no build)
+    for (const [key, song] of artistTitleEntries) {
       const [kA, kT] = key.split('::');
       if (
         (kA.includes(artistNorm) || artistNorm.includes(kA)) &&
-        (kT.includes(titleNorm)  || titleNorm.includes(kT))
+        (kT.includes(titleNorm) || titleNorm.includes(kT))
       ) {
         results.push(song);
         break;
@@ -449,7 +481,11 @@ export async function findSongByGenre(
 
   if (dbData?.length) {
     const fromDb = matchDbCandidatesInLibrary(dbData, index);
-    for (const song of shuffle(fromDb)) {
+    const dedupedFromDb = shuffle(
+      Array.from(new Map(fromDb.map(song => [atKey(song.artist, song.title), song])).values())
+    );
+
+    for (const song of dedupedFromDb) {
       if (!isValidLibraryCandidate(song, usedInBlock, usedArtistsInBlock, ctx, timeStr)) continue;
 
       const libResult = await ctx.findSongInLibrary(song.artist, song.title);
@@ -526,7 +562,11 @@ export async function findSongByYear(
 
   if (dbData?.length) {
     const fromDb = matchDbCandidatesInLibrary(dbData, index);
-    for (const song of shuffle(fromDb)) {
+    const dedupedFromDb = shuffle(
+      Array.from(new Map(fromDb.map(song => [atKey(song.artist, song.title), song])).values())
+    );
+
+    for (const song of dedupedFromDb) {
       if (!isValidLibraryCandidate(song, usedInBlock, usedArtistsInBlock, ctx, timeStr)) continue;
 
       const libResult = await ctx.findSongInLibrary(song.artist, song.title);
@@ -619,7 +659,11 @@ export async function findSongByGenreAndYear(
 
   if (dbData?.length) {
     const fromDb = matchDbCandidatesInLibrary(dbData, index);
-    for (const song of shuffle(fromDb)) {
+    const dedupedFromDb = shuffle(
+      Array.from(new Map(fromDb.map(song => [atKey(song.artist, song.title), song])).values())
+    );
+
+    for (const song of dedupedFromDb) {
       if (!isValidLibraryCandidate(song, usedInBlock, usedArtistsInBlock, ctx, timeStr)) continue;
 
       const libResult = await ctx.findSongInLibrary(song.artist, song.title);
