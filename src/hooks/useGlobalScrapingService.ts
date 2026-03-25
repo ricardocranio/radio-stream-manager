@@ -9,6 +9,7 @@ import { useRef, useCallback, useState } from 'react';
 import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { radioScraperApi } from '@/lib/api/radioScraper';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
+import { normalizeArtistForDedup, normalizeTitleForDedup } from '@/lib/normalizeForDedup';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
