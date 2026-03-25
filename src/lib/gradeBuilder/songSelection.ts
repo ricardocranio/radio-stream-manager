@@ -23,7 +23,7 @@ import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { buildBlockedEngine } from '@/lib/blockedSongsEngine';
 import { buildAliasEngine } from '@/lib/aliasEngine';
 import { songKey as makeSongKey } from '@/lib/songUtils';
-import { ensureFileMatchesGradeName } from './sanitize';
+import { ensureFileMatchesGradeName, filenameNeedsSanitization, ensureFileRenamedOnDisk } from './sanitize';
 import type { SongEntry, BlockLogItem, BlockStats, GradeContext, CarryOverSong } from './types';
 import { STATION_ID_TO_DB_NAME } from './constants';
 import type { WeekDay, SequenceConfig } from '@/types/radio';
