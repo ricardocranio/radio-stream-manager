@@ -24,14 +24,15 @@ export function useMissingTabState() {
 
   const displaySongs = missingSongs.length > 0 ? missingSongs : demoMissing;
 
-  const filteredSongs = useMemo(() =>
-    displaySongs.filter(
+  const filteredSongs = useMemo(() => {
+    if (!searchTerm) return displaySongs;
+    const normalizedSearch = normalizeArtistForDedup(searchTerm).toLowerCase();
+    return displaySongs.filter(
       (song) =>
-        song.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        song.artist.toLowerCase().includes(searchTerm.toLowerCase())
-    ),
-    [displaySongs, searchTerm]
-  );
+        normalizeTitleForDedup(song.title).toLowerCase().includes(normalizedSearch) ||
+        normalizeArtistForDedup(song.artist).toLowerCase().includes(normalizedSearch)
+    );
+  }, [displaySongs, searchTerm]);
 
   const groupedByStation = useMemo(() =>
     filteredSongs.reduce((acc, song) => {
