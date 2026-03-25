@@ -495,6 +495,23 @@ function normalizeMapaTemplateFilename(filename: string | undefined, dayMapping:
   return DEFAULT_TEMPLATES[index]?.filename || filename || `MAPA_${index + 1}.txt`;
 }
 
+// Cached blocked engine for O(1) lookups inside store actions
+let _blockedEngineCache: BlockedEngine | null = null;
+let _blockedCacheSize = -1;
+
+function _getBlockedEngine(state: { config: { blockedSongs?: string[]; forbiddenWords?: string[] }; songAliases?: { fromArtist: string; fromTitle: string; toArtist: string; toTitle: string }[] }): BlockedEngine {
+  const size = (state.config.blockedSongs?.length ?? 0) + (state.config.forbiddenWords?.length ?? 0) + (state.songAliases?.length ?? 0);
+  if (!_blockedEngineCache || size !== _blockedCacheSize) {
+    _blockedEngineCache = buildBlockedEngine(
+      state.config.blockedSongs ?? [],
+      state.config.forbiddenWords ?? [],
+      state.songAliases ?? []
+    );
+    _blockedCacheSize = size;
+  }
+  return _blockedEngineCache;
+}
+
 export const useRadioStore = create<RadioState>()(
   persist(
     (set) => ({
