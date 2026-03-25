@@ -33,6 +33,7 @@ import { isRomanceBlock, generateRomanceBlock } from '@/lib/gradeBuilder/folderP
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
+import { mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
 import { saveGradeToStorage, loadGradeFromStorage, clearGradeStorage } from '@/lib/gradeBuilder/gradePersistence';
 import { resolveVinhetasInLine, resolveVinhetasInGrade, resetVinhetaPool } from '@/lib/gradeBuilder/vinhetaResolver';
 import { saveOfflineSongCache, loadOfflineSongCache } from '@/lib/offlineSongCache';
@@ -93,40 +94,6 @@ function mapKeysArray<K, V>(source?: Map<K, V> | null): K[] {
 
 function mapValuesArray<K, V>(source?: Map<K, V> | null): V[] {
   return source ? Array.from(source.values()) : [];
-}
-
-function getStationPoolEntries(source?: Record<string, unknown> | null): Array<[string, SongEntry[]]> {
-  if (!source || typeof source !== 'object') return [];
-  return Object.entries(source).filter(
-    (entry): entry is [string, SongEntry[]] =>
-      typeof entry[0] === 'string' &&
-      !entry[0].startsWith('__') &&
-      Array.isArray(entry[1])
-  );
-}
-
-function getStationPoolValues(source?: Record<string, unknown> | null): SongEntry[][] {
-  return getStationPoolEntries(source).map(([, songs]) => songs);
-}
-
-function getStationPoolKeys(source?: Record<string, unknown> | null): string[] {
-  return getStationPoolEntries(source).map(([stationName]) => stationName);
-}
-
-function ensureStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0) : [];
-}
-
-function ensureArtistBlackoutsArray(value: unknown): Array<{ artist: string; startHour: number; endHour: number }> {
-  if (!Array.isArray(value)) return [];
-  return value.filter(
-    (entry): entry is { artist: string; startHour: number; endHour: number } =>
-      !!entry &&
-      typeof entry === 'object' &&
-      typeof (entry as { artist?: unknown }).artist === 'string' &&
-      typeof (entry as { startHour?: unknown }).startHour === 'number' &&
-      typeof (entry as { endHour?: unknown }).endHour === 'number'
-  );
 }
 
 interface AutoGradeState {
@@ -358,8 +325,7 @@ export function useAutoGradeBuilder() {
       return { exists: cached.exists, filename: cached.matchedFile };
     }
 
-    const safeMusicFolders = ensureStringArray(config.musicFolders);
-    const result = await findSongInLibraryFn(artist, title, safeMusicFolders, similarityThreshold);
+    const result = await findSongInLibraryFn(artist, title, config.musicFolders, similarityThreshold);
 
     setCachedVerification(artist, title, {
       exists: result.exists,
@@ -376,7 +342,6 @@ export function useAutoGradeBuilder() {
   const batchFind = useCallback(async (songs: Array<{ artist: string; title: string }>) => {
     const results = new Map<string, { exists: boolean; filename?: string }>();
     const toCheck: Array<{ artist: string; title: string }> = [];
-    const safeMusicFolders = ensureStringArray(config.musicFolders);
 
     for (const s of songs) {
       const cached = getCachedVerification(s.artist, s.title);
@@ -391,7 +356,7 @@ export function useAutoGradeBuilder() {
     }
 
     if (toCheck.length > 0) {
-      const checked = await batchFindSongsInLibrary(toCheck, safeMusicFolders, similarityThreshold);
+      const checked = await batchFindSongsInLibrary(toCheck, config.musicFolders, similarityThreshold);
       for (const [key, r] of mapEntriesArray(checked)) {
         results.set(key, r);
         const [artist, title] = key.split('|');
@@ -451,8 +416,6 @@ export function useAutoGradeBuilder() {
 
   const buildGradeContext = useCallback((): GradeContext => {
     const lineSanitizer = createLineSanitizer(filterChars);
-    const safeMusicFolders = ensureStringArray(config.musicFolders);
-    const safeArtistBlackouts = ensureArtistBlackoutsArray(config.artistBlackouts);
     return {
       isRecentlyUsed,
       findSongInLibrary,
@@ -472,8 +435,8 @@ export function useAutoGradeBuilder() {
       filterChars,
       fixedContent: fixedContent as GradeContext['fixedContent'],
       stations: stations.map(s => ({ id: s.id, name: s.name, styles: s.styles })),
-      musicFolders: safeMusicFolders,
-      artistBlackouts: safeArtistBlackouts,
+      musicFolders: config.musicFolders,
+      artistBlackouts: config.artistBlackouts,
     };
   }, [
     isRecentlyUsed, findSongInLibrary, batchFind, markSongAsUsed,
@@ -846,7 +809,7 @@ export function useAutoGradeBuilder() {
 
         // Find pool for this station (flexible matching)
         let pool: SongEntry[] = [];
-        for (const [poolName, poolSongs] of getStationPoolEntries(songsByStation)) {
+        for (const [poolName, poolSongs] of Object.entries(songsByStation)) {
           const norm1 = poolName.toLowerCase().replace(/[^a-z0-9]/g, '');
           const norm2 = stationName.toLowerCase().replace(/[^a-z0-9]/g, '');
           if (norm1.includes(norm2) || norm2.includes(norm1)) {
@@ -1058,10 +1021,6 @@ export function useAutoGradeBuilder() {
     const programName = getProgramForHour(hour);
     const fixedItems = getFixedContentForTime(hour, minute, targetDay);
     const ctx = buildGradeContext();
-    const safeMusicFolders = ensureStringArray(config.musicFolders);
-    const durationLookupFolders = [...safeMusicFolders, config.contentFolder, config.gradeFolder].filter(
-      (folder): folder is string => typeof folder === 'string' && folder.length > 0,
-    );
 
     // === DURATION FILL HELPER (applies to ALL block types including specials) ===
     const MIN_DUR_SEC = 29 * 60;
@@ -1094,7 +1053,7 @@ export function useAutoGradeBuilder() {
           if (getIsElectronEnv() && window.electronAPI?.getFileDuration) {
             const cleanName = token.replace(/^"|"$/g, '');
             try {
-              const dr = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: durationLookupFolders });
+              const dr = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: [...config.musicFolders, config.contentFolder, config.gradeFolder].filter(Boolean) });
               estimatedSec += (dr.success && dr.duration > 0) ? dr.duration : DEFAULT_SONG_DUR;
             } catch { estimatedSec += DEFAULT_SONG_DUR; }
           } else {
@@ -1283,7 +1242,7 @@ export function useAutoGradeBuilder() {
 
     // Build pools
     const allSongsPool: SongEntry[] = [];
-    for (const stationSongs of getStationPoolValues(songsByStation)) {
+    for (const stationSongs of Object.values(songsByStation)) {
       allSongsPool.push(...stationSongs);
     }
 
@@ -1316,7 +1275,7 @@ export function useAutoGradeBuilder() {
       // Try case-insensitive match if exact fails
       let matchedPool = poolSongs.length;
       if (matchedPool === 0) {
-        for (const key of getStationPoolKeys(songsByStation)) {
+        for (const key of Object.keys(songsByStation)) {
           if (key.toLowerCase().trim() === resolvedName.toLowerCase().trim()) {
             matchedPool = songsByStation[key].length;
             break;
@@ -1359,7 +1318,8 @@ export function useAutoGradeBuilder() {
       if (getIsElectronEnv() && window.electronAPI?.getFileDuration) {
         try {
           const cleanName = fixedContentFile.replace(/^"|"$/g, '');
-          const durResult = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: durationLookupFolders });
+          const allFolders = [...config.musicFolders, config.contentFolder, config.gradeFolder].filter(Boolean);
+          const durResult = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: allFolders });
           if (durResult.success && durResult.duration > 0) {
             fixedDuration = durResult.duration;
           }
@@ -1375,7 +1335,7 @@ export function useAutoGradeBuilder() {
       if (!songStr.startsWith('"')) return DEFAULT_SONG_DURATION_SEC;
       const cleanName = songStr.replace(/^"|"$/g, '');
       try {
-        const durResult = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: safeMusicFolders });
+        const durResult = await window.electronAPI.getFileDuration({ filename: cleanName, musicFolders: config.musicFolders });
         if (durResult.success && durResult.duration > 0) return durResult.duration;
       } catch (e) { /* fallback */ }
       return DEFAULT_SONG_DURATION_SEC;
@@ -1673,7 +1633,7 @@ export function useAutoGradeBuilder() {
 
       const songsByStation = await fetchAllRecentSongs();
       // Enrich all song pools with cached BPM data
-      for (const songs of getStationPoolValues(songsByStation)) {
+      for (const songs of Object.values(songsByStation)) {
         enrichSongsWithBpmCache(songs as any[]);
       }
       const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
@@ -2055,7 +2015,7 @@ export function useAutoGradeBuilder() {
       await loadBpmCacheFromDisk();
       const fullPool = await fetchAllRecentSongs();
       // Enrich all song pools with cached BPM data
-      for (const songs of getStationPoolValues(fullPool)) {
+      for (const songs of Object.values(fullPool)) {
         enrichSongsWithBpmCache(songs as any[]);
       }
 
@@ -2064,7 +2024,9 @@ export function useAutoGradeBuilder() {
         const currentResult = await generateBlockLine(blocks.current.hour, blocks.current.minute, fullPool, stats, false, targetDay);
         const resolvedCurrentLine = await resolveVinhetasInLine(currentResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
         const forceReplaceCurrent = forceRegenerate || currentSaturdayMismatch || currentSundayMismatch || currentCoveredBySchedule;
-        const mergedCurrentLine = resolvedCurrentLine;
+        const mergedCurrentLine = currentExistingLine && !forceReplaceCurrent
+          ? mergeGradeLinePreservingResolved(currentExistingLine, resolvedCurrentLine, coringaCode)
+          : resolvedCurrentLine;
         lineMap.set(currentTimeKey, mergedCurrentLine);
         if (currentResult.durationMinutes) durationMap.set(currentTimeKey, currentResult.durationMinutes);
         allLogs.push(...currentResult.logs);
@@ -2083,7 +2045,9 @@ export function useAutoGradeBuilder() {
         const nextResult = await generateBlockLine(blocks.next.hour, blocks.next.minute, fullPool, stats, false, targetDay);
         const resolvedNextLine = await resolveVinhetasInLine(nextResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
         const forceReplaceNext = forceRegenerate || nextSaturdayMismatch || nextSundayMismatch || nextCoveredBySchedule;
-        const mergedNextLine = resolvedNextLine;
+        const mergedNextLine = nextExistingLine && !forceReplaceNext
+          ? mergeGradeLinePreservingResolved(nextExistingLine, resolvedNextLine, coringaCode)
+          : resolvedNextLine;
         lineMap.set(nextTimeKey, mergedNextLine);
         if (nextResult.durationMinutes) durationMap.set(nextTimeKey, nextResult.durationMinutes);
         allLogs.push(...nextResult.logs);
@@ -2102,7 +2066,9 @@ export function useAutoGradeBuilder() {
         const thirdResult = await generateBlockLine(blocks.third.hour, blocks.third.minute, fullPool, stats, false, targetDay);
         const resolvedThirdLine = await resolveVinhetasInLine(thirdResult.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
         const forceReplaceThird = forceRegenerate || thirdSaturdayMismatch || thirdSundayMismatch || thirdCoveredBySchedule;
-        const mergedThirdLine = resolvedThirdLine;
+        const mergedThirdLine = thirdExistingLine && !forceReplaceThird
+          ? mergeGradeLinePreservingResolved(thirdExistingLine, resolvedThirdLine, coringaCode)
+          : resolvedThirdLine;
         lineMap.set(thirdTimeKey, mergedThirdLine);
         if (thirdResult.durationMinutes) durationMap.set(thirdTimeKey, thirdResult.durationMinutes);
         allLogs.push(...thirdResult.logs);

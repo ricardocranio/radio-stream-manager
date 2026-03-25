@@ -4,7 +4,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { useToast } from '@/hooks/use-toast';
-import { normalizeArtistForDedup, normalizeTitleForDedup } from '@/lib/normalizeForDedup';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -24,15 +23,14 @@ export function useMissingTabState() {
 
   const displaySongs = missingSongs.length > 0 ? missingSongs : demoMissing;
 
-  const filteredSongs = useMemo(() => {
-    if (!searchTerm) return displaySongs;
-    const normalizedSearch = normalizeArtistForDedup(searchTerm).toLowerCase();
-    return displaySongs.filter(
+  const filteredSongs = useMemo(() =>
+    displaySongs.filter(
       (song) =>
-        normalizeTitleForDedup(song.title).toLowerCase().includes(normalizedSearch) ||
-        normalizeArtistForDedup(song.artist).toLowerCase().includes(normalizedSearch)
-    );
-  }, [displaySongs, searchTerm]);
+        song.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        song.artist.toLowerCase().includes(searchTerm.toLowerCase())
+    ),
+    [displaySongs, searchTerm]
+  );
 
   const groupedByStation = useMemo(() =>
     filteredSongs.reduce((acc, song) => {

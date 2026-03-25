@@ -347,9 +347,6 @@ interface ElectronAPI {
   onUpdateDownloaded: (callback: (info: { version: string }) => void) => void;
   onDownloadProgress: (callback: (progress: { percent: number }) => void) => void;
   
-  // Download warnings (ARL issues, quality fallback, etc.)
-  onDownloadWarning: (callback: (warning: { type: string; message: string; artist?: string; title?: string }) => void) => void;
-
   // Python/Deemix status notifications
   onPythonStatus: (callback: (status: { available: boolean; message: string; downloadUrl: string }) => void) => void;
   onDeemixStatus: (callback: (status: { installed: boolean; command: string | null }) => void) => void;

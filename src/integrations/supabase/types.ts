@@ -227,7 +227,6 @@ export type Database = {
     Functions: {
       cleanup_excess_scraped_songs: { Args: never; Returns: undefined }
       compress_radio_historico: { Args: never; Returns: Json }
-      normalize_feat_conjunctions: { Args: { input: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never

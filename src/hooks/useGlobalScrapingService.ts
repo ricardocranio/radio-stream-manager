@@ -9,7 +9,6 @@ import { useRef, useCallback, useState } from 'react';
 import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { radioScraperApi } from '@/lib/api/radioScraper';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
-import { normalizeArtistForDedup, normalizeTitleForDedup } from '@/lib/normalizeForDedup';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -239,8 +238,8 @@ export function useGlobalScrapingService(
           
           if (nowPlaying) {
             const { isMissing } = await processSong(
-              normalizeTitleForDedup(nowPlaying.title),
-              normalizeArtistForDedup(nowPlaying.artist),
+              nowPlaying.title,
+              nowPlaying.artist,
               stationName,
               stationStyle,
               scrapeUrl
@@ -251,8 +250,8 @@ export function useGlobalScrapingService(
 
           for (const song of (recentSongs || []).slice(0, 3)) {
             const { isMissing } = await processSong(
-              normalizeTitleForDedup(song.title),
-              normalizeArtistForDedup(song.artist),
+              song.title,
+              song.artist,
               stationName,
               stationStyle,
               scrapeUrl,
