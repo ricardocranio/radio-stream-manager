@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { RadioStation, ProgramSchedule, CapturedSong, SystemConfig, SequenceConfig, BlockSchedule, ScheduledSequence } from '@/types/radio';
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
+import { buildBlockedEngine, type BlockedEngine } from '@/lib/blockedSongsEngine';
 import type { MapasConfig, MapaCodeConfig } from '@/lib/mapasBuilder/types';
 import { DEFAULT_MAPAS_CONFIG, DEFAULT_CODE_CONFIGS, DEFAULT_TEMPLATES } from '@/lib/mapasBuilder/types';
 
@@ -494,6 +495,23 @@ function normalizeMapaTemplateFilename(filename: string | undefined, dayMapping:
   return DEFAULT_TEMPLATES[index]?.filename || filename || `MAPA_${index + 1}.txt`;
 }
 
+// Cached blocked engine for O(1) lookups inside store actions
+let _blockedEngineCache: BlockedEngine | null = null;
+let _blockedCacheSize = -1;
+
+function _getBlockedEngine(state: { config: { blockedSongs?: string[]; forbiddenWords?: string[] }; songAliases?: { fromArtist: string; fromTitle: string; toArtist: string; toTitle: string }[] }): BlockedEngine {
+  const size = (state.config.blockedSongs?.length ?? 0) + (state.config.forbiddenWords?.length ?? 0) + (state.songAliases?.length ?? 0);
+  if (!_blockedEngineCache || size !== _blockedCacheSize) {
+    _blockedEngineCache = buildBlockedEngine(
+      state.config.blockedSongs ?? [],
+      state.config.forbiddenWords ?? [],
+      state.songAliases ?? []
+    );
+    _blockedCacheSize = size;
+  }
+  return _blockedEngineCache;
+}
+
 export const useRadioStore = create<RadioState>()(
   persist(
     (set) => ({
@@ -569,20 +587,9 @@ export const useRadioStore = create<RadioState>()(
             console.log(`[STORE] 🚫 Vinheta/jingle filtrada, não adicionada: ${song.artist} - ${song.title}`);
             return state;
           }
-          // 🚫 Block check — blocked songs must NEVER enter the missing/download queue
-          const { blockedSongs = [], forbiddenWords = [] } = state.config;
-          const artistL = (song.artist || '').trim().toLowerCase();
-          const titleL = (song.title || '').trim().toLowerCase();
-          const songKey = `${artistL} - ${titleL}`;
-          const blockedList = blockedSongs.map(s => s.toLowerCase().trim());
-          const blockedExact = new Set(blockedList.filter(s => !s.endsWith(' - *')));
-          const blockedWild = blockedList.filter(s => s.endsWith(' - *')).map(s => s.replace(/ - \*$/, ''));
-          const forbiddenLower = forbiddenWords.map(w => w.toLowerCase().trim()).filter(Boolean);
-          if (
-            blockedExact.has(songKey) ||
-            blockedWild.some(b => artistL === b || artistL.includes(b)) ||
-            forbiddenLower.some(w => artistL.includes(w) || titleL.includes(w))
-          ) {
+          // 🚫 Block check using centralized engine (O(1) lookups)
+          const engine = _getBlockedEngine(state);
+          if (engine.isBlocked(song.artist || '', song.title || '')) {
             console.log(`[STORE] 🚫 Música bloqueada, não adicionada: ${song.artist} - ${song.title}`);
             return state;
           }

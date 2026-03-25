@@ -12,6 +12,8 @@ import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
 import { isStationAllowedForDownload } from '@/lib/allowedDownloadStations';
+import { buildBlockedEngine } from '@/lib/blockedSongsEngine';
+import { buildAliasEngine } from '@/lib/aliasEngine';
 
 // Shared ID3 genre utilities
 import { normalizeId3Genre as normalizeId3GenreForDl, genreToEnergy as genreToEnergyForDl, routeFileByGenre } from '@/lib/id3GenreUtils';
@@ -109,39 +111,27 @@ export function useGlobalDownloadService() {
       return false;
     }
 
-    // Apply song aliases (corrections) before download
-    let dlArtist = song.artist;
-    let dlTitle = song.title;
-    const aliases = storeState.songAliases || [];
-    for (const alias of aliases) {
-      if (
-        dlArtist.toLowerCase().trim() === alias.fromArtist.toLowerCase().trim() &&
-        dlTitle.toLowerCase().trim() === alias.fromTitle.toLowerCase().trim()
-      ) {
-        console.log(`[DL-SVC] 🔄 Alias aplicado: "${dlArtist} - ${dlTitle}" → "${alias.toArtist} - ${alias.toTitle}"`);
-        dlArtist = alias.toArtist;
-        dlTitle = alias.toTitle;
-        break;
-      }
-    }
+    // Build engines for alias resolution + block check (O(1))
+    const blockedEngine = buildBlockedEngine(
+      storeState.config.blockedSongs ?? [],
+      storeState.config.forbiddenWords ?? [],
+      storeState.songAliases ?? []
+    );
+    const aliasEngine = buildAliasEngine(storeState.songAliases ?? []);
 
-    // Block check before downloading
-    const { blockedSongs = [], forbiddenWords = [] } = storeState.config;
-    const artistL = dlArtist.trim().toLowerCase();
-    const titleL = dlTitle.trim().toLowerCase();
-    const songKey = `${artistL} - ${titleL}`;
-    const blockedList = blockedSongs.map(s => s.toLowerCase().trim());
-    const blockedExact = new Set(blockedList.filter(s => !s.endsWith(' - *')));
-    const blockedWild = blockedList.filter(s => s.endsWith(' - *')).map(s => s.replace(/ - \*$/, ''));
-    const forbiddenLower = forbiddenWords.map(w => w.toLowerCase().trim()).filter(Boolean);
-    if (
-      blockedExact.has(songKey) ||
-      blockedWild.some(b => artistL === b || artistL.includes(b)) ||
-      forbiddenLower.some(w => artistL.includes(w) || titleL.includes(w))
-    ) {
-      console.log(`[DL-SVC] 🚫 Bloqueada, não será baixada: ${dlArtist} - ${dlTitle}`);
+    // 🚫 Block check BEFORE any operation
+    if (blockedEngine.isBlocked(song.artist, song.title)) {
+      console.log(`[DL-SVC] 🚫 Bloqueada, não será baixada: ${song.artist} - ${song.title}`);
       useRadioStore.getState().removeMissingSong(song.id);
       return false;
+    }
+
+    // Apply alias resolution
+    const resolved = aliasEngine.resolve(song.artist, song.title);
+    let dlArtist = resolved.artist;
+    let dlTitle = resolved.title;
+    if (dlArtist !== song.artist || dlTitle !== song.title) {
+      console.log(`[DL-SVC] 🔄 Alias aplicado: "${song.artist} - ${song.title}" → "${dlArtist} - ${dlTitle}"`);
     }
 
     // Check ARL validity

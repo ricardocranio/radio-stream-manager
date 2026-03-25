@@ -545,22 +545,19 @@ export function useAutoGradeBuilder() {
 
       const deduplicated = Array.from(seen.values());
 
-      // Apply song aliases (corrections)
+      // Apply song aliases (corrections) using aliasEngine (O(1) lookups)
       const { songAliases } = useRadioStore.getState();
       if (songAliases && songAliases.length > 0) {
+        const { buildAliasEngine } = await import('@/lib/aliasEngine');
+        const aliasEngine = buildAliasEngine(songAliases);
         let aliasCount = 0;
         for (const song of deduplicated) {
-          for (const alias of songAliases) {
-            if (
-              song.artist.toLowerCase().trim() === alias.fromArtist.toLowerCase().trim() &&
-              song.title.toLowerCase().trim() === alias.fromTitle.toLowerCase().trim()
-            ) {
-              console.log(`[AUTO-GRADE] 🔄 Alias: "${song.artist} - ${song.title}" → "${alias.toArtist} - ${alias.toTitle}"`);
-              song.artist = alias.toArtist;
-              song.title = alias.toTitle;
-              aliasCount++;
-              break;
-            }
+          const resolved = aliasEngine.resolve(song.artist, song.title);
+          if (resolved.artist !== song.artist || resolved.title !== song.title) {
+            console.log(`[AUTO-GRADE] 🔄 Alias: "${song.artist} - ${song.title}" → "${resolved.artist} - ${resolved.title}"`);
+            song.artist = resolved.artist;
+            song.title = resolved.title;
+            aliasCount++;
           }
         }
         if (aliasCount > 0) {
