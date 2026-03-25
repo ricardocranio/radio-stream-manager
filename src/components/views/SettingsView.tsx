@@ -1300,13 +1300,75 @@ export function SettingsView() {
         {/* Song Aliases / Corrections */}
         <Card className="glass-card border-orange-500/20 lg:col-span-2">
           <CardHeader className="border-b border-border">
-            <CardTitle className="flex items-center gap-2">
-              <ArrowRightLeft className="w-5 h-5 text-orange-500" />
-              Correções de Músicas (Aliases)
-              <span className="ml-2 px-2 py-0.5 text-xs bg-orange-500/10 text-orange-500 rounded-full">
-                {songAliases.length} {songAliases.length === 1 ? 'correção' : 'correções'}
-              </span>
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <ArrowRightLeft className="w-5 h-5 text-orange-500" />
+                Correções de Músicas (Aliases)
+                <span className="ml-2 px-2 py-0.5 text-xs bg-orange-500/10 text-orange-500 rounded-full">
+                  {songAliases.length} {songAliases.length === 1 ? 'correção' : 'correções'}
+                </span>
+              </CardTitle>
+              <div className="flex gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    const blob = new Blob([JSON.stringify({ songAliases }, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `aliases_${new Date().toISOString().slice(0, 10)}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast({ title: '📥 Exportado', description: `${songAliases.length} correções exportadas.` });
+                  }}
+                >
+                  <Download className="w-3 h-3 mr-1" />
+                  Exportar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.json';
+                    input.onchange = async (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (!file) return;
+                      try {
+                        const data = JSON.parse(await file.text());
+                        const imported = data.songAliases || data;
+                        if (Array.isArray(imported)) {
+                          let added = 0;
+                          for (const alias of imported) {
+                            if (alias.fromArtist && alias.fromTitle && alias.toArtist && alias.toTitle) {
+                              addSongAlias({
+                                id: `alias-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                                fromArtist: alias.fromArtist,
+                                fromTitle: alias.fromTitle,
+                                toArtist: alias.toArtist,
+                                toTitle: alias.toTitle,
+                              });
+                              added++;
+                            }
+                          }
+                          toast({ title: '📤 Importado', description: `${added} correções importadas com sucesso.` });
+                        }
+                      } catch {
+                        toast({ title: '❌ Erro', description: 'Arquivo JSON inválido.', variant: 'destructive' });
+                      }
+                    };
+                    input.click();
+                  }}
+                >
+                  <Upload className="w-3 h-3 mr-1" />
+                  Importar
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="p-6 space-y-4">
             <p className="text-sm text-muted-foreground">
