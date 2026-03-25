@@ -302,6 +302,18 @@ function register({ getMainWindow, showNotification, safeHandle }) {
 
       downloadedUrlsCache.add(cleanUrl);
       saveCache();
+      
+      // Clean PkInfo folder after download (Locucoes only)
+      try {
+        const pkInfoPath = path.join(outputFolder, 'PkInfo');
+        if (fs.existsSync(pkInfoPath)) {
+          fs.rmSync(pkInfoPath, { recursive: true, force: true });
+          console.log(`[RADIOAGENCIA] 🗑️ PkInfo removido: ${pkInfoPath}`);
+        }
+      } catch (e) {
+        console.log(`[RADIOAGENCIA] ⚠️ Erro ao remover PkInfo: ${e.message}`);
+      }
+      
       console.log(`[RADIOAGENCIA] ✅ Noticia.mp3 atualizada (${(stats.size / 1024).toFixed(0)}KB) — ${title}`);
       
       if (_showNotification) {
