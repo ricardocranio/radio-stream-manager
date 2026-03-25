@@ -243,40 +243,18 @@ export async function selectSongForSlot(
   const { useRadioStore } = await import('@/store/radioStore');
   const _storeState = useRadioStore.getState();
 
-  // Pre-compute blocked songs sets (read once, reuse for all candidates)
+  // Build engines (O(1) lookups)
   const storeConfig = _storeState.config;
-  const _blockedList = (storeConfig.blockedSongs || []).map(s => s.toLowerCase().trim());
-  const _blockedExact = new Set<string>(_blockedList.filter(s => !s.endsWith(' - *')));
-  const _blockedWildcardArtists = _blockedList
-    .filter(s => s.endsWith(' - *'))
-    .map(s => s.replace(/ - \*$/, ''));
-  const _forbiddenLower = (storeConfig.forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
-
-  // Also build alias map so we can check BOTH original and corrected names against the block list
   const _allAliases = _storeState.songAliases || [];
+  const blockedEngine = buildBlockedEngine(
+    storeConfig.blockedSongs || [],
+    storeConfig.forbiddenWords || [],
+    _allAliases
+  );
+  const aliasEngine = buildAliasEngine(_allAliases);
 
-  const isBlockedSong = (artist: string, title: string): boolean => {
-    const artistL = artist.trim().toLowerCase();
-    const titleL = title.trim().toLowerCase();
-    const songKey = `${artistL} - ${titleL}`;
-    if (_blockedExact.has(songKey)) return true;
-    if (_blockedWildcardArtists.some(b => artistL === b || artistL.includes(b))) return true;
-    if (_forbiddenLower.some(w => artistL.includes(w) || titleL.includes(w))) return true;
-
-    // Also check the ALIASED (corrected) name against the block list
-    for (const alias of _allAliases) {
-      if (artistL === alias.fromArtist.toLowerCase().trim() && titleL === alias.fromTitle.toLowerCase().trim()) {
-        const aliasArtistL = alias.toArtist.toLowerCase().trim();
-        const aliasTitleL = alias.toTitle.toLowerCase().trim();
-        const aliasKey = `${aliasArtistL} - ${aliasTitleL}`;
-        if (_blockedExact.has(aliasKey)) return true;
-        if (_blockedWildcardArtists.some(b => aliasArtistL === b || aliasArtistL.includes(b))) return true;
-        if (_forbiddenLower.some(w => aliasArtistL.includes(w) || aliasTitleL.includes(w))) return true;
-        break;
-      }
-    }
-    return false;
-  };
+  const isBlockedSong = (artist: string, title: string): boolean =>
+    blockedEngine.isBlocked(artist, title);
 
   const isValidCandidate = (title: string, artist: string) => {
     const key = `${title.toLowerCase()}-${artist.toLowerCase()}`;
