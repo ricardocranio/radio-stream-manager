@@ -95,6 +95,24 @@ function mapValuesArray<K, V>(source?: Map<K, V> | null): V[] {
   return source ? Array.from(source.values()) : [];
 }
 
+function getStationPoolEntries(source?: Record<string, unknown> | null): Array<[string, SongEntry[]]> {
+  if (!source || typeof source !== 'object') return [];
+  return Object.entries(source).filter(
+    (entry): entry is [string, SongEntry[]] =>
+      typeof entry[0] === 'string' &&
+      !entry[0].startsWith('__') &&
+      Array.isArray(entry[1])
+  );
+}
+
+function getStationPoolValues(source?: Record<string, unknown> | null): SongEntry[][] {
+  return getStationPoolEntries(source).map(([, songs]) => songs);
+}
+
+function getStationPoolKeys(source?: Record<string, unknown> | null): string[] {
+  return getStationPoolEntries(source).map(([stationName]) => stationName);
+}
+
 function ensureStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0) : [];
 }
@@ -828,7 +846,7 @@ export function useAutoGradeBuilder() {
 
         // Find pool for this station (flexible matching)
         let pool: SongEntry[] = [];
-        for (const [poolName, poolSongs] of Object.entries(songsByStation)) {
+        for (const [poolName, poolSongs] of getStationPoolEntries(songsByStation)) {
           const norm1 = poolName.toLowerCase().replace(/[^a-z0-9]/g, '');
           const norm2 = stationName.toLowerCase().replace(/[^a-z0-9]/g, '');
           if (norm1.includes(norm2) || norm2.includes(norm1)) {
@@ -1265,7 +1283,7 @@ export function useAutoGradeBuilder() {
 
     // Build pools
     const allSongsPool: SongEntry[] = [];
-    for (const stationSongs of Object.values(songsByStation)) {
+    for (const stationSongs of getStationPoolValues(songsByStation)) {
       allSongsPool.push(...stationSongs);
     }
 
@@ -1298,7 +1316,7 @@ export function useAutoGradeBuilder() {
       // Try case-insensitive match if exact fails
       let matchedPool = poolSongs.length;
       if (matchedPool === 0) {
-        for (const key of Object.keys(songsByStation)) {
+        for (const key of getStationPoolKeys(songsByStation)) {
           if (key.toLowerCase().trim() === resolvedName.toLowerCase().trim()) {
             matchedPool = songsByStation[key].length;
             break;
@@ -1655,7 +1673,7 @@ export function useAutoGradeBuilder() {
 
       const songsByStation = await fetchAllRecentSongs();
       // Enrich all song pools with cached BPM data
-      for (const songs of Object.values(songsByStation)) {
+      for (const songs of getStationPoolValues(songsByStation)) {
         enrichSongsWithBpmCache(songs as any[]);
       }
       const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
@@ -2037,7 +2055,7 @@ export function useAutoGradeBuilder() {
       await loadBpmCacheFromDisk();
       const fullPool = await fetchAllRecentSongs();
       // Enrich all song pools with cached BPM data
-      for (const songs of Object.values(fullPool)) {
+      for (const songs of getStationPoolValues(fullPool)) {
         enrichSongsWithBpmCache(songs as any[]);
       }
 
