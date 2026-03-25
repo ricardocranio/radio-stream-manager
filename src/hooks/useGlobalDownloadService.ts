@@ -42,6 +42,23 @@ export interface DownloadServiceState {
   isProcessing: boolean;
 }
 
+// Cached engines — rebuilt only when store data changes
+let _dlBlockedEngine: ReturnType<typeof buildBlockedEngine> | null = null;
+let _dlAliasEngine: ReturnType<typeof buildAliasEngine> | null = null;
+let _dlEngineVersion = 0;
+
+function getDlEngines() {
+  const s = useRadioStore.getState();
+  const ver = (s.config.blockedSongs?.length ?? 0) + (s.config.forbiddenWords?.length ?? 0) + (s.songAliases?.length ?? 0);
+  if (!_dlBlockedEngine || !_dlAliasEngine || ver !== _dlEngineVersion) {
+    const aliases = s.songAliases ?? [];
+    _dlBlockedEngine = buildBlockedEngine(s.config.blockedSongs ?? [], s.config.forbiddenWords ?? [], aliases);
+    _dlAliasEngine = buildAliasEngine(aliases);
+    _dlEngineVersion = ver;
+  }
+  return { blockedEng: _dlBlockedEngine, aliasEng: _dlAliasEngine };
+}
+
 export function useGlobalDownloadService() {
   const downloadQueueRef = useRef<DownloadQueueItem[]>([]);
   const isProcessingRef = useRef(false);
