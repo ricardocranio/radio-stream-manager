@@ -1079,7 +1079,70 @@ export function SettingsView() {
             </div>
 
             <div>
-              <Label className="text-sm">🚫 Músicas Bloqueadas</Label>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-sm">🚫 Músicas Bloqueadas</Label>
+                <div className="flex gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      const parsedBlocked = blockedSongs.split('\n').map(s => s.trim()).filter(Boolean);
+                      const blob = new Blob([JSON.stringify({ blockedSongs: parsedBlocked }, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `bloqueadas_${new Date().toISOString().slice(0, 10)}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      toast({ title: '📥 Exportado', description: `${parsedBlocked.length} músicas bloqueadas exportadas.` });
+                    }}
+                  >
+                    <Download className="w-3 h-3 mr-1" />
+                    Exportar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = '.json,.txt';
+                      input.onchange = async (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0];
+                        if (!file) return;
+                        const text = await file.text();
+                        try {
+                          if (file.name.endsWith('.json')) {
+                            const data = JSON.parse(text);
+                            const imported = data.blockedSongs || data;
+                            if (Array.isArray(imported)) {
+                              const current = blockedSongs.split('\n').map(s => s.trim()).filter(Boolean);
+                              const merged = [...new Set([...current, ...imported.map((s: string) => s.trim()).filter(Boolean)])];
+                              setBlockedSongs(merged.join('\n'));
+                              toast({ title: '📤 Importado', description: `${imported.length} músicas importadas (${merged.length} total sem duplicatas).` });
+                            }
+                          } else {
+                            // TXT: one per line
+                            const lines = text.split('\n').map((s: string) => s.trim()).filter(Boolean);
+                            const current = blockedSongs.split('\n').map(s => s.trim()).filter(Boolean);
+                            const merged = [...new Set([...current, ...lines])];
+                            setBlockedSongs(merged.join('\n'));
+                            toast({ title: '📤 Importado', description: `${lines.length} músicas importadas (${merged.length} total).` });
+                          }
+                        } catch {
+                          toast({ title: '❌ Erro', description: 'Arquivo inválido.', variant: 'destructive' });
+                        }
+                      };
+                      input.click();
+                    }}
+                  >
+                    <Upload className="w-3 h-3 mr-1" />
+                    Importar
+                  </Button>
+                </div>
+              </div>
               <Textarea
                 value={blockedSongs}
                 onChange={(e) => setBlockedSongs(e.target.value)}
@@ -1117,7 +1180,7 @@ export function SettingsView() {
                       if (result.deletedCount > 0) {
                         toast({ 
                           title: `🗑️ ${result.deletedCount} arquivo(s) removido(s)`, 
-                          description: result.deleted.slice(0, 3).map(f => f.split('\\').pop()).join(', ') + (result.deletedCount > 3 ? ` e mais ${result.deletedCount - 3}...` : ''),
+                          description: result.deleted.slice(0, 3).map((f: string) => f.split('\\').pop()).join(', ') + (result.deletedCount > 3 ? ` e mais ${result.deletedCount - 3}...` : ''),
                         });
                       } else {
                         toast({ title: '✅ Nenhum arquivo bloqueado encontrado', description: 'As pastas estão limpas.' });
