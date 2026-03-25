@@ -218,9 +218,11 @@ async function getLibraryIndex(): Promise<LibraryIndex> {
   const byDecade      = new Map<string, SongMeta[]>();
   const byGenreDecade = new Map<string, SongMeta[]>();
   const byArtistTitle = new Map<string, SongMeta>();
+  const filenameSet   = new Set<string>();
 
   for (const song of raw) {
     byArtistTitle.set(atKey(song.artist, song.title), song);
+    filenameSet.add(song.filename.toLowerCase().trim());
 
     const genre   = normalizeId3Genre(song.genre);
     const yearNum = parseInt(song.year, 10);
@@ -248,6 +250,7 @@ async function getLibraryIndex(): Promise<LibraryIndex> {
     byDecade,
     byGenreDecade,
     byArtistTitle,
+    filenameSet,
     allSongs: raw,
     builtAt: Date.now(),
   };
