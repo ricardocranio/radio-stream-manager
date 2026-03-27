@@ -332,10 +332,10 @@ export async function selectSongForSlot(
   // This ensures missing songs are instantly replaced by another from the SAME radio.
   // ============================================================
   if (!selectedSong) {
-    const now = Date.now();
-    const FRESHNESS_PRIMARY_MS = 5 * 60 * 1000;   // 5 minutes — ultra-fresh
-    const FRESHNESS_MAX_MS = 20 * 60 * 1000;       // 20 minutes — maximum freshness window
-
+    // P1 uses the NATURAL ORDER from the radio station (newest first, playlist order preserved).
+    // We do NOT apply smart scoring here — the radio's playlist order is what matters.
+    // Songs from the same scrape batch share the same scraped_at, so their original
+    // insertion order (= playlist order) is preserved by the stable sort.
     const freshnessSorted = [...stationSongs].sort((a, b) => {
       if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
       if (a.scrapedAt) return -1;
@@ -343,45 +343,19 @@ export async function selectSongForSlot(
       return 0;
     });
 
-    // Split into tiers: ultra-fresh (≤5min), fresh (5-20min), and rest
-    const ultraFresh: SongEntry[] = [];
-    const fresh: SongEntry[] = [];
-    const rest: SongEntry[] = [];
-    for (const song of freshnessSorted) {
-      if (song.scrapedAt) {
-        const age = now - new Date(song.scrapedAt).getTime();
-        if (age <= FRESHNESS_PRIMARY_MS) {
-          ultraFresh.push(song);
-        } else if (age <= FRESHNESS_MAX_MS) {
-          fresh.push(song);
-        } else {
-          rest.push(song);
-        }
-      } else {
-        rest.push(song);
-      }
-    }
-
-    // Prioritize: ultra-fresh first, then fresh, then rest as fallback
-    // IMPORTANT: Apply smart scoring WITHIN each tier to preserve freshness priority
-    // This ensures the freshest songs are always tried first, with smart scoring
-    // only reordering within the same freshness tier.
-    const smartUltraFresh = applySmartScoring(ultraFresh, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
-    const smartFresh = applySmartScoring(fresh, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
-    const smartRest = applySmartScoring(rest, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
-    const tieredCandidates = [...smartUltraFresh, ...smartFresh, ...smartRest];
-
-    console.log(`[SONG-SELECT] 🕐 [P1] Pool "${stationName}" (resolvedBy: ${resolvedBy}): ${stationSongs.length} total, ${ultraFresh.length} ultra-fresh (≤5min), ${fresh.length} fresh (5-20min), ${rest.length} pool expandido`);
-    if (stationSongs.length === 0) {
+    console.log(`[SONG-SELECT] 🕐 [P1] Pool "${stationName}" (resolvedBy: ${resolvedBy}): ${freshnessSorted.length} músicas (ordem natural da rádio)`);
+    if (freshnessSorted.length === 0) {
       console.warn(`[SONG-SELECT] ⚠️ [P1] Pool VAZIO para "${stationName}"! Pools disponíveis: [${Object.keys(songsByStation).join(', ')}]`);
+    } else {
+      console.log(`[SONG-SELECT] 🎵 [P1] Top 4 de "${stationName}": ${freshnessSorted.slice(0, 4).map(c => `${c.artist} - ${c.title}`).join(' → ')}`);
     }
 
-    const p1Candidates = tieredCandidates.filter(c => isValidCandidate(c.title, c.artist));
+    const p1Candidates = freshnessSorted.filter(c => isValidCandidate(c.title, c.artist));
 
-    if (p1Candidates.length === 0 && tieredCandidates.length > 0) {
-      console.warn(`[SONG-SELECT] ⚠️ [P1] ${tieredCandidates.length} músicas de "${stationName}" mas TODAS filtradas (anti-rep/bloqueio/blackout). Primeiras 3: ${tieredCandidates.slice(0, 3).map(c => `${c.artist} - ${c.title}`).join('; ')}`);
+    if (p1Candidates.length === 0 && freshnessSorted.length > 0) {
+      console.warn(`[SONG-SELECT] ⚠️ [P1] ${freshnessSorted.length} músicas de "${stationName}" mas TODAS filtradas (anti-rep/bloqueio/blackout). Primeiras 3: ${freshnessSorted.slice(0, 3).map(c => `${c.artist} - ${c.title}`).join('; ')}`);
     } else if (p1Candidates.length > 0) {
-      console.log(`[SONG-SELECT] 🎯 [P1] ${p1Candidates.length} candidatas válidas de "${stationName}" (de ${tieredCandidates.length} total). Top 3: ${p1Candidates.slice(0, 3).map(c => `${c.artist} - ${c.title}`).join('; ')}`);
+      console.log(`[SONG-SELECT] 🎯 [P1] ${p1Candidates.length} candidatas válidas de "${stationName}" (de ${freshnessSorted.length} total). Top 3: ${p1Candidates.slice(0, 3).map(c => `${c.artist} - ${c.title}`).join('; ')}`);
     }
 
     const p1Map = p1Candidates.length
