@@ -783,6 +783,19 @@ export async function selectSongForSlot(
       });
     }
 
+    // 🔄 ALIAS RESOLUTION: Use the CORRECTED name (from Correções de Músicas) in the grade.
+    // The scraped name may be wrong — the alias provides the canonical name.
+    const aliasResolved = aliasEngine.resolve(selectedSong.artist, selectedSong.title);
+    const gradeArtist = aliasResolved.artist;
+    const gradeTitle = aliasResolved.title;
+    if (gradeArtist !== selectedSong.artist || gradeTitle !== selectedSong.title) {
+      console.log(`[SONG-SELECT] 🔄 Alias para grade: "${selectedSong.artist} - ${selectedSong.title}" → "${gradeArtist} - ${gradeTitle}"`);
+      // Also mark the corrected name as used to prevent double usage
+      usedInBlock.add(`${gradeTitle.toLowerCase()}-${gradeArtist.toLowerCase()}`);
+      usedArtistsInBlock.add(gradeArtist.toLowerCase().trim());
+      ctx.markSongAsUsed(gradeTitle, gradeArtist, timeStr);
+    }
+
     // CRITICAL SEQUENCE: Validate → Rename on disk → Write clean name to grade
     // 1. Check if filename has accents/special chars
     // 2. If yes, rename the physical file on disk FIRST
@@ -790,8 +803,8 @@ export async function selectSongForSlot(
     const originalFilename = selectedSong.filename || '';
     const sanitizedFilename = await finalizeGradeFilename(
       originalFilename,
-      selectedSong.artist,
-      selectedSong.title,
+      gradeArtist,
+      gradeTitle,
       ctx.musicFolders,
       ctx.filterChars
     );

@@ -1,7 +1,11 @@
 /**
  * Blocked Songs Engine — O(1) lookup for blocked songs/artists/forbidden words.
  * Supports exact match, wildcard artists ("Artist - *"), forbidden words,
- * and alias-aware blocking (checks both original and corrected names).
+ * and alias-aware blocking (checks original, corrected, AND reverse-alias names).
+ *
+ * Key improvement: if a song is blocked under a WRONG name and there's an alias
+ * mapping that wrong name → correct name, the engine blocks BOTH directions.
+ * This ensures blocked songs can't sneak through using alias-corrected names.
  */
 
 import { normalizeStr, songKey } from './songUtils';
@@ -36,11 +40,19 @@ export function buildBlockedEngine(
     .map(w => normalizeStr(w))
     .filter(Boolean);
 
+  // Forward alias map: wrong name → correct name
   const aliasFromMap = new Map<string, { toArtist: string; toTitle: string }>();
+  // Reverse alias map: correct name → wrong name (for reverse blocking)
+  const aliasReverseMap = new Map<string, { fromArtist: string; fromTitle: string }>();
+
   for (const alias of aliases) {
     aliasFromMap.set(songKey(alias.fromArtist, alias.fromTitle), {
       toArtist: alias.toArtist,
       toTitle: alias.toTitle,
+    });
+    aliasReverseMap.set(songKey(alias.toArtist, alias.toTitle), {
+      fromArtist: alias.fromArtist,
+      fromTitle: alias.fromTitle,
     });
   }
 
@@ -55,12 +67,20 @@ export function buildBlockedEngine(
     const aN = normalizeStr(artist);
     const tN = normalizeStr(title);
 
+    // Check 1: Direct match (original name against block list)
     if (checkRaw(aN, tN)) return true;
 
-    // Also check the ALIASED (corrected) name against the block list
+    // Check 2: Forward alias — if original name has an alias, check the CORRECTED name
     const resolved = aliasFromMap.get(`${aN}|||${tN}`);
     if (resolved) {
       if (checkRaw(normalizeStr(resolved.toArtist), normalizeStr(resolved.toTitle))) return true;
+    }
+
+    // Check 3: REVERSE alias — if this is the CORRECTED name, check if the WRONG name is blocked
+    // This catches songs arriving with corrected names when the block list has the wrong name
+    const reverseResolved = aliasReverseMap.get(`${aN}|||${tN}`);
+    if (reverseResolved) {
+      if (checkRaw(normalizeStr(reverseResolved.fromArtist), normalizeStr(reverseResolved.fromTitle))) return true;
     }
 
     return false;
