@@ -363,13 +363,20 @@ export async function selectSongForSlot(
     }
 
     // Prioritize: ultra-fresh first, then fresh, then rest as fallback
-    const tieredCandidates = [...ultraFresh, ...fresh, ...rest];
-    if (ultraFresh.length > 0 || fresh.length > 0) {
-      console.log(`[SONG-SELECT] 🕐 [P1] Frescor "${stationName}": ${ultraFresh.length} ultra-fresh (≤5min), ${fresh.length} fresh (5-20min), ${rest.length} pool geral`);
+    // IMPORTANT: Apply smart scoring WITHIN each tier to preserve freshness priority
+    // This ensures the freshest songs are always tried first, with smart scoring
+    // only reordering within the same freshness tier.
+    const smartUltraFresh = applySmartScoring(ultraFresh, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
+    const smartFresh = applySmartScoring(fresh, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
+    const smartRest = applySmartScoring(rest, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
+    const tieredCandidates = [...smartUltraFresh, ...smartFresh, ...smartRest];
+
+    console.log(`[SONG-SELECT] 🕐 [P1] Pool "${stationName}" (resolvedBy: ${resolvedBy}): ${stationSongs.length} total, ${ultraFresh.length} ultra-fresh (≤5min), ${fresh.length} fresh (5-20min), ${rest.length} pool expandido`);
+    if (stationSongs.length === 0) {
+      console.warn(`[SONG-SELECT] ⚠️ [P1] Pool VAZIO para "${stationName}"! Pools disponíveis: [${Object.keys(songsByStation).join(', ')}]`);
     }
 
-    const smartSorted = applySmartScoring(tieredCandidates, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
-    const p1Candidates = smartSorted.filter(c => isValidCandidate(c.title, c.artist));
+    const p1Candidates = tieredCandidates.filter(c => isValidCandidate(c.title, c.artist));
 
     const p1Map = p1Candidates.length
       ? await ctx.batchFindSongsInLibrary(p1Candidates.map(c => ({ artist: c.artist, title: c.title })))
