@@ -272,8 +272,18 @@ export async function selectSongForSlot(
     const normalizedArtist = artist.toLowerCase().trim();
     if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) return false;
     if (ctx.isRecentlyUsed(title, artist, timeStr, isFullDay)) return false;
-    // 🚫 Blocked songs NEVER enter the grade
-    if (isBlockedSong(artist, title)) return false;
+    // 🚫 Blocked songs NEVER enter the grade (checks raw + alias-corrected + reverse-alias)
+    if (isBlockedSong(artist, title)) {
+      console.log(`[SONG-SELECT] 🚫 Bloqueada: "${artist} - ${title}" (detectada pelo blockedEngine)`);
+      return false;
+    }
+    // 🚫 Also check the ALIAS-CORRECTED name against the block list
+    // This catches cases where the corrected name itself is blocked
+    const corrected = aliasEngine.resolve(artist, title);
+    if ((corrected.artist !== artist || corrected.title !== title) && isBlockedSong(corrected.artist, corrected.title)) {
+      console.log(`[SONG-SELECT] 🚫 Bloqueada via alias: "${artist} - ${title}" → "${corrected.artist} - ${corrected.title}"`);
+      return false;
+    }
     // Artist blackout by time range
     if (ctx.artistBlackouts?.length) {
       for (const bo of ctx.artistBlackouts) {
@@ -298,7 +308,7 @@ export async function selectSongForSlot(
    */
   const findWithAliasFallback = async (artist: string, title: string, batchMap?: Map<string, any>): Promise<{ exists: boolean; filename?: string }> => {
     const key = toLibKey(artist, title);
-    // Try corrected name first (from batch or individual)
+    // Try original/raw name first (from batch or individual)
     if (batchMap) {
       const result = batchMap.get(key) as { exists: boolean; filename?: string } | undefined;
       if (result?.exists) return result;
@@ -306,10 +316,32 @@ export async function selectSongForSlot(
       const result = await ctx.findSongInLibrary(artist, title);
       if (result.exists) return result;
     }
-    // Fallback: try original (pre-alias) name on disk using aliasEngine reverse
+    // Fallback 1: FORWARD alias — try the CORRECTED name on disk
+    // This handles cases where the file was downloaded with the corrected name (via alias)
+    // but the candidate still has the raw scraped name
+    const corrected = aliasEngine.resolve(artist, title);
+    if (corrected.artist !== artist || corrected.title !== title) {
+      console.log(`[SONG-SELECT] 🔄 Alias forward: "${artist} - ${title}" → tentando "${corrected.artist} - ${corrected.title}" no disco`);
+      const correctedKey = toLibKey(corrected.artist, corrected.title);
+      // Check batch map first
+      if (batchMap) {
+        const batchResult = batchMap.get(correctedKey) as { exists: boolean; filename?: string } | undefined;
+        if (batchResult?.exists) {
+          console.log(`[SONG-SELECT] ✅ Encontrado via alias forward (batch): ${batchResult.filename}`);
+          return batchResult;
+        }
+      }
+      const forwardResult = await ctx.findSongInLibrary(corrected.artist, corrected.title);
+      if (forwardResult.exists) {
+        console.log(`[SONG-SELECT] ✅ Encontrado via alias forward: ${forwardResult.filename}`);
+        return forwardResult;
+      }
+    }
+    // Fallback 2: REVERSE alias — try the ORIGINAL name on disk
+    // This handles cases where the candidate has the corrected name but the file has the old name
     const reverse = aliasEngine.resolveReverse(artist, title);
     if (reverse.artist !== artist || reverse.title !== title) {
-      console.log(`[SONG-SELECT] 🔄 Alias fallback: "${artist} - ${title}" → tentando "${reverse.artist} - ${reverse.title}" no disco`);
+      console.log(`[SONG-SELECT] 🔄 Alias reverso: "${artist} - ${title}" → tentando "${reverse.artist} - ${reverse.title}" no disco`);
       const fallbackResult = await ctx.findSongInLibrary(reverse.artist, reverse.title);
       if (fallbackResult.exists) {
         console.log(`[SONG-SELECT] ✅ Encontrado via alias reverso: ${fallbackResult.filename}`);
@@ -358,8 +390,18 @@ export async function selectSongForSlot(
       console.log(`[SONG-SELECT] 🎯 [P1] ${p1Candidates.length} candidatas válidas de "${stationName}" (de ${freshnessSorted.length} total). Top 3: ${p1Candidates.slice(0, 3).map(c => `${c.artist} - ${c.title}`).join('; ')}`);
     }
 
-    const p1Map = p1Candidates.length
-      ? await ctx.batchFindSongsInLibrary(p1Candidates.map(c => ({ artist: c.artist, title: c.title })))
+    // Build batch lookup including BOTH raw names AND alias-corrected names
+    // This ensures findWithAliasFallback can find songs by corrected name in the batch
+    const batchEntries = p1Candidates.flatMap(c => {
+      const entries = [{ artist: c.artist, title: c.title }];
+      const corrected = aliasEngine.resolve(c.artist, c.title);
+      if (corrected.artist !== c.artist || corrected.title !== c.title) {
+        entries.push({ artist: corrected.artist, title: corrected.title });
+      }
+      return entries;
+    });
+    const p1Map = batchEntries.length
+      ? await ctx.batchFindSongsInLibrary(batchEntries)
       : new Map();
 
     // PHASE 1: Pick the first candidate that ALREADY exists in library (instant, no download)
