@@ -458,7 +458,7 @@ export function useAutoGradeBuilder() {
         .limit(2000);
       if (error) throw error;
 
-      return buildSongsByStation(data || [], 200);
+      return buildSongsByStation(data || [], 300);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
       console.error('[AUTO-GRADE] Error fetching songs for block:', errorMsg);
@@ -609,7 +609,7 @@ export function useAutoGradeBuilder() {
   }, [stations]);
 
   // Helper to build songsByStation from raw data
-  const buildSongsByStation = useCallback((data: Array<{ title: string; artist: string; station_name: string; scraped_at: string; ai_genre?: string | null; ai_energy?: string | null }>, maxPerStation = 50): Record<string, SongEntry[]> => {
+  const buildSongsByStation = useCallback((data: Array<{ title: string; artist: string; station_name: string; scraped_at: string; ai_genre?: string | null; ai_energy?: string | null }>, maxPerStation = 300): Record<string, SongEntry[]> => {
     const songsByStation: Record<string, SongEntry[]> = {};
     const stationNameToStyle: Record<string, string> = {};
     const seenSongs = new Set<string>();
