@@ -326,11 +326,16 @@ export async function selectSongForSlot(
 
   // ============================================================
   // PRIORITY 1: Station Pool (primary source — the configured radio)
-  // STRATEGY: First scan ALL candidates for one that EXISTS in library.
+  // STRATEGY: Prioritize FRESH captures (5-20 min) first, then expand.
+  // First scan ALL candidates for one that EXISTS in library.
   // Only attempt JIT downloads if NO candidate from this station is available.
   // This ensures missing songs are instantly replaced by another from the SAME radio.
   // ============================================================
   if (!selectedSong) {
+    const now = Date.now();
+    const FRESHNESS_PRIMARY_MS = 5 * 60 * 1000;   // 5 minutes — ultra-fresh
+    const FRESHNESS_MAX_MS = 20 * 60 * 1000;       // 20 minutes — maximum freshness window
+
     const freshnessSorted = [...stationSongs].sort((a, b) => {
       if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
       if (a.scrapedAt) return -1;
@@ -338,7 +343,32 @@ export async function selectSongForSlot(
       return 0;
     });
 
-    const smartSorted = applySmartScoring(freshnessSorted, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
+    // Split into tiers: ultra-fresh (≤5min), fresh (5-20min), and rest
+    const ultraFresh: SongEntry[] = [];
+    const fresh: SongEntry[] = [];
+    const rest: SongEntry[] = [];
+    for (const song of freshnessSorted) {
+      if (song.scrapedAt) {
+        const age = now - new Date(song.scrapedAt).getTime();
+        if (age <= FRESHNESS_PRIMARY_MS) {
+          ultraFresh.push(song);
+        } else if (age <= FRESHNESS_MAX_MS) {
+          fresh.push(song);
+        } else {
+          rest.push(song);
+        }
+      } else {
+        rest.push(song);
+      }
+    }
+
+    // Prioritize: ultra-fresh first, then fresh, then rest as fallback
+    const tieredCandidates = [...ultraFresh, ...fresh, ...rest];
+    if (ultraFresh.length > 0 || fresh.length > 0) {
+      console.log(`[SONG-SELECT] 🕐 [P1] Frescor "${stationName}": ${ultraFresh.length} ultra-fresh (≤5min), ${fresh.length} fresh (5-20min), ${rest.length} pool geral`);
+    }
+
+    const smartSorted = applySmartScoring(tieredCandidates, timeStr, selCtx.previousEnergy, selCtx.previousBpm);
     const p1Candidates = smartSorted.filter(c => isValidCandidate(c.title, c.artist));
 
     const p1Map = p1Candidates.length
