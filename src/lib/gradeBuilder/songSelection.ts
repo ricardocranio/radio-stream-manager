@@ -347,7 +347,7 @@ export async function selectSongForSlot(
     if (freshnessSorted.length === 0) {
       console.warn(`[SONG-SELECT] ⚠️ [P1] Pool VAZIO para "${stationName}"! Pools disponíveis: [${Object.keys(songsByStation).join(', ')}]`);
     } else {
-      console.log(`[SONG-SELECT] 🎵 [P1] Top 4 de "${stationName}": ${freshnessSorted.slice(0, 4).map(c => `${c.artist} - ${c.title}`).join(' → ')}`);
+      console.log(`[SONG-SELECT] 🎵 [P1] Top 5 de "${stationName}": ${freshnessSorted.slice(0, 5).map(c => `${c.artist} - ${c.title}`).join(' → ')}`);
     }
 
     const p1Candidates = freshnessSorted.filter(c => isValidCandidate(c.title, c.artist));
