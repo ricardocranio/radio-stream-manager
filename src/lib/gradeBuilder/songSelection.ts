@@ -378,6 +378,12 @@ export async function selectSongForSlot(
 
     const p1Candidates = tieredCandidates.filter(c => isValidCandidate(c.title, c.artist));
 
+    if (p1Candidates.length === 0 && tieredCandidates.length > 0) {
+      console.warn(`[SONG-SELECT] ⚠️ [P1] ${tieredCandidates.length} músicas de "${stationName}" mas TODAS filtradas (anti-rep/bloqueio/blackout). Primeiras 3: ${tieredCandidates.slice(0, 3).map(c => `${c.artist} - ${c.title}`).join('; ')}`);
+    } else if (p1Candidates.length > 0) {
+      console.log(`[SONG-SELECT] 🎯 [P1] ${p1Candidates.length} candidatas válidas de "${stationName}" (de ${tieredCandidates.length} total). Top 3: ${p1Candidates.slice(0, 3).map(c => `${c.artist} - ${c.title}`).join('; ')}`);
+    }
+
     const p1Map = p1Candidates.length
       ? await ctx.batchFindSongsInLibrary(p1Candidates.map(c => ({ artist: c.artist, title: c.title })))
       : new Map();

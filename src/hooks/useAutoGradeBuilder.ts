@@ -458,7 +458,7 @@ export function useAutoGradeBuilder() {
         .limit(2000);
       if (error) throw error;
 
-      return buildSongsByStation(data || [], 200);
+      return buildSongsByStation(data || [], 300);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
       console.error('[AUTO-GRADE] Error fetching songs for block:', errorMsg);
