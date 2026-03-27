@@ -380,8 +380,18 @@ export async function selectSongForSlot(
       console.log(`[SONG-SELECT] 🎯 [P1] ${p1Candidates.length} candidatas válidas de "${stationName}" (de ${freshnessSorted.length} total). Top 3: ${p1Candidates.slice(0, 3).map(c => `${c.artist} - ${c.title}`).join('; ')}`);
     }
 
-    const p1Map = p1Candidates.length
-      ? await ctx.batchFindSongsInLibrary(p1Candidates.map(c => ({ artist: c.artist, title: c.title })))
+    // Build batch lookup including BOTH raw names AND alias-corrected names
+    // This ensures findWithAliasFallback can find songs by corrected name in the batch
+    const batchEntries = p1Candidates.flatMap(c => {
+      const entries = [{ artist: c.artist, title: c.title }];
+      const corrected = aliasEngine.resolve(c.artist, c.title);
+      if (corrected.artist !== c.artist || corrected.title !== c.title) {
+        entries.push({ artist: corrected.artist, title: corrected.title });
+      }
+      return entries;
+    });
+    const p1Map = batchEntries.length
+      ? await ctx.batchFindSongsInLibrary(batchEntries)
       : new Map();
 
     // PHASE 1: Pick the first candidate that ALREADY exists in library (instant, no download)
