@@ -272,8 +272,18 @@ export async function selectSongForSlot(
     const normalizedArtist = artist.toLowerCase().trim();
     if (usedInBlock.has(key) || usedArtistsInBlock.has(normalizedArtist)) return false;
     if (ctx.isRecentlyUsed(title, artist, timeStr, isFullDay)) return false;
-    // 🚫 Blocked songs NEVER enter the grade
-    if (isBlockedSong(artist, title)) return false;
+    // 🚫 Blocked songs NEVER enter the grade (checks raw + alias-corrected + reverse-alias)
+    if (isBlockedSong(artist, title)) {
+      console.log(`[SONG-SELECT] 🚫 Bloqueada: "${artist} - ${title}" (detectada pelo blockedEngine)`);
+      return false;
+    }
+    // 🚫 Also check the ALIAS-CORRECTED name against the block list
+    // This catches cases where the corrected name itself is blocked
+    const corrected = aliasEngine.resolve(artist, title);
+    if ((corrected.artist !== artist || corrected.title !== title) && isBlockedSong(corrected.artist, corrected.title)) {
+      console.log(`[SONG-SELECT] 🚫 Bloqueada via alias: "${artist} - ${title}" → "${corrected.artist} - ${corrected.title}"`);
+      return false;
+    }
     // Artist blackout by time range
     if (ctx.artistBlackouts?.length) {
       for (const bo of ctx.artistBlackouts) {
