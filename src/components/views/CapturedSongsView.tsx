@@ -14,6 +14,7 @@ import { useRadioStore } from '@/store/radioStore';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays, subHours, parseISO, getHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { normalizeStr } from '@/lib/songUtils';
 
 import {
   BarChart,
