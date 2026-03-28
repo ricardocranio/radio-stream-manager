@@ -66,7 +66,7 @@ const METADATA_REFRESH_MS = 5 * 60 * 1000;
 export function CapturedSongsView() {
   const isReady = useDeferredRender();
   const { toast } = useToast();
-  const { applyRankingBatch, rankingSongs, deezerConfig, config } = useRadioStore();
+  const { applyRankingBatch, rankingSongs, deezerConfig, config, gradePreviewSongKeys } = useRadioStore();
   const [songs, setSongs] = useState<ScrapedSong[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
