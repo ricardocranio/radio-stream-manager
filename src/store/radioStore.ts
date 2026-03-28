@@ -215,6 +215,10 @@ interface RadioState {
   addMapaTemplateLine: (templateIndex: number, time: string, codes: string[]) => void;
   removeMapaTemplateLine: (templateIndex: number, lineIndex: number) => void;
   resetMapaTemplates: () => void;
+
+  // Grade Preview Songs tracking (artist|title keys of songs in next grade)
+  gradePreviewSongKeys: Set<string>;
+  setGradePreviewSongKeys: (keys: Set<string>) => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
