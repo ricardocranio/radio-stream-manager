@@ -288,6 +288,13 @@ export function CapturedSongsView() {
     return filtered;
   }, [songs, searchTerm, selectedGenre, selectedEnergy]);
 
+  // Check if a song is in the next grade preview
+  const isSongInGrade = useCallback((artist: string, title: string): boolean => {
+    if (gradePreviewSongKeys.size === 0) return false;
+    const key = `${normalizeStr(artist)}|||${normalizeStr(title)}`;
+    return gradePreviewSongKeys.has(key);
+  }, [gradePreviewSongKeys]);
+
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
