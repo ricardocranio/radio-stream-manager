@@ -60,7 +60,7 @@ function parseGradeLine(line: string): PreviewSong[] {
 }
 
 export function GradePreviewCard() {
-  const { config, stations, scheduledSequences } = useRadioStore();
+  const { config, stations, scheduledSequences, setGradePreviewSongKeys } = useRadioStore();
   const { gradeBuilder } = useGlobalServices();
   const { getLogsByBlock } = useGradeLogStore();
   const [libraryStatus, setLibraryStatus] = useState<Record<string, LibraryStatus>>({});
