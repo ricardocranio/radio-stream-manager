@@ -360,7 +360,18 @@ export function GradePreviewCard() {
     return [];
   }, [gradeBuilder.pendingGradeLines, nextBlockTime, mockSongs]);
 
-  // Normalize string: lowercase, strip accents, collapse whitespace
+  // === Sync display songs to store for cross-component tracking ===
+  useEffect(() => {
+    const keys = new Set<string>();
+    for (const song of displaySongs) {
+      if (!song.isSpecial && song.artist && song.title) {
+        keys.add(`${normalizeStr(song.artist)}|||${normalizeStr(song.title)}`);
+      }
+    }
+    setGradePreviewSongKeys(keys);
+  }, [displaySongs, setGradePreviewSongKeys]);
+
+
   const normalizeKey = useCallback((str: string) => {
     return str
       .toLowerCase()
