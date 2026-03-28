@@ -857,6 +857,10 @@ export const useRadioStore = create<RadioState>()(
       resetMapaTemplates: () => set((state) => ({
         mapasConfig: { ...state.mapasConfig, templates: DEFAULT_TEMPLATES },
       })),
+
+      // Grade Preview Songs tracking (not persisted)
+      gradePreviewSongKeys: new Set<string>(),
+      setGradePreviewSongKeys: (keys) => set({ gradePreviewSongKeys: keys }),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
