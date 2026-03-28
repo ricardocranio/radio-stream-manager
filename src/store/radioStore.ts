@@ -215,6 +215,10 @@ interface RadioState {
   addMapaTemplateLine: (templateIndex: number, time: string, codes: string[]) => void;
   removeMapaTemplateLine: (templateIndex: number, lineIndex: number) => void;
   resetMapaTemplates: () => void;
+
+  // Grade Preview Songs tracking (artist|title keys of songs in next grade)
+  gradePreviewSongKeys: Set<string>;
+  setGradePreviewSongKeys: (keys: Set<string>) => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
@@ -853,6 +857,10 @@ export const useRadioStore = create<RadioState>()(
       resetMapaTemplates: () => set((state) => ({
         mapasConfig: { ...state.mapasConfig, templates: DEFAULT_TEMPLATES },
       })),
+
+      // Grade Preview Songs tracking (not persisted)
+      gradePreviewSongKeys: new Set<string>(),
+      setGradePreviewSongKeys: (keys) => set({ gradePreviewSongKeys: keys }),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key

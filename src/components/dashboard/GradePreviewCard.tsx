@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
+import { normalizeStr } from '@/lib/songUtils';
 import { useGlobalServices } from '@/contexts/GlobalServicesContext';
 import { useGradeLogStore } from '@/store/gradeLogStore';
 import { supabase } from '@/integrations/supabase/client';
@@ -59,7 +60,7 @@ function parseGradeLine(line: string): PreviewSong[] {
 }
 
 export function GradePreviewCard() {
-  const { config, stations, scheduledSequences } = useRadioStore();
+  const { config, stations, scheduledSequences, setGradePreviewSongKeys } = useRadioStore();
   const { gradeBuilder } = useGlobalServices();
   const { getLogsByBlock } = useGradeLogStore();
   const [libraryStatus, setLibraryStatus] = useState<Record<string, LibraryStatus>>({});
@@ -359,7 +360,18 @@ export function GradePreviewCard() {
     return [];
   }, [gradeBuilder.pendingGradeLines, nextBlockTime, mockSongs]);
 
-  // Normalize string: lowercase, strip accents, collapse whitespace
+  // === Sync display songs to store for cross-component tracking ===
+  useEffect(() => {
+    const keys = new Set<string>();
+    for (const song of displaySongs) {
+      if (!song.isSpecial && song.artist && song.title) {
+        keys.add(`${normalizeStr(song.artist)}|||${normalizeStr(song.title)}`);
+      }
+    }
+    setGradePreviewSongKeys(keys);
+  }, [displaySongs, setGradePreviewSongKeys]);
+
+
   const normalizeKey = useCallback((str: string) => {
     return str
       .toLowerCase()

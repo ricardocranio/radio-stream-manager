@@ -14,6 +14,7 @@ import { useRadioStore } from '@/store/radioStore';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays, subHours, parseISO, getHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { normalizeStr } from '@/lib/songUtils';
 
 import {
   BarChart,
@@ -65,7 +66,7 @@ const METADATA_REFRESH_MS = 5 * 60 * 1000;
 export function CapturedSongsView() {
   const isReady = useDeferredRender();
   const { toast } = useToast();
-  const { applyRankingBatch, rankingSongs, deezerConfig, config } = useRadioStore();
+  const { applyRankingBatch, rankingSongs, deezerConfig, config, gradePreviewSongKeys } = useRadioStore();
   const [songs, setSongs] = useState<ScrapedSong[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -286,6 +287,13 @@ export function CapturedSongsView() {
     
     return filtered;
   }, [songs, searchTerm, selectedGenre, selectedEnergy]);
+
+  // Check if a song is in the next grade preview
+  const isSongInGrade = useCallback((artist: string, title: string): boolean => {
+    if (gradePreviewSongKeys.size === 0) return false;
+    const key = `${normalizeStr(artist)}|||${normalizeStr(title)}`;
+    return gradePreviewSongKeys.has(key);
+  }, [gradePreviewSongKeys]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -758,6 +766,11 @@ export function CapturedSongsView() {
                         {song.ai_energy && (
                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                             ⚡ {song.ai_energy}
+                          </Badge>
+                        )}
+                        {isSongInGrade(song.artist, song.title) && (
+                          <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] font-bold">
+                            📋 NA GRADE
                           </Badge>
                         )}
                         {song.is_now_playing && (
