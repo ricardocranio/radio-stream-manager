@@ -768,6 +768,11 @@ export function CapturedSongsView() {
                             ⚡ {song.ai_energy}
                           </Badge>
                         )}
+                        {isSongInGrade(song.artist, song.title) && (
+                          <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] font-bold">
+                            📋 NA GRADE
+                          </Badge>
+                        )}
                         {song.is_now_playing && (
                           <Badge className="bg-success/20 text-success border-success/30">
                             AO VIVO
