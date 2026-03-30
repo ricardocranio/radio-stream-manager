@@ -443,6 +443,9 @@ export function SequenceView() {
   };
 
   const getStationColor = (source: string) => {
+    if (source.startsWith('file_')) {
+      return 'bg-sky-500/20 text-sky-400 border-sky-500/30';
+    }
     if (source.startsWith('fixo_')) {
       return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
     }
