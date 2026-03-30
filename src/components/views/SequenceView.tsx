@@ -703,7 +703,7 @@ export function SequenceView() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="space-y-4">
         {/* Default Sequence Configuration */}
         <Collapsible open={defaultOpen} onOpenChange={setDefaultOpen}>
         <Card className="glass-card">
