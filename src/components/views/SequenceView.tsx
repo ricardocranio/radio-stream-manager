@@ -990,6 +990,7 @@ export function SequenceView() {
                             genreYearOptions={genreYearOptions}
                             fixedContentOptions={fixedContentOptions}
                             stationOptions={stationOptions}
+                            justDropped={droppedPosition === col2[i].position}
                           />
                         );
                       }
