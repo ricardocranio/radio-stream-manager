@@ -887,19 +887,26 @@ export function SequenceView() {
               {localSequence.length} posições configuradas
             </p>
           </CardContent>
+          </CollapsibleContent>
         </Card>
+        </Collapsible>
 
         {/* Fixed Content Panel - Sidebar */}
+        <Collapsible open={fixedOpen} onOpenChange={setFixedOpen}>
         <Card className="glass-card border-emerald-500/30">
-          <CardHeader className="border-b border-emerald-500/20 pb-3 bg-emerald-500/5">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <span className="text-lg">📌</span>
-              Conteúdos Fixos Cadastrados
-              <Badge variant="secondary" className="ml-auto text-xs bg-emerald-500/20 text-emerald-400">
-                {fixedContent.filter(c => c.enabled).length} ativos
-              </Badge>
-            </CardTitle>
+          <CardHeader className="border-b border-emerald-500/20 pb-0 pt-0 bg-emerald-500/5 p-0">
+            <CollapsibleTrigger className="w-full flex items-center justify-between p-3 hover:bg-emerald-500/10 transition-colors cursor-pointer">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <span className="text-lg">📌</span>
+                Conteúdos Fixos
+                <Badge variant="secondary" className="ml-2 text-xs bg-emerald-500/20 text-emerald-400">
+                  {fixedContent.filter(c => c.enabled).length} ativos
+                </Badge>
+              </CardTitle>
+              <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${fixedOpen ? 'rotate-180' : ''}`} />
+            </CollapsibleTrigger>
           </CardHeader>
+          <CollapsibleContent>
           <CardContent className="p-3">
             {fixedContent.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">
