@@ -176,6 +176,26 @@ export function CapturedSongsView() {
     }
   }, [songs, gradePreviewSongKeys.size, setGradePreviewSongKeys]);
 
+  // Realtime subscription: auto-refresh when new scraped_songs arrive from Python monitor
+  useEffect(() => {
+    const channel = supabase
+      .channel('captured-songs-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'scraped_songs' },
+        () => {
+          console.log('[CAPTURED] 📡 Nova captura detectada — recarregando lista fresca');
+          loadSongs();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadSongs]);
+
+  // Periodic fallback refresh (less frequent now that realtime handles updates)
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.hidden) return;
