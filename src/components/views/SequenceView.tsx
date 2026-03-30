@@ -987,7 +987,7 @@ export function SequenceView() {
 
               <div className="mt-6 p-4 rounded-lg bg-muted/30 border border-border">
                 <h4 className="font-medium text-sm mb-2">Legenda</h4>
-                <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-6 gap-2 text-xs">
                   {stations.slice(0, 6).map((station) => (
                     <div key={station.id} className="flex items-center gap-2">
                       <div className={`w-3 h-3 rounded ${getStationColor(station.id)}`} />
