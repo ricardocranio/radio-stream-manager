@@ -1892,7 +1892,7 @@ export function useAutoGradeBuilder() {
           currentBlock: currentTimeKey,
           nextBlock: nextTimeKey,
           pendingGradeLines: new Map(lineMap),
-        }));
+          pendingStationMap: { ...prev.pendingStationMap },
         return;
       }
 
