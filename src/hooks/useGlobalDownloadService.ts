@@ -548,6 +548,7 @@ export function useGlobalDownloadService() {
         // 🚫 BLOCKED CHECK AT QUEUE ENTRY — catches songs added before block rule existed
         if (blockedEngine.isBlocked(song.artist, song.title)) {
           console.log(`[DL-SVC] 🚫 Bloqueada na fila: ${song.artist} - ${song.title}`);
+          recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'exact', source: 'download' });
           useRadioStore.getState().removeMissingSong(song.id);
           continue;
         }
