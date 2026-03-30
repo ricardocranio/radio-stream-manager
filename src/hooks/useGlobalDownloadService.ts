@@ -123,6 +123,7 @@ export function useGlobalDownloadService() {
     // 🚫 Block check BEFORE any operation
     if (blockedEngine.isBlocked(song.artist, song.title)) {
       console.log(`[DL-SVC] 🚫 Bloqueada, não será baixada: ${song.artist} - ${song.title}`);
+      recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'exact', source: 'download' });
       useRadioStore.getState().removeMissingSong(song.id);
       return false;
     }
