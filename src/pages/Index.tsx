@@ -120,6 +120,19 @@ const Index = () => {
   // Auto cleanup of old data (>24h) - runs every hour
   useAutoCleanup();
 
+  // F5 keyboard shortcut: force full page reload
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F5') {
+        e.preventDefault();
+        console.log('[APP] 🔄 F5 pressionado — recarregando página');
+        window.location.reload();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Mark system as running on mount
   useEffect(() => {
     setIsRunning(true);
