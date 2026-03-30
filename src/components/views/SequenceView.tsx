@@ -730,7 +730,7 @@ export function SequenceView() {
           </CardHeader>
           <CollapsibleContent>
           <CardContent className="p-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr', gridTemplateRows: `repeat(${Math.ceil(localSequence.length / 2)}, auto)`, gridAutoFlow: 'column' }}>
                 {localSequence.map((item) => {
                   const isFixoItem = item.radioSource.startsWith('fixo_');
                   const isEditing = editingPosition === item.position;
