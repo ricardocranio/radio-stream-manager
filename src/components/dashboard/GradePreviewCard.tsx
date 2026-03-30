@@ -382,16 +382,23 @@ export function GradePreviewCard() {
       .replace(/\s+/g, ' ');
   }, []);
 
-  // Build a map of song key -> station from block logs
+  // Build a map of song key -> station from builder's pendingStationMap (immediate)
+  // Falls back to gradeLogStore for backwards compatibility
   const songStationMap = useMemo(() => {
     if (!isElectron) return dynamicStationMap;
+    
+    // PRIMARY: Use pendingStationMap from grade builder (available immediately after build)
+    const builderMap = gradeBuilder.pendingStationMap;
+    if (builderMap && Object.keys(builderMap).length > 0) {
+      return builderMap;
+    }
+    
+    // FALLBACK: Use gradeLogStore (may have timing lag)
     const map: Record<string, string> = {};
     if (nextBlockTime === '--:--') return map;
     
-    // Try current block and also look at all recent logs for this block time
     const logs = getLogsByBlock(nextBlockTime);
     
-    // If no logs for nextBlock, try current block time too
     if (logs.length === 0) {
       const now = new Date();
       const currentTime = `${now.getHours().toString().padStart(2, '0')}:${(now.getMinutes() < 30 ? '00' : '30')}`;
@@ -407,7 +414,7 @@ export function GradePreviewCard() {
       }
     }
     return map;
-  }, [nextBlockTime, getLogsByBlock, dynamicStationMap, normalizeKey]);
+  }, [nextBlockTime, getLogsByBlock, dynamicStationMap, normalizeKey, gradeBuilder.pendingStationMap]);
 
   // Get the raw grade line from builder
   const nextBlockLine = useMemo(() => {
