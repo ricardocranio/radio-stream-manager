@@ -705,18 +705,23 @@ export function SequenceView() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Default Sequence Configuration */}
+        <Collapsible open={defaultOpen} onOpenChange={setDefaultOpen}>
         <Card className="glass-card">
-          <CardHeader className="border-b border-border">
-            <CardTitle className="flex items-center justify-between">
-              <span>Sequência Padrão</span>
-              {!activeScheduled && (
-                <Badge variant="default" className="text-xs">
-                  <Power className="w-3 h-3 mr-1" />
-                  Ativa
-                </Badge>
-              )}
-            </CardTitle>
+          <CardHeader className="border-b border-border p-0">
+            <CollapsibleTrigger className="w-full flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors cursor-pointer">
+              <CardTitle className="flex items-center gap-2">
+                <span>Sequência Padrão</span>
+                {!activeScheduled && (
+                  <Badge variant="default" className="text-xs">
+                    <Power className="w-3 h-3 mr-1" />
+                    Ativa
+                  </Badge>
+                )}
+              </CardTitle>
+              <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${defaultOpen ? 'rotate-180' : ''}`} />
+            </CollapsibleTrigger>
           </CardHeader>
+          <CollapsibleContent>
           <CardContent className="p-4">
             <ScrollArea className="h-[400px] pr-4">
               <div className="space-y-2">
