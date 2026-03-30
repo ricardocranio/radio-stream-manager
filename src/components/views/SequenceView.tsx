@@ -969,7 +969,7 @@ export function SequenceView() {
                 Visualização de como as músicas serão selecionadas em cada bloco:
               </p>
               
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2">
                 {(activeScheduled ? activeSequence : localSequence).map((item) => {
                   return (
                     <div
