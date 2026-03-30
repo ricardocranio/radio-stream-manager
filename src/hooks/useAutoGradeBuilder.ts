@@ -611,7 +611,10 @@ export function useAutoGradeBuilder() {
   }, [stations]);
 
   // Helper to build songsByStation from raw data
+  // IMPORTANT: data MUST arrive sorted by scraped_at DESC so the maxPerStation cap keeps the freshest songs
   const buildSongsByStation = useCallback((data: Array<{ title: string; artist: string; station_name: string; scraped_at: string; ai_genre?: string | null; ai_energy?: string | null }>, maxPerStation = 300): Record<string, SongEntry[]> => {
+    // Defensive sort: ensure DESC order even if caller doesn't guarantee it
+    const sortedData = [...data].sort((a, b) => new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime());
     const songsByStation: Record<string, SongEntry[]> = {};
     const stationNameToStyle: Record<string, string> = {};
     const seenSongs = new Set<string>();
