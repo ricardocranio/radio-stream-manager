@@ -98,6 +98,8 @@ interface AutoGradeState {
   pendingGradeLines: Map<string, string>;
   /** Duration in minutes for each built block, keyed by block time */
   pendingBlockDurations: Map<string, number>;
+  /** Station map for preview: normalized "artist-title" → station name */
+  pendingStationMap: Record<string, string>;
 }
 
 export function useAutoGradeBuilder() {
