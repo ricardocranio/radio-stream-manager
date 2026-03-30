@@ -67,6 +67,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   const watchdogService = useServiceWatchdog();
   const dailyReportService = useDailyReport();
   const mapaBuilder = useAutoMapaBuilder();
+  const contentCleanupService = useContentCleanupService();
 
   // ============= DEFERRED INITIALIZATION =============
   // Delay heavy services to let the UI render first (fixes black screen on Electron)
