@@ -534,16 +534,18 @@ export function useAutoGradeBuilder() {
       ];
 
       // Deduplicate: keep the most recent entry per song
+      // Sort by scraped_at DESC BEFORE dedup to ensure Map preserves chronological insertion order
+      const sortedData = allData.sort((a, b) => new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime());
+
       const seen = new Map<string, typeof allData[0]>();
-      for (const song of allData) {
+      for (const song of sortedData) {
         const key = `${song.title.toLowerCase().trim()}-${song.artist.toLowerCase().trim()}`;
-        const existing = seen.get(key);
-        if (!existing || new Date(song.scraped_at) > new Date(existing.scraped_at)) {
-          seen.set(key, song);
+        if (!seen.has(key)) {
+          seen.set(key, song); // First seen = most recent due to DESC sort
         }
       }
 
-      const deduplicated = Array.from(seen.values());
+      const deduplicated = Array.from(seen.values()); // Already in DESC order (Map insertion order)
 
       // Apply song aliases (corrections) using aliasEngine (O(1) lookups)
       const { songAliases } = useRadioStore.getState();
