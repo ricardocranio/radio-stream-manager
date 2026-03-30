@@ -664,8 +664,13 @@ export function useAutoGradeBuilder() {
         } as SongEntry);
       }
     });
-    const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
-    console.log(`[AUTO-GRADE] Pool: ${stationList}`);
+    const now = Date.now();
+    const stationList = Object.keys(songsByStation).map(name => {
+      const songs = songsByStation[name];
+      const freshCount = songs.filter(s => s.scrapedAt && (now - new Date(s.scrapedAt).getTime()) <= 20 * 60 * 1000).length;
+      return `${name}(${songs.length}, ${freshCount}⚡)`;
+    }).join(', ');
+    console.log(`[AUTO-GRADE] Pool (total, frescas≤20m): ${stationList}`);
     return songsByStation;
   }, [stations, config.blockedSongs, config.forbiddenWords]);
 
