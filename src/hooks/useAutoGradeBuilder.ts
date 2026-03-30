@@ -1711,6 +1711,7 @@ export function useAutoGradeBuilder() {
           ...prev,
           pendingGradeLines: new Map(),
           pendingBlockDurations: new Map(),
+          pendingStationMap: {},
         }));
       }
 
