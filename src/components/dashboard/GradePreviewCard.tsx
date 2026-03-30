@@ -781,16 +781,22 @@ export function GradePreviewCard() {
                       )}
                     </div>
 
-                    {/* Duration badge */}
+                    {/* Duration badge - prominent */}
                     {(() => {
                       const dur = songDurations[song.filename.toLowerCase()];
                       if (!dur) return null;
                       const mins = Math.floor(dur / 60);
                       const secs = Math.floor(dur % 60);
+                      const isEstimated = dur === 210 || dur === 7;
                       return (
-                        <span className="text-[10px] font-mono text-muted-foreground shrink-0 tabular-nums">
+                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 font-mono tabular-nums shrink-0 ${
+                          isEstimated 
+                            ? 'text-muted-foreground/50 border-border/30' 
+                            : 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10'
+                        }`}>
+                          <Clock className="w-2.5 h-2.5 mr-0.5" />
                           {mins}:{secs.toString().padStart(2, '0')}
-                        </span>
+                        </Badge>
                       );
                     })()}
 
