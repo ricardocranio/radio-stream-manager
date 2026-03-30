@@ -46,6 +46,13 @@ export function SequenceView() {
   const [defaultOpen, setDefaultOpen] = useState(true);
   const [fixedOpen, setFixedOpen] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(true);
+
+  // Collapsible category states for source picker
+  const [catGenres, setCatGenres] = useState(true);
+  const [catDecades, setCatDecades] = useState(false);
+  const [catGenreYear, setCatGenreYear] = useState(false);
+  const [catSpecials, setCatSpecials] = useState(false);
+  const [catStations, setCatStations] = useState(true);
   const { 
     sequence, 
     setSequence, 
