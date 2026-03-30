@@ -198,6 +198,8 @@ export function SequenceView() {
     useSensor(KeyboardSensor)
   );
 
+  const [droppedPosition, setDroppedPosition] = useState<number | null>(null);
+
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -216,6 +218,9 @@ export function SequenceView() {
           description: 'A nova ordem foi salva automaticamente.',
         });
       }, 0);
+      // Flash the dropped item
+      setDroppedPosition(newIndex + 1);
+      setTimeout(() => setDroppedPosition(null), 800);
       return renumbered;
     });
   }, [setSequence, toast]);
