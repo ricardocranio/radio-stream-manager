@@ -861,6 +861,17 @@ export function SequenceView() {
                         >
                           <Edit2 className="w-3 h-3" />
                         </Button>
+                        {window.electronAPI?.selectFile && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10"
+                            onClick={() => handleSelectFile('default', item.position)}
+                            title="Selecionar arquivo local"
+                          >
+                            <FolderOpen className="w-3 h-3" />
+                          </Button>
+                        )}
                         {isFixoItem && !isEditing && (
                           <Button
                             variant="ghost"
