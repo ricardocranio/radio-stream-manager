@@ -205,10 +205,18 @@ export function SequenceView() {
       const newIndex = prev.findIndex(item => `seq-${item.position}` === over.id);
       if (oldIndex === -1 || newIndex === -1) return prev;
       const moved = arrayMove(prev, oldIndex, newIndex);
-      // Renumber positions
-      return moved.map((item, i) => ({ ...item, position: i + 1 }));
+      const renumbered = moved.map((item, i) => ({ ...item, position: i + 1 }));
+      // Auto-save to store after drag
+      setTimeout(() => {
+        setSequence(renumbered);
+        toast({
+          title: '✅ Sequência reordenada',
+          description: 'A nova ordem foi salva automaticamente.',
+        });
+      }, 0);
+      return renumbered;
     });
-  }, []);
+  }, [setSequence, toast]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<ScheduledSequence | null>(null);
   
