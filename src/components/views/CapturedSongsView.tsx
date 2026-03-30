@@ -790,7 +790,8 @@ export function CapturedSongsView() {
                         </span>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   
                   {/* Pagination Controls */}
                   {totalPages > 1 && (
