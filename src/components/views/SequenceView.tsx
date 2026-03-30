@@ -934,6 +934,19 @@ export function SequenceView() {
                           <Pencil className="w-3 h-3 text-emerald-400/60" />
                         </div>
                       )}
+                      
+                      {/* Show file path for local file items */}
+                      {item.radioSource.startsWith('file_') && (
+                        <div 
+                          className="mt-1 pl-8 flex items-center gap-2 cursor-pointer hover:bg-sky-500/10 rounded px-2 py-1 -mx-2"
+                          onClick={() => handleSelectFile('default', item.position)}
+                        >
+                          <span className="text-[10px] text-sky-400 font-mono flex-1 truncate">
+                            {item.radioSource.replace('file_', '').split(/[/\\]/).pop()}
+                          </span>
+                          <FolderOpen className="w-3 h-3 text-sky-400/60" />
+                        </div>
+                      )}
                     </div>
                   );
                 })}
