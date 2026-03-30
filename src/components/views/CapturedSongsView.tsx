@@ -66,7 +66,7 @@ const METADATA_REFRESH_MS = 5 * 60 * 1000;
 export function CapturedSongsView() {
   const isReady = useDeferredRender();
   const { toast } = useToast();
-  const { applyRankingBatch, rankingSongs, deezerConfig, config, gradePreviewSongKeys } = useRadioStore();
+  const { applyRankingBatch, rankingSongs, deezerConfig, config, gradePreviewSongKeys, setGradePreviewSongKeys } = useRadioStore();
   const [songs, setSongs] = useState<ScrapedSong[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -160,6 +160,21 @@ export function CapturedSongsView() {
     setIsLoading(true);
     loadSongs().finally(() => setIsLoading(false));
   }, [loadSongs]);
+
+  // In web preview (non-Electron), mock some songs as "in grade" so the visual indicator is visible
+  useEffect(() => {
+    if (isElectron || songs.length === 0 || gradePreviewSongKeys.size > 0) return;
+    // Pick every 3rd song (up to 5) to simulate grade membership
+    const mockKeys = new Set<string>();
+    const step = Math.max(1, Math.floor(songs.length / 5));
+    for (let i = 0; i < songs.length && mockKeys.size < 5; i += step) {
+      const s = songs[i];
+      mockKeys.add(`${normalizeStr(s.artist)}|||${normalizeStr(s.title)}`);
+    }
+    if (mockKeys.size > 0) {
+      setGradePreviewSongKeys(mockKeys);
+    }
+  }, [songs, gradePreviewSongKeys.size, setGradePreviewSongKeys]);
 
   useEffect(() => {
     const interval = setInterval(() => {
