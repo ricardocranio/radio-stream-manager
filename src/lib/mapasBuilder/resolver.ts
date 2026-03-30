@@ -445,5 +445,6 @@ export function resetMapasPools(): void {
   vinhetaUsed.clear();
   musicPools.clear();
   musicUsed.clear();
-  console.log('[MAPAS] 🔄 Pools resetados');
+  globalMusicUsed.clear();
+  console.log('[MAPAS] 🔄 Pools resetados (incluindo dedup global)');
 }
