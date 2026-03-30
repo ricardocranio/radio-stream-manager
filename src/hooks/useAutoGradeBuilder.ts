@@ -118,7 +118,7 @@ function buildStationMapFromLogs(logs: BlockLogItem[]): Record<string, string> {
   return map;
 }
 
-  const { toast } = useToast();
+  export function useAutoGradeBuilder() {
   const {
     programs, sequence: defaultSequence, scheduledSequences,
     stations, config, fixedContent, rankingSongs,
