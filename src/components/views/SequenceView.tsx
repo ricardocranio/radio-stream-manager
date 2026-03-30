@@ -953,12 +953,20 @@ export function SequenceView() {
               </ScrollArea>
             )}
           </CardContent>
+          </CollapsibleContent>
         </Card>
+        </Collapsible>
 
         {/* Preview */}
+        <Collapsible open={previewOpen} onOpenChange={setPreviewOpen}>
         <Card className="glass-card">
-          <CardHeader className="border-b border-border">
-            <CardTitle>Prévia da Sequência</CardTitle>
+          <CardHeader className="border-b border-border p-0">
+            <CollapsibleTrigger className="w-full flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors cursor-pointer">
+              <CardTitle>Prévia da Sequência</CardTitle>
+              <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${previewOpen ? 'rotate-180' : ''}`} />
+            </CollapsibleTrigger>
+          </CardHeader>
+          <CollapsibleContent>
           </CardHeader>
           <CardContent className="p-4">
             <div className="space-y-4">
