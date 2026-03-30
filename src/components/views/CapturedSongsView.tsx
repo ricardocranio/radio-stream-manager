@@ -739,18 +739,24 @@ export function CapturedSongsView() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {paginatedSongs.map((song, index) => (
+                  {paginatedSongs.map((song, index) => {
+                    const inGrade = isSongInGrade(song.artist, song.title);
+                    return (
                     <div
                       key={song.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                      className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                        inGrade
+                          ? 'bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20'
+                          : 'bg-secondary/30 hover:bg-secondary/50'
+                      }`}
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <span className="text-sm font-mono text-muted-foreground w-8">
                           {(currentPage - 1) * PAGE_SIZE + index + 1}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{song.title}</p>
-                          <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
+                          <p className={`font-medium truncate ${inGrade ? 'text-red-400' : ''}`}>{song.title}</p>
+                          <p className={`text-sm truncate ${inGrade ? 'text-red-400/80' : 'text-muted-foreground'}`}>{song.artist}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -768,9 +774,9 @@ export function CapturedSongsView() {
                             ⚡ {song.ai_energy}
                           </Badge>
                         )}
-                        {isSongInGrade(song.artist, song.title) && (
-                          <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] font-bold">
-                            📋 NA GRADE
+                        {inGrade && (
+                          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/40 text-[10px] font-bold">
+                            ✅ Na Grade
                           </Badge>
                         )}
                         {song.is_now_playing && (
@@ -784,7 +790,8 @@ export function CapturedSongsView() {
                         </span>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   
                   {/* Pagination Controls */}
                   {totalPages > 1 && (
