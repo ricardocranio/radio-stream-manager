@@ -548,6 +548,7 @@ export function SequenceView() {
   };
 
   const getSourceBadgeLabel = (source: string): string => {
+    if (source.startsWith('file_')) return '📂';
     if (source.startsWith('fixo_')) return '📌';
     if (source.startsWith('genreyear_')) return '🎵📅';
     if (source.startsWith('genre_')) return '🎵';
@@ -560,6 +561,29 @@ export function SequenceView() {
       return name.length > 8 ? name.slice(0, 7) + '…' : name.toUpperCase();
     }
     return source.toUpperCase().slice(0, 4);
+  };
+
+  // File picker handler for selecting a local file
+  const handleSelectFile = async (type: 'default' | 'form', position: number) => {
+    if (!window.electronAPI?.selectFile) {
+      toast({ title: '⚠️ Disponível apenas no Desktop', variant: 'destructive' });
+      return;
+    }
+    const filePath = await window.electronAPI.selectFile({
+      filters: [
+        { name: 'Áudio', extensions: ['mp3', 'wav', 'flac', 'ogg', 'wma', 'm4a'] },
+        { name: 'Todos os arquivos', extensions: ['*'] },
+      ],
+    });
+    if (!filePath) return;
+    const value = `file_${filePath}`;
+    if (type === 'default') {
+      handleChange(position, value);
+    } else {
+      handleFormSequenceChange(position, value);
+    }
+    const fileName = filePath.split(/[/\\]/).pop() || filePath;
+    toast({ title: '📂 Arquivo selecionado', description: fileName });
   };
 
   const formatTime = (hour: number, minute: number) => {
