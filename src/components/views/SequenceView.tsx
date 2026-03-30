@@ -74,7 +74,7 @@ interface SortableSequenceItemProps {
   stationOptions: Array<{ value: string; label: string }>;
 }
 
-function SortableSequenceItem({ item, isFixoItem, isEditing, ...props }: SortableSequenceItemProps) {
+function SortableSequenceItem({ item, isFixoItem, isEditing, ...props }: SortableSequenceItemProps & { justDropped?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `seq-${item.position}`,
   });
@@ -90,9 +90,11 @@ function SortableSequenceItem({ item, isFixoItem, isEditing, ...props }: Sortabl
     <div
       ref={setNodeRef}
       style={style}
-      className={`p-2 rounded-lg bg-secondary/30 border transition-colors group ${
+      className={`p-2 rounded-lg bg-secondary/30 border transition-all duration-300 group ${
         isFixoItem ? 'border-emerald-500/30 hover:border-emerald-500/50' : 'border-border hover:border-primary/30'
-      } ${isDragging ? 'shadow-lg ring-2 ring-primary/40' : ''}`}
+      } ${isDragging ? 'shadow-lg ring-2 ring-primary/40 scale-105' : ''} ${
+        props.justDropped ? 'ring-2 ring-primary/60 bg-primary/10 animate-scale-in' : ''
+      }`}
     >
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-1 text-muted-foreground cursor-grab active:cursor-grabbing touch-none" {...attributes} {...listeners}>
@@ -196,6 +198,8 @@ export function SequenceView() {
     useSensor(KeyboardSensor)
   );
 
+  const [droppedPosition, setDroppedPosition] = useState<number | null>(null);
+
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -214,6 +218,9 @@ export function SequenceView() {
           description: 'A nova ordem foi salva automaticamente.',
         });
       }, 0);
+      // Flash the dropped item
+      setDroppedPosition(newIndex + 1);
+      setTimeout(() => setDroppedPosition(null), 800);
       return renumbered;
     });
   }, [setSequence, toast]);
@@ -951,6 +958,7 @@ export function SequenceView() {
                             genreYearOptions={genreYearOptions}
                             fixedContentOptions={fixedContentOptions}
                             stationOptions={stationOptions}
+                            justDropped={droppedPosition === col1[i].position}
                           />
                         );
                         if (col2[i]) rows.push(
@@ -982,6 +990,7 @@ export function SequenceView() {
                             genreYearOptions={genreYearOptions}
                             fixedContentOptions={fixedContentOptions}
                             stationOptions={stationOptions}
+                            justDropped={droppedPosition === col2[i].position}
                           />
                         );
                       }
