@@ -1024,7 +1024,9 @@ export function SequenceView() {
               </div>
             </div>
           </CardContent>
+          </CollapsibleContent>
         </Card>
+        </Collapsible>
 
       </div>
 
