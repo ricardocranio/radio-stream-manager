@@ -14,6 +14,7 @@ import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
 import { isStationAllowedForDownload } from '@/lib/allowedDownloadStations';
 import { buildBlockedEngine } from '@/lib/blockedSongsEngine';
 import { buildAliasEngine } from '@/lib/aliasEngine';
+import { recordBlockedEvent } from '@/components/dashboard/BlockedSongsCard';
 
 // Shared ID3 genre utilities
 import { normalizeId3Genre as normalizeId3GenreForDl, genreToEnergy as genreToEnergyForDl, routeFileByGenre } from '@/lib/id3GenreUtils';
