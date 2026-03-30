@@ -43,6 +43,9 @@ const WEEK_DAYS: { value: WeekDay; label: string }[] = [
 ];
 
 export function SequenceView() {
+  const [defaultOpen, setDefaultOpen] = useState(true);
+  const [fixedOpen, setFixedOpen] = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(true);
   const { 
     sequence, 
     setSequence, 
