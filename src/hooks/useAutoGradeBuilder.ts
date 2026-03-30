@@ -2034,6 +2034,7 @@ export function useAutoGradeBuilder() {
         skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
         pendingGradeLines: new Map(lineMap),
         pendingBlockDurations: new Map(durationMap),
+        pendingStationMap: { ...prev.pendingStationMap, ...buildStationMapFromLogs(allLogs) },
       }));
 
       console.log(`[AUTO-GRADE] 📋 Grade montada em memória e persistida${isWebOnly ? ' (modo web - preview only)' : ' (aguardando janela de 10min para escrita)'}`);
