@@ -20,6 +20,81 @@ const musicUsed: Map<string, Set<string>> = new Map();
 // GLOBAL music dedup — tracks ALL music files used across ALL codes in a single build
 const globalMusicUsed: Set<string> = new Set();
 
+function shuffleArray<T>(arr: T[]): T[] {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+/**
+ * Get next file from a pool without repetition.
+ */
+function getNextFromPool(poolKey: string, files: string[]): string | null {
+  if (files.length === 0) return null;
+
+  let pool = vinhetaPools.get(poolKey);
+  if (!pool || pool.length === 0) {
+    pool = shuffleArray(files);
+    vinhetaPools.set(poolKey, pool);
+    vinhetaUsed.set(poolKey, new Set());
+  }
+
+  const next = pool.pop()!;
+  vinhetaUsed.get(poolKey)?.add(next);
+  return next;
+}
+
+/**
+ * Get next music file from pool with GLOBAL dedup.
+ * Ensures no song repeats across different music codes in the same build.
+ */
+function getNextMusic(poolKey: string, files: string[]): string | null {
+  if (files.length === 0) return null;
+
+  let pool = musicPools.get(poolKey);
+  if (!pool || pool.length === 0) {
+    // Reshuffle but exclude globally used songs first
+    const available = files.filter(f => !globalMusicUsed.has(f.toLowerCase()));
+    pool = shuffleArray(available.length > 0 ? available : files);
+    musicPools.set(poolKey, pool);
+    musicUsed.set(poolKey, new Set());
+  }
+
+  // Try to find a song not yet used globally
+  let next: string | null = null;
+  const tried: string[] = [];
+  
+  while (pool.length > 0) {
+    const candidate = pool.pop()!;
+    if (!globalMusicUsed.has(candidate.toLowerCase())) {
+      next = candidate;
+      break;
+    }
+    tried.push(candidate);
+  }
+  
+  // If all remaining were globally used, accept the last tried one
+  if (!next && tried.length > 0) {
+    next = tried[tried.length - 1];
+    console.warn(`[MAPAS] ⚠️ Pool ${poolKey} exausto — reutilizando: ${next}`);
+  }
+  
+  // Put back untried candidates
+  if (tried.length > 0 && pool.length > 0) {
+    // Don't put back - they were already globally used
+  }
+
+  if (next) {
+    globalMusicUsed.add(next.toLowerCase());
+    musicUsed.get(poolKey)?.add(next);
+  }
+  
+  return next;
+}
+
 /**
  * Load files from a folder via IPC.
  */
