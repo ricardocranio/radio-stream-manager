@@ -514,6 +514,14 @@ export function useGlobalDownloadService() {
       return;
     }
 
+    // Build blocked engine ONCE for this batch (O(1) lookups)
+    const blockedEngine = buildBlockedEngine(
+      storeState.config.blockedSongs ?? [],
+      storeState.config.forbiddenWords ?? [],
+      storeState.songAliases ?? []
+    );
+    const aliasEngine = buildAliasEngine(storeState.songAliases ?? []);
+
     if (newToQueue.length > 0) {
       const rankingMap = new Map<string, number>();
       rankingSongs.forEach((song, index) => {
@@ -531,6 +539,22 @@ export function useGlobalDownloadService() {
         // Skip vinhetas/jingles at queue entry
         if (isVinhetaOrJingle(song.artist, song.title)) {
           console.log(`[DL-SVC] 🚫 Vinheta/jingle filtrada na fila: ${song.artist} - ${song.title}`);
+          useRadioStore.getState().removeMissingSong(song.id);
+          continue;
+        }
+
+        // 🚫 BLOCKED CHECK AT QUEUE ENTRY — catches songs added before block rule existed
+        if (blockedEngine.isBlocked(song.artist, song.title)) {
+          console.log(`[DL-SVC] 🚫 Bloqueada na fila: ${song.artist} - ${song.title}`);
+          useRadioStore.getState().removeMissingSong(song.id);
+          continue;
+        }
+
+        // Also check alias-resolved name
+        const resolved = aliasEngine.resolve(song.artist, song.title);
+        if ((resolved.artist !== song.artist || resolved.title !== song.title) &&
+            blockedEngine.isBlocked(resolved.artist, resolved.title)) {
+          console.log(`[DL-SVC] 🚫 Bloqueada (via alias "${resolved.artist} - ${resolved.title}"): ${song.artist} - ${song.title}`);
           useRadioStore.getState().removeMissingSong(song.id);
           continue;
         }
