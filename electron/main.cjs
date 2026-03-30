@@ -475,7 +475,7 @@ safeHandle('select-file', async (event, params) => {
   return result.filePaths[0];
 });
 
-
+safeHandle('show-notification', (event, { title, body }) => {
   showNotification(title, body, () => { 
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show(); 

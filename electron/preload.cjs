@@ -137,6 +137,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('monitor-status', (_, status) => callback(status));
   },
 
+  // Download warnings (ARL, quality, duration issues)
+  onDownloadWarning: (callback) => {
+    ipcRenderer.removeAllListeners('download-warning');
+    ipcRenderer.on('download-warning', (_, warning) => callback(warning));
+  },
+
   // Platform detection
   platform: process.platform,
   isElectron: true,

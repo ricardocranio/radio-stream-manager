@@ -355,6 +355,9 @@ interface ElectronAPI {
   onPythonStatus: (callback: (status: { available: boolean; message: string; downloadUrl: string }) => void) => void;
   onDeemixStatus: (callback: (status: { installed: boolean; command: string | null }) => void) => void;
   getDeemixCommand: () => Promise<string | null>;
+
+  // Download warnings (ARL, quality, duration issues)
+  onDownloadWarning: (callback: (warning: { artist?: string; title?: string; duration?: number; message?: string; type?: string }) => void) => void;
   
   // Python Radio Monitor
   startPythonMonitor: () => Promise<{ success: boolean; error?: string }>;
