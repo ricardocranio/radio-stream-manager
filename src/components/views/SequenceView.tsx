@@ -967,7 +967,6 @@ export function SequenceView() {
             </CollapsibleTrigger>
           </CardHeader>
           <CollapsibleContent>
-          </CardHeader>
           <CardContent className="p-4">
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
