@@ -67,26 +67,13 @@ export function useContentCleanupService() {
   }, []);
 
   const cleanFolder = useCallback(async (folder: string): Promise<{ success: boolean; deletedCount: number }> => {
-    if (!isElectron || !window.electronAPI?.listFolderFiles) {
+    if (!isElectron || !window.electronAPI?.cleanupContentFolder) {
       return { success: false, deletedCount: 0 };
     }
 
     try {
-      // List all files in the folder
-      const listResult = await window.electronAPI.listFolderFiles({ folder });
-      if (!listResult.success || !listResult.files.length) {
-        return { success: true, deletedCount: 0 };
-      }
-
-      // Use purgeBlockedFiles with a wildcard to delete everything
-      // Or use the cleanup-content-folder IPC if available
-      if ((window.electronAPI as any).cleanupContentFolder) {
-        const result = await (window.electronAPI as any).cleanupContentFolder({ folder });
-        return { success: result.success, deletedCount: result.deletedCount || 0 };
-      }
-
-      console.log(`[CONTENT-CLEANUP] ⚠️ cleanupContentFolder IPC não disponível`);
-      return { success: false, deletedCount: 0 };
+      const result = await window.electronAPI.cleanupContentFolder({ folder });
+      return { success: result.success, deletedCount: result.deletedCount || 0 };
     } catch (err) {
       console.error('[CONTENT-CLEANUP] ❌ Erro na limpeza:', err);
       return { success: false, deletedCount: 0 };
@@ -138,23 +125,23 @@ export function useContentCleanupService() {
     // Only clean once (first due slot triggers the cleanup for all)
     const programNames = [...new Set(dueSlots.map(s => s.name))].join(', ');
     const times = dueSlots.map(s => s.time).join(', ');
-    console.log(`[CONTENT-CLEANUP] 🗑️ Limpando "${folder}" — programa(s): ${programNames} às ${times}`);
+    console.log(`[CONTENT-CLEANUP] 🗑️ Removendo PkInfo de "${folder}" — programa(s): ${programNames} às ${times}`);
 
     try {
       const result = await cleanFolder(folder);
       
       if (result.success) {
         if (result.deletedCount > 0) {
-          console.log(`[CONTENT-CLEANUP] ✅ ${result.deletedCount} arquivo(s) removido(s) antes de: ${programNames}`);
+          console.log(`[CONTENT-CLEANUP] ✅ PkInfo removido antes de: ${programNames}`);
           
           if (window.electronAPI?.showNotification) {
             window.electronAPI.showNotification(
-              '🗑️ Conteúdos KF Limpos',
-              `${result.deletedCount} arquivo(s) removido(s) — ${programNames} em ${MINUTES_BEFORE} min`
+              '🗑️ PkInfo Limpo',
+              `PkInfo removido de Conteudos KF — ${programNames} em ${MINUTES_BEFORE} min`
             );
           }
         } else {
-          console.log(`[CONTENT-CLEANUP] ✅ Pasta já vazia antes de: ${programNames}`);
+          console.log(`[CONTENT-CLEANUP] ✅ PkInfo já ausente antes de: ${programNames}`);
         }
         reportServiceHeartbeat('content-cleanup');
       } else {
