@@ -67,26 +67,13 @@ export function useContentCleanupService() {
   }, []);
 
   const cleanFolder = useCallback(async (folder: string): Promise<{ success: boolean; deletedCount: number }> => {
-    if (!isElectron || !window.electronAPI?.listFolderFiles) {
+    if (!isElectron || !window.electronAPI?.cleanupContentFolder) {
       return { success: false, deletedCount: 0 };
     }
 
     try {
-      // List all files in the folder
-      const listResult = await window.electronAPI.listFolderFiles({ folder });
-      if (!listResult.success || !listResult.files.length) {
-        return { success: true, deletedCount: 0 };
-      }
-
-      // Use purgeBlockedFiles with a wildcard to delete everything
-      // Or use the cleanup-content-folder IPC if available
-      if ((window.electronAPI as any).cleanupContentFolder) {
-        const result = await (window.electronAPI as any).cleanupContentFolder({ folder });
-        return { success: result.success, deletedCount: result.deletedCount || 0 };
-      }
-
-      console.log(`[CONTENT-CLEANUP] ⚠️ cleanupContentFolder IPC não disponível`);
-      return { success: false, deletedCount: 0 };
+      const result = await window.electronAPI.cleanupContentFolder({ folder });
+      return { success: result.success, deletedCount: result.deletedCount || 0 };
     } catch (err) {
       console.error('[CONTENT-CLEANUP] ❌ Erro na limpeza:', err);
       return { success: false, deletedCount: 0 };

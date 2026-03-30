@@ -398,38 +398,20 @@ function register({ getMainWindow, safeHandle }) {
   });
 
   // IPC: Process files in _temp folders — read ID3, rename, move to parent, return genre for routing
-  // IPC: Cleanup content folder (delete all files inside)
+  // IPC: Cleanup PkInfo folder inside content folder (only PkInfo, nothing else)
   handle('cleanup-content-folder', async (event, { folder }) => {
-    console.log(`[FILE-OPS] 🗑️ Limpando pasta de conteúdo: ${folder}`);
+    console.log(`[FILE-OPS] 🗑️ Removendo PkInfo de: ${folder}`);
     try {
-      if (!fs.existsSync(folder)) {
+      const pkInfoPath = path.join(folder, 'PkInfo');
+      if (!fs.existsSync(pkInfoPath)) {
         return { success: true, deletedCount: 0 };
       }
 
-      const items = fs.readdirSync(folder);
-      let deletedCount = 0;
-
-      for (const item of items) {
-        const itemPath = path.join(folder, item);
-        try {
-          const stat = fs.statSync(itemPath);
-          if (stat.isFile()) {
-            fs.unlinkSync(itemPath);
-            deletedCount++;
-          } else if (stat.isDirectory()) {
-            // Recursively delete subdirectories like PkInfo
-            fs.rmSync(itemPath, { recursive: true, force: true });
-            deletedCount++;
-          }
-        } catch (err) {
-          console.warn(`[FILE-OPS] ⚠️ Erro ao apagar ${item}: ${err.message}`);
-        }
-      }
-
-      console.log(`[FILE-OPS] ✅ Limpeza concluída: ${deletedCount} item(ns) removido(s) de ${folder}`);
-      return { success: true, deletedCount };
+      fs.rmSync(pkInfoPath, { recursive: true, force: true });
+      console.log(`[FILE-OPS] ✅ PkInfo removido: ${pkInfoPath}`);
+      return { success: true, deletedCount: 1 };
     } catch (err) {
-      console.error(`[FILE-OPS] ❌ Erro na limpeza: ${err.message}`);
+      console.error(`[FILE-OPS] ❌ Erro ao remover PkInfo: ${err.message}`);
       return { success: false, deletedCount: 0, error: err.message };
     }
   });
