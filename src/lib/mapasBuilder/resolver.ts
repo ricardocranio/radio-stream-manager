@@ -17,50 +17,8 @@ const vinhetaUsed: Map<string, Set<string>> = new Map();
 const musicPools: Map<string, string[]> = new Map();
 const musicUsed: Map<string, Set<string>> = new Map();
 
-function shuffleArray<T>(arr: T[]): T[] {
-  const shuffled = [...arr];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-}
-
-/**
- * Get next file from a pool without repetition.
- */
-function getNextFromPool(poolKey: string, files: string[]): string | null {
-  if (files.length === 0) return null;
-
-  let pool = vinhetaPools.get(poolKey);
-  if (!pool || pool.length === 0) {
-    pool = shuffleArray(files);
-    vinhetaPools.set(poolKey, pool);
-    vinhetaUsed.set(poolKey, new Set());
-  }
-
-  const next = pool.pop()!;
-  vinhetaUsed.get(poolKey)?.add(next);
-  return next;
-}
-
-/**
- * Get next music file from pool.
- */
-function getNextMusic(poolKey: string, files: string[]): string | null {
-  if (files.length === 0) return null;
-
-  let pool = musicPools.get(poolKey);
-  if (!pool || pool.length === 0) {
-    pool = shuffleArray(files);
-    musicPools.set(poolKey, pool);
-    musicUsed.set(poolKey, new Set());
-  }
-
-  const next = pool.pop()!;
-  musicUsed.get(poolKey)?.add(next);
-  return next;
-}
+// GLOBAL music dedup — tracks ALL music files used across ALL codes in a single build
+const globalMusicUsed: Set<string> = new Set();
 
 /**
  * Load files from a folder via IPC.
