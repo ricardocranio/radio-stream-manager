@@ -114,6 +114,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       console.log(`║ 🔄 Cross-Day:     ✅ ATIVO (buffer 4h)`.padEnd(65) + '║');
       console.log(`║ 📉 Ranking Decay: ✅ ATIVO (5%/dia)`.padEnd(65) + '║');
       console.log(`║ 🗺️ Mapas JIT:     ✅ ATIVO (20 min antes)`.padEnd(65) + '║');
+      console.log(`║ 🗑️ Content Clean: ✅ ATIVO (15 min antes)`.padEnd(65) + '║');
       console.log('╚══════════════════════════════════════════════════════════════╝');
 
       // Start services in staggered waves to avoid CPU spikes
