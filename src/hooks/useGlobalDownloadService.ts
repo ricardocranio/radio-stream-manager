@@ -558,6 +558,7 @@ export function useGlobalDownloadService() {
         if ((resolved.artist !== song.artist || resolved.title !== song.title) &&
             blockedEngine.isBlocked(resolved.artist, resolved.title)) {
           console.log(`[DL-SVC] 🚫 Bloqueada (via alias "${resolved.artist} - ${resolved.title}"): ${song.artist} - ${song.title}`);
+          recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'alias', source: 'download' });
           useRadioStore.getState().removeMissingSong(song.id);
           continue;
         }
