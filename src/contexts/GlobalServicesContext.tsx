@@ -26,6 +26,7 @@ import { useBackgroundMaintenance } from '@/hooks/useBackgroundMaintenance';
 import { useServiceWatchdog } from '@/hooks/useServiceWatchdog';
 import { useDailyReport } from '@/hooks/useDailyReport';
 import { useAutoMapaBuilder } from '@/hooks/useAutoMapaBuilder';
+import { useContentCleanupService } from '@/hooks/useContentCleanupService';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
