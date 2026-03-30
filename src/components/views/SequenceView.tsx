@@ -958,6 +958,7 @@ export function SequenceView() {
                             genreYearOptions={genreYearOptions}
                             fixedContentOptions={fixedContentOptions}
                             stationOptions={stationOptions}
+                            justDropped={droppedPosition === col1[i].position}
                           />
                         );
                         if (col2[i]) rows.push(
