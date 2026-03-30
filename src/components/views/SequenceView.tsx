@@ -46,6 +46,13 @@ export function SequenceView() {
   const [defaultOpen, setDefaultOpen] = useState(true);
   const [fixedOpen, setFixedOpen] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(true);
+
+  // Collapsible category states for source picker
+  const [catGenres, setCatGenres] = useState(true);
+  const [catDecades, setCatDecades] = useState(false);
+  const [catGenreYear, setCatGenreYear] = useState(false);
+  const [catSpecials, setCatSpecials] = useState(false);
+  const [catStations, setCatStations] = useState(true);
   const { 
     sequence, 
     setSequence, 
@@ -749,38 +756,66 @@ export function SequenceView() {
                           <SelectTrigger className="flex-1 h-8 text-sm">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent className="max-h-[320px]">
-                            <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Gêneros</div>
-                            {genreOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
+                          <SelectContent className="max-h-[400px]">
+                            <div
+                              className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none"
+                              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setCatGenres(v => !v); }}
+                            >
+                              <span>🎵 Gêneros</span>
+                              <ChevronDown className={`w-3 h-3 transition-transform ${catGenres ? 'rotate-180' : ''}`} />
+                            </div>
+                            {catGenres && genreOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                             ))}
-                            <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Décadas</div>
-                            {yearOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
+
+                            <div
+                              className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none"
+                              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setCatDecades(v => !v); }}
+                            >
+                              <span>📅 Décadas</span>
+                              <ChevronDown className={`w-3 h-3 transition-transform ${catDecades ? 'rotate-180' : ''}`} />
+                            </div>
+                            {catDecades && yearOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                             ))}
-                            <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Gênero + Década</div>
-                            {genreYearOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
+
+                            <div
+                              className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none"
+                              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setCatGenreYear(v => !v); }}
+                            >
+                              <span>🎵📅 Gênero + Década</span>
+                              <ChevronDown className={`w-3 h-3 transition-transform ${catGenreYear ? 'rotate-180' : ''}`} />
+                            </div>
+                            {catGenreYear && genreYearOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                             ))}
-                            <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Especiais</div>
-                            <SelectItem value="random_pop">🎲 Aleatório (Disney/Metro)</SelectItem>
-                            <SelectItem value="top50">🏆 TOP25 (Curadoria)</SelectItem>
-                            {fixedContentOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                            <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Emissoras</div>
-                            {stationOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
+
+                            <div
+                              className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none"
+                              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setCatSpecials(v => !v); }}
+                            >
+                              <span>⭐ Especiais</span>
+                              <ChevronDown className={`w-3 h-3 transition-transform ${catSpecials ? 'rotate-180' : ''}`} />
+                            </div>
+                            {catSpecials && (
+                              <>
+                                <SelectItem value="random_pop">🎲 Aleatório (Disney/Metro)</SelectItem>
+                                <SelectItem value="top50">🏆 TOP25 (Curadoria)</SelectItem>
+                                {fixedContentOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                                ))}
+                              </>
+                            )}
+
+                            <div
+                              className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none"
+                              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setCatStations(v => !v); }}
+                            >
+                              <span>📻 Emissoras</span>
+                              <ChevronDown className={`w-3 h-3 transition-transform ${catStations ? 'rotate-180' : ''}`} />
+                            </div>
+                            {catStations && stationOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
