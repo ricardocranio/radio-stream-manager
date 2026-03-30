@@ -500,49 +500,31 @@ export function GradePreviewCard() {
 
   // === REAL DURATION CALCULATION from actual files ===
   useEffect(() => {
-    if (!nextBlockLine) {
-      // For mock mode, set counts and mock durations from displaySongs
-      if (!isElectron && displaySongs.length > 0) {
-        const mockVhts = displaySongs.filter(s => s.isSpecial).length;
-        const mockSongsCount = displaySongs.filter(s => !s.isSpecial).length;
-        setVhtCount(mockVhts);
-        setSongCount(mockSongsCount);
-        // Use durations from durationSec field
+    // Count VHTs and songs from displaySongs directly
+    const vhts = displaySongs.filter(s => s.isSpecial).length;
+    const songsOnly = displaySongs.filter(s => !s.isSpecial).length;
+    setVhtCount(vhts);
+    setSongCount(songsOnly);
+
+    // Non-Electron: use mock durations from durationSec
+    if (!isElectron) {
+      if (displaySongs.length > 0) {
         const durMap: Record<string, number> = {};
         displaySongs.forEach(s => { if (s.durationSec) durMap[s.filename.toLowerCase()] = s.durationSec; });
         setSongDurations(durMap);
-        // Calculate total from fixed durations
         const totalSec = displaySongs.reduce((acc, s) => acc + (s.durationSec || (s.isSpecial ? 7 : 210)), 0);
         setRealBlockDuration(parseFloat((totalSec / 60).toFixed(1)));
       } else {
-        setVhtCount(0);
-        setSongCount(0);
         setSongDurations({});
+        setRealBlockDuration(null);
       }
-      setRealBlockDuration(null);
       return;
     }
 
-    // Count VHTs and songs from the raw line
-    const headerMatch = nextBlockLine.match(/^(\d{2}:\d{2}\s+\([^)]+\)\s*)(.*)/);
-    if (!headerMatch) return;
-    const tokens = headerMatch[2].split(',').map(t => t.trim()).filter(Boolean);
-    const vhts = tokens.filter(t => t.toLowerCase() === 'vht' || t.toLowerCase() === 'vhtn');
-    const songs = tokens.filter(t => t.toLowerCase() !== 'vht' && t.toLowerCase() !== 'vhtn');
-    setVhtCount(vhts.length);
-    setSongCount(songs.length);
-
-    // Calculate real duration via Electron
-    if (!isElectron || !window.electronAPI?.getFileDurationsBatch) {
-      // Estimate: 3:30 per song, 7s per VHT
-      const estimated = (songs.length * 210 + vhts.length * 7) / 60;
-      setRealBlockDuration(parseFloat(estimated.toFixed(1)));
-      // Set estimated per-song durations
-      const estDurs: Record<string, number> = {};
-      displaySongs.forEach(s => {
-        estDurs[s.filename.toLowerCase()] = s.isSpecial ? 7 : 210;
-      });
-      setSongDurations(estDurs);
+    // Electron: calculate REAL durations from disk
+    if (!window.electronAPI?.getFileDurationsBatch || displaySongs.length === 0) {
+      setRealBlockDuration(null);
+      setSongDurations({});
       return;
     }
 
@@ -554,44 +536,35 @@ export function GradePreviewCard() {
           config.vinhetasFolder || 'C:\\Playlist\\Vinhetas',
         ].filter(Boolean);
 
-        // Get filenames for batch query
-        const filenames = tokens
-          .filter(t => t.startsWith('"'))
-          .map(t => t.replace(/^"|"$/g, ''));
+        // Get ALL filenames from display songs (not just from raw line)
+        const filenames = displaySongs
+          .map(s => s.filename)
+          .filter(Boolean);
 
-        let totalSec = 0;
         const DEFAULT_SONG = 210;
         const DEFAULT_VHT = 7;
         const perSongDurs: Record<string, number> = {};
+        let totalSec = 0;
 
         if (filenames.length > 0) {
           const result = await window.electronAPI!.getFileDurationsBatch({
             filenames,
             musicFolders,
           });
-          if (result.success && result.durations) {
-            for (const token of tokens) {
-              const lower = token.toLowerCase();
-              if (lower === 'vht' || lower === 'vhtn') {
-                totalSec += DEFAULT_VHT;
-              } else if (token.startsWith('"')) {
-                const name = token.replace(/^"|"$/g, '');
-                const dur = result.durations[name];
-                const finalDur = (dur && dur > 0) ? dur : DEFAULT_SONG;
-                totalSec += finalDur;
-                perSongDurs[name.toLowerCase()] = finalDur;
-              } else {
-                totalSec += DEFAULT_SONG;
-              }
+
+          for (const song of displaySongs) {
+            if (song.isSpecial) {
+              totalSec += DEFAULT_VHT;
+              perSongDurs[song.filename.toLowerCase()] = DEFAULT_VHT;
+            } else {
+              const dur = result.success && result.durations ? result.durations[song.filename] : null;
+              const finalDur = (dur && dur > 0) ? dur : DEFAULT_SONG;
+              totalSec += finalDur;
+              perSongDurs[song.filename.toLowerCase()] = finalDur;
             }
-          } else {
-            totalSec = songs.length * DEFAULT_SONG + vhts.length * DEFAULT_VHT;
-            displaySongs.forEach(s => {
-              perSongDurs[s.filename.toLowerCase()] = s.isSpecial ? DEFAULT_VHT : DEFAULT_SONG;
-            });
           }
         } else {
-          totalSec = songs.length * DEFAULT_SONG + vhts.length * DEFAULT_VHT;
+          totalSec = songsOnly * DEFAULT_SONG + vhts * DEFAULT_VHT;
           displaySongs.forEach(s => {
             perSongDurs[s.filename.toLowerCase()] = s.isSpecial ? DEFAULT_VHT : DEFAULT_SONG;
           });
@@ -599,14 +572,16 @@ export function GradePreviewCard() {
 
         setSongDurations(perSongDurs);
         setRealBlockDuration(parseFloat((totalSec / 60).toFixed(1)));
+        console.log(`[PREVIEW] ⏱️ Durações reais: ${Object.values(perSongDurs).filter(d => d !== DEFAULT_SONG && d !== DEFAULT_VHT).length}/${filenames.length} lidas do disco`);
       } catch (e) {
         console.warn('[PREVIEW] Failed to calculate real duration:', e);
-        setRealBlockDuration(parseFloat(((songs.length * 210 + vhts.length * 7) / 60).toFixed(1)));
+        const estimated = (songsOnly * 210 + vhts * 7) / 60;
+        setRealBlockDuration(parseFloat(estimated.toFixed(1)));
       }
     };
 
     calculateDuration();
-  }, [nextBlockLine, config.musicFolders, config.contentFolder, config.vinhetasFolder, displaySongs]);
+  }, [displaySongs, config.musicFolders, config.contentFolder, config.vinhetasFolder]);
 
   const getLibraryIcon = (song: PreviewSong) => {
     if (song.isSpecial) return null;
