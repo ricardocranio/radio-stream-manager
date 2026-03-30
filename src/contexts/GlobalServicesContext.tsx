@@ -127,6 +127,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         cleanups.push(scrapingService.start());
         cleanups.push(vozBrasilService.start());
         cleanups.push(radioagenciaService.start());
+        cleanups.push(contentCleanupService.start());
       }, 500);
       cleanups.push(() => clearTimeout(wave2));
 
