@@ -26,6 +26,7 @@ import { useBackgroundMaintenance } from '@/hooks/useBackgroundMaintenance';
 import { useServiceWatchdog } from '@/hooks/useServiceWatchdog';
 import { useDailyReport } from '@/hooks/useDailyReport';
 import { useAutoMapaBuilder } from '@/hooks/useAutoMapaBuilder';
+import { useContentCleanupService } from '@/hooks/useContentCleanupService';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -66,6 +67,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   const watchdogService = useServiceWatchdog();
   const dailyReportService = useDailyReport();
   const mapaBuilder = useAutoMapaBuilder();
+  const contentCleanupService = useContentCleanupService();
 
   // ============= DEFERRED INITIALIZATION =============
   // Delay heavy services to let the UI render first (fixes black screen on Electron)
@@ -112,6 +114,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       console.log(`║ 🔄 Cross-Day:     ✅ ATIVO (buffer 4h)`.padEnd(65) + '║');
       console.log(`║ 📉 Ranking Decay: ✅ ATIVO (5%/dia)`.padEnd(65) + '║');
       console.log(`║ 🗺️ Mapas JIT:     ✅ ATIVO (20 min antes)`.padEnd(65) + '║');
+      console.log(`║ 🗑️ Content Clean: ✅ ATIVO (15 min antes)`.padEnd(65) + '║');
       console.log('╚══════════════════════════════════════════════════════════════╝');
 
       // Start services in staggered waves to avoid CPU spikes
@@ -124,6 +127,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
         cleanups.push(scrapingService.start());
         cleanups.push(vozBrasilService.start());
         cleanups.push(radioagenciaService.start());
+        cleanups.push(contentCleanupService.start());
       }, 500);
       cleanups.push(() => clearTimeout(wave2));
 

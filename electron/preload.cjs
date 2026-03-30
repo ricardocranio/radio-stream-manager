@@ -70,6 +70,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('radioagencia-download-progress', (_, progress) => callback(progress));
   },
   
+  // Content folder cleanup
+  cleanupContentFolder: (params) => ipcRenderer.invoke('cleanup-content-folder', params),
+  
   // Grade file operations
   saveGradeFile: (params) => ipcRenderer.invoke('save-grade-file', params),
   readGradeFile: (params) => ipcRenderer.invoke('read-grade-file', params),

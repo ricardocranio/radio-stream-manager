@@ -296,6 +296,9 @@ interface ElectronAPI {
   radioagenciaCleanup: (params: { folder: string; maxAgeDays: number }) => Promise<{ success: boolean; deletedCount?: number; error?: string }>;
   onRadioagenciaProgress: (callback: (progress: { progress: number; filename: string }) => void) => void;
   
+  // Content folder cleanup
+  cleanupContentFolder: (params: { folder: string }) => Promise<{ success: boolean; deletedCount?: number; error?: string }>;
+  
   // Grade file operations
   saveGradeFile: (params: GradeFileParams) => Promise<GradeFileResult>;
   readGradeFile: (params: Omit<GradeFileParams, 'content'>) => Promise<GradeFileResult>;

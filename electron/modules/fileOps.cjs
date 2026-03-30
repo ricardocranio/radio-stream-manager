@@ -398,6 +398,42 @@ function register({ getMainWindow, safeHandle }) {
   });
 
   // IPC: Process files in _temp folders — read ID3, rename, move to parent, return genre for routing
+  // IPC: Cleanup content folder (delete all files inside)
+  handle('cleanup-content-folder', async (event, { folder }) => {
+    console.log(`[FILE-OPS] 🗑️ Limpando pasta de conteúdo: ${folder}`);
+    try {
+      if (!fs.existsSync(folder)) {
+        return { success: true, deletedCount: 0 };
+      }
+
+      const items = fs.readdirSync(folder);
+      let deletedCount = 0;
+
+      for (const item of items) {
+        const itemPath = path.join(folder, item);
+        try {
+          const stat = fs.statSync(itemPath);
+          if (stat.isFile()) {
+            fs.unlinkSync(itemPath);
+            deletedCount++;
+          } else if (stat.isDirectory()) {
+            // Recursively delete subdirectories like PkInfo
+            fs.rmSync(itemPath, { recursive: true, force: true });
+            deletedCount++;
+          }
+        } catch (err) {
+          console.warn(`[FILE-OPS] ⚠️ Erro ao apagar ${item}: ${err.message}`);
+        }
+      }
+
+      console.log(`[FILE-OPS] ✅ Limpeza concluída: ${deletedCount} item(ns) removido(s) de ${folder}`);
+      return { success: true, deletedCount };
+    } catch (err) {
+      console.error(`[FILE-OPS] ❌ Erro na limpeza: ${err.message}`);
+      return { success: false, deletedCount: 0, error: err.message };
+    }
+  });
+
   handle('process-temp-files', async (event, { musicFolders }) => {
     const results = { processed: 0, moved: 0, skipped: 0, errors: 0, details: [], movedFiles: [] };
     const mainWindow = _getMainWindow();
