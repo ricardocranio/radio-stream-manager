@@ -460,7 +460,22 @@ safeHandle('select-folder', async () => {
   return result.filePaths[0];
 });
 
-safeHandle('show-notification', (event, { title, body }) => {
+safeHandle('select-file', async (event, params) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  const filters = params?.filters || [
+    { name: 'Áudio', extensions: ['mp3', 'wav', 'flac', 'ogg', 'wma', 'm4a'] },
+    { name: 'Todos os arquivos', extensions: ['*'] },
+  ];
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    title: 'Selecionar arquivo',
+    filters,
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
+
   showNotification(title, body, () => { 
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show(); 
