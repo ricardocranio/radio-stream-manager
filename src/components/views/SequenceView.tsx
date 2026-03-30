@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power, PlusCircle, MinusCircle, Pencil, X, Check } from 'lucide-react';
+import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power, PlusCircle, MinusCircle, Pencil, X, Check, ChevronDown } from 'lucide-react';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
