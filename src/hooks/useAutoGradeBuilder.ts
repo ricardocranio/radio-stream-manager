@@ -1661,6 +1661,7 @@ export function useAutoGradeBuilder() {
           skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
           currentProcessingSong: null, currentProcessingBlock: null,
           pendingGradeLines: fullDayLineMap,
+          pendingStationMap: buildStationMapFromLogs(allLogs),
         }));
         toast({ title: '✅ Grade Completa Gerada!', description: `${filename} salvo com 48 blocos. ${stats.skipped} puladas, ${stats.substituted} substituídas, ${stats.missing} faltando.` });
       } else {
