@@ -129,6 +129,7 @@ export function useAutoGradeBuilder() {
       currentProcessingSong: null, currentProcessingBlock: null, lastSaveProgress: 0,
       pendingGradeLines: persisted?.lineMap || new Map(),
       pendingBlockDurations: new Map(),
+      pendingStationMap: {},
     };
   });
 
