@@ -358,15 +358,16 @@ export async function selectSongForSlot(
 
   // ============================================================
   // PRIORITY 1: Station Pool (primary source — the configured radio)
-  // STRATEGY: Tiered freshness — Ultra-Fresh → Fresh → Recent → Full pool.
+  // HARD RULE: Only songs captured within the last 15 MINUTES are eligible.
+  // Anything older is skipped — P1 must reflect the LIVE monitoring.
   // First scan ALL candidates for one that EXISTS in library.
   // Only attempt JIT downloads if NO candidate from this station is available.
-  // This ensures missing songs are instantly replaced by another from the SAME radio.
   // ============================================================
   if (!selectedSong) {
-    // P1 uses the NATURAL ORDER from the radio station (newest first, playlist order preserved).
-    // We do NOT apply smart scoring here — the radio's playlist order is what matters.
     const now = Date.now();
+    const P1_MAX_AGE_MS = 15 * 60 * 1000; // 15 minutes — hard cutoff
+
+    // Sort by freshness DESC (newest first)
     const freshnessSorted = [...stationSongs].sort((a, b) => {
       if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
       if (a.scrapedAt) return -1;
@@ -374,35 +375,33 @@ export async function selectSongForSlot(
       return 0;
     });
 
-    // Freshness tiers for diagnostics and prioritization
-    const ULTRA_FRESH_MS = 5 * 60 * 1000;    // ≤ 5 min
-    const FRESH_MS = 20 * 60 * 1000;          // ≤ 20 min
-    const RECENT_MS = 60 * 60 * 1000;         // ≤ 1 hour
+    // HARD CUTOFF: Only songs ≤ 15 minutes old are eligible for P1
+    const p1Pool = freshnessSorted.filter(c => {
+      if (!c.scrapedAt) return false;
+      return (now - new Date(c.scrapedAt).getTime()) <= P1_MAX_AGE_MS;
+    });
 
-    const ultraFresh = freshnessSorted.filter(c => c.scrapedAt && (now - new Date(c.scrapedAt).getTime()) <= ULTRA_FRESH_MS);
-    const fresh = freshnessSorted.filter(c => c.scrapedAt && (now - new Date(c.scrapedAt).getTime()) <= FRESH_MS);
-    const recent = freshnessSorted.filter(c => c.scrapedAt && (now - new Date(c.scrapedAt).getTime()) <= RECENT_MS);
+    const droppedCount = freshnessSorted.length - p1Pool.length;
 
-    console.log(`[SONG-SELECT] 🕐 [P1] Pool "${stationName}" (resolvedBy: ${resolvedBy}): ${freshnessSorted.length} total | Ultra-fresh(≤5m): ${ultraFresh.length} | Fresh(≤20m): ${fresh.length} | Recent(≤1h): ${recent.length}`);
-    if (freshnessSorted.length === 0) {
-      console.warn(`[SONG-SELECT] ⚠️ [P1] Pool VAZIO para "${stationName}"! Pools disponíveis: [${Object.keys(songsByStation).join(', ')}]`);
-    } else {
+    console.log(`[SONG-SELECT] 🕐 [P1] Pool "${stationName}" (resolvedBy: ${resolvedBy}): ${p1Pool.length} elegíveis (≤15min) de ${freshnessSorted.length} total${droppedCount > 0 ? ` | ${droppedCount} descartadas (>15min)` : ''}`);
+    if (p1Pool.length === 0 && freshnessSorted.length > 0) {
       const newestAge = freshnessSorted[0].scrapedAt
         ? Math.round((now - new Date(freshnessSorted[0].scrapedAt).getTime()) / 60000)
         : '?';
-      console.log(`[SONG-SELECT] 🎵 [P1] Top 5 de "${stationName}" (mais nova: ${newestAge}min): ${freshnessSorted.slice(0, 5).map(c => {
+      console.warn(`[SONG-SELECT] ⚠️ [P1] NENHUMA música fresca (≤15min) para "${stationName}"! Mais nova tem ${newestAge}min. Caindo para próxima prioridade.`);
+    } else if (p1Pool.length > 0) {
+      console.log(`[SONG-SELECT] 🎵 [P1] Top 5 de "${stationName}": ${p1Pool.slice(0, 5).map(c => {
         const ageMin = c.scrapedAt ? Math.round((now - new Date(c.scrapedAt).getTime()) / 60000) : '?';
         return `${c.artist} - ${c.title} (${ageMin}m)`;
       }).join(' → ')}`);
     }
 
-    const p1Candidates = freshnessSorted.filter(c => isValidCandidate(c.title, c.artist));
+    const p1Candidates = p1Pool.filter(c => isValidCandidate(c.title, c.artist));
 
-    if (p1Candidates.length === 0 && freshnessSorted.length > 0) {
-      console.warn(`[SONG-SELECT] ⚠️ [P1] ${freshnessSorted.length} músicas de "${stationName}" mas TODAS filtradas (anti-rep/bloqueio/blackout). Primeiras 3: ${freshnessSorted.slice(0, 3).map(c => `${c.artist} - ${c.title}`).join('; ')}`);
+    if (p1Candidates.length === 0 && p1Pool.length > 0) {
+      console.warn(`[SONG-SELECT] ⚠️ [P1] ${p1Pool.length} músicas frescas de "${stationName}" mas TODAS filtradas (anti-rep/bloqueio/blackout). Primeiras 3: ${p1Pool.slice(0, 3).map(c => `${c.artist} - ${c.title}`).join('; ')}`);
     } else if (p1Candidates.length > 0) {
-      const freshCandidates = p1Candidates.filter(c => c.scrapedAt && (now - new Date(c.scrapedAt).getTime()) <= FRESH_MS);
-      console.log(`[SONG-SELECT] 🎯 [P1] ${p1Candidates.length} candidatas válidas (${freshCandidates.length} frescas ≤20m) de "${stationName}". Top 3: ${p1Candidates.slice(0, 3).map(c => {
+      console.log(`[SONG-SELECT] 🎯 [P1] ${p1Candidates.length} candidatas válidas (≤15min) de "${stationName}". Top 3: ${p1Candidates.slice(0, 3).map(c => {
         const ageMin = c.scrapedAt ? Math.round((now - new Date(c.scrapedAt).getTime()) / 60000) : '?';
         return `${c.artist} - ${c.title} (${ageMin}m)`;
       }).join('; ')}`);
