@@ -862,7 +862,6 @@ export function SequenceView() {
                   );
                 })}
               </div>
-            </ScrollArea>
             <div className="flex gap-2 mt-4 pt-4 border-t border-border">
               <Button
                 variant="outline"
