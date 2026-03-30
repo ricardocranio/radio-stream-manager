@@ -1893,6 +1893,7 @@ export function useAutoGradeBuilder() {
           nextBlock: nextTimeKey,
           pendingGradeLines: new Map(lineMap),
           pendingStationMap: { ...prev.pendingStationMap },
+        }));
         return;
       }
 
