@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power, PlusCircle, MinusCircle, Pencil, X, Check } from 'lucide-react';
+import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power, PlusCircle, MinusCircle, Pencil, X, Check, ChevronDown } from 'lucide-react';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 const WEEK_DAYS: { value: WeekDay; label: string }[] = [
   { value: 'dom', label: 'Dom' },
@@ -42,6 +43,9 @@ const WEEK_DAYS: { value: WeekDay; label: string }[] = [
 ];
 
 export function SequenceView() {
+  const [defaultOpen, setDefaultOpen] = useState(true);
+  const [fixedOpen, setFixedOpen] = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(true);
   const { 
     sequence, 
     setSequence, 
@@ -701,18 +705,23 @@ export function SequenceView() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Default Sequence Configuration */}
+        <Collapsible open={defaultOpen} onOpenChange={setDefaultOpen}>
         <Card className="glass-card">
-          <CardHeader className="border-b border-border">
-            <CardTitle className="flex items-center justify-between">
-              <span>Sequência Padrão</span>
-              {!activeScheduled && (
-                <Badge variant="default" className="text-xs">
-                  <Power className="w-3 h-3 mr-1" />
-                  Ativa
-                </Badge>
-              )}
-            </CardTitle>
+          <CardHeader className="border-b border-border p-0">
+            <CollapsibleTrigger className="w-full flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors cursor-pointer">
+              <CardTitle className="flex items-center gap-2">
+                <span>Sequência Padrão</span>
+                {!activeScheduled && (
+                  <Badge variant="default" className="text-xs">
+                    <Power className="w-3 h-3 mr-1" />
+                    Ativa
+                  </Badge>
+                )}
+              </CardTitle>
+              <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${defaultOpen ? 'rotate-180' : ''}`} />
+            </CollapsibleTrigger>
           </CardHeader>
+          <CollapsibleContent>
           <CardContent className="p-4">
             <ScrollArea className="h-[400px] pr-4">
               <div className="space-y-2">
@@ -878,19 +887,26 @@ export function SequenceView() {
               {localSequence.length} posições configuradas
             </p>
           </CardContent>
+          </CollapsibleContent>
         </Card>
+        </Collapsible>
 
         {/* Fixed Content Panel - Sidebar */}
+        <Collapsible open={fixedOpen} onOpenChange={setFixedOpen}>
         <Card className="glass-card border-emerald-500/30">
-          <CardHeader className="border-b border-emerald-500/20 pb-3 bg-emerald-500/5">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <span className="text-lg">📌</span>
-              Conteúdos Fixos Cadastrados
-              <Badge variant="secondary" className="ml-auto text-xs bg-emerald-500/20 text-emerald-400">
-                {fixedContent.filter(c => c.enabled).length} ativos
-              </Badge>
-            </CardTitle>
+          <CardHeader className="border-b border-emerald-500/20 pb-0 pt-0 bg-emerald-500/5 p-0">
+            <CollapsibleTrigger className="w-full flex items-center justify-between p-3 hover:bg-emerald-500/10 transition-colors cursor-pointer">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <span className="text-lg">📌</span>
+                Conteúdos Fixos
+                <Badge variant="secondary" className="ml-2 text-xs bg-emerald-500/20 text-emerald-400">
+                  {fixedContent.filter(c => c.enabled).length} ativos
+                </Badge>
+              </CardTitle>
+              <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${fixedOpen ? 'rotate-180' : ''}`} />
+            </CollapsibleTrigger>
           </CardHeader>
+          <CollapsibleContent>
           <CardContent className="p-3">
             {fixedContent.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">
@@ -937,13 +953,20 @@ export function SequenceView() {
               </ScrollArea>
             )}
           </CardContent>
+          </CollapsibleContent>
         </Card>
+        </Collapsible>
 
         {/* Preview */}
+        <Collapsible open={previewOpen} onOpenChange={setPreviewOpen}>
         <Card className="glass-card">
-          <CardHeader className="border-b border-border">
-            <CardTitle>Prévia da Sequência</CardTitle>
+          <CardHeader className="border-b border-border p-0">
+            <CollapsibleTrigger className="w-full flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors cursor-pointer">
+              <CardTitle>Prévia da Sequência</CardTitle>
+              <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${previewOpen ? 'rotate-180' : ''}`} />
+            </CollapsibleTrigger>
           </CardHeader>
+          <CollapsibleContent>
           <CardContent className="p-4">
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
@@ -1000,7 +1023,9 @@ export function SequenceView() {
               </div>
             </div>
           </CardContent>
+          </CollapsibleContent>
         </Card>
+        </Collapsible>
 
       </div>
 
