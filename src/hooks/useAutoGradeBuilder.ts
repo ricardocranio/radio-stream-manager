@@ -102,7 +102,22 @@ interface AutoGradeState {
   pendingStationMap: Record<string, string>;
 }
 
-export function useAutoGradeBuilder() {
+/** Build a normalized station map from block logs for preview radio badges */
+function buildStationMapFromLogs(logs: BlockLogItem[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  const normalizeKey = (str: string) =>
+    str.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
+  
+  for (const log of logs) {
+    if (log.type === 'used' && log.station && log.artist && log.title) {
+      const key = `${normalizeKey(log.artist)}-${normalizeKey(log.title)}`;
+      map[key] = log.station;
+    }
+  }
+  return map;
+}
+
   const { toast } = useToast();
   const {
     programs, sequence: defaultSequence, scheduledSequences,
