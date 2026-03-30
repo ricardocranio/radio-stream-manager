@@ -534,16 +534,18 @@ export function useAutoGradeBuilder() {
       ];
 
       // Deduplicate: keep the most recent entry per song
+      // Sort by scraped_at DESC BEFORE dedup to ensure Map preserves chronological insertion order
+      const sortedData = allData.sort((a, b) => new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime());
+
       const seen = new Map<string, typeof allData[0]>();
-      for (const song of allData) {
+      for (const song of sortedData) {
         const key = `${song.title.toLowerCase().trim()}-${song.artist.toLowerCase().trim()}`;
-        const existing = seen.get(key);
-        if (!existing || new Date(song.scraped_at) > new Date(existing.scraped_at)) {
-          seen.set(key, song);
+        if (!seen.has(key)) {
+          seen.set(key, song); // First seen = most recent due to DESC sort
         }
       }
 
-      const deduplicated = Array.from(seen.values());
+      const deduplicated = Array.from(seen.values()); // Already in DESC order (Map insertion order)
 
       // Apply song aliases (corrections) using aliasEngine (O(1) lookups)
       const { songAliases } = useRadioStore.getState();
@@ -609,7 +611,10 @@ export function useAutoGradeBuilder() {
   }, [stations]);
 
   // Helper to build songsByStation from raw data
+  // IMPORTANT: data MUST arrive sorted by scraped_at DESC so the maxPerStation cap keeps the freshest songs
   const buildSongsByStation = useCallback((data: Array<{ title: string; artist: string; station_name: string; scraped_at: string; ai_genre?: string | null; ai_energy?: string | null }>, maxPerStation = 300): Record<string, SongEntry[]> => {
+    // Defensive sort: ensure DESC order even if caller doesn't guarantee it
+    const sortedData = [...data].sort((a, b) => new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime());
     const songsByStation: Record<string, SongEntry[]> = {};
     const stationNameToStyle: Record<string, string> = {};
     const seenSongs = new Set<string>();
@@ -640,7 +645,7 @@ export function useAutoGradeBuilder() {
       stationNameToStyle[s.name.toLowerCase()] = s.styles?.[0] || 'POP/VARIADO';
       stationNameToStyle[s.id] = s.styles?.[0] || 'POP/VARIADO';
     });
-    data.forEach(song => {
+    sortedData.forEach(song => {
       const songKey = `${song.title.toLowerCase()}-${song.artist.toLowerCase()}`;
       if (seenSongs.has(songKey)) return;
       seenSongs.add(songKey);
@@ -659,8 +664,13 @@ export function useAutoGradeBuilder() {
         } as SongEntry);
       }
     });
-    const stationList = Object.keys(songsByStation).map(name => `${name}(${songsByStation[name].length})`).join(', ');
-    console.log(`[AUTO-GRADE] Pool: ${stationList}`);
+    const now = Date.now();
+    const stationList = Object.keys(songsByStation).map(name => {
+      const songs = songsByStation[name];
+      const freshCount = songs.filter(s => s.scrapedAt && (now - new Date(s.scrapedAt).getTime()) <= 20 * 60 * 1000).length;
+      return `${name}(${songs.length}, ${freshCount}⚡)`;
+    }).join(', ');
+    console.log(`[AUTO-GRADE] Pool (total, frescas≤20m): ${stationList}`);
     return songsByStation;
   }, [stations, config.blockedSongs, config.forbiddenWords]);
 
