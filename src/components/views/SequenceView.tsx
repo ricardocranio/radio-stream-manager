@@ -1,6 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power, PlusCircle, MinusCircle, Pencil, X, Check, ChevronDown, FolderOpen } from 'lucide-react';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +45,127 @@ const WEEK_DAYS: { value: WeekDay; label: string }[] = [
   { value: 'sab', label: 'Sáb' },
 ];
 
+interface SortableSequenceItemProps {
+  item: SequenceConfig;
+  isFixoItem: boolean;
+  isEditing: boolean;
+  editingFileName: string;
+  setEditingFileName: (v: string) => void;
+  handleChange: (position: number, value: string) => void;
+  openComboDialog: (type: 'default' | 'form', position: number) => void;
+  handleSelectFile: (type: 'default' | 'form', position: number) => void;
+  startEditFileName: (position: number, currentFileName: string, source: string) => void;
+  saveEditFileName: () => void;
+  cancelEditFileName: () => void;
+  handleRemovePosition: (position: number) => void;
+  getStationColor: (source: string) => string;
+  getSourceBadgeLabel: (source: string) => string;
+  getDefaultFileName: (source: string) => string;
+  localSequenceLength: number;
+  catGenres: boolean; setCatGenres: React.Dispatch<React.SetStateAction<boolean>>;
+  catDecades: boolean; setCatDecades: React.Dispatch<React.SetStateAction<boolean>>;
+  catGenreYear: boolean; setCatGenreYear: React.Dispatch<React.SetStateAction<boolean>>;
+  catSpecials: boolean; setCatSpecials: React.Dispatch<React.SetStateAction<boolean>>;
+  catStations: boolean; setCatStations: React.Dispatch<React.SetStateAction<boolean>>;
+  genreOptions: Array<{ value: string; label: string }>;
+  yearOptions: Array<{ value: string; label: string }>;
+  genreYearOptions: Array<{ value: string; label: string }>;
+  fixedContentOptions: Array<{ value: string; label: string }>;
+  stationOptions: Array<{ value: string; label: string }>;
+}
+
+function SortableSequenceItem({ item, isFixoItem, isEditing, ...props }: SortableSequenceItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `seq-${item.position}`,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`p-2 rounded-lg bg-secondary/30 border transition-colors group ${
+        isFixoItem ? 'border-emerald-500/30 hover:border-emerald-500/50' : 'border-border hover:border-primary/30'
+      } ${isDragging ? 'shadow-lg ring-2 ring-primary/40' : ''}`}
+    >
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 text-muted-foreground cursor-grab active:cursor-grabbing touch-none" {...attributes} {...listeners}>
+          <GripVertical className="w-3 h-3" />
+          <span className="font-mono font-bold text-foreground w-5 text-xs">{item.position.toString().padStart(2, '0')}</span>
+        </div>
+        <Select value={item.radioSource} onValueChange={(value) => props.handleChange(item.position, value)}>
+          <SelectTrigger className="flex-1 h-8 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent className="max-h-[400px]">
+            <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); props.setCatGenres(v => !v); }}>
+              <span>🎵 Gêneros</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${props.catGenres ? 'rotate-180' : ''}`} />
+            </div>
+            {props.catGenres && props.genreOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            <div className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); props.setCatDecades(v => !v); }}>
+              <span>📅 Décadas</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${props.catDecades ? 'rotate-180' : ''}`} />
+            </div>
+            {props.catDecades && props.yearOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            <div className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); props.setCatGenreYear(v => !v); }}>
+              <span>🎵📅 Gênero + Década</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${props.catGenreYear ? 'rotate-180' : ''}`} />
+            </div>
+            {props.catGenreYear && props.genreYearOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            <div className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); props.setCatSpecials(v => !v); }}>
+              <span>⭐ Especiais</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${props.catSpecials ? 'rotate-180' : ''}`} />
+            </div>
+            {props.catSpecials && (<>
+              <SelectItem value="random_pop">🎲 Aleatório (Disney/Metro)</SelectItem>
+              <SelectItem value="top50">🏆 TOP25 (Curadoria)</SelectItem>
+              {props.fixedContentOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </>)}
+            <div className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); props.setCatStations(v => !v); }}>
+              <span>📻 Emissoras</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${props.catStations ? 'rotate-180' : ''}`} />
+            </div>
+            {props.catStations && props.stationOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Badge variant="outline" className={`${props.getStationColor(item.radioSource)} text-[9px] px-1`}>{props.getSourceBadgeLabel(item.radioSource)}</Badge>
+        <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10" onClick={() => props.openComboDialog('default', item.position)} title="Combo Manual"><Edit2 className="w-3 h-3" /></Button>
+        {window.electronAPI?.selectFile && (
+          <Button variant="ghost" size="icon" className="h-6 w-6 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10" onClick={() => props.handleSelectFile('default', item.position)} title="Selecionar arquivo local"><FolderOpen className="w-3 h-3" /></Button>
+        )}
+        {isFixoItem && !isEditing && (
+          <Button variant="ghost" size="icon" className="h-6 w-6 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10" onClick={() => props.startEditFileName(item.position, item.customFileName || '', item.radioSource)} title="Editar nome"><Pencil className="w-3 h-3" /></Button>
+        )}
+        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => props.handleRemovePosition(item.position)} disabled={props.localSequenceLength <= 5}><Trash2 className="w-3 h-3" /></Button>
+      </div>
+      {isEditing && (
+        <div className="mt-2 flex items-center gap-2">
+          <Input value={props.editingFileName} onChange={(e) => props.setEditingFileName(e.target.value)} placeholder="NOTICIA_DA_HORA_18HORAS" className="h-7 text-xs flex-1 font-mono" />
+          <Button variant="ghost" size="icon" className="h-6 w-6 text-green-500 hover:text-green-400 hover:bg-green-500/10" onClick={props.saveEditFileName}><Check className="w-3 h-3" /></Button>
+          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={props.cancelEditFileName}><X className="w-3 h-3" /></Button>
+        </div>
+      )}
+      {isFixoItem && !isEditing && (
+        <div className="mt-1 pl-8 flex items-center gap-2 cursor-pointer hover:bg-emerald-500/10 rounded px-2 py-1 -mx-2" onClick={() => props.startEditFileName(item.position, item.customFileName || '', item.radioSource)}>
+          <span className="text-[10px] text-emerald-400 font-mono flex-1">{item.customFileName || props.getDefaultFileName(item.radioSource)}</span>
+          <Pencil className="w-3 h-3 text-emerald-400/60" />
+        </div>
+      )}
+      {item.radioSource.startsWith('file_') && (
+        <div className="mt-1 pl-8 flex items-center gap-2 cursor-pointer hover:bg-sky-500/10 rounded px-2 py-1 -mx-2" onClick={() => props.handleSelectFile('default', item.position)}>
+          <span className="text-[10px] text-sky-400 font-mono flex-1 truncate">{item.radioSource.replace('file_', '').split(/[/\\]/).pop()}</span>
+          <FolderOpen className="w-3 h-3 text-sky-400/60" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SequenceView() {
   const [defaultOpen, setDefaultOpen] = useState(true);
   const [fixedOpen, setFixedOpen] = useState(true);
@@ -65,6 +189,26 @@ export function SequenceView() {
   } = useRadioStore();
   const { toast } = useToast();
   const [localSequence, setLocalSequence] = useState(sequence);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    
+    setLocalSequence((prev) => {
+      const oldIndex = prev.findIndex(item => `seq-${item.position}` === active.id);
+      const newIndex = prev.findIndex(item => `seq-${item.position}` === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      const moved = arrayMove(prev, oldIndex, newIndex);
+      // Renumber positions
+      return moved.map((item, i) => ({ ...item, position: i + 1 }));
+    });
+  }, []);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<ScheduledSequence | null>(null);
   
@@ -760,197 +904,84 @@ export function SequenceView() {
           </CardHeader>
           <CollapsibleContent>
           <CardContent className="p-4">
-              <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 1fr', gridTemplateRows: `repeat(${Math.ceil(localSequence.length / 2)}, auto)`, gridAutoFlow: 'column' }}>
-                {localSequence.map((item) => {
-                  const isFixoItem = item.radioSource.startsWith('fixo_');
-                  const isEditing = editingPosition === item.position;
-                  
-                  return (
-                    <div
-                      key={item.position}
-                      className={`p-2 rounded-lg bg-secondary/30 border transition-colors group ${
-                        isFixoItem ? 'border-emerald-500/30 hover:border-emerald-500/50' : 'border-border hover:border-primary/30'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <GripVertical className="w-3 h-3" />
-                          <span className="font-mono font-bold text-foreground w-5 text-xs">
-                            {item.position.toString().padStart(2, '0')}
-                          </span>
-                        </div>
-                        <Select
-                          value={item.radioSource}
-                          onValueChange={(value) => handleChange(item.position, value)}
-                        >
-                          <SelectTrigger className="flex-1 h-8 text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[400px]">
-                            <div
-                              className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none"
-                              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setCatGenres(v => !v); }}
-                            >
-                              <span>🎵 Gêneros</span>
-                              <ChevronDown className={`w-3 h-3 transition-transform ${catGenres ? 'rotate-180' : ''}`} />
-                            </div>
-                            {catGenres && genreOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                            ))}
-
-                            <div
-                              className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none"
-                              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setCatDecades(v => !v); }}
-                            >
-                              <span>📅 Décadas</span>
-                              <ChevronDown className={`w-3 h-3 transition-transform ${catDecades ? 'rotate-180' : ''}`} />
-                            </div>
-                            {catDecades && yearOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                            ))}
-
-                            <div
-                              className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none"
-                              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setCatGenreYear(v => !v); }}
-                            >
-                              <span>🎵📅 Gênero + Década</span>
-                              <ChevronDown className={`w-3 h-3 transition-transform ${catGenreYear ? 'rotate-180' : ''}`} />
-                            </div>
-                            {catGenreYear && genreYearOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                            ))}
-
-                            <div
-                              className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none"
-                              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setCatSpecials(v => !v); }}
-                            >
-                              <span>⭐ Especiais</span>
-                              <ChevronDown className={`w-3 h-3 transition-transform ${catSpecials ? 'rotate-180' : ''}`} />
-                            </div>
-                            {catSpecials && (
-                              <>
-                                <SelectItem value="random_pop">🎲 Aleatório (Disney/Metro)</SelectItem>
-                                <SelectItem value="top50">🏆 TOP25 (Curadoria)</SelectItem>
-                                {fixedContentOptions.map((option) => (
-                                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                                ))}
-                              </>
-                            )}
-
-                            <div
-                              className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none"
-                              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setCatStations(v => !v); }}
-                            >
-                              <span>📻 Emissoras</span>
-                              <ChevronDown className={`w-3 h-3 transition-transform ${catStations ? 'rotate-180' : ''}`} />
-                            </div>
-                            {catStations && stationOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Badge variant="outline" className={`${getStationColor(item.radioSource)} text-[9px] px-1`}>
-                          {getSourceBadgeLabel(item.radioSource)}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
-                          onClick={() => openComboDialog('default', item.position)}
-                          title="Combo Manual (Gênero + Década)"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </Button>
-                        {window.electronAPI?.selectFile && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10"
-                            onClick={() => handleSelectFile('default', item.position)}
-                            title="Selecionar arquivo local"
-                          >
-                            <FolderOpen className="w-3 h-3" />
-                          </Button>
-                        )}
-                        {isFixoItem && !isEditing && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
-                            onClick={() => startEditFileName(item.position, item.customFileName || '', item.radioSource)}
-                            title="Editar nome do arquivo"
-                          >
-                            <Pencil className="w-3 h-3" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => handleRemovePosition(item.position)}
-                          disabled={localSequence.length <= 5}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                      
-                      {/* Editing mode for custom filename */}
-                      {isEditing && (
-                        <div className="mt-2 flex items-center gap-2">
-                          <Input
-                            value={editingFileName}
-                            onChange={(e) => setEditingFileName(e.target.value)}
-                            placeholder="NOTICIA_DA_HORA_18HORAS"
-                            className="h-7 text-xs flex-1 font-mono"
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={localSequence.map(item => `seq-${item.position}`)} strategy={verticalListSortingStrategy}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {(() => {
+                      const half = Math.ceil(localSequence.length / 2);
+                      const col1 = localSequence.slice(0, half);
+                      const col2 = localSequence.slice(half);
+                      const maxLen = Math.max(col1.length, col2.length);
+                      const rows: React.ReactNode[] = [];
+                      for (let i = 0; i < maxLen; i++) {
+                        if (col1[i]) rows.push(
+                          <SortableSequenceItem
+                            key={`seq-${col1[i].position}`}
+                            item={col1[i]}
+                            isFixoItem={col1[i].radioSource.startsWith('fixo_')}
+                            isEditing={editingPosition === col1[i].position}
+                            editingFileName={editingFileName}
+                            setEditingFileName={setEditingFileName}
+                            handleChange={handleChange}
+                            openComboDialog={openComboDialog}
+                            handleSelectFile={handleSelectFile}
+                            startEditFileName={startEditFileName}
+                            saveEditFileName={saveEditFileName}
+                            cancelEditFileName={cancelEditFileName}
+                            handleRemovePosition={handleRemovePosition}
+                            getStationColor={getStationColor}
+                            getSourceBadgeLabel={getSourceBadgeLabel}
+                            getDefaultFileName={getDefaultFileName}
+                            localSequenceLength={localSequence.length}
+                            catGenres={catGenres} setCatGenres={setCatGenres}
+                            catDecades={catDecades} setCatDecades={setCatDecades}
+                            catGenreYear={catGenreYear} setCatGenreYear={setCatGenreYear}
+                            catSpecials={catSpecials} setCatSpecials={setCatSpecials}
+                            catStations={catStations} setCatStations={setCatStations}
+                            genreOptions={genreOptions}
+                            yearOptions={yearOptions}
+                            genreYearOptions={genreYearOptions}
+                            fixedContentOptions={fixedContentOptions}
+                            stationOptions={stationOptions}
                           />
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-green-500 hover:text-green-400 hover:bg-green-500/10"
-                            onClick={saveEditFileName}
-                          >
-                            <Check className="w-3 h-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                            onClick={cancelEditFileName}
-                          >
-                            <X className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      )}
-                      
-                      {/* Show filename for FIXO items - always visible, clickable to edit */}
-                      {isFixoItem && !isEditing && (
-                        <div 
-                          className="mt-1 pl-8 flex items-center gap-2 cursor-pointer hover:bg-emerald-500/10 rounded px-2 py-1 -mx-2"
-                          onClick={() => startEditFileName(item.position, item.customFileName || '', item.radioSource)}
-                        >
-                          <span className="text-[10px] text-emerald-400 font-mono flex-1">
-                            {item.customFileName || getDefaultFileName(item.radioSource)}
-                          </span>
-                          <Pencil className="w-3 h-3 text-emerald-400/60" />
-                        </div>
-                      )}
-                      
-                      {/* Show file path for local file items */}
-                      {item.radioSource.startsWith('file_') && (
-                        <div 
-                          className="mt-1 pl-8 flex items-center gap-2 cursor-pointer hover:bg-sky-500/10 rounded px-2 py-1 -mx-2"
-                          onClick={() => handleSelectFile('default', item.position)}
-                        >
-                          <span className="text-[10px] text-sky-400 font-mono flex-1 truncate">
-                            {item.radioSource.replace('file_', '').split(/[/\\]/).pop()}
-                          </span>
-                          <FolderOpen className="w-3 h-3 text-sky-400/60" />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                        );
+                        if (col2[i]) rows.push(
+                          <SortableSequenceItem
+                            key={`seq-${col2[i].position}`}
+                            item={col2[i]}
+                            isFixoItem={col2[i].radioSource.startsWith('fixo_')}
+                            isEditing={editingPosition === col2[i].position}
+                            editingFileName={editingFileName}
+                            setEditingFileName={setEditingFileName}
+                            handleChange={handleChange}
+                            openComboDialog={openComboDialog}
+                            handleSelectFile={handleSelectFile}
+                            startEditFileName={startEditFileName}
+                            saveEditFileName={saveEditFileName}
+                            cancelEditFileName={cancelEditFileName}
+                            handleRemovePosition={handleRemovePosition}
+                            getStationColor={getStationColor}
+                            getSourceBadgeLabel={getSourceBadgeLabel}
+                            getDefaultFileName={getDefaultFileName}
+                            localSequenceLength={localSequence.length}
+                            catGenres={catGenres} setCatGenres={setCatGenres}
+                            catDecades={catDecades} setCatDecades={setCatDecades}
+                            catGenreYear={catGenreYear} setCatGenreYear={setCatGenreYear}
+                            catSpecials={catSpecials} setCatSpecials={setCatSpecials}
+                            catStations={catStations} setCatStations={setCatStations}
+                            genreOptions={genreOptions}
+                            yearOptions={yearOptions}
+                            genreYearOptions={genreYearOptions}
+                            fixedContentOptions={fixedContentOptions}
+                            stationOptions={stationOptions}
+                          />
+                        );
+                      }
+                      return rows;
+                    })()}
+                  </div>
+                </SortableContext>
+              </DndContext>
             <div className="flex gap-2 mt-4 pt-4 border-t border-border">
               <Button
                 variant="outline"
