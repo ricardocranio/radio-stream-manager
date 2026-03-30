@@ -358,7 +358,7 @@ export async function selectSongForSlot(
 
   // ============================================================
   // PRIORITY 1: Station Pool (primary source — the configured radio)
-  // STRATEGY: Prioritize FRESH captures (5-20 min) first, then expand.
+  // STRATEGY: Tiered freshness — Ultra-Fresh → Fresh → Recent → Full pool.
   // First scan ALL candidates for one that EXISTS in library.
   // Only attempt JIT downloads if NO candidate from this station is available.
   // This ensures missing songs are instantly replaced by another from the SAME radio.
@@ -366,8 +366,7 @@ export async function selectSongForSlot(
   if (!selectedSong) {
     // P1 uses the NATURAL ORDER from the radio station (newest first, playlist order preserved).
     // We do NOT apply smart scoring here — the radio's playlist order is what matters.
-    // Songs from the same scrape batch share the same scraped_at, so their original
-    // insertion order (= playlist order) is preserved by the stable sort.
+    const now = Date.now();
     const freshnessSorted = [...stationSongs].sort((a, b) => {
       if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
       if (a.scrapedAt) return -1;
@@ -375,11 +374,26 @@ export async function selectSongForSlot(
       return 0;
     });
 
-    console.log(`[SONG-SELECT] 🕐 [P1] Pool "${stationName}" (resolvedBy: ${resolvedBy}): ${freshnessSorted.length} músicas (ordem natural da rádio)`);
+    // Freshness tiers for diagnostics and prioritization
+    const ULTRA_FRESH_MS = 5 * 60 * 1000;    // ≤ 5 min
+    const FRESH_MS = 20 * 60 * 1000;          // ≤ 20 min
+    const RECENT_MS = 60 * 60 * 1000;         // ≤ 1 hour
+
+    const ultraFresh = freshnessSorted.filter(c => c.scrapedAt && (now - new Date(c.scrapedAt).getTime()) <= ULTRA_FRESH_MS);
+    const fresh = freshnessSorted.filter(c => c.scrapedAt && (now - new Date(c.scrapedAt).getTime()) <= FRESH_MS);
+    const recent = freshnessSorted.filter(c => c.scrapedAt && (now - new Date(c.scrapedAt).getTime()) <= RECENT_MS);
+
+    console.log(`[SONG-SELECT] 🕐 [P1] Pool "${stationName}" (resolvedBy: ${resolvedBy}): ${freshnessSorted.length} total | Ultra-fresh(≤5m): ${ultraFresh.length} | Fresh(≤20m): ${fresh.length} | Recent(≤1h): ${recent.length}`);
     if (freshnessSorted.length === 0) {
       console.warn(`[SONG-SELECT] ⚠️ [P1] Pool VAZIO para "${stationName}"! Pools disponíveis: [${Object.keys(songsByStation).join(', ')}]`);
     } else {
-      console.log(`[SONG-SELECT] 🎵 [P1] Top 5 de "${stationName}": ${freshnessSorted.slice(0, 5).map(c => `${c.artist} - ${c.title}`).join(' → ')}`);
+      const newestAge = freshnessSorted[0].scrapedAt
+        ? Math.round((now - new Date(freshnessSorted[0].scrapedAt).getTime()) / 60000)
+        : '?';
+      console.log(`[SONG-SELECT] 🎵 [P1] Top 5 de "${stationName}" (mais nova: ${newestAge}min): ${freshnessSorted.slice(0, 5).map(c => {
+        const ageMin = c.scrapedAt ? Math.round((now - new Date(c.scrapedAt).getTime()) / 60000) : '?';
+        return `${c.artist} - ${c.title} (${ageMin}m)`;
+      }).join(' → ')}`);
     }
 
     const p1Candidates = freshnessSorted.filter(c => isValidCandidate(c.title, c.artist));
@@ -387,11 +401,14 @@ export async function selectSongForSlot(
     if (p1Candidates.length === 0 && freshnessSorted.length > 0) {
       console.warn(`[SONG-SELECT] ⚠️ [P1] ${freshnessSorted.length} músicas de "${stationName}" mas TODAS filtradas (anti-rep/bloqueio/blackout). Primeiras 3: ${freshnessSorted.slice(0, 3).map(c => `${c.artist} - ${c.title}`).join('; ')}`);
     } else if (p1Candidates.length > 0) {
-      console.log(`[SONG-SELECT] 🎯 [P1] ${p1Candidates.length} candidatas válidas de "${stationName}" (de ${freshnessSorted.length} total). Top 3: ${p1Candidates.slice(0, 3).map(c => `${c.artist} - ${c.title}`).join('; ')}`);
+      const freshCandidates = p1Candidates.filter(c => c.scrapedAt && (now - new Date(c.scrapedAt).getTime()) <= FRESH_MS);
+      console.log(`[SONG-SELECT] 🎯 [P1] ${p1Candidates.length} candidatas válidas (${freshCandidates.length} frescas ≤20m) de "${stationName}". Top 3: ${p1Candidates.slice(0, 3).map(c => {
+        const ageMin = c.scrapedAt ? Math.round((now - new Date(c.scrapedAt).getTime()) / 60000) : '?';
+        return `${c.artist} - ${c.title} (${ageMin}m)`;
+      }).join('; ')}`);
     }
 
     // Build batch lookup including BOTH raw names AND alias-corrected names
-    // This ensures findWithAliasFallback can find songs by corrected name in the batch
     const batchEntries = p1Candidates.flatMap(c => {
       const entries = [{ artist: c.artist, title: c.title }];
       const corrected = aliasEngine.resolve(c.artist, c.title);
@@ -405,12 +422,14 @@ export async function selectSongForSlot(
       : new Map();
 
     // PHASE 1: Pick the first candidate that ALREADY exists in library (instant, no download)
+    // Scan in freshness order — freshest first, so we always pick the newest available song
     const missingFromStation: SongEntry[] = [];
     for (const candidate of p1Candidates) {
       const libraryResult = await findWithAliasFallback(candidate.artist, candidate.title, p1Map as Map<string, any>);
 
       if (libraryResult?.exists) {
         const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+        const ageMin = candidate.scrapedAt ? Math.round((now - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
         selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
         selCtx.previousEnergy = (candidate as any).ai_energy || null;
         selCtx.previousBpm = (candidate as any).bpm || null;
@@ -421,8 +440,9 @@ export async function selectSongForSlot(
           artist: candidate.artist,
           station: candidate.station,
           style: candidate.style,
-          reason: `[P1] Pool da estação "${stationName}" (resolvedBy: ${resolvedBy}) [smart/batch]`,
+          reason: `[P1] Pool da estação "${stationName}" (resolvedBy: ${resolvedBy}, frescor: ${ageMin}min)`,
         });
+        console.log(`[SONG-SELECT] ✅ [P1] Selecionada: "${candidate.artist} - ${candidate.title}" (frescor: ${ageMin}min, resolvedBy: ${resolvedBy})`);
         break;
       } else {
         missingFromStation.push(candidate);
@@ -441,7 +461,8 @@ export async function selectSongForSlot(
         if (jitAttemptsP1 >= maxJitAttemptsP1) break;
 
         jitAttemptsP1++;
-        console.log(`[SONG-SELECT] 🔍 [P1] "${candidate.artist} - ${candidate.title}" ausente, tentativa JIT ${jitAttemptsP1}/${maxJitAttemptsP1}...`);
+        const ageMin = candidate.scrapedAt ? Math.round((now - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
+        console.log(`[SONG-SELECT] 🔍 [P1] "${candidate.artist} - ${candidate.title}" (${ageMin}min) ausente, tentativa JIT ${jitAttemptsP1}/${maxJitAttemptsP1}...`);
         const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
         if (downloaded) {
           const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
@@ -455,7 +476,7 @@ export async function selectSongForSlot(
               artist: candidate.artist,
               station: candidate.station,
               style: candidate.style,
-              reason: `[P1] Baixada JIT de "${stationName}" (tentativa ${jitAttemptsP1})`,
+              reason: `[P1] Baixada JIT de "${stationName}" (tentativa ${jitAttemptsP1}, frescor: ${ageMin}min)`,
             });
             break;
           }
