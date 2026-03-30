@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power, PlusCircle, MinusCircle, Pencil, X, Check, ChevronDown } from 'lucide-react';
+import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power, PlusCircle, MinusCircle, Pencil, X, Check, ChevronDown, FolderOpen } from 'lucide-react';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -443,6 +443,9 @@ export function SequenceView() {
   };
 
   const getStationColor = (source: string) => {
+    if (source.startsWith('file_')) {
+      return 'bg-sky-500/20 text-sky-400 border-sky-500/30';
+    }
     if (source.startsWith('fixo_')) {
       return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
     }
@@ -490,16 +493,19 @@ export function SequenceView() {
 
   // Get display name for a sequence item source
   const getSourceDisplayName = (source: string): string => {
+    if (source.startsWith('file_')) {
+      const filePath = source.replace('file_', '');
+      const fileName = filePath.split(/[/\\]/).pop() || filePath;
+      return `📂 ${fileName}`;
+    }
     if (source.startsWith('fixo_')) {
       const contentId = source.replace('fixo_', '');
       const content = fixedContent.find(c => c.id === contentId);
       return content?.name || 'FIXO';
     }
     if (source.startsWith('genreyear_')) {
-      // Find matching option label
       const opt = genreYearOptions.find(o => o.value === source);
       if (opt) return opt.label.replace(/^[^\w]+/, '').trim();
-      // Fallback: parse it
       const parts = source.replace('genreyear_', '');
       const lastUnderscore = parts.lastIndexOf('_');
       const genre = parts.substring(0, lastUnderscore);
@@ -542,6 +548,7 @@ export function SequenceView() {
   };
 
   const getSourceBadgeLabel = (source: string): string => {
+    if (source.startsWith('file_')) return '📂';
     if (source.startsWith('fixo_')) return '📌';
     if (source.startsWith('genreyear_')) return '🎵📅';
     if (source.startsWith('genre_')) return '🎵';
@@ -554,6 +561,29 @@ export function SequenceView() {
       return name.length > 8 ? name.slice(0, 7) + '…' : name.toUpperCase();
     }
     return source.toUpperCase().slice(0, 4);
+  };
+
+  // File picker handler for selecting a local file
+  const handleSelectFile = async (type: 'default' | 'form', position: number) => {
+    if (!window.electronAPI?.selectFile) {
+      toast({ title: '⚠️ Disponível apenas no Desktop', variant: 'destructive' });
+      return;
+    }
+    const filePath = await window.electronAPI.selectFile({
+      filters: [
+        { name: 'Áudio', extensions: ['mp3', 'wav', 'flac', 'ogg', 'wma', 'm4a'] },
+        { name: 'Todos os arquivos', extensions: ['*'] },
+      ],
+    });
+    if (!filePath) return;
+    const value = `file_${filePath}`;
+    if (type === 'default') {
+      handleChange(position, value);
+    } else {
+      handleFormSequenceChange(position, value);
+    }
+    const fileName = filePath.split(/[/\\]/).pop() || filePath;
+    toast({ title: '📂 Arquivo selecionado', description: fileName });
   };
 
   const formatTime = (hour: number, minute: number) => {
@@ -831,6 +861,17 @@ export function SequenceView() {
                         >
                           <Edit2 className="w-3 h-3" />
                         </Button>
+                        {window.electronAPI?.selectFile && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10"
+                            onClick={() => handleSelectFile('default', item.position)}
+                            title="Selecionar arquivo local"
+                          >
+                            <FolderOpen className="w-3 h-3" />
+                          </Button>
+                        )}
                         {isFixoItem && !isEditing && (
                           <Button
                             variant="ghost"
@@ -891,6 +932,19 @@ export function SequenceView() {
                             {item.customFileName || getDefaultFileName(item.radioSource)}
                           </span>
                           <Pencil className="w-3 h-3 text-emerald-400/60" />
+                        </div>
+                      )}
+                      
+                      {/* Show file path for local file items */}
+                      {item.radioSource.startsWith('file_') && (
+                        <div 
+                          className="mt-1 pl-8 flex items-center gap-2 cursor-pointer hover:bg-sky-500/10 rounded px-2 py-1 -mx-2"
+                          onClick={() => handleSelectFile('default', item.position)}
+                        >
+                          <span className="text-[10px] text-sky-400 font-mono flex-1 truncate">
+                            {item.radioSource.replace('file_', '').split(/[/\\]/).pop()}
+                          </span>
+                          <FolderOpen className="w-3 h-3 text-sky-400/60" />
                         </div>
                       )}
                     </div>

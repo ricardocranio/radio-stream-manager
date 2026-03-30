@@ -233,7 +233,8 @@ interface ElectronAPI {
   openFolder: (path: string) => Promise<{ success: boolean; error?: string }>;
   ensureFolder: (path: string) => Promise<{ success: boolean; created?: boolean; error?: string }>;
   selectFolder: () => Promise<string | null>;
-  
+  selectFile: (params?: { filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>;
+
   // Deezer/deemix integration
   downloadFromDeezer: (params: DeezerDownloadParams) => Promise<DeezerDownloadResult>;
   checkDeemix: () => Promise<boolean>;

@@ -14,7 +14,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openFolder: (path) => ipcRenderer.invoke('open-folder', path),
   ensureFolder: (path) => ipcRenderer.invoke('ensure-folder', path),
   selectFolder: () => ipcRenderer.invoke('select-folder'),
-  
+  selectFile: (params) => ipcRenderer.invoke('select-file', params),
+
   // Deezer/deemix integration
   downloadFromDeezer: (params) => ipcRenderer.invoke('download-from-deezer', params),
   checkDeemix: () => ipcRenderer.invoke('check-deemix'),
