@@ -6,7 +6,8 @@
  */
 import { useEffect, useRef, useCallback } from 'react';
 import { useRadioStore } from '@/store/radioStore';
-import { resolveTemplateLine, formatResolvedLine, resetMapasPools } from '@/lib/mapasBuilder/resolver';
+import { resolveTemplateLine, formatResolvedLine, resetMapasPools, seedGradeExclusions } from '@/lib/mapasBuilder/resolver';
+import { loadGradeFromStorage } from '@/lib/gradeBuilder/gradePersistence';
 import { loadCrossDayBuffer } from '@/lib/crossDayRepetition';
 import { reportServiceHeartbeat } from '@/hooks/useServiceWatchdog';
 
@@ -99,6 +100,28 @@ export function useAutoMapaBuilder() {
 
       // Build the full file (all slots), but with fresh pools
       resetMapasPools();
+
+      // Cross-mapa anti-repetition: load grade songs to exclude from mapa
+      try {
+        const dayCode = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'][dow];
+        const gradeData = loadGradeFromStorage(dayCode);
+        if (gradeData && gradeData.lineMap.size > 0) {
+          const gradeFilenames: string[] = [];
+          for (const line of gradeData.lineMap.values()) {
+            // Extract filenames from grade lines (format: "filename.mp3")
+            const matches = line.match(/"([^"]+\.mp3)"/gi);
+            if (matches) {
+              for (const m of matches) {
+                gradeFilenames.push(m.replace(/"/g, ''));
+              }
+            }
+          }
+          seedGradeExclusions(gradeFilenames);
+        }
+      } catch (e) {
+        console.warn('[MAPA-JIT] ⚠️ Erro ao carregar exclusões da grade:', e);
+      }
+
       const cache = new Map<string, string[]>();
       const allLines: string[] = [];
       

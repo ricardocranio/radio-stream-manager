@@ -448,3 +448,16 @@ export function resetMapasPools(): void {
   globalMusicUsed.clear();
   console.log('[MAPAS] 🔄 Pools resetados (incluindo dedup global)');
 }
+
+/**
+ * Seed the global music exclusion set with filenames from the grade builder.
+ * This prevents mapa songs from repeating grade songs in the same time slot.
+ */
+export function seedGradeExclusions(gradeFilenames: string[]): void {
+  for (const fn of gradeFilenames) {
+    globalMusicUsed.add(fn.toLowerCase());
+  }
+  if (gradeFilenames.length > 0) {
+    console.log(`[MAPAS] 🚫 Anti-repetição cross-grade: ${gradeFilenames.length} músicas da grade excluídas`);
+  }
+}

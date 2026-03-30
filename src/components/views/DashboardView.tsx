@@ -33,6 +33,9 @@ import { HourlyCapturesCard } from '@/components/dashboard/HourlyCapturesCard';
 import { OfflineAlertsCard } from '@/components/dashboard/OfflineAlertsCard';
 import { DuplicateDetectorCard } from '@/components/dashboard/DuplicateDetectorCard';
 import { WeeklyReportCard } from '@/components/dashboard/WeeklyReportCard';
+import { BlockedSongsCard } from '@/components/dashboard/BlockedSongsCard';
+import { P1FreshnessAlertCard } from '@/components/dashboard/P1FreshnessAlertCard';
+import { GradeDecisionLogCard } from '@/components/dashboard/GradeDecisionLogCard';
 
 interface DashboardViewProps {
   onNavigate?: (tab: string) => void;
@@ -1099,8 +1102,13 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       {/* Phase 5: Service Health Dashboard */}
       <ServiceHealthCard />
 
+      {/* Grade Decision Log */}
+      <GradeDecisionLogCard />
+
       {/* Phase 6: Intelligence Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <BlockedSongsCard />
+        <P1FreshnessAlertCard />
         <HourlyCapturesCard />
         <OfflineAlertsCard />
         <WeeklyReportCard />

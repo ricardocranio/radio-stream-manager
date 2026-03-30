@@ -14,6 +14,7 @@ import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
 import { isStationAllowedForDownload } from '@/lib/allowedDownloadStations';
 import { buildBlockedEngine } from '@/lib/blockedSongsEngine';
 import { buildAliasEngine } from '@/lib/aliasEngine';
+import { recordBlockedEvent } from '@/components/dashboard/BlockedSongsCard';
 
 // Shared ID3 genre utilities
 import { normalizeId3Genre as normalizeId3GenreForDl, genreToEnergy as genreToEnergyForDl, routeFileByGenre } from '@/lib/id3GenreUtils';
@@ -122,6 +123,7 @@ export function useGlobalDownloadService() {
     // 🚫 Block check BEFORE any operation
     if (blockedEngine.isBlocked(song.artist, song.title)) {
       console.log(`[DL-SVC] 🚫 Bloqueada, não será baixada: ${song.artist} - ${song.title}`);
+      recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'exact', source: 'download' });
       useRadioStore.getState().removeMissingSong(song.id);
       return false;
     }
@@ -546,6 +548,7 @@ export function useGlobalDownloadService() {
         // 🚫 BLOCKED CHECK AT QUEUE ENTRY — catches songs added before block rule existed
         if (blockedEngine.isBlocked(song.artist, song.title)) {
           console.log(`[DL-SVC] 🚫 Bloqueada na fila: ${song.artist} - ${song.title}`);
+          recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'exact', source: 'download' });
           useRadioStore.getState().removeMissingSong(song.id);
           continue;
         }
@@ -555,6 +558,7 @@ export function useGlobalDownloadService() {
         if ((resolved.artist !== song.artist || resolved.title !== song.title) &&
             blockedEngine.isBlocked(resolved.artist, resolved.title)) {
           console.log(`[DL-SVC] 🚫 Bloqueada (via alias "${resolved.artist} - ${resolved.title}"): ${song.artist} - ${song.title}`);
+          recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'alias', source: 'download' });
           useRadioStore.getState().removeMissingSong(song.id);
           continue;
         }
