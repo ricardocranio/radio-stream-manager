@@ -493,16 +493,19 @@ export function SequenceView() {
 
   // Get display name for a sequence item source
   const getSourceDisplayName = (source: string): string => {
+    if (source.startsWith('file_')) {
+      const filePath = source.replace('file_', '');
+      const fileName = filePath.split(/[/\\]/).pop() || filePath;
+      return `📂 ${fileName}`;
+    }
     if (source.startsWith('fixo_')) {
       const contentId = source.replace('fixo_', '');
       const content = fixedContent.find(c => c.id === contentId);
       return content?.name || 'FIXO';
     }
     if (source.startsWith('genreyear_')) {
-      // Find matching option label
       const opt = genreYearOptions.find(o => o.value === source);
       if (opt) return opt.label.replace(/^[^\w]+/, '').trim();
-      // Fallback: parse it
       const parts = source.replace('genreyear_', '');
       const lastUnderscore = parts.lastIndexOf('_');
       const genre = parts.substring(0, lastUnderscore);
