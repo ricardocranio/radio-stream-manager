@@ -645,7 +645,7 @@ export function useAutoGradeBuilder() {
       stationNameToStyle[s.name.toLowerCase()] = s.styles?.[0] || 'POP/VARIADO';
       stationNameToStyle[s.id] = s.styles?.[0] || 'POP/VARIADO';
     });
-    data.forEach(song => {
+    sortedData.forEach(song => {
       const songKey = `${song.title.toLowerCase()}-${song.artist.toLowerCase()}`;
       if (seenSongs.has(songKey)) return;
       seenSongs.add(songKey);
