@@ -703,7 +703,7 @@ export function SequenceView() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="space-y-4">
         {/* Default Sequence Configuration */}
         <Collapsible open={defaultOpen} onOpenChange={setDefaultOpen}>
         <Card className="glass-card">
@@ -723,8 +723,7 @@ export function SequenceView() {
           </CardHeader>
           <CollapsibleContent>
           <CardContent className="p-4">
-            <ScrollArea className="h-[400px] pr-4">
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
                 {localSequence.map((item) => {
                   const isFixoItem = item.radioSource.startsWith('fixo_');
                   const isEditing = editingPosition === item.position;
@@ -863,7 +862,6 @@ export function SequenceView() {
                   );
                 })}
               </div>
-            </ScrollArea>
             <div className="flex gap-2 mt-4 pt-4 border-t border-border">
               <Button
                 variant="outline"
@@ -913,8 +911,7 @@ export function SequenceView() {
                 Nenhum conteúdo fixo cadastrado.
               </p>
             ) : (
-              <ScrollArea className="h-[400px] pr-2">
-                <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
                   {fixedContent.map((content) => (
                     <div
                       key={content.id}
@@ -950,7 +947,6 @@ export function SequenceView() {
                     </div>
                   ))}
                 </div>
-              </ScrollArea>
             )}
           </CardContent>
           </CollapsibleContent>
@@ -973,7 +969,7 @@ export function SequenceView() {
                 Visualização de como as músicas serão selecionadas em cada bloco:
               </p>
               
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2">
                 {(activeScheduled ? activeSequence : localSequence).map((item) => {
                   return (
                     <div
@@ -991,7 +987,7 @@ export function SequenceView() {
 
               <div className="mt-6 p-4 rounded-lg bg-muted/30 border border-border">
                 <h4 className="font-medium text-sm mb-2">Legenda</h4>
-                <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-6 gap-2 text-xs">
                   {stations.slice(0, 6).map((station) => (
                     <div key={station.id} className="flex items-center gap-2">
                       <div className={`w-3 h-3 rounded ${getStationColor(station.id)}`} />
