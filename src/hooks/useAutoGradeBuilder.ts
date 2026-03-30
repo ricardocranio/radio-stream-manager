@@ -98,6 +98,24 @@ interface AutoGradeState {
   pendingGradeLines: Map<string, string>;
   /** Duration in minutes for each built block, keyed by block time */
   pendingBlockDurations: Map<string, number>;
+  /** Station map for preview: normalized "artist-title" → station name */
+  pendingStationMap: Record<string, string>;
+}
+
+/** Build a normalized station map from block logs for preview radio badges */
+function buildStationMapFromLogs(logs: BlockLogItem[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  const normalizeKey = (str: string) =>
+    str.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
+  
+  for (const log of logs) {
+    if (log.type === 'used' && log.station && log.artist && log.title) {
+      const key = `${normalizeKey(log.artist)}-${normalizeKey(log.title)}`;
+      map[key] = log.station;
+    }
+  }
+  return map;
 }
 
 export function useAutoGradeBuilder() {
@@ -127,6 +145,7 @@ export function useAutoGradeBuilder() {
       currentProcessingSong: null, currentProcessingBlock: null, lastSaveProgress: 0,
       pendingGradeLines: persisted?.lineMap || new Map(),
       pendingBlockDurations: new Map(),
+      pendingStationMap: {},
     };
   });
 
@@ -1642,6 +1661,7 @@ export function useAutoGradeBuilder() {
           skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
           currentProcessingSong: null, currentProcessingBlock: null,
           pendingGradeLines: fullDayLineMap,
+          pendingStationMap: buildStationMapFromLogs(allLogs),
         }));
         toast({ title: '✅ Grade Completa Gerada!', description: `${filename} salvo com 48 blocos. ${stats.skipped} puladas, ${stats.substituted} substituídas, ${stats.missing} faltando.` });
       } else {
@@ -1691,6 +1711,7 @@ export function useAutoGradeBuilder() {
           ...prev,
           pendingGradeLines: new Map(),
           pendingBlockDurations: new Map(),
+          pendingStationMap: {},
         }));
       }
 
@@ -1871,6 +1892,7 @@ export function useAutoGradeBuilder() {
           currentBlock: currentTimeKey,
           nextBlock: nextTimeKey,
           pendingGradeLines: new Map(lineMap),
+          pendingStationMap: { ...prev.pendingStationMap },
         }));
         return;
       }
@@ -2013,6 +2035,7 @@ export function useAutoGradeBuilder() {
         skippedSongs: stats.skipped, substitutedSongs: stats.substituted, missingSongs: stats.missing,
         pendingGradeLines: new Map(lineMap),
         pendingBlockDurations: new Map(durationMap),
+        pendingStationMap: { ...prev.pendingStationMap, ...buildStationMapFromLogs(allLogs) },
       }));
 
       console.log(`[AUTO-GRADE] 📋 Grade montada em memória e persistida${isWebOnly ? ' (modo web - preview only)' : ' (aguardando janela de 10min para escrita)'}`);
