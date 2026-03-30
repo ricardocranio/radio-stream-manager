@@ -92,7 +92,7 @@ export function SequenceView() {
 
   // Build radio options with stations first, then special options, then each fixed content
   const stationOptions = stations
-    .filter(s => s.enabled !== false)
+    .filter(s => s.enabled === true)
     .map((s) => ({ value: s.id, label: s.name }));
   
   // Create individual options for each fixed content
