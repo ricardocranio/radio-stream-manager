@@ -68,6 +68,26 @@ export function SequenceView() {
   } = useRadioStore();
   const { toast } = useToast();
   const [localSequence, setLocalSequence] = useState(sequence);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    
+    setLocalSequence((prev) => {
+      const oldIndex = prev.findIndex(item => `seq-${item.position}` === active.id);
+      const newIndex = prev.findIndex(item => `seq-${item.position}` === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      const moved = arrayMove(prev, oldIndex, newIndex);
+      // Renumber positions
+      return moved.map((item, i) => ({ ...item, position: i + 1 }));
+    });
+  }, []);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<ScheduledSequence | null>(null);
   
