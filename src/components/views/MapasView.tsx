@@ -9,6 +9,7 @@ import { useRadioStore } from '@/store/radioStore';
 import { resolveTemplateLine, formatResolvedLine, resetMapasPools } from '@/lib/mapasBuilder/resolver';
 import type { MapaResolvedLine, MapaCodeConfig, MapaTemplateLine } from '@/lib/mapasBuilder/types';
 import { MapIcon, FileText, Play, Settings2, Radio, Music, Mic2, Clock, FolderOpen, Plus, RotateCcw, Trash2, GripVertical, Save, ChevronDown, ChevronRight, Zap, X, Pencil, Eye, ArrowLeft } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
