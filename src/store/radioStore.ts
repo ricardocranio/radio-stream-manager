@@ -789,7 +789,7 @@ export const useRadioStore = create<RadioState>()(
       songAliases: [
         { id: 'default-1', fromArtist: 'naldo lima', fromTitle: 'retrovisor', toArtist: 'Gusttavo Lima', toTitle: 'Retrovisor' },
         { id: 'default-2', fromArtist: 'Kaize', fromTitle: 'Olha onde eu to', toArtist: 'Ana Castela', toTitle: 'Olha onde eu to' },
-        { id: 'default-3', fromArtist: 'Olho Seco', fromTitle: 'Olho Seco (Ao Vivo em Lisboa)', toArtist: 'Luan Santana', toTitle: 'OLHO MARROM (Ao Vivo em Lisboa)' },
+        { id: 'default-3', fromArtist: 'Olho Seco', fromTitle: 'Nada (Lisboa) [Ao Vivo]', toArtist: 'Luan Santana', toTitle: 'OLHO MARROM (Ao Vivo em Lisboa)' },
         { id: 'default-4', fromArtist: 'x-terra', fromTitle: 'i will survive', toArtist: 'Léo Santana', toTitle: 'Desliza (Olhinho No Corpinho)' },
         { id: 'default-5', fromArtist: 'PROMESSA D', fromTitle: 'PEDIDO DE SOCORRO', toArtist: 'Gustavo Mioto', toTitle: 'Pedido De Socorro (Ao Vivo)' },
         { id: 'default-6', fromArtist: 'PROMESSA D', fromTitle: 'PEDIDO DE SOCORRO (AO VIVO)', toArtist: 'Gustavo Mioto ', toTitle: ' Pedido De Socorro (Ao Vivo)' },
