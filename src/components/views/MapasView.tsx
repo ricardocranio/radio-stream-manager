@@ -521,7 +521,17 @@ function MapasViewInner() {
               <MapIcon className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-foreground tracking-tight">Mapas Comerciais</h1>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-lg font-bold text-foreground tracking-tight">Mapas Comerciais</h1>
+                <Switch
+                  checked={mapasConfig.enabled}
+                  onCheckedChange={(checked) => setMapasConfig({ enabled: checked })}
+                  className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-muted"
+                />
+                <span className={`text-[9px] font-semibold uppercase tracking-wider ${mapasConfig.enabled ? 'text-emerald-400' : 'text-muted-foreground/50'}`}>
+                  {mapasConfig.enabled ? 'ON' : 'OFF'}
+                </span>
+              </div>
               <p className="text-[10px] text-muted-foreground/60 font-mono">C:\Playlist\pgm\Mapas</p>
             </div>
           </div>
