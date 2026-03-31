@@ -5,15 +5,16 @@
  * specifies a radio station, and songs MUST come from that station's captures.
  * Randomness is only acceptable as the absolute last resort.
  * 
- * Order: P1 → P0 → P1.5 → P0.75 → P4 → P5 → P6
+ * Order: P1 → P1-EXT → P0 → P1.5 → P0.75 → P4 → P5 → P6
  * 
- * P1:    Station Pool — songs from the configured radio station (8 JIT attempts)
- * P0:    Carry-over — songs from previous blocks now downloaded
- * P1.5:  DNA/Style match — songs from other stations with same style (4 JIT attempts)
- * P0.75: TOP25 — songs from the ranking TOP25
- * P4:    General Pool — STYLE-FILTERED first, then any (3 JIT for same style)
- * P5:    Curadoria — random ranking song
- * P6:    Coringa — wildcard fallback code (mus/rom/jov)
+ * P1:     Station Pool — fresh songs (≤15min) from the configured radio station
+ * P1-EXT: Station Pool Extended — OLDER songs from the SAME station (preserves identity)
+ * P0:     Carry-over — songs from previous blocks now downloaded
+ * P1.5:   DNA/Style match — songs from other stations with same style (4 JIT attempts)
+ * P0.75:  TOP25 — songs from the ranking TOP25
+ * P4:     General Pool — STYLE-FILTERED first, then any (3 JIT for same style)
+ * P5:     Curadoria — random ranking song
+ * P6:     Coringa — wildcard fallback code (mus/rom/jov)
  * 
  * P0.5 (fresh from ANY station) was REMOVED because it caused random selection
  * that broke the monitoring sequence identity.
@@ -504,6 +505,96 @@ export async function selectSongForSlot(
             style: stationStyle,
             targetBlock: timeStr,
           });
+        }
+      }
+    }
+  }
+
+  // ============================================================
+  // PRIORITY P1-EXT: Same station, older songs (beyond 15min cutoff)
+  // When P1 finds no fresh songs, we STILL prefer the target station's
+  // older captures over jumping to completely different stations.
+  // This preserves the station identity of the sequence.
+  // ============================================================
+  if (!selectedSong && stationSongs.length > 0) {
+    const now_ext = Date.now();
+    const P1_MAX_AGE_MS_EXT = 15 * 60 * 1000;
+
+    // Get songs that were TOO OLD for P1 but still belong to the correct station
+    const olderStationSongs = [...stationSongs]
+      .filter(c => {
+        if (!c.scrapedAt) return true; // no timestamp = include
+        return (now_ext - new Date(c.scrapedAt).getTime()) > P1_MAX_AGE_MS_EXT;
+      })
+      .sort((a, b) => {
+        if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
+        return 0;
+      })
+      .filter(c => isValidCandidate(c.title, c.artist));
+
+    if (olderStationSongs.length > 0) {
+      console.log(`[SONG-SELECT] 🕐 [P1-EXT] Tentando ${olderStationSongs.length} músicas MAIS ANTIGAS de "${stationName}" (mantendo identidade da rádio)`);
+
+      const extBatchEntries = olderStationSongs.flatMap(c => {
+        const entries = [{ artist: c.artist, title: c.title }];
+        const corrected = aliasEngine.resolve(c.artist, c.title);
+        if (corrected.artist !== c.artist || corrected.title !== c.title) {
+          entries.push({ artist: corrected.artist, title: corrected.title });
+        }
+        return entries;
+      });
+      const extMap = extBatchEntries.length
+        ? await ctx.batchFindSongsInLibrary(extBatchEntries)
+        : new Map();
+
+      for (const candidate of olderStationSongs) {
+        const libraryResult = await findWithAliasFallback(candidate.artist, candidate.title, extMap as Map<string, any>);
+        if (libraryResult?.exists) {
+          const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+          const ageMin = candidate.scrapedAt ? Math.round((now_ext - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
+          selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+          selCtx.previousEnergy = (candidate as any).ai_energy || null;
+          selCtx.previousBpm = (candidate as any).bpm || null;
+          logs.push({
+            blockTime: timeStr,
+            type: 'used',
+            title: candidate.title,
+            artist: candidate.artist,
+            station: candidate.station,
+            style: candidate.style,
+            reason: `[P1-EXT] Pool estendido "${stationName}" (frescor: ${ageMin}min, mantendo identidade)`,
+          });
+          console.log(`[SONG-SELECT] ✅ [P1-EXT] Selecionada: "${candidate.artist} - ${candidate.title}" (${ageMin}min, da mesma rádio)`);
+          break;
+        }
+      }
+
+      // JIT for older station songs (up to 4 attempts)
+      if (!selectedSong) {
+        let jitExtAttempts = 0;
+        const maxJitExt = 4;
+        for (const candidate of olderStationSongs) {
+          if (jitExtAttempts >= maxJitExt) break;
+          jitExtAttempts++;
+          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
+          if (downloaded) {
+            const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+            if (recheck.exists) {
+              const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              const ageMin = candidate.scrapedAt ? Math.round((now_ext - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
+              selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+              logs.push({
+                blockTime: timeStr,
+                type: 'used',
+                title: candidate.title,
+                artist: candidate.artist,
+                station: candidate.station,
+                style: candidate.style,
+                reason: `[P1-EXT] JIT da mesma rádio "${stationName}" (${ageMin}min, tentativa ${jitExtAttempts})`,
+              });
+              break;
+            }
+          }
         }
       }
     }
