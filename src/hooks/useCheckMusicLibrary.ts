@@ -297,4 +297,4 @@ export async function checkSongInLibrary(
 }
 
 // Re-export cache functions for external use
-export { markSongAsDownloaded, getCachedVerification } from '@/lib/libraryVerificationCache';
+export { markSongAsDownloaded, markSongAsDownloadedWithAlias, getCachedVerification } from '@/lib/libraryVerificationCache';
