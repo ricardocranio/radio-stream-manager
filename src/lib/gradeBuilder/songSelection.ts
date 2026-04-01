@@ -474,11 +474,12 @@ export async function selectSongForSlot(
         jitAttemptsP1++;
         const ageMin = candidate.scrapedAt ? Math.round((now - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
         console.log(`[SONG-SELECT] 🔍 [P1] "${candidate.artist} - ${candidate.title}" (${ageMin}min) ausente, tentativa JIT ${jitAttemptsP1}/${maxJitAttemptsP1}...`);
-        const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
+        const jitAlias = aliasEngine.resolve(candidate.artist, candidate.title);
+        const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs, jitAlias.artist, jitAlias.title);
         if (downloaded) {
-          const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+          const recheck = await findWithAliasFallback(candidate.artist, candidate.title);
           if (recheck.exists) {
-            const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+            const correctFilename = recheck.filename || sanitizeFilename(`${jitAlias.artist} - ${jitAlias.title}.mp3`);
             selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
             logs.push({
               blockTime: timeStr,
