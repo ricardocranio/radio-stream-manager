@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power, PlusCircle, MinusCircle, Pencil, X, Check, ChevronDown, FolderOpen } from 'lucide-react';
+import { GripVertical, Save, RotateCcw, Plus, Trash2, Clock, Edit2, Calendar, Power, PlusCircle, MinusCircle, Pencil, X, Check, ChevronDown, FolderOpen, Download, Upload } from 'lucide-react';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
@@ -1016,6 +1016,62 @@ export function SequenceView() {
                 disabled={localSequence.length <= 5}
               >
                 <MinusCircle className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex gap-2 mt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  const exportData = {
+                    defaultSequence: localSequence,
+                    scheduledSequences: scheduledSequences,
+                    exportedAt: new Date().toISOString(),
+                  };
+                  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `sequencia_${new Date().toISOString().slice(0, 10)}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  toast({ title: '📥 Exportado', description: `Sequência padrão (${localSequence.length} posições) + ${scheduledSequences.length} programadas exportadas.` });
+                }}
+              >
+                <Download className="w-3 h-3 mr-1" />
+                Exportar
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.json';
+                  input.onchange = async (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (!file) return;
+                    try {
+                      const text = await file.text();
+                      const data = JSON.parse(text);
+                      if (data.defaultSequence && Array.isArray(data.defaultSequence)) {
+                        setLocalSequence(data.defaultSequence);
+                        setSequence(data.defaultSequence);
+                        toast({ title: '📤 Importado', description: `Sequência padrão com ${data.defaultSequence.length} posições importada.` });
+                      } else {
+                        toast({ title: '❌ Erro', description: 'Arquivo não contém sequência válida.', variant: 'destructive' });
+                      }
+                    } catch {
+                      toast({ title: '❌ Erro', description: 'Arquivo JSON inválido.', variant: 'destructive' });
+                    }
+                  };
+                  input.click();
+                }}
+              >
+                <Upload className="w-3 h-3 mr-1" />
+                Importar
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2 text-center">

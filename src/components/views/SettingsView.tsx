@@ -813,6 +813,68 @@ export function SettingsView() {
               <FolderPlus className="w-4 h-4 mr-2" />
               Adicionar Pasta
             </Button>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  const exportData = {
+                    musicFolders: localConfig.musicFolders.filter(Boolean),
+                    similarityThreshold: localConfig.similarityThreshold,
+                    exportedAt: new Date().toISOString(),
+                  };
+                  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `banco_musical_${new Date().toISOString().slice(0, 10)}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  toast({ title: '📥 Exportado', description: `${localConfig.musicFolders.filter(Boolean).length} pastas exportadas.` });
+                }}
+              >
+                <Download className="w-3 h-3 mr-1" />
+                Exportar
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.json';
+                  input.onchange = async (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (!file) return;
+                    try {
+                      const text = await file.text();
+                      const data = JSON.parse(text);
+                      if (data.musicFolders && Array.isArray(data.musicFolders)) {
+                        const current = localConfig.musicFolders.filter(Boolean);
+                        const imported = data.musicFolders.filter((f: string) => typeof f === 'string' && f.trim());
+                        const merged = [...new Set([...current, ...imported])];
+                        setLocalConfig(prev => ({ ...prev, musicFolders: merged }));
+                        if (data.similarityThreshold && typeof data.similarityThreshold === 'number') {
+                          setLocalConfig(prev => ({ ...prev, similarityThreshold: data.similarityThreshold }));
+                        }
+                        toast({ title: '📤 Importado', description: `${imported.length} pastas importadas (${merged.length} total sem duplicatas).` });
+                      } else {
+                        toast({ title: '❌ Erro', description: 'Arquivo não contém configuração válida.', variant: 'destructive' });
+                      }
+                    } catch {
+                      toast({ title: '❌ Erro', description: 'Arquivo JSON inválido.', variant: 'destructive' });
+                    }
+                  };
+                  input.click();
+                }}
+              >
+                <Upload className="w-3 h-3 mr-1" />
+                Importar
+              </Button>
+            </div>
             
             <p className="text-xs text-muted-foreground">
               O sistema vasculha recursivamente todas as subpastas procurando arquivos de áudio (.mp3, .flac, .wav, .m4a, .aac, .ogg, .wma)
