@@ -349,7 +349,11 @@ export function useCapturedDownloadService() {
       for (const song of data) {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
         if (seen.has(key) || processedRef.current.has(key)) continue;
-        if (isBlocked(song.artist, song.title)) continue;
+        if (blockedEngine.isBlocked(song.artist, song.title)) {
+          console.log(`[CAP-DL] 🚫 Bloqueada na fila: ${song.artist} - ${song.title}`);
+          recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'exact', source: 'captured-download' });
+          continue;
+        }
         // === STATION FILTER: only download from sequence/priority stations ===
         if (!isStationAllowedForDownload(song.station_name)) continue;
         seen.add(key);
