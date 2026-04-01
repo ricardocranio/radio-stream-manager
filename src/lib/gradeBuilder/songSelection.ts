@@ -41,7 +41,8 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
  * @param maxWaitMs - Maximum time to wait (default 30s for full-day, up to 720s/12min for incremental)
  */
 async function tryDownloadAndWait(
-  artist: string, title: string, ctx: GradeContext, maxWaitMs: number = 30000
+  artist: string, title: string, ctx: GradeContext, maxWaitMs: number = 30000,
+  aliasArtist?: string, aliasTitle?: string
 ): Promise<boolean> {
   if (!isElectron || !window.electronAPI?.downloadFromDeezer) {
     return false;
@@ -53,12 +54,20 @@ async function tryDownloadAndWait(
     return false;
   }
 
-  console.log(`[SONG-SELECT] ⏬ Download imediato: ${artist} - ${title} (timeout: ${Math.round(maxWaitMs / 1000)}s)`);
+  // Use alias-corrected name for Deezer search (better match), fall back to raw name
+  const dlArtist = aliasArtist || artist;
+  const dlTitle = aliasTitle || title;
+  
+  if (dlArtist !== artist || dlTitle !== title) {
+    console.log(`[SONG-SELECT] ⏬ Download JIT (alias): "${artist} - ${title}" → "${dlArtist} - ${dlTitle}" (timeout: ${Math.round(maxWaitMs / 1000)}s)`);
+  } else {
+    console.log(`[SONG-SELECT] ⏬ Download imediato: ${dlArtist} - ${dlTitle} (timeout: ${Math.round(maxWaitMs / 1000)}s)`);
+  }
 
   try {
     const result = await Promise.race([
       window.electronAPI.downloadFromDeezer({
-        artist, title,
+        artist: dlArtist, title: dlTitle,
         arl: storeState.deezerConfig.arl,
         outputFolder: storeState.deezerConfig.downloadFolder,
         quality: storeState.deezerConfig.quality,
@@ -67,18 +76,20 @@ async function tryDownloadAndWait(
     ]);
 
     if (result && typeof result === 'object' && 'success' in result && result.success) {
-      console.log(`[SONG-SELECT] ✅ Download concluído a tempo: ${artist} - ${title}`);
-      // Clear cache so recheck goes to disk and gets the REAL filename
-      // Do NOT cache a fabricated filename here — the recheck will do a proper disk lookup
+      console.log(`[SONG-SELECT] ✅ Download concluído a tempo: ${dlArtist} - ${dlTitle}`);
       const { clearVerificationForSong } = await import('@/lib/libraryVerificationCache');
+      // Clear cache for BOTH names so recheck finds the file
       clearVerificationForSong(artist, title);
+      if (dlArtist !== artist || dlTitle !== title) {
+        clearVerificationForSong(dlArtist, dlTitle);
+      }
       return true;
     }
 
-    console.log(`[SONG-SELECT] ⏰ Download não concluiu a tempo: ${artist} - ${title}`);
+    console.log(`[SONG-SELECT] ⏰ Download não concluiu a tempo: ${dlArtist} - ${dlTitle}`);
     return false;
   } catch (error) {
-    console.error(`[SONG-SELECT] ❌ Erro no download imediato: ${artist} - ${title}`, error);
+    console.error(`[SONG-SELECT] ❌ Erro no download imediato: ${dlArtist} - ${dlTitle}`, error);
     return false;
   }
 }
@@ -463,11 +474,12 @@ export async function selectSongForSlot(
         jitAttemptsP1++;
         const ageMin = candidate.scrapedAt ? Math.round((now - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
         console.log(`[SONG-SELECT] 🔍 [P1] "${candidate.artist} - ${candidate.title}" (${ageMin}min) ausente, tentativa JIT ${jitAttemptsP1}/${maxJitAttemptsP1}...`);
-        const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
+        const jitAlias = aliasEngine.resolve(candidate.artist, candidate.title);
+        const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs, jitAlias.artist, jitAlias.title);
         if (downloaded) {
-          const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+          const recheck = await findWithAliasFallback(candidate.artist, candidate.title);
           if (recheck.exists) {
-            const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+            const correctFilename = recheck.filename || sanitizeFilename(`${jitAlias.artist} - ${jitAlias.title}.mp3`);
             selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
             logs.push({
               blockTime: timeStr,
@@ -576,11 +588,12 @@ export async function selectSongForSlot(
         for (const candidate of olderStationSongs) {
           if (jitExtAttempts >= maxJitExt) break;
           jitExtAttempts++;
-          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
+          const jitAlias = aliasEngine.resolve(candidate.artist, candidate.title);
+          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs, jitAlias.artist, jitAlias.title);
           if (downloaded) {
-            const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+            const recheck = await findWithAliasFallback(candidate.artist, candidate.title);
             if (recheck.exists) {
-              const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              const correctFilename = recheck.filename || sanitizeFilename(`${jitAlias.artist} - ${jitAlias.title}.mp3`);
               const ageMin = candidate.scrapedAt ? Math.round((now_ext - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
               selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
               logs.push({
@@ -694,11 +707,12 @@ export async function selectSongForSlot(
 
         if (jitAttemptsDNA < maxJitAttemptsDNA) {
           jitAttemptsDNA++;
-          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
+          const jitAlias = aliasEngine.resolve(candidate.artist, candidate.title);
+          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs, jitAlias.artist, jitAlias.title);
           if (downloaded) {
-            const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+            const recheck = await findWithAliasFallback(candidate.artist, candidate.title);
             if (recheck.exists) {
-              const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              const correctFilename = recheck.filename || sanitizeFilename(`${jitAlias.artist} - ${jitAlias.title}.mp3`);
               selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
               stats.substituted++;
               logs.push({
@@ -828,11 +842,12 @@ export async function selectSongForSlot(
 
         if (jitAttemptsP4 < maxJitAttemptsP4 && candidate.style === stationStyle) {
           jitAttemptsP4++;
-          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
+          const jitAlias = aliasEngine.resolve(candidate.artist, candidate.title);
+          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs, jitAlias.artist, jitAlias.title);
           if (downloaded) {
-            const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+            const recheck = await findWithAliasFallback(candidate.artist, candidate.title);
             if (recheck.exists) {
-              const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              const correctFilename = recheck.filename || sanitizeFilename(`${jitAlias.artist} - ${jitAlias.title}.mp3`);
               selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
               stats.substituted++;
               logs.push({
