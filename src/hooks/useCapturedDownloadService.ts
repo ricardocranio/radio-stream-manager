@@ -85,7 +85,6 @@ export function useCapturedDownloadService() {
       recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'alias', source: 'captured-download' });
       return 'exists';
     }
-    }
 
     // Check library first (using corrected name)
     if (config.musicFolders?.length > 0) {
