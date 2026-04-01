@@ -11,6 +11,7 @@ interface CacheEntry {
   matchedFile?: string;
   similarity?: number;
   timestamp: number;
+  downloaded?: boolean; // true = confirmed download, uses longer TTL
 }
 
 const CACHE_TTL = 3 * 60 * 1000; // 3 minutes
