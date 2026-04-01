@@ -14,6 +14,7 @@ interface CacheEntry {
 }
 
 const CACHE_TTL = 3 * 60 * 1000; // 3 minutes
+const DOWNLOADED_TTL = 60 * 60 * 1000; // 1 hour for confirmed downloads
 const STORAGE_KEY = 'pgmr_lib_cache';
 const MAX_CACHE_SIZE = 500;
 const cache = new Map<string, CacheEntry>();
