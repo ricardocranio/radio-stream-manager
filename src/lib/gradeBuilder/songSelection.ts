@@ -842,11 +842,12 @@ export async function selectSongForSlot(
 
         if (jitAttemptsP4 < maxJitAttemptsP4 && candidate.style === stationStyle) {
           jitAttemptsP4++;
-          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs);
+          const jitAlias = aliasEngine.resolve(candidate.artist, candidate.title);
+          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs, jitAlias.artist, jitAlias.title);
           if (downloaded) {
-            const recheck = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+            const recheck = await findWithAliasFallback(candidate.artist, candidate.title);
             if (recheck.exists) {
-              const correctFilename = recheck.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              const correctFilename = recheck.filename || sanitizeFilename(`${jitAlias.artist} - ${jitAlias.title}.mp3`);
               selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
               stats.substituted++;
               logs.push({
