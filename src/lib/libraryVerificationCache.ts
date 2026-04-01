@@ -11,9 +11,11 @@ interface CacheEntry {
   matchedFile?: string;
   similarity?: number;
   timestamp: number;
+  downloaded?: boolean; // true = confirmed download, uses longer TTL
 }
 
 const CACHE_TTL = 3 * 60 * 1000; // 3 minutes
+const DOWNLOADED_TTL = 60 * 60 * 1000; // 1 hour for confirmed downloads
 const STORAGE_KEY = 'pgmr_lib_cache';
 const MAX_CACHE_SIZE = 500;
 const cache = new Map<string, CacheEntry>();
@@ -62,8 +64,9 @@ export function getCachedVerification(artist: string, title: string): CacheEntry
   
   if (!entry) return null;
   
-  // Check if expired
-  if (Date.now() - entry.timestamp > CACHE_TTL) {
+  // Check if expired (confirmed downloads get longer TTL)
+  const ttl = entry.downloaded ? DOWNLOADED_TTL : CACHE_TTL;
+  if (Date.now() - entry.timestamp > ttl) {
     cache.delete(key);
     return null;
   }
@@ -151,8 +154,26 @@ export function markSongAsDownloaded(artist: string, title: string, filename?: s
     matchedFile: safeFilename,
     similarity: 1.0,
     timestamp: Date.now(),
+    downloaded: true,
   });
   schedulePersist();
+}
+
+/**
+ * Mark song as downloaded under BOTH original and alias names.
+ * Prevents re-download when the same song appears with different names.
+ */
+export function markSongAsDownloadedWithAlias(
+  originalArtist: string, originalTitle: string,
+  aliasArtist: string, aliasTitle: string,
+  filename?: string
+): void {
+  markSongAsDownloaded(aliasArtist, aliasTitle, filename);
+  // Also cache under the original (scraped) name
+  if (originalArtist.toLowerCase().trim() !== aliasArtist.toLowerCase().trim() ||
+      originalTitle.toLowerCase().trim() !== aliasTitle.toLowerCase().trim()) {
+    markSongAsDownloaded(originalArtist, originalTitle, filename);
+  }
 }
 
 /**

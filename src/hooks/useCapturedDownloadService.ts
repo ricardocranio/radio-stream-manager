@@ -12,7 +12,7 @@ import { useRadioStore, DownloadHistoryEntry } from '@/store/radioStore';
 import { useCapturedDownloadStore } from '@/store/capturedDownloadStore';
 import { supabase } from '@/integrations/supabase/client';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
-import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
+import { markSongAsDownloaded, markSongAsDownloadedWithAlias } from '@/lib/libraryVerificationCache';
 import { subHours } from 'date-fns';
 import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 import { isStationAllowedForDownload } from '@/lib/allowedDownloadStations';
@@ -137,7 +137,7 @@ export function useCapturedDownloadService() {
       const duration = Date.now() - startTime;
 
       if (result?.success) {
-        markSongAsDownloaded(dlArtist, dlTitle, result.verifiedFile);
+        markSongAsDownloadedWithAlias(song.artist, song.title, dlArtist, dlTitle, result.verifiedFile);
 
         // Read ID3 genre from downloaded file and update DB
         let downloadedGenre: string | null = null;
