@@ -77,12 +77,13 @@ async function tryDownloadAndWait(
 
     if (result && typeof result === 'object' && 'success' in result && result.success) {
       console.log(`[SONG-SELECT] ✅ Download concluído a tempo: ${dlArtist} - ${dlTitle}`);
-      const { clearVerificationForSong } = await import('@/lib/libraryVerificationCache');
-      // Clear cache for BOTH names so recheck finds the file
+      const { clearVerificationForSong, markSongAsDownloadedWithAlias } = await import('@/lib/libraryVerificationCache');
+      // Clear stale cache and mark as downloaded for BOTH names
       clearVerificationForSong(artist, title);
       if (dlArtist !== artist || dlTitle !== title) {
         clearVerificationForSong(dlArtist, dlTitle);
       }
+      markSongAsDownloadedWithAlias(artist, title, dlArtist || artist, dlTitle || title);
       return true;
     }
 
