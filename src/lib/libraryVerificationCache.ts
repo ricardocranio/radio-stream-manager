@@ -64,8 +64,9 @@ export function getCachedVerification(artist: string, title: string): CacheEntry
   
   if (!entry) return null;
   
-  // Check if expired
-  if (Date.now() - entry.timestamp > CACHE_TTL) {
+  // Check if expired (confirmed downloads get longer TTL)
+  const ttl = entry.downloaded ? DOWNLOADED_TTL : CACHE_TTL;
+  if (Date.now() - entry.timestamp > ttl) {
     cache.delete(key);
     return null;
   }
