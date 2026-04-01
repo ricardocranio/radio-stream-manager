@@ -16,6 +16,9 @@ import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 import { subHours } from 'date-fns';
 import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 import { isStationAllowedForDownload } from '@/lib/allowedDownloadStations';
+import { buildBlockedEngine } from '@/lib/blockedSongsEngine';
+import { recordBlockedEvent } from '@/components/dashboard/BlockedSongsCard';
+import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
