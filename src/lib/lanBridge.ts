@@ -94,6 +94,7 @@ export function createLanElectronAPI(): typeof window.electronAPI {
     openFolder: (p: string) => lanApiCall('open-folder', p),
     ensureFolder: (p: string) => lanApiCall('ensure-folder', p),
     selectFolder: () => Promise.resolve(null), // Can't open native dialog remotely
+    selectFile: () => Promise.resolve(null), // Can't open native dialog remotely
     
     // Deezer/deemix
     downloadFromDeezer: (params: any) => lanApiCall('download-from-deezer', params),
@@ -146,6 +147,9 @@ export function createLanElectronAPI(): typeof window.electronAPI {
     radioagenciaCleanup: (params: any) => lanApiCall('radioagencia-cleanup', params),
     onRadioagenciaProgress: () => {},
     
+    // Content folder cleanup
+    cleanupContentFolder: (params: any) => lanApiCall('cleanup-content-folder', params),
+    
     // Grade files
     saveGradeFile: (params: any) => lanApiCall('save-grade-file', params),
     readGradeFile: (params: any) => lanApiCall('read-grade-file', params),
@@ -184,5 +188,8 @@ export function createLanElectronAPI(): typeof window.electronAPI {
     getMonitorLogs: () => lanApiCall('get-monitor-logs'),
     onMonitorLog: () => {},
     onMonitorStatus: () => {},
+    
+    // Download warnings
+    onDownloadWarning: () => {},
   } as any;
 }
