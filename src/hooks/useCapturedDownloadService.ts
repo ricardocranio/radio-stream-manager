@@ -16,6 +16,9 @@ import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 import { subHours } from 'date-fns';
 import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 import { isStationAllowedForDownload } from '@/lib/allowedDownloadStations';
+import { buildBlockedEngine } from '@/lib/blockedSongsEngine';
+import { recordBlockedEvent } from '@/components/dashboard/BlockedSongsCard';
+import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -42,6 +45,24 @@ export function useCapturedDownloadService() {
   const downloadOne = useCallback(async (song: CapturedQueueItem): Promise<'success' | 'exists' | 'error'> => {
     const { deezerConfig, config, addDownloadHistory, songAliases } = useRadioStore.getState();
 
+    // 🚫 Block check BEFORE any operation (using centralized engine)
+    const blockedEngine = buildBlockedEngine(
+      config.blockedSongs ?? [],
+      config.forbiddenWords ?? [],
+      songAliases ?? []
+    );
+    if (blockedEngine.isBlocked(song.artist, song.title)) {
+      console.log(`[CAP-DL] 🚫 Bloqueada, não será baixada: ${song.artist} - ${song.title}`);
+      recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'exact', source: 'captured-download' });
+      return 'exists'; // treat as "exists" to skip without error
+    }
+
+    // Skip vinhetas/jingles
+    if (isVinhetaOrJingle(song.artist, song.title)) {
+      console.log(`[CAP-DL] 🚫 Vinheta/jingle bloqueada: ${song.artist} - ${song.title}`);
+      return 'exists';
+    }
+
     // === Apply alias correction: use "Para" (correct) name, block "De" (wrong) ===
     let dlArtist = song.artist;
     let dlTitle = song.title;
@@ -55,6 +76,14 @@ export function useCapturedDownloadService() {
           break;
         }
       }
+    }
+
+    // Also check if alias-resolved name is blocked
+    if ((dlArtist !== song.artist || dlTitle !== song.title) &&
+        blockedEngine.isBlocked(dlArtist, dlTitle)) {
+      console.log(`[CAP-DL] 🚫 Bloqueada (via alias "${dlArtist} - ${dlTitle}"): ${song.artist} - ${song.title}`);
+      recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'alias', source: 'captured-download' });
+      return 'exists';
     }
 
     // Check library first (using corrected name)
@@ -307,46 +336,24 @@ export function useCapturedDownloadService() {
 
       if (error || !data) return;
 
-      // Deduplicate by artist+title and filter blocked songs (checking BOTH original and aliased names)
+      // Build centralized blocked engine (O(1) lookups with full normalization + alias support)
       const storeState = useRadioStore.getState();
-      const blockedList = (storeState.config.blockedSongs || []).map(s => s.toLowerCase().trim());
-      const blockedExact = new Set<string>(blockedList.filter(s => !s.endsWith(' - *')));
-      const blockedWildcardArtists = blockedList
-        .filter(s => s.endsWith(' - *'))
-        .map(s => s.replace(/ - \*$/, ''));
-      const forbiddenLower = (storeState.config.forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
-      const songAliases = storeState.songAliases || [];
-      
-      const isBlockedCheck = (artist: string, title: string): boolean => {
-        const artistLower = artist.trim().toLowerCase();
-        const titleLower = title.trim().toLowerCase();
-        const key = `${artistLower} - ${titleLower}`;
-        if (blockedExact.has(key)) return true;
-        if (blockedWildcardArtists.some(blocked => artistLower === blocked || artistLower.includes(blocked))) return true;
-        if (forbiddenLower.some(word => artistLower.includes(word) || titleLower.includes(word))) return true;
-        return false;
-      };
-      
-      const isBlocked = (artist: string, title: string): boolean => {
-        // Check original name
-        if (isBlockedCheck(artist, title)) return true;
-        // Check aliased (corrected) name too
-        for (const alias of songAliases) {
-          if (artist.trim().toLowerCase() === alias.fromArtist.toLowerCase().trim() &&
-              title.trim().toLowerCase() === alias.fromTitle.toLowerCase().trim()) {
-            if (isBlockedCheck(alias.toArtist, alias.toTitle)) return true;
-            break;
-          }
-        }
-        return false;
-      };
+      const blockedEngine = buildBlockedEngine(
+        storeState.config.blockedSongs ?? [],
+        storeState.config.forbiddenWords ?? [],
+        storeState.songAliases ?? []
+      );
       
       const seen = new Set<string>();
       const unique: CapturedQueueItem[] = [];
       for (const song of data) {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
         if (seen.has(key) || processedRef.current.has(key)) continue;
-        if (isBlocked(song.artist, song.title)) continue;
+        if (blockedEngine.isBlocked(song.artist, song.title)) {
+          console.log(`[CAP-DL] 🚫 Bloqueada na fila: ${song.artist} - ${song.title}`);
+          recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'exact', source: 'captured-download' });
+          continue;
+        }
         // === STATION FILTER: only download from sequence/priority stations ===
         if (!isStationAllowedForDownload(song.station_name)) continue;
         seen.add(key);
