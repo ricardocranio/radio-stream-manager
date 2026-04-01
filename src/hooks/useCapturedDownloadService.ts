@@ -45,6 +45,24 @@ export function useCapturedDownloadService() {
   const downloadOne = useCallback(async (song: CapturedQueueItem): Promise<'success' | 'exists' | 'error'> => {
     const { deezerConfig, config, addDownloadHistory, songAliases } = useRadioStore.getState();
 
+    // 🚫 Block check BEFORE any operation (using centralized engine)
+    const blockedEngine = buildBlockedEngine(
+      config.blockedSongs ?? [],
+      config.forbiddenWords ?? [],
+      songAliases ?? []
+    );
+    if (blockedEngine.isBlocked(song.artist, song.title)) {
+      console.log(`[CAP-DL] 🚫 Bloqueada, não será baixada: ${song.artist} - ${song.title}`);
+      recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'exact', source: 'captured-download' });
+      return 'exists'; // treat as "exists" to skip without error
+    }
+
+    // Skip vinhetas/jingles
+    if (isVinhetaOrJingle(song.artist, song.title)) {
+      console.log(`[CAP-DL] 🚫 Vinheta/jingle bloqueada: ${song.artist} - ${song.title}`);
+      return 'exists';
+    }
+
     // === Apply alias correction: use "Para" (correct) name, block "De" (wrong) ===
     let dlArtist = song.artist;
     let dlTitle = song.title;
@@ -58,6 +76,15 @@ export function useCapturedDownloadService() {
           break;
         }
       }
+    }
+
+    // Also check if alias-resolved name is blocked
+    if ((dlArtist !== song.artist || dlTitle !== song.title) &&
+        blockedEngine.isBlocked(dlArtist, dlTitle)) {
+      console.log(`[CAP-DL] 🚫 Bloqueada (via alias "${dlArtist} - ${dlTitle}"): ${song.artist} - ${song.title}`);
+      recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'alias', source: 'captured-download' });
+      return 'exists';
+    }
     }
 
     // Check library first (using corrected name)
