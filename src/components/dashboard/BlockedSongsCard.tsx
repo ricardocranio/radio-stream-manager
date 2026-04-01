@@ -14,7 +14,7 @@ export interface BlockedEvent {
   artist: string;
   title: string;
   rule: 'exact' | 'wildcard' | 'forbidden' | 'alias';
-  source: 'download' | 'grade' | 'mapa';
+  source: 'download' | 'grade' | 'mapa' | 'captured-download';
   timestamp: string;
 }
 
