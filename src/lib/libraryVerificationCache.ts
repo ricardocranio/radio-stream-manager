@@ -154,8 +154,26 @@ export function markSongAsDownloaded(artist: string, title: string, filename?: s
     matchedFile: safeFilename,
     similarity: 1.0,
     timestamp: Date.now(),
+    downloaded: true,
   });
   schedulePersist();
+}
+
+/**
+ * Mark song as downloaded under BOTH original and alias names.
+ * Prevents re-download when the same song appears with different names.
+ */
+export function markSongAsDownloadedWithAlias(
+  originalArtist: string, originalTitle: string,
+  aliasArtist: string, aliasTitle: string,
+  filename?: string
+): void {
+  markSongAsDownloaded(aliasArtist, aliasTitle, filename);
+  // Also cache under the original (scraped) name
+  if (originalArtist.toLowerCase().trim() !== aliasArtist.toLowerCase().trim() ||
+      originalTitle.toLowerCase().trim() !== aliasTitle.toLowerCase().trim()) {
+    markSongAsDownloaded(originalArtist, originalTitle, filename);
+  }
 }
 
 /**
