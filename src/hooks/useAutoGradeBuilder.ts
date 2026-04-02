@@ -1054,11 +1054,18 @@ export function useAutoGradeBuilder() {
         return timeMinutes >= startMin && timeMinutes < endMin;
       });
 
-    // === SEQUÊNCIA AGENDADA TEM PRIORIDADE ABSOLUTA ===
-    // Quando há sequência agendada ativa, pula TODOS os programas especiais,
+    // === VOZ DO BRASIL: PRIORIDADE MÁXIMA — NUNCA pode ser sobreposta ===
+    // Obrigatório por lei (60 min, bloco 21:30 eliminado)
+    if (hour === 21 && minute === 0 && isWeekday(targetDay)) {
+      console.log(`[GRADE] 🇧🇷 Voz do Brasil às ${timeStr} — OBRIGATÓRIO, ignora sequência agendada`);
+      return generateVozDoBrasil(timeStr);
+    }
+
+    // === SEQUÊNCIA AGENDADA TEM PRIORIDADE SOBRE DEMAIS PROGRAMAS ===
+    // Quando há sequência agendada ativa, pula programas especiais,
     // templates de sábado e conteúdo fixo — vai direto para geração baseada na sequência.
     if (hasScheduledSequence) {
-      console.log(`[GRADE] 📅 Sequência agendada ativa às ${timeStr} — sobrepondo TUDO (programas especiais, templates, conteúdo fixo)`);
+      console.log(`[GRADE] 📅 Sequência agendada ativa às ${timeStr} — sobrepondo programas especiais e conteúdo fixo`);
       // Fall through to Normal Block Logic below
     } else {
       // === Special Programs (only when NO scheduled sequence overrides) ===
@@ -1067,11 +1074,6 @@ export function useAutoGradeBuilder() {
       if (targetDay === 'sab') {
         const weekendResult = await generateWeekendTemplateBlock(hour, minute, timeStr, songsByStation, ctx);
         if (weekendResult) return fillBlockIfShort(weekendResult);
-      }
-
-      // Voz do Brasil (21:00 weekdays) - obrigatório por lei (60 min, bloco 21:30 eliminado)
-      if (hour === 21 && minute === 0 && isWeekday(targetDay)) {
-        return generateVozDoBrasil(timeStr);
       }
 
       // TOP10 Década (18:00 weekdays) - 10 músicas de 2000-2010 com vhtn
