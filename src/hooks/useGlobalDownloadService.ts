@@ -105,9 +105,9 @@ export function useGlobalDownloadService() {
     }
 
     const guard = createDownloadGuard({
-      storeState.config.blockedSongs ?? [],
-      storeState.config.forbiddenWords ?? [],
-      storeState.songAliases ?? []
+      blockedSongs: storeState.config.blockedSongs ?? [],
+      forbiddenWords: storeState.config.forbiddenWords ?? [],
+      songAliases: storeState.songAliases ?? [],
     });
     const decision = guard(song.artist, song.title);
     if (!decision.allowed) {

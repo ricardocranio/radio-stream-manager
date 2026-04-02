@@ -23,6 +23,7 @@
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { buildBlockedEngine } from '@/lib/blockedSongsEngine';
 import { buildAliasEngine } from '@/lib/aliasEngine';
+import { getDownloadDecision } from '@/lib/downloadGuard';
 import { songKey as makeSongKey } from '@/lib/songUtils';
 import { ensureFileMatchesGradeName, filenameNeedsSanitization, ensureFileRenamedOnDisk } from './sanitize';
 import type { SongEntry, BlockLogItem, BlockStats, GradeContext, CarryOverSong } from './types';
@@ -54,9 +55,19 @@ async function tryDownloadAndWait(
     return false;
   }
 
+  const decision = getDownloadDecision(artist, title, {
+    blockedSongs: storeState.config.blockedSongs ?? [],
+    forbiddenWords: storeState.config.forbiddenWords ?? [],
+    songAliases: storeState.songAliases ?? [],
+  });
+  if (!decision.allowed) {
+    console.log(`[SONG-SELECT] 🚫 Download JIT bloqueado: ${artist} - ${title}`);
+    return false;
+  }
+
   // Use alias-corrected name for Deezer search (better match), fall back to raw name
-  const dlArtist = aliasArtist || artist;
-  const dlTitle = aliasTitle || title;
+  const dlArtist = decision.downloadArtist || aliasArtist || artist;
+  const dlTitle = decision.downloadTitle || aliasTitle || title;
   
   if (dlArtist !== artist || dlTitle !== title) {
     console.log(`[SONG-SELECT] ⏬ Download JIT (alias): "${artist} - ${title}" → "${dlArtist} - ${dlTitle}" (timeout: ${Math.round(maxWaitMs / 1000)}s)`);
