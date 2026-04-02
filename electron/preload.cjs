@@ -73,6 +73,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Content folder cleanup
   cleanupContentFolder: (params) => ipcRenderer.invoke('cleanup-content-folder', params),
+  cleanupOldDayFiles: (params) => ipcRenderer.invoke('cleanup-old-day-files', params),
   
   // Grade file operations
   saveGradeFile: (params) => ipcRenderer.invoke('save-grade-file', params),

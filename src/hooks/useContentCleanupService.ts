@@ -1,10 +1,10 @@
 /**
  * Content Folder Cleanup Service
  * 
- * Automatically cleans the "Conteudos KF" folder 15 minutes before
- * each fixed content program starts (same logic as Voz do Brasil / Notícias).
- * 
- * This ensures fresh content is always ready for the next program block.
+ * Two cleanup tasks:
+ * 1. PkInfo cleanup: 15 minutes before each fixed content program
+ * 2. Old day files cleanup: Deletes files from past weekdays daily
+ *    (e.g. on Thursday, deletes Monday/Tuesday/Wednesday files)
  */
 
 import { useRef, useCallback } from 'react';
@@ -20,6 +20,7 @@ const DEFAULT_CONTENT_FOLDER = 'G:\\Outros computadores\\Meu computador\\Conteud
 
 // Track which cleanups have run today (avoid repeating)
 const CLEANED_KEY = 'pgmr_content_cleaned_slots';
+const OLD_DAY_CLEANED_KEY = 'pgmr_old_day_cleaned';
 
 function getCleanedSlots(): Set<string> {
   try {
@@ -38,6 +39,17 @@ function markSlotCleaned(key: string) {
     day: new Date().toDateString(),
     slots: Array.from(cleaned),
   }));
+}
+
+function hasOldDayCleanedToday(): boolean {
+  try {
+    const raw = localStorage.getItem(OLD_DAY_CLEANED_KEY);
+    return raw === new Date().toDateString();
+  } catch { return false; }
+}
+
+function markOldDayCleaned() {
+  localStorage.setItem(OLD_DAY_CLEANED_KEY, new Date().toDateString());
 }
 
 /** Check if a dayPattern matches the current day */
@@ -80,9 +92,47 @@ export function useContentCleanupService() {
     }
   }, []);
 
+  /** Delete files from past weekdays (e.g. on Thursday delete Mon/Tue/Wed files) */
+  const cleanOldDayFiles = useCallback(async () => {
+    if (!isElectron || !window.electronAPI?.cleanupOldDayFiles) return;
+    if (hasOldDayCleanedToday()) return;
+
+    const folder = getFolder();
+    console.log(`[CONTENT-CLEANUP] 🗓️ Verificando arquivos de dias passados em: ${folder}`);
+
+    try {
+      const result = await window.electronAPI.cleanupOldDayFiles({ folder });
+
+      if (result.success) {
+        markOldDayCleaned();
+
+        if (result.deletedCount > 0) {
+          console.log(`[CONTENT-CLEANUP] ✅ ${result.deletedCount} arquivo(s) de dias passados removidos: ${result.deletedFiles.join(', ')}`);
+          console.log(`[CONTENT-CLEANUP] 📅 Dias mantidos: ${result.keptDays.join(', ')}`);
+
+          if (window.electronAPI?.showNotification) {
+            window.electronAPI.showNotification(
+              '🗓️ Limpeza de Dias Passados',
+              `${result.deletedCount} arquivo(s) removidos de Conteudos KF. Mantidos: ${result.keptDays.join(', ')}`
+            );
+          }
+        } else {
+          console.log(`[CONTENT-CLEANUP] ✅ Nenhum arquivo de dia passado encontrado. Dias mantidos: ${result.keptDays.join(', ')}`);
+        }
+        reportServiceHeartbeat('content-cleanup');
+      }
+    } catch (err) {
+      console.error('[CONTENT-CLEANUP] ❌ Erro na limpeza de dias passados:', err);
+    }
+  }, [getFolder]);
+
   const checkAndClean = useCallback(async () => {
     if (!isElectron || cleaningRef.current) return;
 
+    // === 1. Clean old day files (once per day) ===
+    await cleanOldDayFiles();
+
+    // === 2. PkInfo cleanup before fixed programs ===
     const { fixedContent } = useRadioStore.getState();
     if (!fixedContent?.length) return;
 
@@ -92,7 +142,6 @@ export function useContentCleanupService() {
     const cleaned = getCleanedSlots();
     const folder = getFolder();
 
-    // Find fixed programs that start in the next MINUTES_BEFORE
     const dueSlots: { name: string; time: string }[] = [];
 
     for (const fc of fixedContent) {
@@ -102,7 +151,6 @@ export function useContentCleanupService() {
       for (const slot of fc.timeSlots) {
         const slotMinutes = slot.hour * 60 + slot.minute;
         const diff = slotMinutes - nowMinutes;
-        // Handle midnight wrap
         const normalizedDiff = diff < -720 ? diff + 1440 : diff > 720 ? diff - 1440 : diff;
 
         const slotKey = `${fc.id}:${slot.hour}:${slot.minute}:${now.toDateString()}`;
@@ -112,7 +160,6 @@ export function useContentCleanupService() {
             name: fc.name, 
             time: `${slot.hour.toString().padStart(2, '0')}:${slot.minute.toString().padStart(2, '0')}` 
           });
-          // Mark all due slots for this check
           markSlotCleaned(slotKey);
         }
       }
@@ -122,7 +169,6 @@ export function useContentCleanupService() {
 
     cleaningRef.current = true;
     
-    // Only clean once (first due slot triggers the cleanup for all)
     const programNames = [...new Set(dueSlots.map(s => s.name))].join(', ');
     const times = dueSlots.map(s => s.time).join(', ');
     console.log(`[CONTENT-CLEANUP] 🗑️ Removendo PkInfo de "${folder}" — programa(s): ${programNames} às ${times}`);
@@ -152,7 +198,7 @@ export function useContentCleanupService() {
     } finally {
       cleaningRef.current = false;
     }
-  }, [cleanFolder, getFolder]);
+  }, [cleanFolder, cleanOldDayFiles, getFolder]);
 
   const start = useCallback(() => {
     if (!isElectron) return () => {};
@@ -171,5 +217,5 @@ export function useContentCleanupService() {
     };
   }, [checkAndClean, getFolder]);
 
-  return { start, checkAndClean };
+  return { start, checkAndClean, cleanOldDayFiles };
 }
