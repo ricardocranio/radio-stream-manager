@@ -2136,7 +2136,7 @@ export function useAutoGradeBuilder() {
 
   const realtimeBuildRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRealtimeBlockRef = useRef<string>('');
-  const lastRealtimeWrittenRef = useRef<string>('');
+  const lastWrittenContentHashRef = useRef<string>('');
   const realtimeTickInProgressRef = useRef(false);
 
   const getUpcomingBlockInfo = useCallback(() => {
