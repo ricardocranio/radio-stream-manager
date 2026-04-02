@@ -245,7 +245,7 @@ export function useContentCleanupService() {
     } finally {
       cleaningRef.current = false;
     }
-  }, [cleanFolder, cleanOldDayFiles, getFolder]);
+  }, [cleanFolder, cleanOldDayFiles, cleanOldGradeFiles, getFolder]);
 
   const start = useCallback(() => {
     if (!isElectron) return () => {};
