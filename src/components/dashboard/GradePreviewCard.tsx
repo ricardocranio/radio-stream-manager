@@ -249,12 +249,23 @@ export function GradePreviewCard() {
           const stationName = legacyName || station?.name || seqItem.radioSource;
 
           try {
-            const { data } = await supabase
+            let { data } = await supabase
               .from('scraped_songs')
               .select('artist, title, station_name')
               .eq('station_name', stationName)
               .order('scraped_at', { ascending: false })
               .limit(30);
+
+            // Fallback: case-insensitive search if exact match found nothing
+            if ((!data || data.length === 0) && stationName) {
+              const fallback = await supabase
+                .from('scraped_songs')
+                .select('artist, title, station_name')
+                .ilike('station_name', stationName)
+                .order('scraped_at', { ascending: false })
+                .limit(30);
+              data = fallback.data;
+            }
 
             if (data && data.length > 0) {
               for (const s of data) {
