@@ -16,7 +16,7 @@ import { markSongAsDownloaded, markSongAsDownloadedWithAlias } from '@/lib/libra
 import { subHours } from 'date-fns';
 import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 import { isStationAllowedForDownload } from '@/lib/allowedDownloadStations';
-import { buildBlockedEngine } from '@/lib/blockedSongsEngine';
+import { createDownloadGuard } from '@/lib/downloadGuard';
 import { recordBlockedEvent } from '@/components/dashboard/BlockedSongsCard';
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
 
@@ -45,45 +45,26 @@ export function useCapturedDownloadService() {
   const downloadOne = useCallback(async (song: CapturedQueueItem): Promise<'success' | 'exists' | 'error'> => {
     const { deezerConfig, config, addDownloadHistory, songAliases } = useRadioStore.getState();
 
-    // 🚫 Block check BEFORE any operation (using centralized engine)
-    const blockedEngine = buildBlockedEngine(
-      config.blockedSongs ?? [],
-      config.forbiddenWords ?? [],
-      songAliases ?? []
-    );
-    if (blockedEngine.isBlocked(song.artist, song.title)) {
-      console.log(`[CAP-DL] 🚫 Bloqueada, não será baixada: ${song.artist} - ${song.title}`);
-      recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'exact', source: 'captured-download' });
-      return 'exists'; // treat as "exists" to skip without error
-    }
-
-    // Skip vinhetas/jingles
-    if (isVinhetaOrJingle(song.artist, song.title)) {
-      console.log(`[CAP-DL] 🚫 Vinheta/jingle bloqueada: ${song.artist} - ${song.title}`);
-      return 'exists';
-    }
-
-    // === Apply alias correction: use "Para" (correct) name, block "De" (wrong) ===
-    let dlArtist = song.artist;
-    let dlTitle = song.title;
-    if (songAliases?.length) {
-      for (const alias of songAliases) {
-        if (song.artist.trim().toLowerCase() === alias.fromArtist.toLowerCase().trim() &&
-            song.title.trim().toLowerCase() === alias.fromTitle.toLowerCase().trim()) {
-          console.log(`[CAP-DL] 🔄 Alias: "${song.artist} - ${song.title}" → "${alias.toArtist} - ${alias.toTitle}"`);
-          dlArtist = alias.toArtist;
-          dlTitle = alias.toTitle;
-          break;
-        }
+    const guard = createDownloadGuard({
+      blockedSongs: config.blockedSongs ?? [],
+      forbiddenWords: config.forbiddenWords ?? [],
+      songAliases: songAliases ?? [],
+    });
+    const decision = guard(song.artist, song.title);
+    if (!decision.allowed) {
+      if (decision.reason === 'blocked') {
+        console.log(`[CAP-DL] 🚫 Bloqueada, não será baixada: ${song.artist} - ${song.title}`);
+        recordBlockedEvent({ artist: song.artist, title: song.title, rule: decision.blockRule ?? 'exact', source: 'captured-download' });
+      } else {
+        console.log(`[CAP-DL] 🚫 Vinheta/jingle bloqueada: ${song.artist} - ${song.title}`);
       }
+      return 'exists';
     }
 
-    // Also check if alias-resolved name is blocked
-    if ((dlArtist !== song.artist || dlTitle !== song.title) &&
-        blockedEngine.isBlocked(dlArtist, dlTitle)) {
-      console.log(`[CAP-DL] 🚫 Bloqueada (via alias "${dlArtist} - ${dlTitle}"): ${song.artist} - ${song.title}`);
-      recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'alias', source: 'captured-download' });
-      return 'exists';
+    const dlArtist = decision.downloadArtist;
+    const dlTitle = decision.downloadTitle;
+    if (dlArtist !== song.artist || dlTitle !== song.title) {
+      console.log(`[CAP-DL] 🔄 Alias: "${song.artist} - ${song.title}" → "${dlArtist} - ${dlTitle}"`);
     }
 
     // Check library first (using corrected name)
@@ -336,22 +317,26 @@ export function useCapturedDownloadService() {
 
       if (error || !data) return;
 
-      // Build centralized blocked engine (O(1) lookups with full normalization + alias support)
       const storeState = useRadioStore.getState();
-      const blockedEngine = buildBlockedEngine(
-        storeState.config.blockedSongs ?? [],
-        storeState.config.forbiddenWords ?? [],
-        storeState.songAliases ?? []
-      );
+      const guard = createDownloadGuard({
+        blockedSongs: storeState.config.blockedSongs ?? [],
+        forbiddenWords: storeState.config.forbiddenWords ?? [],
+        songAliases: storeState.songAliases ?? [],
+      });
       
       const seen = new Set<string>();
       const unique: CapturedQueueItem[] = [];
       for (const song of data) {
         const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
         if (seen.has(key) || processedRef.current.has(key)) continue;
-        if (blockedEngine.isBlocked(song.artist, song.title)) {
-          console.log(`[CAP-DL] 🚫 Bloqueada na fila: ${song.artist} - ${song.title}`);
-          recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'exact', source: 'captured-download' });
+        const decision = guard(song.artist, song.title);
+        if (!decision.allowed) {
+          if (decision.reason === 'blocked') {
+            console.log(`[CAP-DL] 🚫 Bloqueada na fila: ${song.artist} - ${song.title}`);
+            recordBlockedEvent({ artist: song.artist, title: song.title, rule: decision.blockRule ?? 'exact', source: 'captured-download' });
+          } else {
+            console.log(`[CAP-DL] 🚫 Vinheta/jingle filtrada na fila: ${song.artist} - ${song.title}`);
+          }
           continue;
         }
         // === STATION FILTER: only download from sequence/priority stations ===

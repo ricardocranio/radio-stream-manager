@@ -12,8 +12,7 @@ import { markSongAsDownloaded } from '@/lib/libraryVerificationCache';
 import { acquireDownloadLock, releaseDownloadLock } from '@/lib/downloadMutex';
 import { isVinhetaOrJingle } from '@/lib/vinhetaFilter';
 import { isStationAllowedForDownload } from '@/lib/allowedDownloadStations';
-import { buildBlockedEngine } from '@/lib/blockedSongsEngine';
-import { buildAliasEngine } from '@/lib/aliasEngine';
+import { createDownloadGuard } from '@/lib/downloadGuard';
 import { recordBlockedEvent } from '@/components/dashboard/BlockedSongsCard';
 
 // Shared ID3 genre utilities
@@ -100,38 +99,30 @@ export function useGlobalDownloadService() {
       return false;
     }
 
-    // Last-barrier: never download vinhetas/jingles via Deemix
-    if (isVinhetaOrJingle(song.artist, song.title)) {
-      console.log(`[DL-SVC] 🚫 Vinheta/jingle bloqueada no download: ${song.artist} - ${song.title}`);
-      useRadioStore.getState().removeMissingSong(song.id);
-      return false;
-    }
-
     const storeState = useRadioStore.getState();
     if (!storeState.deezerConfig.enabled || !storeState.deezerConfig.arl) {
       return false;
     }
 
-    // Build engines for alias resolution + block check (O(1))
-    const blockedEngine = buildBlockedEngine(
-      storeState.config.blockedSongs ?? [],
-      storeState.config.forbiddenWords ?? [],
-      storeState.songAliases ?? []
-    );
-    const aliasEngine = buildAliasEngine(storeState.songAliases ?? []);
-
-    // 🚫 Block check BEFORE any operation
-    if (blockedEngine.isBlocked(song.artist, song.title)) {
-      console.log(`[DL-SVC] 🚫 Bloqueada, não será baixada: ${song.artist} - ${song.title}`);
-      recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'exact', source: 'download' });
+    const guard = createDownloadGuard({
+      blockedSongs: storeState.config.blockedSongs ?? [],
+      forbiddenWords: storeState.config.forbiddenWords ?? [],
+      songAliases: storeState.songAliases ?? [],
+    });
+    const decision = guard(song.artist, song.title);
+    if (!decision.allowed) {
+      if (decision.reason === 'blocked') {
+        console.log(`[DL-SVC] 🚫 Bloqueada, não será baixada: ${song.artist} - ${song.title}`);
+        recordBlockedEvent({ artist: song.artist, title: song.title, rule: decision.blockRule ?? 'exact', source: 'download' });
+      } else {
+        console.log(`[DL-SVC] 🚫 Vinheta/jingle bloqueada no download: ${song.artist} - ${song.title}`);
+      }
       useRadioStore.getState().removeMissingSong(song.id);
       return false;
     }
 
-    // Apply alias resolution
-    const resolved = aliasEngine.resolve(song.artist, song.title);
-    let dlArtist = resolved.artist;
-    let dlTitle = resolved.title;
+    const dlArtist = decision.downloadArtist;
+    const dlTitle = decision.downloadTitle;
     if (dlArtist !== song.artist || dlTitle !== song.title) {
       console.log(`[DL-SVC] 🔄 Alias aplicado: "${song.artist} - ${song.title}" → "${dlArtist} - ${dlTitle}"`);
     }
@@ -516,13 +507,11 @@ export function useGlobalDownloadService() {
       return;
     }
 
-    // Build blocked engine ONCE for this batch (O(1) lookups)
-    const blockedEngine = buildBlockedEngine(
-      storeState.config.blockedSongs ?? [],
-      storeState.config.forbiddenWords ?? [],
-      storeState.songAliases ?? []
-    );
-    const aliasEngine = buildAliasEngine(storeState.songAliases ?? []);
+    const guard = createDownloadGuard({
+      blockedSongs: storeState.config.blockedSongs ?? [],
+      forbiddenWords: storeState.config.forbiddenWords ?? [],
+      songAliases: storeState.songAliases ?? [],
+    });
 
     if (newToQueue.length > 0) {
       const rankingMap = new Map<string, number>();
@@ -538,27 +527,14 @@ export function useGlobalDownloadService() {
       );
 
       for (const song of newToQueue) {
-        // Skip vinhetas/jingles at queue entry
-        if (isVinhetaOrJingle(song.artist, song.title)) {
-          console.log(`[DL-SVC] 🚫 Vinheta/jingle filtrada na fila: ${song.artist} - ${song.title}`);
-          useRadioStore.getState().removeMissingSong(song.id);
-          continue;
-        }
-
-        // 🚫 BLOCKED CHECK AT QUEUE ENTRY — catches songs added before block rule existed
-        if (blockedEngine.isBlocked(song.artist, song.title)) {
-          console.log(`[DL-SVC] 🚫 Bloqueada na fila: ${song.artist} - ${song.title}`);
-          recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'exact', source: 'download' });
-          useRadioStore.getState().removeMissingSong(song.id);
-          continue;
-        }
-
-        // Also check alias-resolved name
-        const resolved = aliasEngine.resolve(song.artist, song.title);
-        if ((resolved.artist !== song.artist || resolved.title !== song.title) &&
-            blockedEngine.isBlocked(resolved.artist, resolved.title)) {
-          console.log(`[DL-SVC] 🚫 Bloqueada (via alias "${resolved.artist} - ${resolved.title}"): ${song.artist} - ${song.title}`);
-          recordBlockedEvent({ artist: song.artist, title: song.title, rule: 'alias', source: 'download' });
+        const decision = guard(song.artist, song.title);
+        if (!decision.allowed) {
+          if (decision.reason === 'blocked') {
+            console.log(`[DL-SVC] 🚫 Bloqueada na fila: ${song.artist} - ${song.title}`);
+            recordBlockedEvent({ artist: song.artist, title: song.title, rule: decision.blockRule ?? 'exact', source: 'download' });
+          } else {
+            console.log(`[DL-SVC] 🚫 Vinheta/jingle filtrada na fila: ${song.artist} - ${song.title}`);
+          }
           useRadioStore.getState().removeMissingSong(song.id);
           continue;
         }

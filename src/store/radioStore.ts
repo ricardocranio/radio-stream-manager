@@ -501,17 +501,21 @@ function normalizeMapaTemplateFilename(filename: string | undefined, dayMapping:
 
 // Cached blocked engine for O(1) lookups inside store actions
 let _blockedEngineCache: BlockedEngine | null = null;
-let _blockedCacheSize = -1;
+let _blockedCacheSignature: string | null = null;
 
 function _getBlockedEngine(state: { config: { blockedSongs?: string[]; forbiddenWords?: string[] }; songAliases?: { fromArtist: string; fromTitle: string; toArtist: string; toTitle: string }[] }): BlockedEngine {
-  const size = (state.config.blockedSongs?.length ?? 0) + (state.config.forbiddenWords?.length ?? 0) + (state.songAliases?.length ?? 0);
-  if (!_blockedEngineCache || size !== _blockedCacheSize) {
+  const signature = JSON.stringify({
+    blockedSongs: state.config.blockedSongs ?? [],
+    forbiddenWords: state.config.forbiddenWords ?? [],
+    songAliases: (state.songAliases ?? []).map((alias) => [alias.fromArtist, alias.fromTitle, alias.toArtist, alias.toTitle]),
+  });
+  if (!_blockedEngineCache || signature !== _blockedCacheSignature) {
     _blockedEngineCache = buildBlockedEngine(
       state.config.blockedSongs ?? [],
       state.config.forbiddenWords ?? [],
       state.songAliases ?? []
     );
-    _blockedCacheSize = size;
+    _blockedCacheSignature = signature;
   }
   return _blockedEngineCache;
 }

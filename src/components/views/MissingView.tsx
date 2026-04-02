@@ -29,6 +29,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { getDownloadDecision } from '@/lib/downloadGuard';
+import { recordBlockedEvent } from '@/components/dashboard/BlockedSongsCard';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -50,6 +52,7 @@ export function MissingView() {
     downloadHistory,
     addDownloadHistory,
     clearDownloadHistory,
+    songAliases,
   } = useRadioStore();
   
   // Auto-download status from global store
@@ -434,6 +437,27 @@ export function MissingView() {
   };
 
   const handleDeezerDownload = async (songId: string, artist: string, title: string, isRetry = false) => {
+    const decision = getDownloadDecision(artist, title, {
+      blockedSongs: config.blockedSongs ?? [],
+      forbiddenWords: config.forbiddenWords ?? [],
+      songAliases,
+    });
+    if (!decision.allowed) {
+      if (decision.reason === 'blocked') {
+        recordBlockedEvent({ artist, title, rule: decision.blockRule ?? 'exact', source: 'download' });
+      }
+      removeMissingSong(songId);
+      toast({
+        title: 'Música bloqueada',
+        description: `${artist} - ${title} está bloqueada e não será baixada.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const dlArtist = decision.downloadArtist;
+    const dlTitle = decision.downloadTitle;
+
     // In simulation mode, skip Deezer checks
     if (!simulationMode) {
       if (!deezerConfig.enabled || !deezerConfig.arl) {
@@ -471,8 +495,8 @@ export function MissingView() {
       } else {
         // Use real Electron API
         result = await window.electronAPI?.downloadFromDeezer({
-          artist,
-          title,
+          artist: dlArtist,
+          title: dlTitle,
           arl: deezerConfig.arl,
           outputFolder: deezerConfig.downloadFolder,
           quality: deezerConfig.quality,
@@ -624,6 +648,24 @@ export function MissingView() {
     let shouldStop = false;
 
     for (const song of songsToDownload) {
+      const decision = getDownloadDecision(song.artist, song.title, {
+        blockedSongs: config.blockedSongs ?? [],
+        forbiddenWords: config.forbiddenWords ?? [],
+        songAliases,
+      });
+      if (!decision.allowed) {
+        if (decision.reason === 'blocked') {
+          recordBlockedEvent({ artist: song.artist, title: song.title, rule: decision.blockRule ?? 'exact', source: 'download' });
+        }
+        removeMissingSong(song.id);
+        completed++;
+        setBatchDownloadProgress({ completed, failed });
+        continue;
+      }
+
+      const dlArtist = decision.downloadArtist;
+      const dlTitle = decision.downloadTitle;
+
       // Check if user requested stop
       const currentProgress = useRadioStore.getState().batchDownloadProgress;
       if (!currentProgress.isRunning) {
@@ -647,8 +689,8 @@ export function MissingView() {
           result = await simulateDownload(song.id, song.artist, song.title);
         } else {
           result = await window.electronAPI?.downloadFromDeezer({
-            artist: song.artist,
-            title: song.title,
+            artist: dlArtist,
+            title: dlTitle,
             arl: deezerConfig.arl,
             outputFolder: deezerConfig.downloadFolder,
             quality: deezerConfig.quality,
