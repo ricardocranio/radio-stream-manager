@@ -128,11 +128,56 @@ export function useContentCleanupService() {
     }
   }, [getFolder]);
 
+  /** Delete old grade files (e.g. on Thursday delete SEG.txt, TER.txt, QUA.txt) */
+  const cleanOldGradeFiles = useCallback(async () => {
+    if (!isElectron || !window.electronAPI?.cleanupOldDayFiles) return;
+    try {
+      const raw = localStorage.getItem(GRADE_OLD_DAY_CLEANED_KEY);
+      if (raw === new Date().toDateString()) return;
+    } catch { return; }
+
+    const { config } = useRadioStore.getState();
+    const gradeFolder = config.gradeFolder;
+    if (!gradeFolder) return;
+
+    console.log(`[GRADE-CLEANUP] 🗓️ Verificando grades de dias passados em: ${gradeFolder}`);
+
+    try {
+      const result = await window.electronAPI.cleanupOldDayFiles({ folder: gradeFolder });
+
+      if (result.success) {
+        localStorage.setItem(GRADE_OLD_DAY_CLEANED_KEY, new Date().toDateString());
+
+        // Also clear stale grade persistence from localStorage
+        clearGradeStorage();
+
+        if (result.deletedCount > 0) {
+          console.log(`[GRADE-CLEANUP] ✅ ${result.deletedCount} grade(s) de dias passados removidas: ${result.deletedFiles.join(', ')}`);
+
+          if (window.electronAPI?.showNotification) {
+            window.electronAPI.showNotification(
+              '🗓️ Grades Antigas Removidas',
+              `${result.deletedCount} grade(s) removidas. Mantidas: ${result.keptDays.join(', ')}`
+            );
+          }
+        } else {
+          console.log(`[GRADE-CLEANUP] ✅ Nenhuma grade de dia passado encontrada.`);
+        }
+        reportServiceHeartbeat('content-cleanup');
+      }
+    } catch (err) {
+      console.error('[GRADE-CLEANUP] ❌ Erro na limpeza de grades passadas:', err);
+    }
+  }, []);
+
   const checkAndClean = useCallback(async () => {
     if (!isElectron || cleaningRef.current) return;
 
-    // === 1. Clean old day files (once per day) ===
+    // === 1. Clean old day files from content folder (once per day) ===
     await cleanOldDayFiles();
+
+    // === 2. Clean old grade files (once per day) ===
+    await cleanOldGradeFiles();
 
     // === 2. PkInfo cleanup before fixed programs ===
     const { fixedContent } = useRadioStore.getState();
