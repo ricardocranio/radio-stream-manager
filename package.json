@@ -1,7 +1,7 @@
 {
-  "name": "programador-de-radio",
+  "name": "programador para radio",
   "private": true,
-  "version": "11.0.0",
+  "version": "12.0.0 edit",
   "type": "module",
   "scripts": {
     "dev": "vite",
