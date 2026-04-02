@@ -5,7 +5,7 @@
 ║                          INTEGRADO COM SUPABASE                               ║
 ║                                                                               ║
 ║  MELHORIAS v3.5:                                                              ║
-║  - Buffer de frescor em memória (janela 15 min, histórico 60 min)            ║
+║  - Buffer de frescor em memória (janela 20 min, histórico 60 min)            ║
 ║  - Build pool ponderado: rádios ativas ganham mais slots de scraping         ║
 ║  - Envio em batch ao Supabase (após ciclo completo, menos latência)          ║
 ║  - Resumo de frescor por rádio ao final de cada ciclo                        ║
@@ -403,7 +403,7 @@ def parse_song_text(text: str) -> Dict[str, str]:
 
 CONFIG_PADRAO = {
     "configuracao": {
-        "intervalo_minutos": 5,
+        "intervalo_minutos": 12,
         "mostrar_navegador": False,
         "arquivo_historico": os.path.join(_DATA_DIR, "radio_historico.json"),
         "arquivo_relatorio": os.path.join(_DATA_DIR, "radio_relatorio.txt")
@@ -639,7 +639,7 @@ class RadioMonitor:
         # ── Buffer de frescor ──────────────────────────────────────────
         # Formato: {'BH FM': [{'song': 'Artista - Música', 'ts': datetime}, ...]}
         self.recentes: Dict[str, List[Dict]] = {}
-        self.janela_frescor_minutos = 15
+        self.janela_frescor_minutos = 20
         
         self.arquivo_historico = os.path.join(_DATA_DIR, "radio_historico.json")
         self.arquivo_relatorio = os.path.join(_DATA_DIR, "radio_relatorio.txt")
@@ -1361,7 +1361,7 @@ if __name__ == "__main__":
         print(cor(Cores.GREEN, "  ✅ Modo Supabase ativo (REST API)!"))
         print(cor(Cores.CYAN, "  📻 Emissoras carregadas do banco (radio_stations + special_monitoring)"))
         print(cor(Cores.CYAN, "  📡 Fontes: OnlineRadioBox → Triton API → ICY → Playwright"))
-        print(cor(Cores.CYAN, "  🧊 Buffer de frescor: janela de 15 min, histórico de 60 min"))
+        print(cor(Cores.CYAN, "  🧊 Buffer de frescor: janela de 20 min, histórico de 60 min"))
         print(cor(Cores.CYAN, "  🎯 Build pool: slots ponderados por atividade recente"))
         print(cor(Cores.CYAN, "  📦 Envio em batch: dados acumulados e enviados após cada ciclo"))
     else:

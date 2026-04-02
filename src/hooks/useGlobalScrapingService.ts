@@ -312,7 +312,7 @@ export function useGlobalScrapingService(
   const start = useCallback(() => {
     const scrapeAllRef = { current: scrapeAllStations };
 
-    // Scraping every 15 minutes
+    // Scraping every 12 minutes (matches Python monitor cycle)
     scrapeIntervalRef.current = setInterval(() => {
       const currentState = useRadioStore.getState();
       if (!currentState.isRunning) return;
@@ -320,7 +320,7 @@ export function useGlobalScrapingService(
       if (hasStations) {
         scrapeAllRef.current();
       }
-    }, 15 * 60 * 1000);
+    }, 12 * 60 * 1000);
 
     // Initial scrape
     const state = useRadioStore.getState();

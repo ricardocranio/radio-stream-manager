@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { useRadioStore } from '@/store/radioStore';
 import { supabase } from '@/integrations/supabase/client';
 
-const FRESHNESS_THRESHOLD_MIN = 15;
+const FRESHNESS_THRESHOLD_MIN = 20;
 const CHECK_INTERVAL_MS = 60_000; // 1 minute
 
 export function P1FreshnessAlertCard() {
