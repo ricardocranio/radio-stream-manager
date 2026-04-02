@@ -546,20 +546,20 @@ export async function selectSongForSlot(
   }
 
   // ============================================================
-  // PRIORITY P1-EXT: Same station, older songs (beyond 15min cutoff)
-  // When P1 finds no fresh songs, we STILL prefer the target station's
-  // older captures over jumping to completely different stations.
-  // This preserves the station identity of the sequence.
+  // PRIORITY P1-EXT: Same station, older songs (beyond graduated tiers)
+  // When ALL graduated tiers found no songs, try ALL remaining songs
+  // from the SAME station regardless of age. This preserves station
+  // identity and is MUCH more assertive than jumping to other stations.
   // ============================================================
   if (!selectedSong && stationSongs.length > 0) {
     const now_ext = Date.now();
-    const P1_MAX_AGE_MS_EXT = 15 * 60 * 1000;
+    const P1_GRADUATED_MAX_MS = 120 * 60 * 1000; // Match last graduated tier (2h)
 
-    // Get songs that were TOO OLD for P1 but still belong to the correct station
+    // Get songs that were TOO OLD for graduated tiers but still belong to the correct station
     const olderStationSongs = [...stationSongs]
       .filter(c => {
-        if (!c.scrapedAt) return true; // no timestamp = include
-        return (now_ext - new Date(c.scrapedAt).getTime()) > P1_MAX_AGE_MS_EXT;
+        if (!c.scrapedAt) return true; // no timestamp = include (could be from historico)
+        return (now_ext - new Date(c.scrapedAt).getTime()) > P1_GRADUATED_MAX_MS;
       })
       .sort((a, b) => {
         if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
@@ -568,7 +568,7 @@ export async function selectSongForSlot(
       .filter(c => isValidCandidate(c.title, c.artist));
 
     if (olderStationSongs.length > 0) {
-      console.log(`[SONG-SELECT] 🕐 [P1-EXT] Tentando ${olderStationSongs.length} músicas MAIS ANTIGAS de "${stationName}" (mantendo identidade da rádio)`);
+      console.log(`[SONG-SELECT] 🕐 [P1-EXT] Tentando ${olderStationSongs.length} músicas MAIS ANTIGAS (>2h) de "${stationName}" (mantendo identidade da rádio)`);
 
       const extBatchEntries = olderStationSongs.flatMap(c => {
         const entries = [{ artist: c.artist, title: c.title }];
@@ -604,10 +604,11 @@ export async function selectSongForSlot(
         }
       }
 
-      // JIT for older station songs (up to 4 attempts)
+      // JIT for older station songs — AGGRESSIVE: up to 8 attempts to respect sequence
       if (!selectedSong) {
         let jitExtAttempts = 0;
-        const maxJitExt = 4;
+        const maxJitExt = 8;
+        console.log(`[SONG-SELECT] ⚠️ [P1-EXT] Nenhuma música antiga de "${stationName}" na biblioteca. Tentando JIT agressivo (${maxJitExt} tentativas)...`);
         for (const candidate of olderStationSongs) {
           if (jitExtAttempts >= maxJitExt) break;
           jitExtAttempts++;
@@ -634,6 +635,43 @@ export async function selectSongForSlot(
         }
       }
     }
+  }
+
+  // ============================================================
+  // PRIORITY P0-SAME: Carry-over from the SAME station first
+  // Before trying any other station, check if we have carry-over
+  // songs specifically from the target station.
+  // ============================================================
+  if (!selectedSong && stationName) {
+    const carryOverSameStation = (carryOverByStation[stationName] || []).filter(s => isValidCandidate(s.title, s.artist));
+
+    if (carryOverSameStation.length > 0) {
+      const map = await ctx.batchFindSongsInLibrary(carryOverSameStation.map(s => ({ artist: s.artist, title: s.title })));
+      for (const carryOverSong of carryOverSameStation) {
+        const r = (map as Map<string, any>).get(toLibKey(carryOverSong.artist, carryOverSong.title)) as { exists: boolean; filename?: string } | undefined;
+        if (!r?.exists) continue;
+        const correctFilename = r.filename || sanitizeFilename(`${carryOverSong.artist} - ${carryOverSong.title}.mp3`);
+        selectedSong = { ...carryOverSong, filename: correctFilename, existsInLibrary: true };
+        usedInBlock.add(`${carryOverSong.title.toLowerCase()}-${carryOverSong.artist.toLowerCase()}`);
+        usedArtistsInBlock.add(carryOverSong.artist.toLowerCase().trim());
+        logs.push({
+          blockTime: timeStr,
+          type: 'used',
+          title: carryOverSong.title,
+          artist: carryOverSong.artist,
+          station: carryOverSong.station,
+          style: carryOverSong.style,
+          reason: `[P0-SAME] Carry-over da mesma rádio "${stationName}" (batch)`,
+        });
+        console.log(`[SONG-SELECT] ✅ [P0-SAME] Carry-over de "${stationName}": "${carryOverSong.artist} - ${carryOverSong.title}"`);
+        break;
+      }
+    }
+  }
+
+  // === LOG SEQUENCE VIOLATION if we're about to leave the target station ===
+  if (!selectedSong && stationName && stationSongs.length > 0) {
+    console.warn(`[SONG-SELECT] ⚠️🔴 VIOLAÇÃO DE SEQUÊNCIA: Posição P${seq.position} deveria ser "${stationName}" mas NENHUMA música dessa rádio está disponível na biblioteca. Pool tinha ${stationSongs.length} candidatas. Caindo para prioridades cruzadas...`);
   }
 
   // ============================================================
