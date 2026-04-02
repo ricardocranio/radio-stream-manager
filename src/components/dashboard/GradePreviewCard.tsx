@@ -243,9 +243,10 @@ export function GradePreviewCard() {
           seqItem.radioSource !== 'top50' &&
           seqItem.radioSource !== 'random_pop'
         ) {
-          // Station-based: try to find matching songs from that station
+          // Resolve station: try legacy short-ID map first, then UUID lookup, then raw string
+          const legacyName = STATION_ID_TO_DB_NAME[seqItem.radioSource] || STATION_ID_TO_DB_NAME[seqItem.radioSource.toLowerCase()];
           const station = stations.find(s => s.id === seqItem.radioSource);
-          const stationName = station?.name || seqItem.radioSource;
+          const stationName = legacyName || station?.name || seqItem.radioSource;
 
           try {
             const { data } = await supabase
