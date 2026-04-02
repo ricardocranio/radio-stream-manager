@@ -22,6 +22,7 @@ const DEFAULT_CONTENT_FOLDER = 'G:\\Outros computadores\\Meu computador\\Conteud
 // Track which cleanups have run today (avoid repeating)
 const CLEANED_KEY = 'pgmr_content_cleaned_slots';
 const OLD_DAY_CLEANED_KEY = 'pgmr_old_day_cleaned';
+const GRADE_OLD_DAY_CLEANED_KEY = 'pgmr_grade_old_day_cleaned';
 
 function getCleanedSlots(): Set<string> {
   try {
