@@ -15,15 +15,27 @@ type DownloadGuardConfig = {
   songAliases?: SongAlias[];
 };
 
-export type DownloadDecision = {
-  allowed: boolean;
-  reason: 'ok' | 'blocked' | 'vinheta';
-  blockRule?: 'exact' | 'alias' | 'vinheta';
+type DownloadDecisionBase = {
   originalArtist: string;
   originalTitle: string;
   downloadArtist: string;
   downloadTitle: string;
 };
+
+export type DownloadDecision =
+  | (DownloadDecisionBase & {
+      allowed: true;
+      reason: 'ok';
+    })
+  | (DownloadDecisionBase & {
+      allowed: false;
+      reason: 'blocked';
+      blockRule: 'exact' | 'alias';
+    })
+  | (DownloadDecisionBase & {
+      allowed: false;
+      reason: 'vinheta';
+    });
 
 export function createDownloadGuard({
   blockedSongs = [],
@@ -43,7 +55,6 @@ export function createDownloadGuard({
       return {
         allowed: false,
         reason: 'vinheta',
-        blockRule: 'vinheta',
         originalArtist,
         originalTitle,
         downloadArtist: resolved.artist,
