@@ -382,14 +382,21 @@ export async function selectSongForSlot(
 
   // ============================================================
   // PRIORITY 1: Station Pool (primary source — the configured radio)
-  // HARD RULE: Only songs captured within the last 15 MINUTES are eligible.
-  // Anything older is skipped — P1 must reflect the LIVE monitoring.
-  // First scan ALL candidates for one that EXISTS in library.
-  // Only attempt JIT downloads if NO candidate from this station is available.
+  // GRADUATED FRESHNESS: Tries 15min → 30min → 60min → 120min tiers.
+  // Each tier expands the window only if the previous one found ZERO
+  // library-available candidates. This maximizes P1 hit rate while
+  // still preferring the freshest songs from the target station.
   // ============================================================
   if (!selectedSong) {
     const now = Date.now();
-    const P1_MAX_AGE_MS = 15 * 60 * 1000; // 15 minutes — hard cutoff
+    // Graduated freshness tiers (ms) — try narrow first, widen if empty
+    const P1_TIERS_MS = [
+      15 * 60 * 1000,   // Tier 1: ≤15min (ideal — live monitoring)
+      30 * 60 * 1000,   // Tier 2: ≤30min (recent)
+      60 * 60 * 1000,   // Tier 3: ≤1h (still relevant)
+      120 * 60 * 1000,  // Tier 4: ≤2h (last resort before P1-EXT)
+    ];
+    const P1_TIER_LABELS = ['≤15min', '≤30min', '≤1h', '≤2h'];
 
     // Sort by freshness DESC (newest first)
     const freshnessSorted = [...stationSongs].sort((a, b) => {
@@ -399,139 +406,143 @@ export async function selectSongForSlot(
       return 0;
     });
 
-    // HARD CUTOFF: Only songs ≤ 15 minutes old are eligible for P1
-    const p1Pool = freshnessSorted.filter(c => {
-      if (!c.scrapedAt) return false;
-      return (now - new Date(c.scrapedAt).getTime()) <= P1_MAX_AGE_MS;
-    });
-
-    const droppedCount = freshnessSorted.length - p1Pool.length;
-
-    console.log(`[SONG-SELECT] 🕐 [P1] Pool "${stationName}" (resolvedBy: ${resolvedBy}): ${p1Pool.length} elegíveis (≤15min) de ${freshnessSorted.length} total${droppedCount > 0 ? ` | ${droppedCount} descartadas (>15min)` : ''}`);
-    if (p1Pool.length === 0 && freshnessSorted.length > 0) {
-      const newestAge = freshnessSorted[0].scrapedAt
-        ? Math.round((now - new Date(freshnessSorted[0].scrapedAt).getTime()) / 60000)
-        : '?';
-      console.warn(`[SONG-SELECT] ⚠️ [P1] NENHUMA música fresca (≤15min) para "${stationName}"! Mais nova tem ${newestAge}min. Caindo para próxima prioridade.`);
-    } else if (p1Pool.length > 0) {
-      console.log(`[SONG-SELECT] 🎵 [P1] Top 5 de "${stationName}": ${p1Pool.slice(0, 5).map(c => {
-        const ageMin = c.scrapedAt ? Math.round((now - new Date(c.scrapedAt).getTime()) / 60000) : '?';
-        return `${c.artist} - ${c.title} (${ageMin}m)`;
-      }).join(' → ')}`);
+    console.log(`[SONG-SELECT] 🕐 [P1] Pool "${stationName}" (resolvedBy: ${resolvedBy}): ${freshnessSorted.length} total`);
+    if (freshnessSorted.length > 0 && freshnessSorted[0].scrapedAt) {
+      const newestAge = Math.round((now - new Date(freshnessSorted[0].scrapedAt).getTime()) / 60000);
+      console.log(`[SONG-SELECT] 🎵 [P1] Música mais nova de "${stationName}": ${freshnessSorted[0].artist} - ${freshnessSorted[0].title} (${newestAge}min)`);
     }
 
-    const p1Candidates = p1Pool.filter(c => isValidCandidate(c.title, c.artist));
+    // Try each freshness tier until we find a library-available song
+    for (let tierIdx = 0; tierIdx < P1_TIERS_MS.length && !selectedSong; tierIdx++) {
+      const tierMaxMs = P1_TIERS_MS[tierIdx];
+      const tierLabel = P1_TIER_LABELS[tierIdx];
 
-    if (p1Candidates.length === 0 && p1Pool.length > 0) {
-      console.warn(`[SONG-SELECT] ⚠️ [P1] ${p1Pool.length} músicas frescas de "${stationName}" mas TODAS filtradas (anti-rep/bloqueio/blackout). Primeiras 3: ${p1Pool.slice(0, 3).map(c => `${c.artist} - ${c.title}`).join('; ')}`);
-    } else if (p1Candidates.length > 0) {
-      console.log(`[SONG-SELECT] 🎯 [P1] ${p1Candidates.length} candidatas válidas (≤15min) de "${stationName}". Top 3: ${p1Candidates.slice(0, 3).map(c => {
+      const tierPool = freshnessSorted.filter(c => {
+        if (!c.scrapedAt) return false;
+        return (now - new Date(c.scrapedAt).getTime()) <= tierMaxMs;
+      });
+
+      if (tierPool.length === 0) {
+        if (tierIdx === 0) {
+          console.log(`[SONG-SELECT] ⚠️ [P1-T${tierIdx + 1}] Nenhuma música ${tierLabel} de "${stationName}", expandindo janela...`);
+        }
+        continue;
+      }
+
+      const tierCandidates = tierPool.filter(c => isValidCandidate(c.title, c.artist));
+
+      if (tierCandidates.length === 0) {
+        console.log(`[SONG-SELECT] ⚠️ [P1-T${tierIdx + 1}] ${tierPool.length} músicas ${tierLabel} de "${stationName}" mas TODAS filtradas (anti-rep/bloqueio). Expandindo...`);
+        continue;
+      }
+
+      console.log(`[SONG-SELECT] 🎯 [P1-T${tierIdx + 1}] ${tierCandidates.length} candidatas ${tierLabel} de "${stationName}". Top 3: ${tierCandidates.slice(0, 3).map(c => {
         const ageMin = c.scrapedAt ? Math.round((now - new Date(c.scrapedAt).getTime()) / 60000) : '?';
         return `${c.artist} - ${c.title} (${ageMin}m)`;
       }).join('; ')}`);
-    }
 
-    // Build batch lookup including BOTH raw names AND alias-corrected names
-    const batchEntries = p1Candidates.flatMap(c => {
-      const entries = [{ artist: c.artist, title: c.title }];
-      const corrected = aliasEngine.resolve(c.artist, c.title);
-      if (corrected.artist !== c.artist || corrected.title !== c.title) {
-        entries.push({ artist: corrected.artist, title: corrected.title });
-      }
-      return entries;
-    });
-    const p1Map = batchEntries.length
-      ? await ctx.batchFindSongsInLibrary(batchEntries)
-      : new Map();
-
-    // PHASE 1: Pick the first candidate that ALREADY exists in library (instant, no download)
-    // Scan in freshness order — freshest first, so we always pick the newest available song
-    const missingFromStation: SongEntry[] = [];
-    for (const candidate of p1Candidates) {
-      const libraryResult = await findWithAliasFallback(candidate.artist, candidate.title, p1Map as Map<string, any>);
-
-      if (libraryResult?.exists) {
-        const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-        const ageMin = candidate.scrapedAt ? Math.round((now - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
-        selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-        selCtx.previousEnergy = (candidate as any).ai_energy || null;
-        selCtx.previousBpm = (candidate as any).bpm || null;
-        logs.push({
-          blockTime: timeStr,
-          type: 'used',
-          title: candidate.title,
-          artist: candidate.artist,
-          station: candidate.station,
-          style: candidate.style,
-          reason: `[P1] Pool da estação "${stationName}" (resolvedBy: ${resolvedBy}, frescor: ${ageMin}min)`,
-        });
-        console.log(`[SONG-SELECT] ✅ [P1] Selecionada: "${candidate.artist} - ${candidate.title}" (frescor: ${ageMin}min, resolvedBy: ${resolvedBy})`);
-        break;
-      } else {
-        missingFromStation.push(candidate);
-      }
-    }
-
-    // PHASE 2: No song from this station exists in library — try JIT download for the top candidates
-    if (!selectedSong && missingFromStation.length > 0) {
-      let jitAttemptsP1 = 0;
-      const maxJitAttemptsP1 = 8;
-      let missingMarks = 0;
-
-      console.log(`[SONG-SELECT] ⚠️ [P1] Nenhuma música de "${stationName}" na biblioteca (${missingFromStation.length} candidatas). Tentando JIT...`);
-
-      for (const candidate of missingFromStation) {
-        if (jitAttemptsP1 >= maxJitAttemptsP1) break;
-
-        jitAttemptsP1++;
-        const ageMin = candidate.scrapedAt ? Math.round((now - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
-        console.log(`[SONG-SELECT] 🔍 [P1] "${candidate.artist} - ${candidate.title}" (${ageMin}min) ausente, tentativa JIT ${jitAttemptsP1}/${maxJitAttemptsP1}...`);
-        const jitAlias = aliasEngine.resolve(candidate.artist, candidate.title);
-        const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs, jitAlias.artist, jitAlias.title);
-        if (downloaded) {
-          const recheck = await findWithAliasFallback(candidate.artist, candidate.title);
-          if (recheck.exists) {
-            const correctFilename = recheck.filename || sanitizeFilename(`${jitAlias.artist} - ${jitAlias.title}.mp3`);
-            selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-            logs.push({
-              blockTime: timeStr,
-              type: 'used',
-              title: candidate.title,
-              artist: candidate.artist,
-              station: candidate.station,
-              style: candidate.style,
-              reason: `[P1] Baixada JIT de "${stationName}" (tentativa ${jitAttemptsP1}, frescor: ${ageMin}min)`,
-            });
-            break;
-          }
+      // Build batch lookup including BOTH raw names AND alias-corrected names
+      const batchEntries = tierCandidates.flatMap(c => {
+        const entries = [{ artist: c.artist, title: c.title }];
+        const corrected = aliasEngine.resolve(c.artist, c.title);
+        if (corrected.artist !== c.artist || corrected.title !== c.title) {
+          entries.push({ artist: corrected.artist, title: corrected.title });
         }
-        console.log(`[SONG-SELECT] ⚠️ [P1] JIT ${jitAttemptsP1}/${maxJitAttemptsP1} falhou, continuando...`);
+        return entries;
+      });
+      const tierMap = batchEntries.length
+        ? await ctx.batchFindSongsInLibrary(batchEntries)
+        : new Map();
 
-        // Mark missing + carry-over (capped)
-        if (missingMarks < MAX_MISSING_MARKS_PER_PRIORITY) {
-          missingMarks++;
-          if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
-            ctx.addMissingSong({
-              id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      // PHASE 1: Pick the first candidate that ALREADY exists in library (instant, no download)
+      const missingFromTier: SongEntry[] = [];
+      for (const candidate of tierCandidates) {
+        const libraryResult = await findWithAliasFallback(candidate.artist, candidate.title, tierMap as Map<string, any>);
+
+        if (libraryResult?.exists) {
+          const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+          const ageMin = candidate.scrapedAt ? Math.round((now - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
+          selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+          selCtx.previousEnergy = (candidate as any).ai_energy || null;
+          selCtx.previousBpm = (candidate as any).bpm || null;
+          logs.push({
+            blockTime: timeStr,
+            type: 'used',
+            title: candidate.title,
+            artist: candidate.artist,
+            station: candidate.station,
+            style: candidate.style,
+            reason: `[P1] Pool da estação "${stationName}" (resolvedBy: ${resolvedBy}, frescor: ${ageMin}min, tier: ${tierLabel})`,
+          });
+          console.log(`[SONG-SELECT] ✅ [P1-T${tierIdx + 1}] Selecionada: "${candidate.artist} - ${candidate.title}" (frescor: ${ageMin}min, resolvedBy: ${resolvedBy})`);
+          break;
+        } else {
+          missingFromTier.push(candidate);
+        }
+      }
+
+      // PHASE 2: No song from this tier exists in library — try JIT download
+      // Only attempt JIT on the first tier (freshest) to avoid wasting time on older songs
+      if (!selectedSong && missingFromTier.length > 0 && tierIdx <= 1) {
+        let jitAttemptsP1 = 0;
+        const maxJitAttemptsP1 = tierIdx === 0 ? 8 : 4; // More attempts for freshest tier
+        let missingMarks = 0;
+
+        console.log(`[SONG-SELECT] ⚠️ [P1-T${tierIdx + 1}] Nenhuma música ${tierLabel} de "${stationName}" na biblioteca (${missingFromTier.length} candidatas). Tentando JIT...`);
+
+        for (const candidate of missingFromTier) {
+          if (jitAttemptsP1 >= maxJitAttemptsP1) break;
+
+          jitAttemptsP1++;
+          const ageMin = candidate.scrapedAt ? Math.round((now - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
+          console.log(`[SONG-SELECT] 🔍 [P1-T${tierIdx + 1}] "${candidate.artist} - ${candidate.title}" (${ageMin}min) ausente, tentativa JIT ${jitAttemptsP1}/${maxJitAttemptsP1}...`);
+          const jitAlias = aliasEngine.resolve(candidate.artist, candidate.title);
+          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs, jitAlias.artist, jitAlias.title);
+          if (downloaded) {
+            const recheck = await findWithAliasFallback(candidate.artist, candidate.title);
+            if (recheck.exists) {
+              const correctFilename = recheck.filename || sanitizeFilename(`${jitAlias.artist} - ${jitAlias.title}.mp3`);
+              selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+              logs.push({
+                blockTime: timeStr,
+                type: 'used',
+                title: candidate.title,
+                artist: candidate.artist,
+                station: candidate.station,
+                style: candidate.style,
+                reason: `[P1] Baixada JIT de "${stationName}" (tentativa ${jitAttemptsP1}, frescor: ${ageMin}min, tier: ${tierLabel})`,
+              });
+              break;
+            }
+          }
+          console.log(`[SONG-SELECT] ⚠️ [P1-T${tierIdx + 1}] JIT ${jitAttemptsP1}/${maxJitAttemptsP1} falhou, continuando...`);
+
+          // Mark missing + carry-over (capped)
+          if (missingMarks < MAX_MISSING_MARKS_PER_PRIORITY) {
+            missingMarks++;
+            if (!ctx.isSongAlreadyMissing(candidate.artist, candidate.title)) {
+              ctx.addMissingSong({
+                id: `missing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                title: candidate.title,
+                artist: candidate.artist,
+                station: stationName || 'UNKNOWN',
+                timestamp: new Date(),
+                status: 'missing',
+                dna: stationStyle,
+                urgency: 'grade',
+              });
+            }
+            ctx.addCarryOverSong({
               title: candidate.title,
               artist: candidate.artist,
               station: stationName || 'UNKNOWN',
-              timestamp: new Date(),
-              status: 'missing',
-              dna: stationStyle,
-              urgency: 'grade',
+              style: stationStyle,
+              targetBlock: timeStr,
             });
           }
-          ctx.addCarryOverSong({
-            title: candidate.title,
-            artist: candidate.artist,
-            station: stationName || 'UNKNOWN',
-            style: stationStyle,
-            targetBlock: timeStr,
-          });
         }
       }
-    }
+    } // end tier loop
   }
 
   // ============================================================
