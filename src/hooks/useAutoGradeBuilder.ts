@@ -2168,6 +2168,7 @@ export function useAutoGradeBuilder() {
         console.log(`[AUTO-GRADE] 🔓 Ciclo ${lastRealtimeBlockRef.current || 'inicial'} → ${blockKey} (${reason})`);
         builtBlocksRef.current.delete(blockKey);
         lastRealtimeBlockRef.current = blockKey;
+        lastWrittenContentHashRef.current = ''; // Reset hash for new cycle
       }
 
       // Always run tick build; per-block lock/completeness is decided inside buildGrade
