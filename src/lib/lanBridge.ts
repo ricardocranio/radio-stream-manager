@@ -149,6 +149,7 @@ export function createLanElectronAPI(): typeof window.electronAPI {
     
     // Content folder cleanup
     cleanupContentFolder: (params: any) => lanApiCall('cleanup-content-folder', params),
+    cleanupOldDayFiles: (params: any) => lanApiCall('cleanup-old-day-files', params),
     
     // Grade files
     saveGradeFile: (params: any) => lanApiCall('save-grade-file', params),
