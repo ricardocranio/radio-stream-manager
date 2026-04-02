@@ -10,6 +10,7 @@
 import { useRef, useCallback } from 'react';
 import { useRadioStore, FixedContent } from '@/store/radioStore';
 import { reportServiceHeartbeat } from '@/hooks/useServiceWatchdog';
+import { clearGradeStorage } from '@/lib/gradeBuilder/gradePersistence';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 const CHECK_INTERVAL_MS = 60_000; // check every minute
