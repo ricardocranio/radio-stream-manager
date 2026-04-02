@@ -128,7 +128,7 @@ export function useContentCleanupService() {
     }
   }, [getFolder]);
 
-  /** Delete old grade files (e.g. on Thursday delete SEG.txt, TER.txt, QUA.txt) */
+  /** Delete old grade files — keep ONLY today's grade (e.g. on Thursday keep only QUI.txt) */
   const cleanOldGradeFiles = useCallback(async () => {
     if (!isElectron || !window.electronAPI?.cleanupOldDayFiles) return;
     try {
@@ -140,10 +140,10 @@ export function useContentCleanupService() {
     const gradeFolder = config.gradeFolder;
     if (!gradeFolder) return;
 
-    console.log(`[GRADE-CLEANUP] 🗓️ Verificando grades de dias passados em: ${gradeFolder}`);
+    console.log(`[GRADE-CLEANUP] 🗓️ Limpando grades — mantendo SOMENTE o dia atual em: ${gradeFolder}`);
 
     try {
-      const result = await window.electronAPI.cleanupOldDayFiles({ folder: gradeFolder });
+      const result = await window.electronAPI.cleanupOldDayFiles({ folder: gradeFolder, onlyKeepToday: true });
 
       if (result.success) {
         localStorage.setItem(GRADE_OLD_DAY_CLEANED_KEY, new Date().toDateString());
@@ -152,12 +152,12 @@ export function useContentCleanupService() {
         clearGradeStorage();
 
         if (result.deletedCount > 0) {
-          console.log(`[GRADE-CLEANUP] ✅ ${result.deletedCount} grade(s) de dias passados removidas: ${result.deletedFiles.join(', ')}`);
+          console.log(`[GRADE-CLEANUP] ✅ ${result.deletedCount} grade(s) removidas: ${result.deletedFiles.join(', ')}`);
 
           if (window.electronAPI?.showNotification) {
             window.electronAPI.showNotification(
               '🗓️ Grades Antigas Removidas',
-              `${result.deletedCount} grade(s) removidas. Mantidas: ${result.keptDays.join(', ')}`
+              `${result.deletedCount} grade(s) removidas. Mantida: ${result.keptDays.join(', ')}`
             );
           }
         } else {
