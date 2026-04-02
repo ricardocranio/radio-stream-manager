@@ -482,13 +482,20 @@ export async function selectSongForSlot(
       }
 
       // PHASE 2: No song from this tier exists in library — try JIT download
-      // Only attempt JIT on the first tier (freshest) to avoid wasting time on older songs
-      if (!selectedSong && missingFromTier.length > 0 && tierIdx <= 1) {
+      // ALL tiers attempt JIT because the monitor updates every 5min,
+      // so candidates exist but may not have been downloaded yet.
+      // Freshest tier gets most attempts; older tiers get fewer.
+      if (!selectedSong && missingFromTier.length > 0) {
         let jitAttemptsP1 = 0;
-        const maxJitAttemptsP1 = tierIdx === 0 ? 8 : 4; // More attempts for freshest tier
+        // Tier 1 (≤15min): 10 attempts — most critical, freshest captures
+        // Tier 2 (≤30min): 6 attempts — still very relevant
+        // Tier 3 (≤1h): 4 attempts — worth trying
+        // Tier 4 (≤2h): 3 attempts — last resort within P1
+        const jitBudgetByTier = [10, 6, 4, 3];
+        const maxJitAttemptsP1 = jitBudgetByTier[tierIdx] || 3;
         let missingMarks = 0;
 
-        console.log(`[SONG-SELECT] ⚠️ [P1-T${tierIdx + 1}] Nenhuma música ${tierLabel} de "${stationName}" na biblioteca (${missingFromTier.length} candidatas). Tentando JIT...`);
+        console.log(`[SONG-SELECT] ⚠️ [P1-T${tierIdx + 1}] Nenhuma música ${tierLabel} de "${stationName}" na biblioteca (${missingFromTier.length} candidatas). Tentando JIT (${maxJitAttemptsP1} tentativas)...`);
 
         for (const candidate of missingFromTier) {
           if (jitAttemptsP1 >= maxJitAttemptsP1) break;
