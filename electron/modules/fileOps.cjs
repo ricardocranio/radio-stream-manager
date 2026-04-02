@@ -416,6 +416,96 @@ function register({ getMainWindow, safeHandle }) {
     }
   });
 
+  // IPC: Delete files from past weekdays in content folder
+  // E.g. if today is Thursday (QUINTA), delete files containing SEGUNDA, TERCA, QUARTA
+  handle('cleanup-old-day-files', async (event, { folder }) => {
+    const DAY_NAMES = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SABADO'];
+    // Also match accented variants
+    const DAY_VARIANTS = {
+      'SABADO': ['SABADO', 'SÁBADO'],
+      'TERCA': ['TERCA', 'TERÇA'],
+      'QUARTA': ['QUARTA'],
+      'QUINTA': ['QUINTA'],
+      'SEXTA': ['SEXTA'],
+      'SEGUNDA': ['SEGUNDA'],
+      'DOMINGO': ['DOMINGO'],
+    };
+
+    const today = new Date().getDay(); // 0=Sun, 1=Mon...6=Sat
+    const todayName = DAY_NAMES[today];
+
+    // Build set of days to KEEP: today + future days until Sunday
+    // Week cycle: today → ... → Saturday → Sunday (wraps)
+    // Keep today and the remaining days of the week (forward)
+    const keepDays = new Set();
+    for (let i = today; i <= 6; i++) {
+      keepDays.add(DAY_NAMES[i]);
+    }
+    // If today is Mon-Sat, also keep Sunday (weekend)
+    if (today >= 1) {
+      keepDays.add('DOMINGO');
+    }
+
+    // Days to delete = all days NOT in keepDays
+    const deleteDays = DAY_NAMES.filter(d => !keepDays.has(d));
+
+    if (deleteDays.length === 0) {
+      console.log(`[FILE-OPS] ✅ Nenhum dia passado para limpar (hoje: ${todayName})`);
+      return { success: true, deletedCount: 0, deletedFiles: [], keptDays: [...keepDays] };
+    }
+
+    console.log(`[FILE-OPS] 🗓️ Hoje: ${todayName} — Apagar arquivos de: ${deleteDays.join(', ')} — Manter: ${[...keepDays].join(', ')}`);
+
+    try {
+      if (!fs.existsSync(folder)) {
+        return { success: false, deletedCount: 0, error: 'Pasta não encontrada' };
+      }
+
+      // Build patterns to match (all variants of days to delete)
+      const deletePatterns = [];
+      for (const day of deleteDays) {
+        const variants = DAY_VARIANTS[day] || [day];
+        for (const v of variants) {
+          deletePatterns.push(v.toUpperCase());
+          deletePatterns.push(v.toLowerCase());
+          // Mixed case
+          deletePatterns.push(v.charAt(0).toUpperCase() + v.slice(1).toLowerCase());
+        }
+      }
+
+      const allFiles = fs.readdirSync(folder);
+      const deletedFiles = [];
+
+      for (const file of allFiles) {
+        const filePath = path.join(folder, file);
+        const stat = fs.statSync(filePath);
+        
+        // Skip directories (like PkInfo) — only delete files
+        if (stat.isDirectory()) continue;
+
+        // Check if filename contains any of the delete-day patterns
+        const upperFile = file.toUpperCase();
+        const shouldDelete = deletePatterns.some(pattern => upperFile.includes(pattern.toUpperCase()));
+
+        if (shouldDelete) {
+          try {
+            fs.unlinkSync(filePath);
+            deletedFiles.push(file);
+            console.log(`[FILE-OPS] 🗑️ Arquivo removido: ${file}`);
+          } catch (err) {
+            console.error(`[FILE-OPS] ❌ Erro ao remover ${file}: ${err.message}`);
+          }
+        }
+      }
+
+      console.log(`[FILE-OPS] ✅ Limpeza de dias passados: ${deletedFiles.length} arquivo(s) removido(s)`);
+      return { success: true, deletedCount: deletedFiles.length, deletedFiles, keptDays: [...keepDays] };
+    } catch (err) {
+      console.error(`[FILE-OPS] ❌ Erro na limpeza de dias passados: ${err.message}`);
+      return { success: false, deletedCount: 0, error: err.message };
+    }
+  });
+
   handle('process-temp-files', async (event, { musicFolders }) => {
     const results = { processed: 0, moved: 0, skipped: 0, errors: 0, details: [], movedFiles: [] };
     const mainWindow = _getMainWindow();
