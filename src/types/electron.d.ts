@@ -299,6 +299,7 @@ interface ElectronAPI {
   
   // Content folder cleanup
   cleanupContentFolder: (params: { folder: string }) => Promise<{ success: boolean; deletedCount?: number; error?: string }>;
+  cleanupOldDayFiles: (params: { folder: string }) => Promise<{ success: boolean; deletedCount: number; deletedFiles: string[]; keptDays: string[]; error?: string }>;
   
   // Grade file operations
   saveGradeFile: (params: GradeFileParams) => Promise<GradeFileResult>;
