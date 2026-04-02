@@ -5,7 +5,7 @@
 ║                          INTEGRADO COM SUPABASE                               ║
 ║                                                                               ║
 ║  MELHORIAS v3.5:                                                              ║
-║  - Buffer de frescor em memória (janela 15 min, histórico 60 min)            ║
+║  - Buffer de frescor em memória (janela 20 min, histórico 60 min)            ║
 ║  - Build pool ponderado: rádios ativas ganham mais slots de scraping         ║
 ║  - Envio em batch ao Supabase (após ciclo completo, menos latência)          ║
 ║  - Resumo de frescor por rádio ao final de cada ciclo                        ║
