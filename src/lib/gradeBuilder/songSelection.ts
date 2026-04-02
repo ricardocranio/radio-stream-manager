@@ -382,7 +382,7 @@ export async function selectSongForSlot(
 
   // ============================================================
   // PRIORITY 1: Station Pool (primary source — the configured radio)
-  // GRADUATED FRESHNESS: Tries 15min → 30min → 60min → 120min tiers.
+  // GRADUATED FRESHNESS: Tries 20min → 40min → 60min → 120min tiers.
   // Each tier expands the window only if the previous one found ZERO
   // library-available candidates. This maximizes P1 hit rate while
   // still preferring the freshest songs from the target station.
@@ -482,13 +482,13 @@ export async function selectSongForSlot(
       }
 
       // PHASE 2: No song from this tier exists in library — try JIT download
-      // ALL tiers attempt JIT because the monitor updates every 5min,
+      // ALL tiers attempt JIT because the monitor updates every 12min,
       // so candidates exist but may not have been downloaded yet.
       // Freshest tier gets most attempts; older tiers get fewer.
       if (!selectedSong && missingFromTier.length > 0) {
         let jitAttemptsP1 = 0;
-        // Tier 1 (≤15min): 10 attempts — most critical, freshest captures
-        // Tier 2 (≤30min): 6 attempts — still very relevant
+        // Tier 1 (≤20min): 10 attempts — most critical, freshest captures
+        // Tier 2 (≤40min): 6 attempts — still very relevant
         // Tier 3 (≤1h): 4 attempts — worth trying
         // Tier 4 (≤2h): 3 attempts — last resort within P1
         const jitBudgetByTier = [10, 6, 4, 3];
