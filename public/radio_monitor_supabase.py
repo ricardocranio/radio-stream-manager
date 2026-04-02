@@ -639,7 +639,7 @@ class RadioMonitor:
         # ── Buffer de frescor ──────────────────────────────────────────
         # Formato: {'BH FM': [{'song': 'Artista - Música', 'ts': datetime}, ...]}
         self.recentes: Dict[str, List[Dict]] = {}
-        self.janela_frescor_minutos = 15
+        self.janela_frescor_minutos = 20
         
         self.arquivo_historico = os.path.join(_DATA_DIR, "radio_historico.json")
         self.arquivo_relatorio = os.path.join(_DATA_DIR, "radio_relatorio.txt")
