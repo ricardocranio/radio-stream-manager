@@ -24,7 +24,7 @@ import { sanitizeFilename } from '@/lib/sanitizeFilename';
 import { buildBlockedEngine } from '@/lib/blockedSongsEngine';
 import { buildAliasEngine } from '@/lib/aliasEngine';
 import { getDownloadDecision } from '@/lib/downloadGuard';
-import { songKey as makeSongKey } from '@/lib/songUtils';
+import { songKey as makeSongKey, normalizeStr } from '@/lib/songUtils';
 import { ensureFileMatchesGradeName, filenameNeedsSanitization, ensureFileRenamedOnDisk } from './sanitize';
 import type { SongEntry, BlockLogItem, BlockStats, GradeContext, CarryOverSong } from './types';
 import { STATION_ID_TO_DB_NAME } from './constants';
@@ -291,6 +291,14 @@ export async function selectSongForSlot(
   const isBlockedSong = (artist: string, title: string): boolean =>
     blockedEngine.isBlocked(artist, title);
 
+  // Build a set of blocked title fragments for partial matching
+  const _blockedTitleFragments: string[] = (storeConfig.blockedSongs || [])
+    .map(entry => {
+      const dash = entry.indexOf(' - ');
+      return dash !== -1 ? normalizeStr(entry.slice(dash + 3)) : '';
+    })
+    .filter(t => t.length >= 4); // Only fragments with 4+ chars to avoid false positives
+
   const isValidCandidate = (title: string, artist: string) => {
     const key = `${title.toLowerCase()}-${artist.toLowerCase()}`;
     const normalizedArtist = artist.toLowerCase().trim();
@@ -307,6 +315,29 @@ export async function selectSongForSlot(
     if ((corrected.artist !== artist || corrected.title !== title) && isBlockedSong(corrected.artist, corrected.title)) {
       console.log(`[SONG-SELECT] 🚫 Bloqueada via alias: "${artist} - ${title}" → "${corrected.artist} - ${corrected.title}"`);
       return false;
+    }
+    // 🚫 Partial title match — catches variations like "feat." or "remix" appended by radio
+    const normTitle = normalizeStr(title);
+    const normCorrectedTitle = normalizeStr(corrected.title);
+    for (const frag of _blockedTitleFragments) {
+      if (normTitle === frag || normCorrectedTitle === frag ||
+          (frag.length >= 6 && (normTitle.includes(frag) || normCorrectedTitle.includes(frag)))) {
+        // Double-check: also verify artist partially matches any blocked entry with this title
+        const normArt = normalizeStr(artist);
+        const normCorrArt = normalizeStr(corrected.artist);
+        const matchesArtist = (storeConfig.blockedSongs || []).some(entry => {
+          const dash = entry.indexOf(' - ');
+          if (dash === -1) return false;
+          const blockedArtist = normalizeStr(entry.slice(0, dash));
+          const blockedTitle = normalizeStr(entry.slice(dash + 3));
+          return blockedTitle === frag && (normArt.includes(blockedArtist) || blockedArtist.includes(normArt) ||
+                                            normCorrArt.includes(blockedArtist) || blockedArtist.includes(normCorrArt));
+        });
+        if (matchesArtist) {
+          console.log(`[SONG-SELECT] 🚫 Bloqueada (match parcial): "${artist} - ${title}" contém título bloqueado "${frag}"`);
+          return false;
+        }
+      }
     }
     // Artist blackout by time range
     if (ctx.artistBlackouts?.length) {
