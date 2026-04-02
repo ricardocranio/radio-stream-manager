@@ -382,7 +382,7 @@ export async function selectSongForSlot(
 
   // ============================================================
   // PRIORITY 1: Station Pool (primary source — the configured radio)
-  // GRADUATED FRESHNESS: Tries 15min → 30min → 60min → 120min tiers.
+  // GRADUATED FRESHNESS: Tries 20min → 40min → 60min → 120min tiers.
   // Each tier expands the window only if the previous one found ZERO
   // library-available candidates. This maximizes P1 hit rate while
   // still preferring the freshest songs from the target station.
