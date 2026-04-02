@@ -418,32 +418,35 @@ function register({ getMainWindow, safeHandle }) {
 
   // IPC: Delete files from past weekdays in content folder
   // E.g. if today is Thursday (QUINTA), delete files containing SEGUNDA, TERCA, QUARTA
-  handle('cleanup-old-day-files', async (event, { folder }) => {
+  handle('cleanup-old-day-files', async (event, { folder, onlyKeepToday }) => {
     const DAY_NAMES = ['DOMINGO', 'SEGUNDA', 'TERCA', 'QUARTA', 'QUINTA', 'SEXTA', 'SABADO'];
     // Also match accented variants
     const DAY_VARIANTS = {
-      'SABADO': ['SABADO', 'SÁBADO'],
-      'TERCA': ['TERCA', 'TERÇA'],
-      'QUARTA': ['QUARTA'],
-      'QUINTA': ['QUINTA'],
-      'SEXTA': ['SEXTA'],
-      'SEGUNDA': ['SEGUNDA'],
-      'DOMINGO': ['DOMINGO'],
+      'SABADO': ['SABADO', 'SÁBADO', 'SAB', 'SÁB'],
+      'TERCA': ['TERCA', 'TERÇA', 'TER'],
+      'QUARTA': ['QUARTA', 'QUA'],
+      'QUINTA': ['QUINTA', 'QUI'],
+      'SEXTA': ['SEXTA', 'SEX'],
+      'SEGUNDA': ['SEGUNDA', 'SEG'],
+      'DOMINGO': ['DOMINGO', 'DOM'],
     };
 
     const today = new Date().getDay(); // 0=Sun, 1=Mon...6=Sat
     const todayName = DAY_NAMES[today];
 
-    // Build set of days to KEEP: today + future days until Sunday
-    // Week cycle: today → ... → Saturday → Sunday (wraps)
-    // Keep today and the remaining days of the week (forward)
+    // Build set of days to KEEP
     const keepDays = new Set();
-    for (let i = today; i <= 6; i++) {
-      keepDays.add(DAY_NAMES[i]);
-    }
-    // If today is Mon-Sat, also keep Sunday (weekend)
-    if (today >= 1) {
-      keepDays.add('DOMINGO');
+    if (onlyKeepToday) {
+      // Grade mode: keep ONLY today's file
+      keepDays.add(todayName);
+    } else {
+      // Content folder mode: keep today + future days
+      for (let i = today; i <= 6; i++) {
+        keepDays.add(DAY_NAMES[i]);
+      }
+      if (today >= 1) {
+        keepDays.add('DOMINGO');
+      }
     }
 
     // Days to delete = all days NOT in keepDays
@@ -454,7 +457,7 @@ function register({ getMainWindow, safeHandle }) {
       return { success: true, deletedCount: 0, deletedFiles: [], keptDays: [...keepDays] };
     }
 
-    console.log(`[FILE-OPS] 🗓️ Hoje: ${todayName} — Apagar arquivos de: ${deleteDays.join(', ')} — Manter: ${[...keepDays].join(', ')}`);
+    console.log(`[FILE-OPS] 🗓️ Hoje: ${todayName} — Apagar arquivos de: ${deleteDays.join(', ')} — Manter: ${[...keepDays].join(', ')}${onlyKeepToday ? ' (somente hoje)' : ''}`);
 
     try {
       if (!fs.existsSync(folder)) {
