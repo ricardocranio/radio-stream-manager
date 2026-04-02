@@ -2136,7 +2136,7 @@ export function useAutoGradeBuilder() {
 
   const realtimeBuildRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRealtimeBlockRef = useRef<string>('');
-  const lastRealtimeWrittenRef = useRef<string>('');
+  const lastWrittenContentHashRef = useRef<string>('');
   const realtimeTickInProgressRef = useRef(false);
 
   const getUpcomingBlockInfo = useCallback(() => {
@@ -2168,22 +2168,28 @@ export function useAutoGradeBuilder() {
         console.log(`[AUTO-GRADE] 🔓 Ciclo ${lastRealtimeBlockRef.current || 'inicial'} → ${blockKey} (${reason})`);
         builtBlocksRef.current.delete(blockKey);
         lastRealtimeBlockRef.current = blockKey;
+        lastWrittenContentHashRef.current = ''; // Reset hash for new cycle
       }
 
       // Always run tick build; per-block lock/completeness is decided inside buildGrade
       console.log(`[AUTO-GRADE] ⚡ Tick realtime para bloco ${blockKey} (${reason})`);
       await buildGrade(false, false);
 
-      // Disk write within the configured window
-      const shouldWrite = !isWebOnly && minutesUntilBlock <= state.minutesBeforeBlock && lastRealtimeWrittenRef.current !== blockKey;
-      if (shouldWrite) {
-        if (pendingGradeRef.current?.blockKey !== blockKey) {
-          console.log(`[AUTO-GRADE] ♻️ Buffer desatualizado, regenerando ${blockKey} antes da escrita`);
-          await buildGrade(false, true);
+      // Disk write within the configured window — re-write whenever content changes
+      const shouldWrite = !isWebOnly && minutesUntilBlock <= state.minutesBeforeBlock;
+      if (shouldWrite && pendingGradeRef.current) {
+        // Compute a simple hash of the current lineMap content to detect changes
+        const currentContent = Array.from(pendingGradeRef.current.lineMap.keys())
+          .sort()
+          .map(t => pendingGradeRef.current!.lineMap.get(t))
+          .join('\n');
+        const contentHash = currentContent.length + ':' + currentContent.slice(0, 200) + currentContent.slice(-200);
+        
+        if (contentHash !== lastWrittenContentHashRef.current) {
+          console.log(`[AUTO-GRADE] 📝 Conteúdo da grade mudou — re-escrevendo no disco para bloco ${blockKey} (${minutesUntilBlock} min antes)`);
+          await flushGradeToDisk();
+          lastWrittenContentHashRef.current = contentHash;
         }
-        console.log(`[AUTO-GRADE] 📝 Escrevendo grade no disco para bloco ${blockKey} (${minutesUntilBlock} min antes)`);
-        await flushGradeToDisk();
-        lastRealtimeWrittenRef.current = blockKey;
       }
     } finally {
       realtimeTickInProgressRef.current = false;
