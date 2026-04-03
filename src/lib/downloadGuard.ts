@@ -1,5 +1,5 @@
 import { buildAliasEngine } from './aliasEngine';
-import { buildBlockedEngine } from './blockedSongsEngine';
+import { buildBlockedEngine, type BlockedRule } from './blockedSongsEngine';
 import { isVinhetaOrJingle } from './vinhetaFilter';
 
 type SongAlias = {
@@ -30,7 +30,7 @@ export type DownloadDecision =
   | (DownloadDecisionBase & {
       allowed: false;
       reason: 'blocked';
-      blockRule: 'exact' | 'alias';
+      blockRule: BlockedRule;
     })
   | (DownloadDecisionBase & {
       allowed: false;
@@ -62,12 +62,12 @@ export function createDownloadGuard({
       };
     }
 
-    const aliasBlocked = aliasChanged && blockedEngine.isBlocked(resolved.artist, resolved.title);
-    if (blockedEngine.isBlocked(originalArtist, originalTitle) || aliasBlocked) {
+    const blockMatch = blockedEngine.getBlockMatch(originalArtist, originalTitle);
+    if (blockMatch) {
       return {
         allowed: false,
         reason: 'blocked',
-        blockRule: aliasBlocked ? 'alias' : 'exact',
+        blockRule: blockMatch.rule,
         originalArtist,
         originalTitle,
         downloadArtist: resolved.artist,
