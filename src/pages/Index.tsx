@@ -29,6 +29,7 @@ const TrendsView = lazy(() => import('@/components/views/TrendsView').then(m => 
 const AnalyticsView = lazy(() => import('@/components/views/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
 const CompetitorView = lazy(() => import('@/components/views/CompetitorView').then(m => ({ default: m.CompetitorView })));
 const MapasView = lazy(() => import('@/components/views/MapasView').then(m => ({ default: m.MapasView })));
+const ManualView = lazy(() => import('@/components/views/ManualView').then(m => ({ default: m.ManualView })));
 
 // Prefetch map: preload chunk on hover for instant navigation
 const PREFETCH_MAP: Record<string, () => void> = {
@@ -51,6 +52,7 @@ const PREFETCH_MAP: Record<string, () => void> = {
   folders: () => import('@/components/views/FoldersView'),
   missing: () => import('@/components/views/MissingView'),
   settings: () => import('@/components/views/SettingsView'),
+  manual: () => import('@/components/views/ManualView'),
 };
 
 // Loading fallback for lazy components
@@ -84,6 +86,7 @@ const TAB_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentTy
   folders: FoldersView,
   missing: MissingView,
   settings: SettingsView,
+  manual: ManualView,
 };
 
 /**
