@@ -30,6 +30,7 @@ import {
 import { selectSongForSlot, handleSpecialSequenceType } from '@/lib/gradeBuilder/songSelection';
 import { batchFindSongsInLibrary, findSongInLibrary as findSongInLibraryFn } from '@/lib/gradeBuilder/batchLibrary';
 import { isRomanceBlock, generateRomanceBlock } from '@/lib/gradeBuilder/folderPrograms';
+import { isWeekdayTemplateBlock, generateWeekdayTemplateBlock } from '@/lib/gradeBuilder/weekdayTemplates';
 import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
