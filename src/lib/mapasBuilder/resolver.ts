@@ -291,7 +291,6 @@ async function loadMonitoredGenreSongs(
     return [];
   }
 }
-}
 
 /**
  * Load songs filtered by genre from library metadata.
