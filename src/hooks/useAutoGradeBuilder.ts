@@ -1943,16 +1943,36 @@ export function useAutoGradeBuilder() {
       const nextSundayMismatch = hasSundayMismatch(nextExistingLine);
       const thirdSundayMismatch = hasSundayMismatch(thirdExistingLine);
 
+      // === TIME-PROXIMITY GATE ===
+      // Only build blocks that are within DEFAULT_MINUTES_BEFORE_BLOCK (10 min) of their start time.
+      // This prevents premature generation (e.g. building the 12:00 block at 11:28).
+      const now = new Date();
+      const nowTotalMin = now.getHours() * 60 + now.getMinutes();
+      const minutesUntil = (blockHour: number, blockMinute: number): number => {
+        let diff = (blockHour * 60 + blockMinute) - nowTotalMin;
+        if (diff < 0) diff += 1440; // past midnight wrap
+        return diff;
+      };
+      const maxLeadMinutes = DEFAULT_MINUTES_BEFORE_BLOCK; // 10 min
+      const currentInWindow = true; // current block is always eligible (already started or about to)
+      const nextInWindow = minutesUntil(blocks.next.hour, blocks.next.minute) <= maxLeadMinutes;
+      const thirdInWindow = minutesUntil(blocks.third.hour, blocks.third.minute) <= maxLeadMinutes;
+
       // Fully resolved blocks are LOCKED and skip rebuild (unless force refresh or scheduled sequence)
       const shouldBuildCurrent = forceRegenerate || currentCoveredBySchedule
         ? true
         : (!currentLocked && !currentFullyResolved) || currentSaturdayMismatch || currentSundayMismatch;
-      const shouldBuildNext = forceRegenerate || nextCoveredBySchedule
-        ? true
-        : (!nextLocked && !nextFullyResolved) || nextSaturdayMismatch || nextSundayMismatch;
-      const shouldBuildThird = forceRegenerate || thirdCoveredBySchedule
-        ? true
-        : (!thirdLocked && !thirdFullyResolved) || thirdSaturdayMismatch || thirdSundayMismatch;
+      const shouldBuildNext = !nextInWindow ? false
+        : forceRegenerate || nextCoveredBySchedule
+          ? true
+          : (!nextLocked && !nextFullyResolved) || nextSaturdayMismatch || nextSundayMismatch;
+      const shouldBuildThird = !thirdInWindow ? false
+        : forceRegenerate || thirdCoveredBySchedule
+          ? true
+          : (!thirdLocked && !thirdFullyResolved) || thirdSaturdayMismatch || thirdSundayMismatch;
+
+      if (!nextInWindow) console.log(`[AUTO-GRADE] ⏳ Bloco ${nextTimeKey} fora da janela (${minutesUntil(blocks.next.hour, blocks.next.minute)} min) — aguardando`);
+      if (!thirdInWindow) console.log(`[AUTO-GRADE] ⏳ Bloco ${thirdTimeKey} fora da janela (${minutesUntil(blocks.third.hour, blocks.third.minute)} min) — aguardando`);
 
       if (!shouldBuildCurrent && !shouldBuildNext && !shouldBuildThird) {
         console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey}, ${nextTimeKey} e ${thirdTimeKey} já resolvidos, pulando`);
