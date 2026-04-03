@@ -193,9 +193,10 @@ export function FoldersView() {
               </p>
             </div>
 
+            {/* Content Folders - multiple */}
             <div>
               <Label className="text-xs text-muted-foreground uppercase tracking-wide">
-                Pasta de Conteúdos
+                Pastas de Conteúdos
               </Label>
               <Input
                 value={localConfig.contentFolder}
@@ -206,8 +207,46 @@ export function FoldersView() {
                 placeholder="G:\Conteudos KF"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Conteúdos fixos como notícias, horóscopo, etc.
+                Pasta principal de conteúdos fixos
               </p>
+              {(localConfig.extraContentFolders || []).map((folder, idx) => (
+                <div key={`content-${idx}`} className="flex gap-2 mt-2">
+                  <Input
+                    value={folder}
+                    onChange={(e) => {
+                      const updated = [...(localConfig.extraContentFolders || [])];
+                      updated[idx] = e.target.value;
+                      setLocalConfig((prev) => ({ ...prev, extraContentFolders: updated }));
+                    }}
+                    className="font-mono text-sm flex-1"
+                    placeholder="Caminho adicional de conteúdos"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      const updated = (localConfig.extraContentFolders || []).filter((_, i) => i !== idx);
+                      setLocalConfig((prev) => ({ ...prev, extraContentFolders: updated }));
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() =>
+                  setLocalConfig((prev) => ({
+                    ...prev,
+                    extraContentFolders: [...(prev.extraContentFolders || []), ''],
+                  }))
+                }
+              >
+                <FolderPlus className="w-4 h-4 mr-2" />
+                Adicionar Pasta de Conteúdo
+              </Button>
             </div>
 
             <div>
@@ -227,10 +266,11 @@ export function FoldersView() {
               </p>
             </div>
 
+            {/* Vinhetas Folders - multiple */}
             <div>
               <Label className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                 <Music className="w-3 h-3" />
-                Pasta de Vinhetas (VHT)
+                Pastas de Vinhetas (VHT)
               </Label>
               <div className="flex gap-2 mt-2">
                 <Input
@@ -258,8 +298,46 @@ export function FoldersView() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Arquivos .mp3 de vinhetas usados entre músicas na grade (VHT)
+                Pasta principal de vinhetas usadas entre músicas na grade
               </p>
+              {(localConfig.extraVinhetasFolders || []).map((folder, idx) => (
+                <div key={`vht-${idx}`} className="flex gap-2 mt-2">
+                  <Input
+                    value={folder}
+                    onChange={(e) => {
+                      const updated = [...(localConfig.extraVinhetasFolders || [])];
+                      updated[idx] = e.target.value;
+                      setLocalConfig((prev) => ({ ...prev, extraVinhetasFolders: updated }));
+                    }}
+                    className="font-mono text-sm flex-1"
+                    placeholder="Caminho adicional de vinhetas"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      const updated = (localConfig.extraVinhetasFolders || []).filter((_, i) => i !== idx);
+                      setLocalConfig((prev) => ({ ...prev, extraVinhetasFolders: updated }));
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() =>
+                  setLocalConfig((prev) => ({
+                    ...prev,
+                    extraVinhetasFolders: [...(prev.extraVinhetasFolders || []), ''],
+                  }))
+                }
+              >
+                <FolderPlus className="w-4 h-4 mr-2" />
+                Adicionar Pasta de Vinhetas
+              </Button>
             </div>
           </CardContent>
         </Card>
