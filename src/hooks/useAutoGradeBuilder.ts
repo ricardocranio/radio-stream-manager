@@ -1767,7 +1767,7 @@ export function useAutoGradeBuilder() {
 
     try {
       const blocks = getBlockTimes();
-      const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
+      let currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       let nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
       let thirdTimeKey = `${blocks.third.hour.toString().padStart(2, '0')}:${blocks.third.minute.toString().padStart(2, '0')}`;
       const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
@@ -1798,7 +1798,10 @@ export function useAutoGradeBuilder() {
         blocks.current = { hour: 22, minute: 0 };
         blocks.next = { hour: 22, minute: 30 };
         blocks.third = { hour: 23, minute: 0 };
-        return buildGrade(forceWrite, forceRegenerate);
+        // Recalculate time keys after skip (NO recursive call — avoids infinite loop)
+        currentTimeKey = '22:00';
+        nextTimeKey = '22:30';
+        thirdTimeKey = '23:00';
       }
       if (blocks.next.hour === 21 && blocks.next.minute === 30 && isWeekday(targetDay)) {
         nextTimeKey = '22:00';
