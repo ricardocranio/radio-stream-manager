@@ -116,7 +116,7 @@ export function CapturedSongsView() {
         .select('id, title, artist, station_name, scraped_at, is_now_playing, source, ai_genre, ai_energy')
         .gte('scraped_at', dateThreshold.toISOString())
         .order('scraped_at', { ascending: false })
-        .limit(1000);
+        .limit(500);
 
       if (selectedStation !== 'all') {
         query = query.eq('station_name', selectedStation);
@@ -125,7 +125,18 @@ export function CapturedSongsView() {
       const { data, error } = await query;
       if (error) throw error;
 
-      const loadedSongs = data || [];
+      // Enforce MAX_SONGS_PER_STATION: keep only the N most recent per station
+      const stationCounts = new Map<string, number>();
+      const capped: ScrapedSong[] = [];
+      for (const song of (data || [])) {
+        const count = stationCounts.get(song.station_name) || 0;
+        if (count < MAX_SONGS_PER_STATION) {
+          capped.push(song);
+          stationCounts.set(song.station_name, count + 1);
+        }
+      }
+
+      const loadedSongs = capped;
       setSongs(loadedSongs);
 
       const uniqueGenres = [...new Set(loadedSongs.map((s) => s.ai_genre).filter(Boolean))] as string[];
