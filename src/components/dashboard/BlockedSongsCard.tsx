@@ -13,7 +13,7 @@ const STORAGE_KEY = 'pgmr_blocked_today';
 export interface BlockedEvent {
   artist: string;
   title: string;
-  rule: 'exact' | 'wildcard' | 'forbidden' | 'alias';
+  rule: 'exact' | 'wildcard' | 'forbidden' | 'alias' | 'partial';
   source: 'download' | 'grade' | 'mapa' | 'captured-download';
   timestamp: string;
 }
@@ -50,8 +50,8 @@ export function BlockedSongsCard() {
   const events = useMemo(() => loadBlockedEvents(), []);
 
   const stats = useMemo(() => {
-    const byRule = { exact: 0, wildcard: 0, forbidden: 0, alias: 0 };
-    const bySource = { download: 0, grade: 0, mapa: 0 };
+    const byRule = { exact: 0, wildcard: 0, forbidden: 0, alias: 0, partial: 0 };
+    const bySource = { download: 0, grade: 0, mapa: 0, 'captured-download': 0 };
     for (const e of events) {
       byRule[e.rule] = (byRule[e.rule] || 0) + 1;
       bySource[e.source] = (bySource[e.source] || 0) + 1;
@@ -64,6 +64,7 @@ export function BlockedSongsCard() {
     wildcard: { label: 'Artista *', icon: User, color: 'text-orange-400' },
     forbidden: { label: 'Proibida', icon: Type, color: 'text-amber-400' },
     alias: { label: 'Alias', icon: Shield, color: 'text-purple-400' },
+    partial: { label: 'Parcial', icon: Shield, color: 'text-rose-400' },
   };
 
   return (
@@ -103,6 +104,7 @@ export function BlockedSongsCard() {
             {/* Source breakdown */}
             <div className="flex gap-3 text-xs text-muted-foreground">
               {stats.bySource.download > 0 && <span>📥 Downloads: {stats.bySource.download}</span>}
+              {stats.bySource['captured-download'] > 0 && <span>🎙️ Capturadas: {stats.bySource['captured-download']}</span>}
               {stats.bySource.grade > 0 && <span>📋 Grade: {stats.bySource.grade}</span>}
               {stats.bySource.mapa > 0 && <span>🗺️ Mapa: {stats.bySource.mapa}</span>}
             </div>
