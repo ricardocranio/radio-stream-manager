@@ -505,7 +505,7 @@ function register({ safeHandle }) {
       }
     };
     
-    for (const folder of (musicFolders || [])) {
+    for (const folder of (folders || musicFolders || [])) {
       scanDir(folder);
     }
     
