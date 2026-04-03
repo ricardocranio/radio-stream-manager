@@ -163,6 +163,10 @@ export function useAutoGradeBuilder() {
   );
   const activeDayCodeRef = useRef<string>(DAY_CODES_BY_INDEX[new Date().getDay()]);
 
+  /** Tracks the date string for which we already pre-generated the next day's grade (avoids re-running) */
+  const nextDayBuiltForRef = useRef<string>('');
+  const nextDayBuildInProgressRef = useRef(false);
+
   // Restore pendingGradeRef from localStorage on mount
   const pendingGradeRestored = useRef(false);
   if (!pendingGradeRestored.current) {
@@ -1523,12 +1527,11 @@ export function useAutoGradeBuilder() {
 
   // ==================== Full Day Grade ====================
 
-  const buildFullDayGrade = useCallback(async () => {
+  const buildFullDayGrade = useCallback(async (overrideDay?: WeekDay) => {
     if (!getIsElectronEnv() || !window.electronAPI?.saveGradeFile) {
       toast({ title: '⚠️ Modo Web', description: 'Geração de grade disponível apenas no aplicativo desktop.' });
       return;
     }
-
     setState(prev => ({
       ...prev, isBuilding: true, error: null,
       fullDayProgress: 0, fullDayTotal: 48,
@@ -1537,15 +1540,16 @@ export function useAutoGradeBuilder() {
     }));
 
     const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
-    const targetDay = dayMap[new Date().getDay()];
+    const targetDay = overrideDay || dayMap[new Date().getDay()];
     const dayCode = getDayCode(targetDay);
     const filename = `${dayCode.toUpperCase()}.txt`;
 
     try {
-      console.log('[AUTO-GRADE] 🚀 Building full day grade with progressive saving...');
+      console.log(`[AUTO-GRADE] 🚀 Building full day grade: ${filename}...`);
       reportServiceHeartbeat('grade-builder');
-      logSystemError('GRADE', 'info', 'Iniciando geração da grade completa (salvamento progressivo)');
-      clearUsedSongs();
+      logSystemError('GRADE', 'info', `Iniciando geração da grade completa: ${filename} (salvamento progressivo)`);
+      // Only clear used songs if building for today — next-day builds use fresh context
+      if (!overrideDay) clearUsedSongs();
 
       // Load BPM cache from disk before building
       await loadBpmCacheFromDisk();
@@ -1679,6 +1683,41 @@ export function useAutoGradeBuilder() {
     clearUsedSongs, fetchAllRecentSongs, generateBlockLine, renameFilesInGradeContent,
     getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, toast, addBlockLogs,
   ]);
+
+  // ==================== Next Day Pre-Generation (22:00) ====================
+
+  const buildNextDayGrade = useCallback(async () => {
+    const todayStr = new Date().toDateString();
+    if (nextDayBuiltForRef.current === todayStr) return;
+    if (nextDayBuildInProgressRef.current) return;
+
+    nextDayBuildInProgressRef.current = true;
+    try {
+      const dayMapArr: WeekDay[] = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+      const tomorrowIndex = (new Date().getDay() + 1) % 7;
+      const tomorrowDay = dayMapArr[tomorrowIndex];
+      const tomorrowCode = getDayCode(tomorrowDay);
+      const tomorrowFilename = `${tomorrowCode.toUpperCase()}.txt`;
+
+      console.log(`[AUTO-GRADE] 🌙 22:00 — Pré-gerando grade do dia seguinte: ${tomorrowFilename} (${tomorrowDay})`);
+      logSystemError('GRADE', 'info', `Pré-geração do dia seguinte: ${tomorrowFilename}`, 'Disparado às 22:00 para garantir conteúdo pronto para a automação.');
+
+      await buildFullDayGrade(tomorrowDay);
+
+      nextDayBuiltForRef.current = todayStr;
+      console.log(`[AUTO-GRADE] ✅ Grade do dia seguinte pré-gerada: ${tomorrowFilename}`);
+      toast({ title: '🌙 Grade do Dia Seguinte', description: `${tomorrowFilename} gerado automaticamente às 22:00.` });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Erro desconhecido';
+      console.error(`[AUTO-GRADE] ❌ Erro na pré-geração do dia seguinte:`, msg);
+      logSystemError('GRADE', 'error', 'Erro na pré-geração do dia seguinte', msg);
+    } finally {
+      nextDayBuildInProgressRef.current = false;
+    }
+  }, [getDayCode, buildFullDayGrade, toast]);
+
+  const buildNextDayGradeRef = useRef(buildNextDayGrade);
+  buildNextDayGradeRef.current = buildNextDayGrade;
 
   // ==================== Pending Grade (in-memory buffer) ====================
 
@@ -2164,6 +2203,12 @@ export function useAutoGradeBuilder() {
       if (!isRunning && !isWebOnly) return;
 
       const { blockKey, minutesUntilBlock } = getUpcomingBlockInfo();
+
+      // === 22:00+ trigger: pre-generate next day's grade ===
+      const currentHour = new Date().getHours();
+      if (currentHour >= 22 && !isWebOnly) {
+        void buildNextDayGradeRef.current();
+      }
 
       // New cycle detection — unlock next block
       if (lastRealtimeBlockRef.current !== blockKey) {
