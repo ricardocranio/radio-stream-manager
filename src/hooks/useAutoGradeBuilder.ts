@@ -1799,6 +1799,9 @@ export function useAutoGradeBuilder() {
         blocks.next = { hour: 22, minute: 30 };
         blocks.third = { hour: 23, minute: 0 };
         // Recalculate time keys after skip (NO recursive call — avoids infinite loop)
+        currentTimeKey = '22:00';
+        nextTimeKey = '22:30';
+        thirdTimeKey = '23:00';
       }
       if (blocks.next.hour === 21 && blocks.next.minute === 30 && isWeekday(targetDay)) {
         nextTimeKey = '22:00';
