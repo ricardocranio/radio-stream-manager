@@ -1527,7 +1527,7 @@ export function useAutoGradeBuilder() {
 
   // ==================== Full Day Grade ====================
 
-  const buildFullDayGrade = useCallback(async () => {
+  const buildFullDayGrade = useCallback(async (overrideDay?: WeekDay) => {
     if (!getIsElectronEnv() || !window.electronAPI?.saveGradeFile) {
       toast({ title: '⚠️ Modo Web', description: 'Geração de grade disponível apenas no aplicativo desktop.' });
       return;
@@ -1540,16 +1540,16 @@ export function useAutoGradeBuilder() {
     }));
 
     const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
-    const targetDay = (arguments[0] as WeekDay | undefined) || dayMap[new Date().getDay()];
+    const targetDay = overrideDay || dayMap[new Date().getDay()];
     const dayCode = getDayCode(targetDay);
     const filename = `${dayCode.toUpperCase()}.txt`;
 
     try {
-      console.log(`[AUTO-GRADE] 🚀 Building full day grade for ${filename} with progressive saving...`);
+      console.log(`[AUTO-GRADE] 🚀 Building full day grade: ${filename}...`);
       reportServiceHeartbeat('grade-builder');
       logSystemError('GRADE', 'info', `Iniciando geração da grade completa: ${filename} (salvamento progressivo)`);
       // Only clear used songs if building for today — next-day builds use fresh context
-      if (!arguments[0]) clearUsedSongs();
+      if (!overrideDay) clearUsedSongs();
 
       // Load BPM cache from disk before building
       await loadBpmCacheFromDisk();
@@ -1702,7 +1702,7 @@ export function useAutoGradeBuilder() {
       console.log(`[AUTO-GRADE] 🌙 22:00 — Pré-gerando grade do dia seguinte: ${tomorrowFilename} (${tomorrowDay})`);
       logSystemError('GRADE', 'info', `Pré-geração do dia seguinte: ${tomorrowFilename}`, 'Disparado às 22:00 para garantir conteúdo pronto para a automação.');
 
-      await buildFullDayGrade(tomorrowDay as any);
+      await buildFullDayGrade(tomorrowDay);
 
       nextDayBuiltForRef.current = todayStr;
       console.log(`[AUTO-GRADE] ✅ Grade do dia seguinte pré-gerada: ${tomorrowFilename}`);
