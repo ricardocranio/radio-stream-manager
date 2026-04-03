@@ -586,11 +586,14 @@ function register({ safeHandle }) {
     return { success: true, songs, scanned, genreSummary };
   });
 
-  handle('save-bpm-cache', async (event, { cachePath, data }) => {
+  handle('save-bpm-cache', async (event, params) => {
     try {
+      // Accept both { cachePath, data } and { folder, data } for compatibility
+      const cachePath = params.cachePath || (params.folder ? path.join(params.folder, 'bpm_cache.json') : null);
+      if (!cachePath) return { success: false, error: 'No cache path or folder provided' };
       const dir = path.dirname(cachePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(cachePath, JSON.stringify(data, null, 2), 'utf-8');
+      fs.writeFileSync(cachePath, JSON.stringify(params.data, null, 2), 'utf-8');
       console.log(`[BPM] Cache saved to: ${cachePath}`);
       return { success: true };
     } catch (error) {
@@ -599,8 +602,11 @@ function register({ safeHandle }) {
     }
   });
 
-  handle('load-bpm-cache', async (event, { cachePath }) => {
+  handle('load-bpm-cache', async (event, params) => {
     try {
+      // Accept both { cachePath } and { folder } for compatibility
+      const cachePath = params.cachePath || (params.folder ? path.join(params.folder, 'bpm_cache.json') : null);
+      if (!cachePath) return { success: true, data: null };
       if (!fs.existsSync(cachePath)) {
         return { success: true, data: null };
       }
