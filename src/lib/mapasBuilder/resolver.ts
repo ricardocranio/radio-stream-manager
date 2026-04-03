@@ -182,7 +182,6 @@ async function loadMonitoredSongs(
     return [];
   }
 }
-}
 
 /**
  * Load songs from DB (ai_genre) + library check, with genre/decade filters.
