@@ -43,6 +43,7 @@ const staticNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'logs', label: 'Logs', icon: Terminal, group: 'system' },
   { id: 'export', label: 'Exportar', icon: Download, group: 'system' },
   { id: 'settings', label: 'Configurações', icon: Settings, group: 'system' },
+  { id: 'manual', label: 'Manual', icon: BookOpen, group: 'system' },
 ];
 
 interface SidebarProps {

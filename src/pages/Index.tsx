@@ -86,6 +86,7 @@ const TAB_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentTy
   folders: FoldersView,
   missing: MissingView,
   settings: SettingsView,
+  manual: ManualView,
 };
 
 /**
