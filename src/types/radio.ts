@@ -58,6 +58,8 @@ export interface SystemConfig {
   vozBrasilFolder?: string;
   vozBrasilTime?: string;
   vinhetasFolder?: string;
+  extraVinhetasFolders?: string[];
+
   dnaLearningFile?: string;
   inventoryCacheDuration?: number;
   hardResetInterval?: number;
