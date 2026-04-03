@@ -105,7 +105,7 @@ async function loadFolderFiles(folder: string): Promise<string[]> {
 }
 
 /**
- * Load songs from station captures (via scraped_songs DB).
+ * Load songs from station captures (scraped_songs + radio_historico for depth).
  * If stationName is empty/undefined, loads from ALL stations.
  */
 async function loadMonitoredSongs(
@@ -116,22 +116,43 @@ async function loadMonitoredSongs(
   
   try {
     const { supabase } = await import('@/integrations/supabase/client');
+    
+    // PRIMARY: scraped_songs (recent)
     let query = supabase
       .from('scraped_songs')
-      .select('artist, title, station_name')
+      .select('artist, title')
       .order('scraped_at', { ascending: false })
-      .limit(300);
+      .limit(500);
+    if (stationName) query = query.eq('station_name', stationName);
+    const { data: recentData } = await query;
     
-    if (stationName) {
-      query = query.eq('station_name', stationName);
-    }
+    // SECONDARY: radio_historico (deeper catalog, last 3 days)
+    let histQuery = supabase
+      .from('radio_historico')
+      .select('artist, title')
+      .order('captured_at', { ascending: false })
+      .limit(800);
+    if (stationName) histQuery = histQuery.eq('station_name', stationName);
+    const { data: histData } = await histQuery;
+
+    // TERTIARY: radio_historico_stats (aggregated all-time top songs)
+    let statsQuery = supabase
+      .from('radio_historico_stats')
+      .select('artist, title')
+      .order('play_count', { ascending: false })
+      .limit(500);
+    if (stationName) statsQuery = statsQuery.eq('station_name', stationName);
+    const { data: statsData } = await statsQuery;
+
+    // Merge all sources, deduplicate
+    const allSongs = [
+      ...(recentData || []),
+      ...(histData || []),
+      ...(statsData || []),
+    ];
     
-    const { data } = await query;
-    if (!data || data.length === 0) return [];
-    
-    // Deduplicate by artist+title
     const seen = new Set<string>();
-    const unique = data.filter(s => {
+    const unique = allSongs.filter(s => {
       const key = `${s.artist.toLowerCase()}|${s.title.toLowerCase()}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -151,10 +172,10 @@ async function loadMonitoredSongs(
           found.push(result.filename);
         }
       } catch { /* skip */ }
-      if (found.length >= 80) break;
+      if (found.length >= 200) break;
     }
     
-    console.log(`[MAPAS] 📡 ${found.length}/${unique.length} músicas reais encontradas${stationName ? ` de ${stationName}` : ' (todas)'}`);
+    console.log(`[MAPAS] 📡 ${found.length}/${unique.length} músicas reais encontradas${stationName ? ` de ${stationName}` : ' (todas)'} [scraped:${recentData?.length||0} hist:${histData?.length||0} stats:${statsData?.length||0}]`);
     return found;
   } catch (err) {
     console.warn(`[MAPAS] Erro ao carregar monitoramento:`, err);
@@ -177,19 +198,32 @@ async function loadMonitoredGenreSongs(
   try {
     const { supabase } = await import('@/integrations/supabase/client');
     
-    // Query scraped songs with ai_genre filter
+    // PRIMARY: scraped_songs with ai_genre
     let query = supabase
       .from('scraped_songs')
       .select('artist, title, ai_genre, year')
       .order('scraped_at', { ascending: false })
       .limit(500);
-    
-    if (stationName) {
-      query = query.eq('station_name', stationName);
-    }
-    
-    const { data } = await query;
-    if (!data || data.length === 0) return [];
+    if (stationName) query = query.eq('station_name', stationName);
+    const { data: recentData } = await query;
+
+    // SECONDARY: radio_historico (no genre field, but adds catalog depth)
+    let histQuery = supabase
+      .from('radio_historico')
+      .select('artist, title')
+      .order('captured_at', { ascending: false })
+      .limit(800);
+    if (stationName) histQuery = histQuery.eq('station_name', stationName);
+    const { data: histData } = await histQuery;
+
+    // TERTIARY: radio_historico_stats (all-time popular)
+    let statsQuery = supabase
+      .from('radio_historico_stats')
+      .select('artist, title')
+      .order('play_count', { ascending: false })
+      .limit(500);
+    if (stationName) statsQuery = statsQuery.eq('station_name', stationName);
+    const { data: statsData } = await statsQuery;
     
     // Parse decade range
     let yearStart = 0, yearEnd = 9999;
@@ -204,25 +238,30 @@ async function loadMonitoredGenreSongs(
     
     const genreUpper = genreFilter.map(g => g.toUpperCase());
     
-    // Filter by genre and decade
-    const filtered = data.filter(s => {
-      // Genre check via ai_genre field
+    // Filter scraped_songs by genre and decade
+    const genreFiltered = (recentData || []).filter(s => {
       if (genreUpper.length > 0) {
         if (!s.ai_genre) return false;
         const songGenre = s.ai_genre.toUpperCase();
         if (!genreUpper.some(g => songGenre.includes(g))) return false;
       }
-      // Decade check
       if (decadeFilter && s.year) {
         const y = parseInt(s.year, 10);
         if (isNaN(y) || y < yearStart || y > yearEnd) return false;
       }
       return true;
     });
+
+    // Merge genre-filtered scraped + historico + stats (historico/stats have no genre, used as fallback depth)
+    const allSongs: { artist: string; title: string }[] = [
+      ...genreFiltered,
+      ...(histData || []),
+      ...(statsData || []),
+    ];
     
     // Deduplicate
     const seen = new Set<string>();
-    const unique = filtered.filter(s => {
+    const unique = allSongs.filter(s => {
       const key = `${s.artist.toLowerCase()}|${s.title.toLowerCase()}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -242,10 +281,10 @@ async function loadMonitoredGenreSongs(
           found.push(result.filename);
         }
       } catch { /* skip */ }
-      if (found.length >= 60) break;
+      if (found.length >= 200) break;
     }
     
-    console.log(`[MAPAS] 🎵📡 ${found.length} músicas reais gênero ${genreUpper.join(',')}${decadeFilter ? ` (${decadeFilter})` : ''}`);
+    console.log(`[MAPAS] 🎵📡 ${found.length} músicas reais gênero ${genreUpper.join(',')}${decadeFilter ? ` (${decadeFilter})` : ''} [genre:${genreFiltered.length} hist:${histData?.length||0} stats:${statsData?.length||0}]`);
     return found;
   } catch (err) {
     console.warn(`[MAPAS] Erro ao carregar gênero monitorado:`, err);
