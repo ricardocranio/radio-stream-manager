@@ -56,43 +56,32 @@ function getNextMusic(poolKey: string, files: string[]): string | null {
 
   let pool = musicPools.get(poolKey);
   if (!pool || pool.length === 0) {
-    // Reshuffle but exclude globally used songs first
+    // Reshuffle ONLY songs not yet used globally
     const available = files.filter(f => !globalMusicUsed.has(f.toLowerCase()));
-    pool = shuffleArray(available.length > 0 ? available : files);
+    if (available.length === 0) {
+      console.warn(`[MAPAS] ⚠️ Pool ${poolKey} totalmente exausto (${files.length} músicas, todas já usadas)`);
+      return null; // DO NOT reuse — return null to prevent duplicates
+    }
+    pool = shuffleArray(available);
     musicPools.set(poolKey, pool);
     musicUsed.set(poolKey, new Set());
   }
 
-  // Try to find a song not yet used globally
-  let next: string | null = null;
-  const tried: string[] = [];
-  
+  // Pop candidates until we find one not globally used
   while (pool.length > 0) {
     const candidate = pool.pop()!;
-    if (!globalMusicUsed.has(candidate.toLowerCase())) {
-      next = candidate;
-      break;
+    const key = candidate.toLowerCase();
+    if (!globalMusicUsed.has(key)) {
+      globalMusicUsed.add(key);
+      musicUsed.get(poolKey)?.add(candidate);
+      return candidate;
     }
-    tried.push(candidate);
-  }
-  
-  // If all remaining were globally used, accept the last tried one
-  if (!next && tried.length > 0) {
-    next = tried[tried.length - 1];
-    console.warn(`[MAPAS] ⚠️ Pool ${poolKey} exausto — reutilizando: ${next}`);
-  }
-  
-  // Put back untried candidates
-  if (tried.length > 0 && pool.length > 0) {
-    // Don't put back - they were already globally used
+    // Skip — already used globally by another code
   }
 
-  if (next) {
-    globalMusicUsed.add(next.toLowerCase());
-    musicUsed.get(poolKey)?.add(next);
-  }
-  
-  return next;
+  // Pool drained during iteration — all were globally used
+  console.warn(`[MAPAS] ⚠️ Pool ${poolKey} drenado — sem músicas únicas disponíveis`);
+  return null;
 }
 
 /**
