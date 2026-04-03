@@ -1,6 +1,6 @@
 {
   "configuracao": {
-    "intervalo_minutos": 5,
+    "intervalo_minutos": 12,
     "mostrar_navegador": false,
     "arquivo_historico": "radio_historico.json",
     "arquivo_relatorio": "radio_relatorio.txt"
