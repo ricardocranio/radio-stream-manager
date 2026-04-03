@@ -10,8 +10,15 @@
 
 import { normalizeStr, songKey } from './songUtils';
 
+export type BlockedRule = 'exact' | 'wildcard' | 'forbidden' | 'alias' | 'partial';
+
+export interface BlockedMatch {
+  rule: BlockedRule;
+}
+
 export interface BlockedEngine {
   isBlocked: (artist: string, title: string) => boolean;
+  getBlockMatch: (artist: string, title: string) => BlockedMatch | null;
 }
 
 export function buildBlockedEngine(
@@ -21,6 +28,7 @@ export function buildBlockedEngine(
 ): BlockedEngine {
   const exact = new Set<string>();
   const wildcardArtists = new Set<string>();
+  const exactEntries: Array<{ artist: string; title: string }> = [];
 
   for (const entry of blockedSongs) {
     const norm = normalizeStr(entry);
@@ -32,6 +40,10 @@ export function buildBlockedEngine(
         const artist = entry.slice(0, dashIndex);
         const title = entry.slice(dashIndex + 3);
         exact.add(songKey(artist, title));
+        exactEntries.push({
+          artist: normalizeStr(artist),
+          title: normalizeStr(title),
+        });
       }
     }
   }
@@ -56,35 +68,69 @@ export function buildBlockedEngine(
     });
   }
 
-  function checkRaw(aN: string, tN: string): boolean {
-    if (exact.has(`${aN}|||${tN}`)) return true;
-    if (wildcardArtists.has(aN)) return true;
-    if (forbidden.some(w => aN.includes(w) || tN.includes(w))) return true;
-    return false;
+  function checkRaw(aN: string, tN: string): Exclude<BlockedRule, 'alias' | 'partial'> | null {
+    if (exact.has(`${aN}|||${tN}`)) return 'exact';
+    if (wildcardArtists.has(aN)) return 'wildcard';
+    if (forbidden.some(w => aN.includes(w) || tN.includes(w))) return 'forbidden';
+    return null;
   }
 
-  function isBlocked(artist: string, title: string): boolean {
+  function checkPartial(aN: string, tN: string): 'partial' | null {
+    if (!aN || !tN) return null;
+
+    for (const entry of exactEntries) {
+      const frag = entry.title;
+      if (!frag || frag.length < 4) continue;
+
+      const titleMatches = tN === frag || (frag.length >= 6 && tN.includes(frag));
+      if (!titleMatches) continue;
+
+      const artistMatches =
+        (aN.includes(entry.artist) || entry.artist.includes(aN));
+
+      if (artistMatches) {
+        return 'partial';
+      }
+    }
+
+    return null;
+  }
+
+  function checkDirect(aN: string, tN: string): Exclude<BlockedRule, 'alias'> | null {
+    return checkRaw(aN, tN) ?? checkPartial(aN, tN);
+  }
+
+  function getBlockMatch(artist: string, title: string): BlockedMatch | null {
     const aN = normalizeStr(artist);
     const tN = normalizeStr(title);
 
     // Check 1: Direct match (original name against block list)
-    if (checkRaw(aN, tN)) return true;
+    const directMatch = checkDirect(aN, tN);
+    if (directMatch) return { rule: directMatch };
 
     // Check 2: Forward alias — if original name has an alias, check the CORRECTED name
     const resolved = aliasFromMap.get(`${aN}|||${tN}`);
     if (resolved) {
-      if (checkRaw(normalizeStr(resolved.toArtist), normalizeStr(resolved.toTitle))) return true;
+      if (checkDirect(normalizeStr(resolved.toArtist), normalizeStr(resolved.toTitle))) {
+        return { rule: 'alias' };
+      }
     }
 
     // Check 3: REVERSE alias — if this is the CORRECTED name, check if the WRONG name is blocked
     // This catches songs arriving with corrected names when the block list has the wrong name
     const reverseResolved = aliasReverseMap.get(`${aN}|||${tN}`);
     if (reverseResolved) {
-      if (checkRaw(normalizeStr(reverseResolved.fromArtist), normalizeStr(reverseResolved.fromTitle))) return true;
+      if (checkDirect(normalizeStr(reverseResolved.fromArtist), normalizeStr(reverseResolved.fromTitle))) {
+        return { rule: 'alias' };
+      }
     }
 
-    return false;
+    return null;
   }
 
-  return { isBlocked };
+  function isBlocked(artist: string, title: string): boolean {
+    return getBlockMatch(artist, title) !== null;
+  }
+
+  return { isBlocked, getBlockMatch };
 }
