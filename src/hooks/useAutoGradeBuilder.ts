@@ -1767,7 +1767,7 @@ export function useAutoGradeBuilder() {
 
     try {
       const blocks = getBlockTimes();
-      const currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
+      let currentTimeKey = `${blocks.current.hour.toString().padStart(2, '0')}:${blocks.current.minute.toString().padStart(2, '0')}`;
       let nextTimeKey = `${blocks.next.hour.toString().padStart(2, '0')}:${blocks.next.minute.toString().padStart(2, '0')}`;
       let thirdTimeKey = `${blocks.third.hour.toString().padStart(2, '0')}:${blocks.third.minute.toString().padStart(2, '0')}`;
       const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
