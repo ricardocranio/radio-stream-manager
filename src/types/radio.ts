@@ -47,6 +47,8 @@ export interface SystemConfig {
   musicFolders: string[];
   gradeFolder: string;
   contentFolder: string;
+  extraContentFolders?: string[];
+
   rankingFile: string;
   updateIntervalMinutes: number;
   artistRepetitionMinutes: number;
@@ -56,6 +58,8 @@ export interface SystemConfig {
   vozBrasilFolder?: string;
   vozBrasilTime?: string;
   vinhetasFolder?: string;
+  extraVinhetasFolders?: string[];
+
   dnaLearningFile?: string;
   inventoryCacheDuration?: number;
   hardResetInterval?: number;
