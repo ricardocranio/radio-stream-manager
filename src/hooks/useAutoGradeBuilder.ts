@@ -1684,7 +1684,7 @@ export function useAutoGradeBuilder() {
     getDayCode, config.gradeFolder, addGradeHistory, defaultSequence.length, toast, addBlockLogs,
   ]);
 
-  // ==================== Next Day Pre-Generation (22:00) ====================
+  // ==================== Next Day Pre-Generation (22:00) — Only 00:00-01:00 ====================
 
   const buildNextDayGrade = useCallback(async () => {
     const todayStr = new Date().toDateString();
@@ -1699,14 +1699,50 @@ export function useAutoGradeBuilder() {
       const tomorrowCode = getDayCode(tomorrowDay);
       const tomorrowFilename = `${tomorrowCode.toUpperCase()}.txt`;
 
-      console.log(`[AUTO-GRADE] 🌙 22:00 — Pré-gerando grade do dia seguinte: ${tomorrowFilename} (${tomorrowDay})`);
-      logSystemError('GRADE', 'info', `Pré-geração do dia seguinte: ${tomorrowFilename}`, 'Disparado às 22:00 para garantir conteúdo pronto para a automação.');
+      console.log(`[AUTO-GRADE] 🌙 22:00 — Pré-gerando blocos 00:00-01:00 do dia seguinte: ${tomorrowFilename} (${tomorrowDay})`);
+      logSystemError('GRADE', 'info', `Pré-geração parcial do dia seguinte: ${tomorrowFilename}`, 'Blocos 00:00 e 00:30 gerados às 22:00. O restante será montado pelo monitoramento em tempo real.');
 
-      await buildFullDayGrade(tomorrowDay);
+      if (!getIsElectronEnv() || !window.electronAPI?.saveGradeFile) return;
 
-      nextDayBuiltForRef.current = todayStr;
-      console.log(`[AUTO-GRADE] ✅ Grade do dia seguinte pré-gerada: ${tomorrowFilename}`);
-      toast({ title: '🌙 Grade do Dia Seguinte', description: `${tomorrowFilename} gerado automaticamente às 22:00.` });
+      // Load BPM cache
+      await loadBpmCacheFromDisk();
+
+      const songsByStation = await fetchAllRecentSongs();
+      for (const songs of Object.values(songsByStation)) {
+        enrichSongsWithBpmCache(songs as any[]);
+      }
+
+      const stats: BlockStats = { skipped: 0, substituted: 0, missing: 0 };
+      const lines: string[] = [];
+      const allLogs: BlockLogItem[] = [];
+
+      // Only build blocks 00:00 and 00:30
+      for (const minute of [0, 30]) {
+        const blockTimeStr = `00:${minute.toString().padStart(2, '0')}`;
+        console.log(`[AUTO-GRADE] 🌙 Gerando bloco ${blockTimeStr} para ${tomorrowDay}...`);
+
+        const result = await generateBlockLine(0, minute, songsByStation, stats, true, tomorrowDay);
+        const resolvedLine = await resolveVinhetasInLine(result.line, config.vinhetasFolder || 'C:\\Playlist\\Vinhetas');
+        lines.push(resolvedLine);
+        allLogs.push(...result.logs);
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      if (lines.length > 0) {
+        addBlockLogs(allLogs);
+        const content = lines.join('\n');
+
+        const result = await window.electronAPI.saveGradeFile({
+          folder: config.gradeFolder, filename: tomorrowFilename, content,
+        });
+
+        if (result.success) {
+          nextDayBuiltForRef.current = todayStr;
+          console.log(`[AUTO-GRADE] ✅ Blocos 00:00-01:00 do dia seguinte salvos: ${tomorrowFilename}`);
+          toast({ title: '🌙 Grade do Dia Seguinte', description: `${tomorrowFilename} — blocos 00:00 e 00:30 pré-gerados. O monitoramento completa o restante.` });
+        }
+      }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Erro desconhecido';
       console.error(`[AUTO-GRADE] ❌ Erro na pré-geração do dia seguinte:`, msg);
@@ -1714,7 +1750,7 @@ export function useAutoGradeBuilder() {
     } finally {
       nextDayBuildInProgressRef.current = false;
     }
-  }, [getDayCode, buildFullDayGrade, toast]);
+  }, [getDayCode, fetchAllRecentSongs, generateBlockLine, resolveVinhetasInLine, config.gradeFolder, config.vinhetasFolder, addBlockLogs, toast]);
 
   const buildNextDayGradeRef = useRef(buildNextDayGrade);
   buildNextDayGradeRef.current = buildNextDayGrade;
