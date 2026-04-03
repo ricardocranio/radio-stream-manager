@@ -9,3 +9,4 @@ export * from './folderPrograms';
 export * from './songSelection';
 export * from './batchLibrary';
 export * from './smartGrade';
+export * from './weekdayTemplates';
