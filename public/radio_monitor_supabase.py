@@ -623,7 +623,7 @@ class RadioMonitor:
         self.config = config.get('configuracao', {})
         self.radios: List[Dict] = []
         self.special_radios: List[Dict] = []
-        self.intervalo = self.config.get('intervalo_minutos', 5) * 60
+        self.intervalo = self.config.get('intervalo_minutos', 12) * 60
         self.mostrar_navegador = self.config.get('mostrar_navegador', False)
         self.historico: Dict = {}
         self.online = True

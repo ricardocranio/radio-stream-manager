@@ -60,8 +60,9 @@ const CHART_COLORS = [
 ];
 
 const PAGE_SIZE = 50;
-const REFRESH_INTERVAL_MS = 30_000;
+const REFRESH_INTERVAL_MS = 60_000; // match 12-min monitor cycle; refresh every 60s
 const METADATA_REFRESH_MS = 5 * 60 * 1000;
+const MAX_SONGS_PER_STATION = 10;
 
 export function CapturedSongsView() {
   const isReady = useDeferredRender();
