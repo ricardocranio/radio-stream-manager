@@ -1917,25 +1917,54 @@ export function useAutoGradeBuilder() {
       const nextSundayMismatch = hasSundayMismatch(nextExistingLine);
       const thirdSundayMismatch = hasSundayMismatch(thirdExistingLine);
 
-      // === 3-BLOCK LOOKAHEAD (sempre 3 adiantados) ===
-      // Sempre constrói atual + próximo + terceiro bloco, sem restrição de janela de tempo.
-      // Blocos incompletos são atualizados a cada ciclo conforme chegam dados do monitoramento.
-      const currentInWindow = true;
-      const nextInWindow = true;
-      const thirdInWindow = true;
+      // === 3-BLOCK LOOKAHEAD COM LOCK PROGRESSIVO ===
+      // Bloco ATUAL: sempre travado (locked) assim que totalmente resolvido — já está tocando/prestes a tocar.
+      // Blocos NEXT e THIRD: construídos imediatamente, mas continuam sendo atualizados com dados
+      // frescos do monitoramento até faltarem 10 minutos para o horário — quando travam definitivamente.
+      const now = new Date();
+      const nowTotalMin = now.getHours() * 60 + now.getMinutes();
+      const minutesUntil = (blockHour: number, blockMinute: number): number => {
+        let diff = (blockHour * 60 + blockMinute) - nowTotalMin;
+        if (diff < 0) diff += 1440; // past midnight wrap
+        return diff;
+      };
+      const maxLeadMinutes = DEFAULT_MINUTES_BEFORE_BLOCK; // 10 min
 
-      // Fully resolved blocks are LOCKED and skip rebuild (unless force refresh or scheduled sequence)
+      // Next/Third: se faltam <= 10 min, travar; caso contrário, permitir atualização contínua
+      const nextMinutesAway = minutesUntil(blocks.next.hour, blocks.next.minute);
+      const thirdMinutesAway = minutesUntil(blocks.third.hour, blocks.third.minute);
+      const nextShouldLock = nextMinutesAway <= maxLeadMinutes;
+      const thirdShouldLock = thirdMinutesAway <= maxLeadMinutes;
+
+      // Bloco atual: locked se resolvido (comportamento padrão — não desbloqueia para refresh)
+      // Next/Third: se ainda fora da janela de 10 min, DESBLOQUEIA para permitir atualização contínua
+      if (!nextShouldLock && nextFullyResolved && !forceRegenerate && !nextCoveredBySchedule) {
+        builtBlocksRef.current.delete(nextTimeKey);
+        nextLocked = false;
+        console.log(`[AUTO-GRADE] 🔄 Bloco ${nextTimeKey} desbloqueado para atualização (${nextMinutesAway} min restantes)`);
+      }
+      if (!thirdShouldLock && thirdFullyResolved && !forceRegenerate && !thirdCoveredBySchedule) {
+        builtBlocksRef.current.delete(thirdTimeKey);
+        thirdLocked = false;
+        console.log(`[AUTO-GRADE] 🔄 Bloco ${thirdTimeKey} desbloqueado para atualização (${thirdMinutesAway} min restantes)`);
+      }
+
+      // Fully resolved blocks: LOCK rules
       const shouldBuildCurrent = forceRegenerate || currentCoveredBySchedule
         ? true
         : (!currentLocked && !currentFullyResolved) || currentSaturdayMismatch || currentSundayMismatch;
       const shouldBuildNext = forceRegenerate || nextCoveredBySchedule
         ? true
-        : (!nextLocked && !nextFullyResolved) || nextSaturdayMismatch || nextSundayMismatch;
+        : nextShouldLock
+          ? ((!nextLocked && !nextFullyResolved) || nextSaturdayMismatch || nextSundayMismatch)  // dentro dos 10 min — só build se incompleto
+          : true;  // fora dos 10 min — sempre rebuild para incorporar dados frescos
       const shouldBuildThird = forceRegenerate || thirdCoveredBySchedule
         ? true
-        : (!thirdLocked && !thirdFullyResolved) || thirdSaturdayMismatch || thirdSundayMismatch;
+        : thirdShouldLock
+          ? ((!thirdLocked && !thirdFullyResolved) || thirdSaturdayMismatch || thirdSundayMismatch)
+          : true;
 
-      console.log(`[AUTO-GRADE] 🔮 Lookahead 3 blocos: ${currentTimeKey} (${shouldBuildCurrent ? 'BUILD' : 'LOCKED'}), ${nextTimeKey} (${shouldBuildNext ? 'BUILD' : 'LOCKED'}), ${thirdTimeKey} (${shouldBuildThird ? 'BUILD' : 'LOCKED'})`);
+      console.log(`[AUTO-GRADE] 🔮 Lookahead: ${currentTimeKey} (${shouldBuildCurrent ? 'BUILD' : '🔒LOCKED'}), ${nextTimeKey} (${shouldBuildNext ? nextShouldLock ? 'BUILD-FINAL' : '🔄UPDATE' : '🔒LOCKED'} ${nextMinutesAway}min), ${thirdTimeKey} (${shouldBuildThird ? thirdShouldLock ? 'BUILD-FINAL' : '🔄UPDATE' : '🔒LOCKED'} ${thirdMinutesAway}min)`);
 
       if (!shouldBuildCurrent && !shouldBuildNext && !shouldBuildThird) {
         console.log(`[AUTO-GRADE] ⏭️ Blocos ${currentTimeKey}, ${nextTimeKey} e ${thirdTimeKey} já resolvidos, pulando`);
