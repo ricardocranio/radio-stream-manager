@@ -1081,29 +1081,11 @@ export function useAutoGradeBuilder() {
         if (weekendResult) return fillBlockIfShort(weekendResult);
       }
 
-      // TOP10 Década (18:00 weekdays) - 10 músicas de 2000-2010 com vhtn
-      if (hour === 18 && minute === 0 && isWeekday(targetDay)) {
-        return fillBlockIfShort(await generateTop10Decada(hour, minute, 2000, 2010, ctx, targetDay));
-      }
-
-      // TOP10 (18:30 weekdays) - template com esporte + mix + ranking
-      if (hour === 18 && minute === 30 && isWeekday(targetDay)) {
-        return fillBlockIfShort(await generateTop10Block(hour, minute, ctx, targetDay));
-      }
-
-      // Rock & Metal (19:00/19:30 weekdays) - 10 músicas das pastas Rock e Metal
-      if (hour === 19 && (minute === 0 || minute === 30) && isWeekday(targetDay)) {
-        return fillBlockIfShort(await generateRockMetal(hour, minute, ctx, targetDay));
-      }
-
-      // Misturadão (20:00, 20:30 weekdays)
-      if ((hour === 20 && (minute === 0 || minute === 30)) && isWeekday(targetDay)) {
-        return fillBlockIfShort(await generateMisturadao(hour, minute, ctx, targetDay));
-      }
-
-      // Romance blocks (22:00-00:00)
-      if (isRomanceBlock(hour, minute) && isWeekday(targetDay)) {
-        return fillBlockIfShort(await generateRomanceBlock(hour, minute, stats, isFullDay, ctx, targetDay));
+      // === WEEKDAY TEMPLATE BLOCKS (09:00-10:30, 12:00-13:30, 17:00-20:30, 22:00-23:30) ===
+      // These replace the old individual handlers for these time slots
+      if (isWeekday(targetDay) && isWeekdayTemplateBlock(hour, minute)) {
+        const templateResult = await generateWeekdayTemplateBlock(hour, minute, songsByStation, stats, isFullDay, ctx, targetDay);
+        if (templateResult) return fillBlockIfShort(templateResult);
       }
 
       // Raridades (year-filtered program) — skip on Sunday (no fixed programs)
