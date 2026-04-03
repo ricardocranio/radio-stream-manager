@@ -701,13 +701,45 @@ export function useAutoGradeBuilder() {
   // ==================== Weekend Template Generator ====================
 
   // Station rotation for Saturday monitoring-based music
-  const SATURDAY_STATION_ROTATION = ['Mix FM', 'Metropolitana', 'Positividade', 'Clube', 'BH', 'Clube'];
+  const SATURDAY_STATION_ROTATION = ['disney', 'Clube', 'bh', 'Globo', 'Mix FM', 'Positividade', 'Band FM'];
   const saturdayStationIndexRef = useRef(0);
 
   /**
+   * Pick a song from a specific station's monitoring pool.
+   * stationHint: partial name like 'disney', 'bh', 'Clube', 'Globo', 'Mix', 'Positividade', 'Band'
+   */
+  const pickMonitoringSong = useCallback(async (
+    stationHint: string,
+    songsByStation: Record<string, SongEntry[]>,
+    ctx: GradeContext,
+    timeStr: string,
+    logs: BlockLogItem[],
+    usedKeys: Set<string>,
+  ): Promise<string> => {
+    const normHint = stationHint.toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const [poolName, pool] of Object.entries(songsByStation)) {
+      const normPool = poolName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!normPool.includes(normHint) && !normHint.includes(normPool)) continue;
+      for (const candidate of pool) {
+        const key = `${candidate.artist.toLowerCase().trim()}|${candidate.title.toLowerCase().trim()}`;
+        if (usedKeys.has(key)) continue;
+        if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr)) continue;
+        const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
+        if (libraryResult.exists) {
+          const realFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+          usedKeys.add(key);
+          ctx.markSongAsUsed(candidate.title, candidate.artist, timeStr);
+          logs.push({ blockTime: timeStr, type: 'used', title: candidate.title, artist: candidate.artist, station: stationHint, style: candidate.style, reason: `Sábado monitoramento (${stationHint})` });
+          return `"${realFilename}"`;
+        }
+      }
+    }
+    return 'mus';
+  }, []);
+
+  /**
    * Replace 'mus' codes in a template line with real songs from the monitoring
-   * station rotation: Mix FM → Metropolitana → Positividade → Clube → BH → Clube (cyclic).
-   * Falls back to 'mus' if no song is available from the current station.
+   * station rotation (cyclic fallback).
    */
   const replaceMusWithMonitoring = useCallback(async (
     templateLine: string,
@@ -716,74 +748,32 @@ export function useAutoGradeBuilder() {
     timeStr: string,
     logs: BlockLogItem[]
   ): Promise<string> => {
-    // Split by comma, find 'mus' tokens (case-insensitive)
     const parts = templateLine.split(',');
     const usedKeys = new Set<string>();
 
     for (let i = 0; i < parts.length; i++) {
       if (parts[i].trim().toLowerCase() !== 'mus') continue;
 
-      // Try stations in rotation order, cycling through
       let found = false;
       for (let attempt = 0; attempt < SATURDAY_STATION_ROTATION.length; attempt++) {
         const stationName = SATURDAY_STATION_ROTATION[saturdayStationIndexRef.current % SATURDAY_STATION_ROTATION.length];
         saturdayStationIndexRef.current++;
-
-        // Find pool for this station (flexible matching)
-        let pool: SongEntry[] = [];
-        for (const [poolName, poolSongs] of Object.entries(songsByStation)) {
-          const norm1 = poolName.toLowerCase().replace(/[^a-z0-9]/g, '');
-          const norm2 = stationName.toLowerCase().replace(/[^a-z0-9]/g, '');
-          if (norm1.includes(norm2) || norm2.includes(norm1)) {
-            pool = poolSongs;
-            break;
-          }
+        const result = await pickMonitoringSong(stationName, songsByStation, ctx, timeStr, logs, usedKeys);
+        if (result !== 'mus') {
+          parts[i] = result;
+          found = true;
+          break;
         }
-
-        if (pool.length === 0) continue;
-
-        // Pick first available song not yet used
-        for (const candidate of pool) {
-          const key = `${candidate.artist.toLowerCase().trim()}|${candidate.title.toLowerCase().trim()}`;
-          if (usedKeys.has(key)) continue;
-          if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr)) continue;
-
-          const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
-          if (libraryResult.exists) {
-            const realFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-            parts[i] = `"${realFilename}"`;
-            usedKeys.add(key);
-            ctx.markSongAsUsed(candidate.title, candidate.artist, timeStr);
-            logs.push({
-              blockTime: timeStr,
-              type: 'used',
-              title: candidate.title,
-              artist: candidate.artist,
-              station: stationName,
-              style: candidate.style,
-              reason: `Sábado monitoramento (${stationName})`,
-            });
-            found = true;
-            break;
-          }
-        }
-        if (found) break;
       }
-
-      // If not found after trying all stations, keep 'mus' as fallback
-      if (!found) {
-        // Advance rotation anyway to avoid getting stuck
-        saturdayStationIndexRef.current++;
-      }
+      if (!found) saturdayStationIndexRef.current++;
     }
 
     return parts.join(',');
-  }, []);
+  }, [pickMonitoringSong]);
 
   /**
-   * Generates weekend (SAB/DOM) blocks using predefined templates.
-   * Returns null if no template matches (falls through to normal logic).
-   * Now async: replaces 'mus' codes with real monitoring songs (except Mega Funk which uses 'fun').
+   * Generates Saturday blocks using the detailed template.
+   * Returns null if no template matches.
    */
   const generateWeekendTemplateBlock = useCallback(async (
     hour: number,
@@ -792,139 +782,137 @@ export function useAutoGradeBuilder() {
     songsByStation: Record<string, SongEntry[]>,
     ctx: GradeContext
   ): Promise<BlockResult | null> => {
-    const musLine = 'mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus';
+    const usedKeys = new Set<string>();
+    const logs: BlockLogItem[] = [];
 
-    // Helper to build result and replace mus with monitoring
-    const buildWithMonitoring = async (line: string, logs: BlockLogItem[]): Promise<BlockResult> => {
-      const resolvedLine = await replaceMusWithMonitoring(line, songsByStation, ctx, timeStr, logs);
-      return { line: resolvedLine, logs };
+    // Helper: pick station song shorthand
+    const mon = async (station: string) => pickMonitoringSong(station, songsByStation, ctx, timeStr, logs, usedKeys);
+
+    // Helper to build result with generic mus replacement
+    const buildWithMonitoring = async (line: string, blockLogs: BlockLogItem[]): Promise<BlockResult> => {
+      const resolvedLine = await replaceMusWithMonitoring(line, songsByStation, ctx, timeStr, blockLogs);
+      return { line: resolvedLine, logs: blockLogs };
     };
 
-    // 00:00-07:30 — Regular music blocks
+    // ===== 00:00 - 07:30 — Music blocks with varying lengths =====
     if (hour >= 0 && hour <= 7) {
-      const logs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: 'Weekend Music', artist: '', station: 'TEMPLATE', reason: 'Bloco musical FDS' }];
-      return buildWithMonitoring(`${timeStr} (ID=SABADO) ${musLine}`, logs);
+      // Some blocks are longer (31 items) vs shorter (19 items) based on user spec
+      const longBlocks = ['00:00','01:00','02:30','03:30','04:30','06:00','07:00'];
+      const musShort = 'mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus';
+      const musLong = 'mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,VHT,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus';
+      const musLine = longBlocks.includes(timeStr) ? musLong : musShort;
+      const blockLogs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: 'Weekend Music', artist: '', station: 'TEMPLATE', reason: 'Bloco musical FDS' }];
+      return buildWithMonitoring(`${timeStr} (ID=SABADO) ${musLine}`, blockLogs);
     }
 
-    // 08:00-11:30 — Shake Mix (8 blocks)
-    if (hour >= 8 && hour <= 11) {
-      const blockMap: Record<string, number> = { '08:00': 1, '08:30': 2, '09:00': 3, '09:30': 4, '10:00': 5, '10:30': 6, '11:00': 7, '11:30': 8 };
+    // ===== 08:00 - 09:30 — SHAKE MIX (4 blocks) =====
+    if ((hour === 8) || (hour === 9 && minute <= 30)) {
+      const blockMap: Record<string, number> = { '08:00': 1, '08:30': 2, '09:00': 3, '09:30': 4 };
       const blockNum = blockMap[timeStr] || 1;
       const ed = blockNum.toString().padStart(2, '0');
       const fixedFile = `"SHAKE_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3"`;
-      const musicSlots = ',vht,mus'.repeat(10);
-      const logs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: `Shake Mix Bloco ${ed}`, artist: `SHAKE_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Shake Mix FDS' }];
-      return buildWithMonitoring(`${timeStr} (ID=SABADO) ${fixedFile}${musicSlots}`, logs);
+      // 08:00-08:30 use disney+Clube, 09:00-09:30 use disney+bh
+      const station2 = hour === 8 ? 'Clube' : 'bh';
+      const mon1 = await mon('disney');
+      const mon2 = await mon(station2);
+      const blockLogs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: `Shake Mix Bloco ${ed}`, artist: `SHAKE_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Shake Mix FDS' }];
+      return { line: `${timeStr} (ID=SHAKE_MIX) ${fixedFile},vht,${mon1},vht,${mon2}`, logs: blockLogs };
     }
 
-    // 12:00-15:30 — Mega Mix (8 blocks) + music
-    if (hour >= 12 && hour <= 15) {
+    // ===== 10:00 - 12:30 — CONEXÃO MIX (6 blocks) =====
+    if ((hour === 10) || (hour === 11) || (hour === 12 && minute <= 30)) {
+      const blockMap: Record<string, number> = { '10:00': 1, '10:30': 2, '11:00': 3, '11:30': 4, '12:00': 5, '12:30': 8 };
+      const blockNum = blockMap[timeStr] || 1;
+      const ed = blockNum.toString().padStart(2, '0');
+      const fixedFile = `"CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3"`;
+      // Station pairs per block
+      let s1 = 'Positividade', s2 = 'Band FM';
+      if (hour === 11) { s1 = 'Globo'; s2 = 'Mix FM'; }
+      if (hour === 12) { s1 = 'disney'; s2 = 'Clube'; }
+      const mon1 = await mon(s1);
+      const mon2 = await mon(s2);
+      const vhtPre = timeStr === '10:30' ? 'MUS' : 'VHTN';
+      const blockLogs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: `Conexão Mix Bloco ${ed}`, artist: `CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Conexão Mix FDS' }];
+      return { line: `${timeStr} (ID=CONEXAO_MIX) VHTN,${fixedFile},${vhtPre},${mon1},vht,${mon2}`, logs: blockLogs };
+    }
+
+    // ===== 13:00 - 17:30 — MEGA MIX (8 blocks) =====
+    if (hour >= 13 && hour <= 17) {
       const blockMap: Record<string, number> = {
-        '12:00': 1, '12:30': 2, '13:00': 3, '13:30': 4,
-        '14:00': 5, '14:30': 6, '15:00': 7, '15:30': 8,
+        '13:00': 1, '13:30': 2, '14:00': 3, '15:30': 4,
+        '16:00': 5, '16:30': 6, '17:00': 7, '17:30': 8,
       };
-      const blockNum = blockMap[timeStr] || 1;
-      const ed = blockNum.toString().padStart(2, '0');
-      const suffix = blockNum === 1
-        ? ',VHTN,mus,vht,mus,vht,mus,vht,mus'
-        : ',VHTN,VHTN,mus,vht,mus,vht,mus,vht,mus';
-      const logs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: `Mega Mix Bloco ${ed}`, artist: `MEGA_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Mega Mix FDS' }];
-      return buildWithMonitoring(`${timeStr} (ID=SABADO) "MEGA_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3"${suffix}`, logs);
+      const blockNum = blockMap[timeStr];
+      if (blockNum) {
+        const ed = blockNum.toString().padStart(2, '0');
+        const fixedFile = `"MEGA_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3"`;
+        // Station pairs by block
+        let s1 = 'disney', s2 = 'bh';
+        if (blockNum === 3 || blockNum === 4 || blockNum === 7 || blockNum === 8) { s1 = 'Globo'; s2 = 'Mix FM'; }
+        if (blockNum === 5 || blockNum === 6) { s1 = 'Positividade'; s2 = 'Band FM'; }
+        const mon1 = await mon(s1);
+        const mon2 = await mon(s2);
+        const blockLogs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: `Mega Mix Bloco ${ed}`, artist: `MEGA_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Mega Mix FDS' }];
+        return { line: `${timeStr} (ID=MEGA_MIX) ${fixedFile},VHTN,${mon1},vht,${mon2}`, logs: blockLogs };
+      }
+      // 14:30, 15:00 not in user spec — fill with monitoring
+      const blockLogs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: 'Mega Mix Extra', artist: '', station: 'TEMPLATE', reason: 'Bloco extra FDS' }];
+      return buildWithMonitoring(`${timeStr} (ID=MEGA_MIX) mus,vht,mus,vht,mus,vht,mus,vht,mus`, blockLogs);
     }
 
-    // 16:00-17:30 — Sem Parar (4 blocks)
-    if (hour >= 16 && hour <= 17) {
-      const blockMap: Record<string, number> = { '16:00': 1, '16:30': 2, '17:00': 3, '17:30': 4 };
-      const blockNum = blockMap[timeStr] || 1;
-      const ed = blockNum.toString().padStart(2, '0');
-      const logs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: `Sem Parar Bloco ${ed}`, artist: `SEM_PARAR_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Sem Parar FDS' }];
-      return buildWithMonitoring(`${timeStr} (ID=SABADO) VHTN,"SEM_PARAR_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,mus,vht,mus,vht,mus,vht,mus`, logs);
-    }
-
-    // 18:00-19:30 — Mega Funk (4 blocks) — NÃO substitui, mantém 'fun'
+    // ===== 18:00 - 19:30 — SEM PARAR (4 blocks) =====
     if (hour >= 18 && hour <= 19) {
       const blockMap: Record<string, number> = { '18:00': 1, '18:30': 2, '19:00': 3, '19:30': 4 };
       const blockNum = blockMap[timeStr] || 1;
       const ed = blockNum.toString().padStart(2, '0');
-      const programId = hour === 18 ? 'TOP10' : 'TOP50';
-      return {
-        line: `${timeStr} (ID=${programId}) VHTN,"MEGA_FUNK_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,FUN,VHT,FUN,VHTN,FUN,VHT,FUN,VHTN`,
-        logs: [{ blockTime: timeStr, type: 'fixed', title: `Mega Funk Bloco ${ed}`, artist: `MEGA_FUNK_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: `Mega Funk FDS (${programId})` }],
-      };
+      const fixedFile = `"SEM_PARAR_BLOCO${ed}_FINAL_DE_SEMANA.MP3"`;
+      // 18:00-18:30 use Globo+Mix, 19:00-19:30 use disney+bh
+      let s1 = 'Globo', s2 = 'Mix FM';
+      if (hour === 19) { s1 = 'disney'; s2 = 'bh'; }
+      const mon1 = await mon(s1);
+      const mon2 = await mon(s2);
+      const vhtPost = blockNum === 4 ? '' : ',VHTN';
+      const blockLogs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: `Sem Parar Bloco ${ed}`, artist: `SEM_PARAR_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Sem Parar FDS' }];
+      return { line: `${timeStr} (ID=SEM_PARAR) VHTN,${fixedFile}${vhtPost},${mon1},vht,${mon2}`, logs: blockLogs };
     }
 
-    // 20:00 — TOP50 FDS (positions 20 down to 11) - com músicas reais do ranking
-    if (hour === 20 && minute === 0) {
-      const sorted = [...ctx.rankingSongs].sort((a, b) => b.plays - a.plays);
-      const blockSongs: string[] = [];
-      const blockLogs: BlockLogItem[] = [];
-      
-      for (let i = 19; i >= 10 && blockSongs.length < 10; i--) {
-        if (i >= sorted.length) {
-          blockSongs.push(ctx.coringaCode);
-          continue;
-        }
-        const song = sorted[i];
-        const libraryResult = await ctx.findSongInLibrary(song.artist, song.title);
-        if (libraryResult.exists) {
-          const realFilename = libraryResult.filename || sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
-          blockSongs.push(`"${realFilename}"`);
-          ctx.markSongAsUsed(song.title, song.artist, timeStr);
-          blockLogs.push({ blockTime: timeStr, type: 'used', title: song.title, artist: song.artist, station: 'RANKING', reason: `TOP50 FDS posição ${i + 1}` });
-        } else {
-          blockSongs.push(ctx.coringaCode);
-          blockLogs.push({ blockTime: timeStr, type: 'substituted', title: ctx.coringaCode, artist: song.artist, station: 'RANKING', reason: `TOP50 FDS posição ${i + 1} - não encontrada` });
-        }
+    // ===== 20:00 - 20:30 — MEGA FUNK (2 blocks, 2 files each + fun) =====
+    if (hour === 20) {
+      if (minute === 0) {
+        return {
+          line: `${timeStr} (ID=FUNK) VHTN,"MEGA_FUNK_BLOCO01_FINAL_DE_SEMANA.MP3",VHTN,"MEGA_FUNK_BLOCO02_FINAL_DE_SEMANA.MP3",fun,vhtn,fun,vhtn`,
+          logs: [{ blockTime: timeStr, type: 'fixed', title: 'Mega Funk Blocos 01-02', artist: 'MEGA_FUNK_BLOCO01/02', station: 'FIXO', reason: 'Mega Funk FDS' }],
+        };
       }
-      while (blockSongs.length < 10) blockSongs.push(ctx.coringaCode);
-      
       return {
-        line: ctx.sanitizeGradeLine(`${timeStr} (ID=SABADO) ${blockSongs.join(',vht,')}`),
-        logs: blockLogs,
+        line: `${timeStr} (ID=FUNK) VHTN,"MEGA_FUNK_BLOCO03_FINAL_DE_SEMANA.MP3",VHTN,"MEGA_FUNK_BLOCO04_FINAL_DE_SEMANA.MP3",fun,vhtn,fun,vhtn`,
+        logs: [{ blockTime: timeStr, type: 'fixed', title: 'Mega Funk Blocos 03-04', artist: 'MEGA_FUNK_BLOCO03/04', station: 'FIXO', reason: 'Mega Funk FDS' }],
       };
     }
 
-    // 20:30 — TOP50 FDS (positions 10 down to 01, posição 01 é a ÚLTIMA)
-    if (hour === 20 && minute === 30) {
-      const sorted = [...ctx.rankingSongs].sort((a, b) => b.plays - a.plays);
-      const blockSongs: string[] = [];
-      const blockLogs: BlockLogItem[] = [];
-      
-      for (let i = 9; i >= 0 && blockSongs.length < 10; i--) {
-        if (i >= sorted.length) {
-          blockSongs.push(ctx.coringaCode);
-          continue;
-        }
-        const song = sorted[i];
-        const libraryResult = await ctx.findSongInLibrary(song.artist, song.title);
-        if (libraryResult.exists) {
-          const realFilename = libraryResult.filename || sanitizeFilename(`${song.artist} - ${song.title}.mp3`);
-          blockSongs.push(`"${realFilename}"`);
-          ctx.markSongAsUsed(song.title, song.artist, timeStr);
-          blockLogs.push({ blockTime: timeStr, type: 'used', title: song.title, artist: song.artist, station: 'RANKING', reason: `TOP50 FDS posição ${i + 1}` });
-        } else {
-          blockSongs.push(ctx.coringaCode);
-          blockLogs.push({ blockTime: timeStr, type: 'substituted', title: ctx.coringaCode, artist: song.artist, station: 'RANKING', reason: `TOP50 FDS posição ${i + 1} - não encontrada` });
-        }
-      }
-      while (blockSongs.length < 10) blockSongs.push(ctx.coringaCode);
-      
+    // ===== 21:00 - 22:00 — GAS TOTAL (6 blocks) =====
+    if (hour === 21 || (hour === 22 && minute === 0)) {
+      const blockMap: Record<string, number> = { '21:00': 1, '21:30': 2, '22:00': 3 };
+      // 21:00→blocos 01+02, 21:30→blocos 03+04, 22:00→blocos 05+06
+      const pair = blockMap[timeStr] || 1;
+      const b1 = ((pair - 1) * 2 + 1).toString().padStart(2, '0');
+      const b2 = ((pair - 1) * 2 + 2).toString().padStart(2, '0');
       return {
-        line: ctx.sanitizeGradeLine(`${timeStr} (ID=SABADO) ${blockSongs.join(',vht,')}`),
-        logs: blockLogs,
+        line: `${timeStr} (ID=GAS) vht,"Gas Total _ bloco ${b1}.mp3",vht,"Gas Total _ bloco ${b2}.mp3"`,
+        logs: [{ blockTime: timeStr, type: 'fixed', title: `Gas Total Blocos ${b1}-${b2}`, artist: `Gas Total`, station: 'FIXO', reason: 'Gas Total FDS' }],
       };
     }
 
-    // 21:00-23:30 — Conexão Mix (6 blocks, numbered 01-05 then 08)
-    if (hour >= 21 && hour <= 23) {
-      const blockMap: Record<string, number> = { '21:00': 1, '21:30': 2, '22:00': 3, '22:30': 4, '23:00': 5, '23:30': 8 };
-      const blockNum = blockMap[timeStr] || 1;
-      const ed = blockNum.toString().padStart(2, '0');
-      const content = timeStr === '21:30'
-        ? `VHTN,"CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3",MUS,VHTN,MUS,VHTN,MUS,VHTN,MUS,VHTN,MUS`
-        : `VHTN,"CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3",VHTN,MUS,VHTN,MUS,VHTN,MUS,VHTN,MUS`;
-      const logs: BlockLogItem[] = [{ blockTime: timeStr, type: 'fixed', title: `Conexão Mix Bloco ${ed}`, artist: `CONEXAO_MIX_BLOCO${ed}_FINAL_DE_SEMANA.MP3`, station: 'FIXO', reason: 'Conexão Mix FDS' }];
-      return buildWithMonitoring(`${timeStr} (ID=SABADO) ${content}`, logs);
+    // ===== 22:30 - 23:30 — AMNESIA (6 blocks) =====
+    if ((hour === 22 && minute === 30) || hour === 23) {
+      const blockMap: Record<string, number> = { '22:30': 1, '23:00': 2, '23:30': 3 };
+      const pair = blockMap[timeStr] || 1;
+      const b1 = ((pair - 1) * 2 + 1).toString().padStart(2, '0');
+      const b2 = ((pair - 1) * 2 + 2).toString().padStart(2, '0');
+      return {
+        line: `${timeStr} (ID=Amnesia) vht,"Amnesia _ bloco ${b1}.mp3",vht,"Amnesia _ bloco ${b2}.mp3"`,
+        logs: [{ blockTime: timeStr, type: 'fixed', title: `Amnesia Blocos ${b1}-${b2}`, artist: `Amnesia`, station: 'FIXO', reason: 'Amnesia FDS' }],
+      };
     }
 
     return null;
