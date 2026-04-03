@@ -838,7 +838,7 @@ class RadioMonitor:
         print(f"  Ciclo: #{self.cycle_count} | Capturas: {self.total_captures} | Bloqueadas: {self.total_blocked}")
         print(f"  Fontes: {json.dumps(self.source_stats)}")
         print(f"  Última atualização: {self.historico.get('ultima_atualizacao', 'Nunca')}")
-        print(f"  Intervalo: {self.config.get('intervalo_minutos', 5)} minutos")
+        print(f"  Intervalo: {self.config.get('intervalo_minutos', 12)} minutos")
         print(f"  Rádios: {len(self.radios)} normais + {len(self.special_radios)} especiais")
         print()
         print(cor(Cores.YELLOW, "─" * 72))
