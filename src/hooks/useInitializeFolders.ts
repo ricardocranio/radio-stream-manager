@@ -23,8 +23,10 @@ export function useInitializeFolders() {
       const foldersToCheck = [
         config.gradeFolder,
         config.contentFolder,
+        ...(config.extraContentFolders || []),
         config.vozBrasilFolder,
         config.vinhetasFolder,
+        ...(config.extraVinhetasFolders || []),
         deezerConfig.downloadFolder,
         ...config.musicFolders,
       ].filter(Boolean);
