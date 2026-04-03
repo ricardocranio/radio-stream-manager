@@ -47,6 +47,8 @@ export interface SystemConfig {
   musicFolders: string[];
   gradeFolder: string;
   contentFolder: string;
+  extraContentFolders?: string[];
+
   rankingFile: string;
   updateIntervalMinutes: number;
   artistRepetitionMinutes: number;
