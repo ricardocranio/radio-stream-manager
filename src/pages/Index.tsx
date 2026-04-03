@@ -52,6 +52,7 @@ const PREFETCH_MAP: Record<string, () => void> = {
   folders: () => import('@/components/views/FoldersView'),
   missing: () => import('@/components/views/MissingView'),
   settings: () => import('@/components/views/SettingsView'),
+  manual: () => import('@/components/views/ManualView'),
 };
 
 // Loading fallback for lazy components
