@@ -703,10 +703,15 @@ export function useAutoGradeBuilder() {
   // Station rotation for Saturday monitoring-based music
   const SATURDAY_STATION_ROTATION = ['disney', 'Clube', 'bh', 'Globo', 'Mix FM', 'Positividade', 'Band FM'];
   const saturdayStationIndexRef = useRef(0);
+  // Cross-block anti-repetition set for weekend templates (persists across all blocks in the same build)
+  const weekendUsedKeysRef = useRef<Set<string>>(new Set());
 
   /**
    * Pick a song from a specific station's monitoring pool.
    * stationHint: partial name like 'disney', 'bh', 'Clube', 'Globo', 'Mix', 'Positividade', 'Band'
+   * 
+   * FRESHNESS PRIORITY: Songs are sorted by scraped_at (most recent first),
+   * ensuring the grade always uses the freshest monitoring data available.
    */
   const pickMonitoringSong = useCallback(async (
     stationHint: string,
@@ -720,14 +725,24 @@ export function useAutoGradeBuilder() {
     for (const [poolName, pool] of Object.entries(songsByStation)) {
       const normPool = poolName.toLowerCase().replace(/[^a-z0-9]/g, '');
       if (!normPool.includes(normHint) && !normHint.includes(normPool)) continue;
-      for (const candidate of pool) {
+      
+      // Sort by freshness (most recent first) to prioritize live monitoring data
+      const freshSorted = [...pool].sort((a, b) => {
+        const aTime = a.scrapedAt ? new Date(a.scrapedAt).getTime() : 0;
+        const bTime = b.scrapedAt ? new Date(b.scrapedAt).getTime() : 0;
+        return bTime - aTime;
+      });
+      
+      for (const candidate of freshSorted) {
         const key = `${candidate.artist.toLowerCase().trim()}|${candidate.title.toLowerCase().trim()}`;
-        if (usedKeys.has(key)) continue;
+        // Check both local block usedKeys AND cross-block weekend ref
+        if (usedKeys.has(key) || weekendUsedKeysRef.current.has(key)) continue;
         if (ctx.isRecentlyUsed(candidate.title, candidate.artist, timeStr)) continue;
         const libraryResult = await ctx.findSongInLibrary(candidate.artist, candidate.title);
         if (libraryResult.exists) {
           const realFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
           usedKeys.add(key);
+          weekendUsedKeysRef.current.add(key); // Cross-block anti-repetition
           ctx.markSongAsUsed(candidate.title, candidate.artist, timeStr);
           logs.push({ blockTime: timeStr, type: 'used', title: candidate.title, artist: candidate.artist, station: stationHint, style: candidate.style, reason: `Sábado monitoramento (${stationHint})` });
           return `"${realFilename}"`;
