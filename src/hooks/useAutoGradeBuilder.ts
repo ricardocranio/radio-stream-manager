@@ -1528,6 +1528,10 @@ export function useAutoGradeBuilder() {
     const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
     const targetDay = overrideDay || dayMap[new Date().getDay()];
     const dayCode = getDayCode(targetDay);
+
+    // Reset weekend cross-block anti-repetition for fresh build
+    weekendUsedKeysRef.current.clear();
+    saturdayStationIndexRef.current = 0;
     const filename = `${dayCode.toUpperCase()}.txt`;
 
     try {
