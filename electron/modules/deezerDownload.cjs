@@ -377,6 +377,12 @@ function register({ getMainWindow, showNotification, safeHandle }) {
             }
           }, 3000);
         });
+        
+        // Track active download process for graceful shutdown
+        try {
+          const mainModule = require('../main.cjs');
+          if (mainModule.setActiveDownloadProcess) mainModule.setActiveDownloadProcess(childProcess);
+        } catch (e) {}
       });
       
     } catch (error) {
