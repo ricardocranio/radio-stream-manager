@@ -693,7 +693,60 @@ app.on('window-all-closed', () => {
   if (process.platform === 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
+// === GRACEFUL SHUTDOWN: wait for active download to finish ===
+let _activeDownloadProcess = null; // set by deezerDownload module
+
+function setActiveDownloadProcess(proc) {
+  _activeDownloadProcess = proc;
+}
+
+function getActiveDownloadProcess() {
+  return _activeDownloadProcess;
+}
+
+app.on('before-quit', async (event) => {
+  // If a download is in progress, wait for it to finish (max 60s)
+  if (_activeDownloadProcess && !_activeDownloadProcess.killed) {
+    if (!app._waitingForDownload) {
+      app._waitingForDownload = true;
+      event.preventDefault();
+      
+      console.log('[SHUTDOWN] ⏳ Aguardando download em andamento terminar (máx 60s)...');
+      
+      // Show notification
+      showNotification('⏳ Aguardando Download', 'O app vai fechar após o download atual terminar.');
+      
+      const waitStart = Date.now();
+      const checkInterval = setInterval(() => {
+        const elapsed = Date.now() - waitStart;
+        if (!_activeDownloadProcess || _activeDownloadProcess.killed || elapsed > 60000) {
+          clearInterval(checkInterval);
+          if (elapsed > 60000) {
+            console.log('[SHUTDOWN] ⚠️ Timeout — forçando encerramento.');
+            try { _activeDownloadProcess?.kill('SIGTERM'); } catch (e) {}
+          } else {
+            console.log('[SHUTDOWN] ✅ Download concluído, encerrando app.');
+          }
+          _activeDownloadProcess = null;
+          app._waitingForDownload = false;
+          
+          // Now actually quit
+          pythonMonitor.killMonitorProcess();
+          if (lanServer) {
+            try { lanServer.close(); } catch (e) {}
+            lanServer = null;
+          }
+          if (tray && !tray.isDestroyed()) {
+            tray.destroy();
+            tray = null;
+          }
+          app.quit();
+        }
+      }, 500);
+      return;
+    }
+  }
+  
   app.isQuitting = true;
   pythonMonitor.killMonitorProcess();
   if (lanServer) {
@@ -705,3 +758,6 @@ app.on('before-quit', () => {
     tray = null;
   }
 });
+
+// Export for use by deezerDownload module
+module.exports = { setActiveDownloadProcess, getActiveDownloadProcess };

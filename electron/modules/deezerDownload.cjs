@@ -126,6 +126,12 @@ function register({ getMainWindow, showNotification, safeHandle }) {
         const downloadStartTime = Date.now();
         
         const childProcess = exec(fullCommand, { timeout: 0, maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+          // Clear active process tracker on completion
+          try {
+            const mainModule = require('../main.cjs');
+            if (mainModule.setActiveDownloadProcess) mainModule.setActiveDownloadProcess(null);
+          } catch (e) {}
+          
           const elapsedSec = Math.round((Date.now() - downloadStartTime) / 1000);
           console.log(`[DEEMIX] Process finished after ${elapsedSec}s`);
           console.log(`[DEEMIX] STDOUT: ${stdout}`);
@@ -371,6 +377,12 @@ function register({ getMainWindow, showNotification, safeHandle }) {
             }
           }, 3000);
         });
+        
+        // Track active download process for graceful shutdown
+        try {
+          const mainModule = require('../main.cjs');
+          if (mainModule.setActiveDownloadProcess) mainModule.setActiveDownloadProcess(childProcess);
+        } catch (e) {}
       });
       
     } catch (error) {
