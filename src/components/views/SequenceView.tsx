@@ -982,11 +982,13 @@ export function SequenceView() {
                             catGenres={catGenres} setCatGenres={setCatGenres}
                             catDecades={catDecades} setCatDecades={setCatDecades}
                             catGenreYear={catGenreYear} setCatGenreYear={setCatGenreYear}
+                            catPrograms={catPrograms} setCatPrograms={setCatPrograms}
                             catSpecials={catSpecials} setCatSpecials={setCatSpecials}
                             catStations={catStations} setCatStations={setCatStations}
                             genreOptions={genreOptions}
                             yearOptions={yearOptions}
                             genreYearOptions={genreYearOptions}
+                            programOptions={programOptions}
                             fixedContentOptions={fixedContentOptions}
                             stationOptions={stationOptions}
                             justDropped={droppedPosition === col1[i].position}
