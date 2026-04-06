@@ -108,4 +108,6 @@ export interface GradeContext {
   }>;
   musicFolders: string[];
   artistBlackouts?: Array<{ artist: string; startHour: number; endHour: number }>;
+  /** Station names derived from the active sequence (default or scheduled) for monitoring song selection */
+  sequenceStations?: string[];
 }

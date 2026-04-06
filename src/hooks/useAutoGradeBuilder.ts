@@ -240,6 +240,27 @@ export function useAutoGradeBuilder() {
     return defaultSequence;
   }, [scheduledSequences, defaultSequence]);
 
+  /**
+   * Derive unique station names from the active sequence for a given block.
+   * Used by template blocks to pick monitoring songs from the correct stations.
+   */
+  const getSequenceStationNames = useCallback((hour: number, minute: number, targetDay?: WeekDay): string[] => {
+    const activeSeq = getActiveSequenceForBlock(hour, minute, targetDay);
+    const stationNames: string[] = [];
+    for (const entry of activeSeq) {
+      // Skip special types (fixo_, top50, genre_, etc.)
+      if (entry.radioSource.startsWith('fixo') || entry.radioSource === 'top50' || 
+          entry.radioSource === 'random_pop' || entry.radioSource.startsWith('genre_') ||
+          entry.radioSource.startsWith('year_') || entry.radioSource.startsWith('genreyear_')) continue;
+      const name = STATION_ID_TO_DB_NAME[entry.radioSource] || 
+        STATION_ID_TO_DB_NAME[entry.radioSource.toLowerCase()] ||
+        stations.find(s => s.id === entry.radioSource)?.name || 
+        entry.radioSource;
+      if (!stationNames.includes(name)) stationNames.push(name);
+    }
+    return stationNames.length > 0 ? stationNames : ['BH FM', 'Rádio Globo RJ', 'Band FM', 'Clube FM'];
+  }, [getActiveSequenceForBlock, stations]);
+
   // ==================== Song Tracking ====================
 
   const isRecentlyUsed = useCallback((title: string, artist: string, currentBlockTime: string, isFullDay: boolean = false): boolean => {
@@ -417,7 +438,7 @@ export function useAutoGradeBuilder() {
 
   // ==================== Build GradeContext ====================
 
-  const buildGradeContext = useCallback((): GradeContext => {
+  const buildGradeContext = useCallback((sequenceStations?: string[]): GradeContext => {
     const lineSanitizer = createLineSanitizer(filterChars);
     return {
       isRecentlyUsed,
@@ -440,6 +461,7 @@ export function useAutoGradeBuilder() {
       stations: stations.map(s => ({ id: s.id, name: s.name, styles: s.styles })),
       musicFolders: config.musicFolders,
       artistBlackouts: config.artistBlackouts,
+      sequenceStations,
     };
   }, [
     isRecentlyUsed, findSongInLibrary, batchFind, markSongAsUsed,
@@ -700,8 +722,8 @@ export function useAutoGradeBuilder() {
 
   // ==================== Weekend Template Generator ====================
 
-  // Station rotation for Saturday monitoring-based music
-  const SATURDAY_STATION_ROTATION = ['disney', 'Clube', 'bh', 'Globo', 'Mix FM', 'Positividade', 'Band FM'];
+  // FALLBACK station rotation — only used when sequence has no valid stations
+  const FALLBACK_STATION_ROTATION = ['BH FM', 'Rádio Globo RJ', 'Band FM', 'Clube FM', 'Mix FM'];
   const saturdayStationIndexRef = useRef(0);
   // Cross-block anti-repetition set for weekend templates (persists across all blocks in the same build)
   const weekendUsedKeysRef = useRef<Set<string>>(new Set());
@@ -763,6 +785,11 @@ export function useAutoGradeBuilder() {
     timeStr: string,
     logs: BlockLogItem[]
   ): Promise<string> => {
+    // Use sequence-derived stations from context, or fallback
+    const stationRotation = (ctx.sequenceStations && ctx.sequenceStations.length > 0) 
+      ? ctx.sequenceStations 
+      : FALLBACK_STATION_ROTATION;
+    
     const parts = templateLine.split(',');
     const usedKeys = new Set<string>();
 
@@ -770,8 +797,8 @@ export function useAutoGradeBuilder() {
       if (parts[i].trim().toLowerCase() !== 'mus') continue;
 
       let found = false;
-      for (let attempt = 0; attempt < SATURDAY_STATION_ROTATION.length; attempt++) {
-        const stationName = SATURDAY_STATION_ROTATION[saturdayStationIndexRef.current % SATURDAY_STATION_ROTATION.length];
+      for (let attempt = 0; attempt < stationRotation.length; attempt++) {
+        const stationName = stationRotation[saturdayStationIndexRef.current % stationRotation.length];
         saturdayStationIndexRef.current++;
         const result = await pickMonitoringSong(stationName, songsByStation, ctx, timeStr, logs, usedKeys);
         if (result !== 'mus') {
@@ -800,8 +827,23 @@ export function useAutoGradeBuilder() {
     const usedKeys = new Set<string>();
     const logs: BlockLogItem[] = [];
 
-    // Helper: pick station song shorthand
-    const mon = async (station: string) => pickMonitoringSong(station, songsByStation, ctx, timeStr, logs, usedKeys);
+    // Use sequence-derived stations from context, or fallback
+    const stationRotation = (ctx.sequenceStations && ctx.sequenceStations.length > 0)
+      ? ctx.sequenceStations
+      : FALLBACK_STATION_ROTATION;
+
+    // Helper: pick station song cycling through the active sequence's stations
+    const mon = async (_stationHint?: string) => {
+      // Cycle through the SEQUENCE stations instead of hardcoded ones
+      for (let attempt = 0; attempt < stationRotation.length; attempt++) {
+        const stationName = stationRotation[saturdayStationIndexRef.current % stationRotation.length];
+        saturdayStationIndexRef.current++;
+        const result = await pickMonitoringSong(stationName, songsByStation, ctx, timeStr, logs, usedKeys);
+        if (result !== 'mus') return result;
+      }
+      saturdayStationIndexRef.current++;
+      return 'mus';
+    };
 
     // Helper to build result with generic mus replacement
     const buildWithMonitoring = async (line: string, blockLogs: BlockLogItem[]): Promise<BlockResult> => {
@@ -945,7 +987,9 @@ export function useAutoGradeBuilder() {
     const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     const programName = getProgramForHour(hour);
     const fixedItems = getFixedContentForTime(hour, minute, targetDay);
-    const ctx = buildGradeContext();
+    const seqStations = getSequenceStationNames(hour, minute, targetDay);
+    const ctx = buildGradeContext(seqStations);
+    console.log(`[AUTO-GRADE] 🎯 Sequência ativa para ${timeStr}: [${seqStations.join(', ')}]`);
 
     // === DURATION FILL HELPER (applies to ALL block types including specials) ===
     const MIN_DUR_SEC = 29 * 60;
@@ -1521,7 +1565,7 @@ export function useAutoGradeBuilder() {
     };
   }, [
     getProgramForHour, getFixedContentForTime, isWeekday,
-    getActiveSequenceForBlock, findSongInLibrary,
+    getActiveSequenceForBlock, getSequenceStationNames, findSongInLibrary,
     processFixedContentFilename, getDayCode, getCarryOverSongs,
     buildGradeContext, filterChars, stations, scheduledSequences,
   ]);
