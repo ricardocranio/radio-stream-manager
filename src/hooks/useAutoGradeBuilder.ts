@@ -1440,17 +1440,48 @@ export function useAutoGradeBuilder() {
         }
       }
       
-      // If STILL under minimum after swaps, add max 1 coringa as absolute last resort
+      // If STILL under minimum after swaps, add filler songs or coringa
       if (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC) {
-        const coringaCode = config.coringaCode || 'mus';
-        songs.push(coringaCode);
-        accumulatedDurationSec += DEFAULT_SONG_DURATION_SEC + VHT_DURATION_SEC;
-        console.log(`[AUTO-GRADE] ⚠️ Coringa de segurança: "${coringaCode}" (bloco ainda abaixo de 29 min após trocas)`);
-        blockLogs.push({
-          blockTime: timeStr, type: 'substituted',
-          title: coringaCode, artist: 'CORINGA',
-          station: 'fallback', reason: 'Segurança: bloco abaixo de 29 min após trocas',
-        });
+        if (isMadrugada) {
+          // 🌙 Madrugada: NO codes — try harder to find real songs from ANY station
+          console.log(`[AUTO-GRADE] 🌙 Madrugada ${timeStr}: bloco curto, buscando músicas extras de qualquer rádio...`);
+          for (const [stName, pool] of Object.entries(songsByStation)) {
+            if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
+            for (const candidate of pool) {
+              if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
+              const key = `${candidate.title.toLowerCase().trim()}-${candidate.artist.toLowerCase().trim()}`;
+              if (usedInBlock.has(key) || usedArtistsInBlock.has(candidate.artist.toLowerCase().trim())) continue;
+              if (isRecentlyUsed(candidate.title, candidate.artist, timeStr)) continue;
+              const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
+              if (libraryResult.exists) {
+                const fname = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+                songs.push(`"${fname}"`);
+                usedInBlock.add(key);
+                usedArtistsInBlock.add(candidate.artist.toLowerCase().trim());
+                markSongAsUsed(candidate.title, candidate.artist, timeStr);
+                accumulatedDurationSec += DEFAULT_SONG_DURATION_SEC + VHT_DURATION_SEC;
+                blockLogs.push({
+                  blockTime: timeStr, type: 'used',
+                  title: candidate.title, artist: candidate.artist,
+                  station: stName, reason: `Madrugada fill (${stName}) — sem códigos`,
+                });
+              }
+            }
+          }
+          if (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC) {
+            console.warn(`[AUTO-GRADE] ⚠️ Madrugada ${timeStr}: bloco ainda curto (${(accumulatedDurationSec/60).toFixed(1)}min) mas SEM coringa`);
+          }
+        } else {
+          const coringaCode = config.coringaCode || 'mus';
+          songs.push(coringaCode);
+          accumulatedDurationSec += DEFAULT_SONG_DURATION_SEC + VHT_DURATION_SEC;
+          console.log(`[AUTO-GRADE] ⚠️ Coringa de segurança: "${coringaCode}" (bloco ainda abaixo de 29 min após trocas)`);
+          blockLogs.push({
+            blockTime: timeStr, type: 'substituted',
+            title: coringaCode, artist: 'CORINGA',
+            station: 'fallback', reason: 'Segurança: bloco abaixo de 29 min após trocas',
+          });
+        }
       }
     }
 
