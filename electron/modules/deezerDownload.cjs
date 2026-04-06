@@ -99,6 +99,37 @@ function register({ getMainWindow, showNotification, safeHandle }) {
         const durSec = track.duration % 60;
         console.log(`[DEEMIX] Found: ${track.artist.name} - ${track.title} (ID: ${track.id}, Duration: ${durMin}:${String(durSec).padStart(2, '0')})`);
         
+        // === SIMILARITY VALIDATION ===
+        // Verify the Deezer result actually matches what we searched for
+        const { calculateSimilarity, normalizeText } = require('./utils.cjs');
+        const searchArtistNorm = normalizeText(artist);
+        const searchTitleNorm = normalizeText(title);
+        const resultArtistNorm = normalizeText(track.artist.name);
+        const resultTitleNorm = normalizeText(track.title);
+        
+        const artistSim = calculateSimilarity(artist, track.artist.name);
+        const titleSim = calculateSimilarity(title, track.title);
+        const combinedSim = (artistSim + titleSim) / 2;
+        
+        console.log(`[DEEMIX] 🔍 Similarity: artist=${(artistSim * 100).toFixed(0)}%, title=${(titleSim * 100).toFixed(0)}%, combined=${(combinedSim * 100).toFixed(0)}%`);
+        
+        // If the result is too different, flag it and prefer original search names for the filename
+        if (combinedSim < 0.4) {
+          console.warn(`[DEEMIX] ⚠️ BAIXA SIMILARIDADE (${(combinedSim * 100).toFixed(0)}%): buscou "${artist} - ${title}" mas Deezer retornou "${track.artist.name} - ${track.title}"`);
+          // Store flag to use search params for filename instead of API result
+          track._useSearchNames = true;
+          track._searchArtist = artist;
+          track._searchTitle = title;
+          
+          const mainWindow = _getMainWindow();
+          if (mainWindow) {
+            mainWindow.webContents.send('download-warning', {
+              artist, title,
+              message: `⚠️ Deezer retornou faixa diferente: "${track.artist.name} - ${track.title}" (similaridade: ${(combinedSim * 100).toFixed(0)}%)`
+            });
+          }
+        }
+        
         // Warn dashboard about short tracks
         const mainWindow = _getMainWindow();
         if (track.duration < 150 && mainWindow) {
