@@ -1486,7 +1486,7 @@ export function useAutoGradeBuilder() {
     }
 
     // Insert fixed content at configured position
-    let allContent: string[] = [...songs];
+    let allContent: string[] = [...songs].filter(s => s && s.length > 0); // Filter empty strings (madrugada omitted positions)
     if (fixedContentFile) {
       if (fixedPosition === 'start') {
         allContent = [fixedContentFile, ...songs];
