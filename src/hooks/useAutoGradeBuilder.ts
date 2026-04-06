@@ -1110,14 +1110,13 @@ export function useAutoGradeBuilder() {
         return fillBlockIfShort(await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx));
       }
 
-      // Madrugada (00:00-04:30) - weekdays only
-      if (hour >= 0 && hour <= 4 && isWeekday(targetDay)) {
-        return fillBlockIfShort(await generateMadrugada(hour, minute, songsByStation, stats, isFullDay, ctx, programName));
-      }
-
-      // Sertanejo Nossa (05:00-07:30) - weekdays only
-      if (hour >= 5 && hour <= 7 && isWeekday(targetDay)) {
-        return fillBlockIfShort(await generateSertanejoNossa(hour, minute, songsByStation, stats, isFullDay, ctx));
+      // === MADRUGADA 00:00-07:30: Usa sequência padrão/programada ===
+      // Removido: generateMadrugada e generateSertanejoNossa
+      // Agora segue para Normal Block Logic usando a sequência configurada
+      // com APENAS músicas reais do monitoramento (sem códigos mus/clas/rom)
+      if (hour >= 0 && hour <= 7) {
+        console.log(`[GRADE] 🌙 Madrugada ${timeStr}: usando sequência normal (padrão ou programada) — sem códigos`);
+        // Fall through to Normal Block Logic below
       }
     }
 
@@ -1125,9 +1124,10 @@ export function useAutoGradeBuilder() {
 
     const blockLogs: BlockLogItem[] = [];
 
-    // Fixed content handling — SKIPPED on Sunday (DOM.txt = 100% monitoring) and when a scheduled sequence is active
+    // Fixed content handling — SKIPPED on Sunday, during scheduled sequences, AND during madrugada (00:00-07:59)
     const isSunday = targetDay === 'dom';
-    const fixedItem = (hasScheduledSequence || isSunday) ? undefined : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil' && fc.type !== 'raridades');
+    const isMadrugada = hour >= 0 && hour <= 7;
+    const fixedItem = (hasScheduledSequence || isSunday || isMadrugada) ? undefined : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil' && fc.type !== 'raridades');
     let fixedContentFile: string | null = null;
     let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
 
@@ -1145,6 +1145,8 @@ export function useAutoGradeBuilder() {
       });
     } else if (isSunday) {
       console.log(`[GRADE] 🌞 Domingo: conteúdo fixo ignorado às ${timeStr} — 100% monitoramento`);
+    } else if (isMadrugada) {
+      console.log(`[GRADE] 🌙 Madrugada: conteúdo fixo ignorado às ${timeStr} — 100% monitoramento`);
     } else if (hasScheduledSequence && fixedItems.some(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil')) {
       console.log(`[GRADE] ⏭️ Conteúdo fixo ignorado às ${timeStr} — sequência agendada ativa`);
     }
@@ -1438,22 +1440,53 @@ export function useAutoGradeBuilder() {
         }
       }
       
-      // If STILL under minimum after swaps, add max 1 coringa as absolute last resort
+      // If STILL under minimum after swaps, add filler songs or coringa
       if (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC) {
-        const coringaCode = config.coringaCode || 'mus';
-        songs.push(coringaCode);
-        accumulatedDurationSec += DEFAULT_SONG_DURATION_SEC + VHT_DURATION_SEC;
-        console.log(`[AUTO-GRADE] ⚠️ Coringa de segurança: "${coringaCode}" (bloco ainda abaixo de 29 min após trocas)`);
-        blockLogs.push({
-          blockTime: timeStr, type: 'substituted',
-          title: coringaCode, artist: 'CORINGA',
-          station: 'fallback', reason: 'Segurança: bloco abaixo de 29 min após trocas',
-        });
+        if (isMadrugada) {
+          // 🌙 Madrugada: NO codes — try harder to find real songs from ANY station
+          console.log(`[AUTO-GRADE] 🌙 Madrugada ${timeStr}: bloco curto, buscando músicas extras de qualquer rádio...`);
+          for (const [stName, pool] of Object.entries(songsByStation)) {
+            if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
+            for (const candidate of pool) {
+              if (accumulatedDurationSec >= MIN_BLOCK_DURATION_SEC) break;
+              const key = `${candidate.title.toLowerCase().trim()}-${candidate.artist.toLowerCase().trim()}`;
+              if (usedInBlock.has(key) || usedArtistsInBlock.has(candidate.artist.toLowerCase().trim())) continue;
+              if (isRecentlyUsed(candidate.title, candidate.artist, timeStr)) continue;
+              const libraryResult = await findSongInLibrary(candidate.artist, candidate.title);
+              if (libraryResult.exists) {
+                const fname = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+                songs.push(`"${fname}"`);
+                usedInBlock.add(key);
+                usedArtistsInBlock.add(candidate.artist.toLowerCase().trim());
+                markSongAsUsed(candidate.title, candidate.artist, timeStr);
+                accumulatedDurationSec += DEFAULT_SONG_DURATION_SEC + VHT_DURATION_SEC;
+                blockLogs.push({
+                  blockTime: timeStr, type: 'used',
+                  title: candidate.title, artist: candidate.artist,
+                  station: stName, reason: `Madrugada fill (${stName}) — sem códigos`,
+                });
+              }
+            }
+          }
+          if (accumulatedDurationSec < MIN_BLOCK_DURATION_SEC) {
+            console.warn(`[AUTO-GRADE] ⚠️ Madrugada ${timeStr}: bloco ainda curto (${(accumulatedDurationSec/60).toFixed(1)}min) mas SEM coringa`);
+          }
+        } else {
+          const coringaCode = config.coringaCode || 'mus';
+          songs.push(coringaCode);
+          accumulatedDurationSec += DEFAULT_SONG_DURATION_SEC + VHT_DURATION_SEC;
+          console.log(`[AUTO-GRADE] ⚠️ Coringa de segurança: "${coringaCode}" (bloco ainda abaixo de 29 min após trocas)`);
+          blockLogs.push({
+            blockTime: timeStr, type: 'substituted',
+            title: coringaCode, artist: 'CORINGA',
+            station: 'fallback', reason: 'Segurança: bloco abaixo de 29 min após trocas',
+          });
+        }
       }
     }
 
     // Insert fixed content at configured position
-    let allContent: string[] = [...songs];
+    let allContent: string[] = [...songs].filter(s => s && s.length > 0); // Filter empty strings (madrugada omitted positions)
     if (fixedContentFile) {
       if (fixedPosition === 'start') {
         allContent = [fixedContentFile, ...songs];
