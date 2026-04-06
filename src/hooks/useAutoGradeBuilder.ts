@@ -1565,7 +1565,7 @@ export function useAutoGradeBuilder() {
     };
   }, [
     getProgramForHour, getFixedContentForTime, isWeekday,
-    getActiveSequenceForBlock, findSongInLibrary,
+    getActiveSequenceForBlock, getSequenceStationNames, findSongInLibrary,
     processFixedContentFilename, getDayCode, getCarryOverSongs,
     buildGradeContext, filterChars, stations, scheduledSequences,
   ]);
