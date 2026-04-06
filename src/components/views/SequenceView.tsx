@@ -331,6 +331,28 @@ export function SequenceView() {
     { value: 'genreyear_ELETRONICA,DANCE_2000s', label: '🎧📅 Dance/Eletrônica Anos 2000', isFixo: false },
   ];
 
+  // Template program options for sequence building
+  const programOptions = [
+    // Weekday programs
+    { value: 'program_sintonia_total', label: '📺 Sintonia Total (09-10:30)' },
+    { value: 'program_painel_flashback', label: '📺 Painel Flashback (12-12:30)' },
+    { value: 'program_top10', label: '📺 Top 10 / Papo Sério (13-13:30)' },
+    { value: 'program_intensidade', label: '📺 Intensidade (17-17:30)' },
+    { value: 'program_radar_noticias', label: '📺 Radar Notícias (18:00)' },
+    { value: 'program_top10_mix', label: '📺 TOP10 MIX + Esporte (18:30)' },
+    { value: 'program_radio_revista', label: '📺 Rádio Revista (19-19:30)' },
+    { value: 'program_misturadao', label: '📺 Misturadão (20-20:30)' },
+    { value: 'program_songs_of_love', label: '📺 Songs of Love (22-23:30)' },
+    // Weekend programs
+    { value: 'program_shake_mix', label: '📺 Shake Mix (FDS 08-09:30)' },
+    { value: 'program_conexao_mix', label: '📺 Conexão Mix (FDS 10-12:30)' },
+    { value: 'program_mega_mix', label: '📺 Mega Mix (FDS 13-17:30)' },
+    { value: 'program_sem_parar', label: '📺 Sem Parar (FDS 18-19:30)' },
+    { value: 'program_mega_funk', label: '📺 Mega Funk (FDS 20-20:30)' },
+    { value: 'program_gas_total', label: '📺 Gas Total (FDS 21-22)' },
+    { value: 'program_amnesia', label: '📺 Amnesia (FDS 22:30-23:30)' },
+  ];
+
   const radioOptions = [
     ...stationOptions,
     { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)', isFixo: false },
@@ -338,6 +360,7 @@ export function SequenceView() {
     ...genreOptions,
     ...yearOptions,
     ...genreYearOptions,
+    ...programOptions,
     ...fixedContentOptions,
   ];
 
