@@ -785,6 +785,11 @@ export function useAutoGradeBuilder() {
     timeStr: string,
     logs: BlockLogItem[]
   ): Promise<string> => {
+    // Use sequence-derived stations from context, or fallback
+    const stationRotation = (ctx.sequenceStations && ctx.sequenceStations.length > 0) 
+      ? ctx.sequenceStations 
+      : FALLBACK_STATION_ROTATION;
+    
     const parts = templateLine.split(',');
     const usedKeys = new Set<string>();
 
@@ -792,8 +797,8 @@ export function useAutoGradeBuilder() {
       if (parts[i].trim().toLowerCase() !== 'mus') continue;
 
       let found = false;
-      for (let attempt = 0; attempt < SATURDAY_STATION_ROTATION.length; attempt++) {
-        const stationName = SATURDAY_STATION_ROTATION[saturdayStationIndexRef.current % SATURDAY_STATION_ROTATION.length];
+      for (let attempt = 0; attempt < stationRotation.length; attempt++) {
+        const stationName = stationRotation[saturdayStationIndexRef.current % stationRotation.length];
         saturdayStationIndexRef.current++;
         const result = await pickMonitoringSong(stationName, songsByStation, ctx, timeStr, logs, usedKeys);
         if (result !== 'mus') {
