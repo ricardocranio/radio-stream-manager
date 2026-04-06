@@ -240,6 +240,27 @@ export function useAutoGradeBuilder() {
     return defaultSequence;
   }, [scheduledSequences, defaultSequence]);
 
+  /**
+   * Derive unique station names from the active sequence for a given block.
+   * Used by template blocks to pick monitoring songs from the correct stations.
+   */
+  const getSequenceStationNames = useCallback((hour: number, minute: number, targetDay?: WeekDay): string[] => {
+    const activeSeq = getActiveSequenceForBlock(hour, minute, targetDay);
+    const stationNames: string[] = [];
+    for (const entry of activeSeq) {
+      // Skip special types (fixo_, top50, genre_, etc.)
+      if (entry.radioSource.startsWith('fixo') || entry.radioSource === 'top50' || 
+          entry.radioSource === 'random_pop' || entry.radioSource.startsWith('genre_') ||
+          entry.radioSource.startsWith('year_') || entry.radioSource.startsWith('genreyear_')) continue;
+      const name = STATION_ID_TO_DB_NAME[entry.radioSource] || 
+        STATION_ID_TO_DB_NAME[entry.radioSource.toLowerCase()] ||
+        stations.find(s => s.id === entry.radioSource)?.name || 
+        entry.radioSource;
+      if (!stationNames.includes(name)) stationNames.push(name);
+    }
+    return stationNames.length > 0 ? stationNames : ['BH FM', 'Rádio Globo RJ', 'Band FM', 'Clube FM'];
+  }, [getActiveSequenceForBlock, stations]);
+
   // ==================== Song Tracking ====================
 
   const isRecentlyUsed = useCallback((title: string, artist: string, currentBlockTime: string, isFullDay: boolean = false): boolean => {
