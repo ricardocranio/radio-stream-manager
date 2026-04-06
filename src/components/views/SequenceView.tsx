@@ -747,6 +747,7 @@ export function SequenceView() {
   const getSourceBadgeLabel = (source: string): string => {
     if (source.startsWith('file_')) return '📂';
     if (source.startsWith('fixo_')) return '📌';
+    if (source.startsWith('program_')) return '📺';
     if (source.startsWith('genreyear_')) return '🎵📅';
     if (source.startsWith('genre_')) return '🎵';
     if (source.startsWith('year_')) return '📅';
