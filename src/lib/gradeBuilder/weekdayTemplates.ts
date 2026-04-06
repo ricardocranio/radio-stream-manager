@@ -112,7 +112,7 @@ async function pickRomanticSong(
   return 'rom'; // coringa romántico
 }
 
-/** Pick a monitoring song from mixed stations (Rádio Globo RJ / BH FM) */
+/** Pick a monitoring song cycling through the active sequence's stations */
 async function pickMixedMonitoredSong(
   songsByStation: Record<string, SongEntry[]>,
   ctx: GradeContext,
@@ -122,11 +122,22 @@ async function pickMixedMonitoredSong(
   usedArtists: Set<string>,
   logs: BlockLogItem[],
   coringaCode: string,
+  stationIndex: { current: number },
 ): Promise<string> {
-  // Alternate between stations
-  const stations = ['BH FM', 'Rádio Globo RJ'];
-  const randomStation = stations[Math.floor(Math.random() * stations.length)];
-  return pickMonitoredSong(randomStation, songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
+  // Use sequence-derived stations from context, or fallback
+  const stations = (ctx.sequenceStations && ctx.sequenceStations.length > 0)
+    ? ctx.sequenceStations
+    : ['BH FM', 'Rádio Globo RJ', 'Band FM', 'Clube FM'];
+  
+  // Cycle through stations from the active sequence
+  for (let attempt = 0; attempt < stations.length; attempt++) {
+    const stationName = stations[stationIndex.current % stations.length];
+    stationIndex.current++;
+    const result = await pickMonitoredSong(stationName, songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
+    if (result !== coringaCode) return result;
+  }
+  stationIndex.current++;
+  return coringaCode;
 }
 
 // ========== Template Generators ==========
