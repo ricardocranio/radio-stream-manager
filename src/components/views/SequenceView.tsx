@@ -639,6 +639,9 @@ export function SequenceView() {
     if (source.startsWith('fixo_')) {
       return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
     }
+    if (source.startsWith('program_')) {
+      return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
+    }
     if (source.startsWith('genreyear_')) {
       return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
     }
