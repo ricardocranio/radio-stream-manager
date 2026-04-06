@@ -343,8 +343,14 @@ function register({ getMainWindow, showNotification, safeHandle }) {
               const safeId3Title = id3Title && !hasCorruptedChars(id3Title) ? id3Title : null;
               
               // Use shared disk sanitization from utils.cjs
-              const finalArtist = sanitizeForDisk(track.artist.name || safeId3Artist || artist, 'artist');
-              const finalTitle = sanitizeForDisk(track.title || safeId3Title || title, 'title');
+              // Use search params when Deezer returned a very different track
+              const useSearchNames = track._useSearchNames === true;
+              const finalArtist = useSearchNames
+                ? sanitizeForDisk(track._searchArtist || artist, 'artist')
+                : sanitizeForDisk(track.artist.name || safeId3Artist || artist, 'artist');
+              const finalTitle = useSearchNames
+                ? sanitizeForDisk(track._searchTitle || title, 'title')
+                : sanitizeForDisk(track.title || safeId3Title || title, 'title');
               const finalFilename = `${finalArtist} - ${finalTitle}.mp3`;
               const finalFilePath = path.join(finalOutputFolder, finalFilename);
               
