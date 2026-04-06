@@ -967,7 +967,9 @@ export function useAutoGradeBuilder() {
     const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     const programName = getProgramForHour(hour);
     const fixedItems = getFixedContentForTime(hour, minute, targetDay);
-    const ctx = buildGradeContext();
+    const seqStations = getSequenceStationNames(hour, minute, targetDay);
+    const ctx = buildGradeContext(seqStations);
+    console.log(`[AUTO-GRADE] 🎯 Sequência ativa para ${timeStr}: [${seqStations.join(', ')}]`);
 
     // === DURATION FILL HELPER (applies to ALL block types including specials) ===
     const MIN_DUR_SEC = 29 * 60;
