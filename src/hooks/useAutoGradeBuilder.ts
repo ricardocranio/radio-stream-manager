@@ -438,7 +438,7 @@ export function useAutoGradeBuilder() {
 
   // ==================== Build GradeContext ====================
 
-  const buildGradeContext = useCallback((): GradeContext => {
+  const buildGradeContext = useCallback((sequenceStations?: string[]): GradeContext => {
     const lineSanitizer = createLineSanitizer(filterChars);
     return {
       isRecentlyUsed,
@@ -461,6 +461,7 @@ export function useAutoGradeBuilder() {
       stations: stations.map(s => ({ id: s.id, name: s.name, styles: s.styles })),
       musicFolders: config.musicFolders,
       artistBlackouts: config.artistBlackouts,
+      sequenceStations,
     };
   }, [
     isRecentlyUsed, findSongInLibrary, batchFind, markSongAsUsed,
