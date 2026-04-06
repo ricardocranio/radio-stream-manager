@@ -165,21 +165,21 @@ export async function generateSintoniaTotalBlock(
   let line: string;
 
   if (hour === 9 && minute === 0) {
-    const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-    const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
+    const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+    const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
     line = `${timeStr} (ID=SINTONIA TOTAL) vht,"NOTICIA_DA_HORA_09HORAS_${dayName}.mp3","Sintonia Total _ bloco 01.mp3","HOROSCOPO_DO_DIA_EDICAO01_${dayName}.mp3",vht,"Sintonia Total _ bloco 02.mp3",vht,${mon1},vht,${mon2},vht`;
   } else if (hour === 9 && minute === 30) {
-    const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-    const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
+    const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+    const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
     line = `${timeStr} (ID=SINTONIA TOTAL) vht,"FIQUE_SABENDO_EDICAO01_${dayName}.mp3","Sintonia Total _ bloco 03.mp3","HOROSCOPO_DO_DIA_EDICAO02_${dayName}.mp3",vht,"Sintonia Total _ bloco 04.mp3",vht,${mon1},vht,${mon2},vht`;
   } else if (hour === 10 && minute === 0) {
-    const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-    const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
+    const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+    const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
     line = `${timeStr} (ID=SINTONIA TOTAL) vht,"NOTICIA_DA_HORA_10HORAS_${dayName}.mp3","Sintonia Total _ bloco 05.mp3","HOROSCOPO_DO_DIA_EDICAO03_${dayName}.mp3",vht,"Sintonia Total _ bloco 06.mp3",vht,${mon1},vht,${mon2},vht`;
   } else {
     // 10:30
-    const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-    const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
+    const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+    const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
     line = `${timeStr} (ID=SINTONIA TOTAL) vht,"FIQUE_SABENDO_EDICAO02_${dayName}.mp3","Sintonia Total _ bloco 07.mp3","HOROSCOPO_DO_DIA_EDICAO04_${dayName}.mp3",vht,"Sintonia Total _ bloco 08.mp3",vht,${mon1},vht,${mon2},vht`;
   }
 
@@ -238,8 +238,8 @@ export async function generateTop10PapoSerioBlock(
     line = `${timeStr} (ID=TOP 10) vht,"NOTICIA_DA_HORA_13HORAS_${dayName}.mp3","Top 10 _ bloco 01.mp3",vht,"PAPO_SERIO_${dayName}.mp3","Top 10 _ bloco 02.mp3"`;
   } else {
     // 13:30
-    const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-    const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
+    const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+    const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
     line = `${timeStr} (ID=TOP 10) vht,"Top 10 _ bloco 03.mp3",vht,"CURIOSIDADES_${dayName}.mp3",${mon1},vht,${mon2},vht`;
   }
 
