@@ -827,8 +827,23 @@ export function useAutoGradeBuilder() {
     const usedKeys = new Set<string>();
     const logs: BlockLogItem[] = [];
 
-    // Helper: pick station song shorthand
-    const mon = async (station: string) => pickMonitoringSong(station, songsByStation, ctx, timeStr, logs, usedKeys);
+    // Use sequence-derived stations from context, or fallback
+    const stationRotation = (ctx.sequenceStations && ctx.sequenceStations.length > 0)
+      ? ctx.sequenceStations
+      : FALLBACK_STATION_ROTATION;
+
+    // Helper: pick station song cycling through the active sequence's stations
+    const mon = async (_stationHint?: string) => {
+      // Cycle through the SEQUENCE stations instead of hardcoded ones
+      for (let attempt = 0; attempt < stationRotation.length; attempt++) {
+        const stationName = stationRotation[saturdayStationIndexRef.current % stationRotation.length];
+        saturdayStationIndexRef.current++;
+        const result = await pickMonitoringSong(stationName, songsByStation, ctx, timeStr, logs, usedKeys);
+        if (result !== 'mus') return result;
+      }
+      saturdayStationIndexRef.current++;
+      return 'mus';
+    };
 
     // Helper to build result with generic mus replacement
     const buildWithMonitoring = async (line: string, blockLogs: BlockLogItem[]): Promise<BlockResult> => {
