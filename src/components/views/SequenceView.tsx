@@ -696,6 +696,10 @@ export function SequenceView() {
       const content = fixedContent.find(c => c.id === contentId);
       return content?.name || 'FIXO';
     }
+    if (source.startsWith('program_')) {
+      const opt = programOptions.find(o => o.value === source);
+      return opt ? opt.label.replace('📺 ', '') : source.replace('program_', '').replace(/_/g, ' ');
+    }
     if (source.startsWith('genreyear_')) {
       const opt = genreYearOptions.find(o => o.value === source);
       if (opt) return opt.label.replace(/^[^\w]+/, '').trim();
