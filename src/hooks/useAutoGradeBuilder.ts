@@ -1145,6 +1145,8 @@ export function useAutoGradeBuilder() {
       });
     } else if (isSunday) {
       console.log(`[GRADE] 🌞 Domingo: conteúdo fixo ignorado às ${timeStr} — 100% monitoramento`);
+    } else if (isMadrugada) {
+      console.log(`[GRADE] 🌙 Madrugada: conteúdo fixo ignorado às ${timeStr} — 100% monitoramento`);
     } else if (hasScheduledSequence && fixedItems.some(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil')) {
       console.log(`[GRADE] ⏭️ Conteúdo fixo ignorado às ${timeStr} — sequência agendada ativa`);
     }
