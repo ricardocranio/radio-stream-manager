@@ -1110,14 +1110,13 @@ export function useAutoGradeBuilder() {
         return fillBlockIfShort(await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx));
       }
 
-      // Madrugada (00:00-04:30) - weekdays only
-      if (hour >= 0 && hour <= 4 && isWeekday(targetDay)) {
-        return fillBlockIfShort(await generateMadrugada(hour, minute, songsByStation, stats, isFullDay, ctx, programName));
-      }
-
-      // Sertanejo Nossa (05:00-07:30) - weekdays only
-      if (hour >= 5 && hour <= 7 && isWeekday(targetDay)) {
-        return fillBlockIfShort(await generateSertanejoNossa(hour, minute, songsByStation, stats, isFullDay, ctx));
+      // === MADRUGADA 00:00-07:30: Usa sequência padrão/programada ===
+      // Removido: generateMadrugada e generateSertanejoNossa
+      // Agora segue para Normal Block Logic usando a sequência configurada
+      // com APENAS músicas reais do monitoramento (sem códigos mus/clas/rom)
+      if (hour >= 0 && hour <= 7) {
+        console.log(`[GRADE] 🌙 Madrugada ${timeStr}: usando sequência normal (padrão ou programada) — sem códigos`);
+        // Fall through to Normal Block Logic below
       }
     }
 
