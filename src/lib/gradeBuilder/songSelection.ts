@@ -1066,7 +1066,59 @@ export async function selectSongForSlot(
     return `"${sanitizedFilename}"`;
   }
 
-  // PRIORITY 6: Coringa
+  // PRIORITY 6: Coringa (or extra effort for madrugada 00:00-07:59)
+  const [blockHourP6] = timeStr.split(':').map(Number);
+  const isMadrugadaSlot = blockHourP6 >= 0 && blockHourP6 <= 7;
+
+  if (isMadrugadaSlot) {
+    // 🌙 Madrugada: try ALL pools one more time with relaxed anti-repetition
+    console.log(`[SONG-SELECT] 🌙 [P6-MADRUGADA] Último esforço para encontrar música real (sem coringa)`);
+    for (const [poolName, poolSongs] of Object.entries(songsByStation)) {
+      for (const candidate of poolSongs) {
+        const key = `${candidate.title.toLowerCase()}-${candidate.artist.toLowerCase()}`;
+        if (usedInBlock.has(key)) continue;
+        // Relaxed: allow same artist if nothing else is available
+        const libraryResult = await findWithAliasFallback(candidate.artist, candidate.title);
+        if (libraryResult?.exists) {
+          const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+          selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+          stats.substituted++;
+          logs.push({
+            blockTime: timeStr, type: 'used',
+            title: candidate.title, artist: candidate.artist,
+            station: poolName, style: candidate.style,
+            reason: `[P6-MADRUGADA] Último esforço sem coringa (de ${poolName})`,
+          });
+          break;
+        }
+      }
+      if (selectedSong) break;
+    }
+
+    if (selectedSong) {
+      usedInBlock.add(`${selectedSong.title.toLowerCase()}-${selectedSong.artist.toLowerCase()}`);
+      usedArtistsInBlock.add(selectedSong.artist.toLowerCase().trim());
+      ctx.markSongAsUsed(selectedSong.title, selectedSong.artist, timeStr);
+      const aliasResolved = aliasEngine.resolve(selectedSong.artist, selectedSong.title);
+      const sanitizedFilename = await finalizeGradeFilename(
+        selectedSong.filename || '',
+        aliasResolved.artist, aliasResolved.title,
+        ctx.musicFolders, ctx.filterChars
+      );
+      return `"${sanitizedFilename}"`;
+    }
+
+    // Absolute last resort: still return a real song filename if possible, avoid coringa
+    console.warn(`[SONG-SELECT] ⚠️ [P6-MADRUGADA] Pool totalmente esgotado — bloco ficará mais curto, SEM coringa`);
+    logs.push({
+      blockTime: timeStr, type: 'substituted',
+      title: 'VAZIO', artist: 'MADRUGADA',
+      station: 'FALLBACK',
+      reason: `[P6-MADRUGADA] Pool esgotado — posição omitida (sem coringa)`,
+    });
+    return ''; // Empty string = position will be omitted from grade
+  }
+
   stats.missing++;
   
   // === DIAGNOSTIC LOGGING ===
