@@ -1117,7 +1117,64 @@ export function useAutoGradeBuilder() {
     // Quando há sequência agendada ativa, pula programas especiais,
     // templates de sábado e conteúdo fixo — vai direto para geração baseada na sequência.
     if (hasScheduledSequence) {
-      console.log(`[GRADE] 📅 Sequência agendada ativa às ${timeStr} — sobrepondo programas especiais e conteúdo fixo`);
+      // Check if the scheduled sequence contains a program_* entry — if so, invoke that specific template
+      const activeSeq = getActiveSequenceForBlock(hour, minute, targetDay);
+      const programEntry = activeSeq.find(s => s.radioSource.startsWith('program_'));
+      if (programEntry) {
+        const pgm = programEntry.radioSource;
+        console.log(`[GRADE] 📺 Programa "${pgm}" na sequência agendada às ${timeStr}`);
+        
+        // Weekday programs
+        if (pgm === 'program_sintonia_total' && (hour === 9 || hour === 10)) {
+          const result = await generateWeekdayTemplateBlock(hour, minute, songsByStation, stats, isFullDay, ctx, targetDay);
+          if (result) return fillBlockIfShort(result);
+        }
+        if (pgm === 'program_painel_flashback' && hour === 12) {
+          const result = await generateWeekdayTemplateBlock(hour, minute, songsByStation, stats, isFullDay, ctx, targetDay);
+          if (result) return fillBlockIfShort(result);
+        }
+        if (pgm === 'program_top10' && hour === 13) {
+          const result = await generateWeekdayTemplateBlock(hour, minute, songsByStation, stats, isFullDay, ctx, targetDay);
+          if (result) return fillBlockIfShort(result);
+        }
+        if (pgm === 'program_intensidade' && hour === 17) {
+          const result = await generateWeekdayTemplateBlock(hour, minute, songsByStation, stats, isFullDay, ctx, targetDay);
+          if (result) return fillBlockIfShort(result);
+        }
+        if (pgm === 'program_radar_noticias' && hour === 18 && minute === 0) {
+          const result = await generateWeekdayTemplateBlock(hour, minute, songsByStation, stats, isFullDay, ctx, targetDay);
+          if (result) return fillBlockIfShort(result);
+        }
+        if (pgm === 'program_top10_mix' && hour === 18 && minute === 30) {
+          const result = await generateWeekdayTemplateBlock(hour, minute, songsByStation, stats, isFullDay, ctx, targetDay);
+          if (result) return fillBlockIfShort(result);
+        }
+        if (pgm === 'program_radio_revista' && (hour === 19)) {
+          const result = await generateWeekdayTemplateBlock(hour, minute, songsByStation, stats, isFullDay, ctx, targetDay);
+          if (result) return fillBlockIfShort(result);
+        }
+        if (pgm === 'program_misturadao' && hour === 20) {
+          const result = await generateWeekdayTemplateBlock(hour, minute, songsByStation, stats, isFullDay, ctx, targetDay);
+          if (result) return fillBlockIfShort(result);
+        }
+        if (pgm === 'program_songs_of_love' && hour >= 22) {
+          const result = await generateWeekdayTemplateBlock(hour, minute, songsByStation, stats, isFullDay, ctx, targetDay);
+          if (result) return fillBlockIfShort(result);
+        }
+
+        // Weekend programs — invoke weekend template
+        const weekendPgms = ['program_shake_mix', 'program_conexao_mix', 'program_mega_mix', 
+          'program_sem_parar', 'program_mega_funk', 'program_gas_total', 'program_amnesia'];
+        if (weekendPgms.includes(pgm)) {
+          const weekendResult = await generateWeekendTemplateBlock(hour, minute, timeStr, songsByStation, ctx);
+          if (weekendResult) return fillBlockIfShort(weekendResult);
+        }
+
+        // If the program template didn't match the current time, fall through to normal block logic
+        console.log(`[GRADE] ⚠️ Programa "${pgm}" não corresponde ao horário ${timeStr} — usando sequência normal`);
+      } else {
+        console.log(`[GRADE] 📅 Sequência agendada ativa às ${timeStr} — sobrepondo programas especiais e conteúdo fixo`);
+      }
       // Fall through to Normal Block Logic below
     } else {
       // === Special Programs (only when NO scheduled sequence overrides) ===

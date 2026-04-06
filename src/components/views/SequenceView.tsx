@@ -65,11 +65,13 @@ interface SortableSequenceItemProps {
   catGenres: boolean; setCatGenres: React.Dispatch<React.SetStateAction<boolean>>;
   catDecades: boolean; setCatDecades: React.Dispatch<React.SetStateAction<boolean>>;
   catGenreYear: boolean; setCatGenreYear: React.Dispatch<React.SetStateAction<boolean>>;
+  catPrograms: boolean; setCatPrograms: React.Dispatch<React.SetStateAction<boolean>>;
   catSpecials: boolean; setCatSpecials: React.Dispatch<React.SetStateAction<boolean>>;
   catStations: boolean; setCatStations: React.Dispatch<React.SetStateAction<boolean>>;
   genreOptions: Array<{ value: string; label: string }>;
   yearOptions: Array<{ value: string; label: string }>;
   genreYearOptions: Array<{ value: string; label: string }>;
+  programOptions: Array<{ value: string; label: string }>;
   fixedContentOptions: Array<{ value: string; label: string }>;
   stationOptions: Array<{ value: string; label: string }>;
 }
@@ -119,6 +121,11 @@ function SortableSequenceItem({ item, isFixoItem, isEditing, ...props }: Sortabl
               <ChevronDown className={`w-3 h-3 transition-transform ${props.catGenreYear ? 'rotate-180' : ''}`} />
             </div>
             {props.catGenreYear && props.genreYearOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            <div className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); props.setCatPrograms(v => !v); }}>
+              <span>📺 Programas</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${props.catPrograms ? 'rotate-180' : ''}`} />
+            </div>
+            {props.catPrograms && props.programOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
             <div className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); props.setCatSpecials(v => !v); }}>
               <span>⭐ Especiais</span>
               <ChevronDown className={`w-3 h-3 transition-transform ${props.catSpecials ? 'rotate-180' : ''}`} />
@@ -177,6 +184,7 @@ export function SequenceView() {
   const [catGenres, setCatGenres] = useState(true);
   const [catDecades, setCatDecades] = useState(false);
   const [catGenreYear, setCatGenreYear] = useState(false);
+  const [catPrograms, setCatPrograms] = useState(false);
   const [catSpecials, setCatSpecials] = useState(false);
   const [catStations, setCatStations] = useState(true);
   const { 
@@ -323,6 +331,28 @@ export function SequenceView() {
     { value: 'genreyear_ELETRONICA,DANCE_2000s', label: '🎧📅 Dance/Eletrônica Anos 2000', isFixo: false },
   ];
 
+  // Template program options for sequence building
+  const programOptions = [
+    // Weekday programs
+    { value: 'program_sintonia_total', label: '📺 Sintonia Total (09-10:30)' },
+    { value: 'program_painel_flashback', label: '📺 Painel Flashback (12-12:30)' },
+    { value: 'program_top10', label: '📺 Top 10 / Papo Sério (13-13:30)' },
+    { value: 'program_intensidade', label: '📺 Intensidade (17-17:30)' },
+    { value: 'program_radar_noticias', label: '📺 Radar Notícias (18:00)' },
+    { value: 'program_top10_mix', label: '📺 TOP10 MIX + Esporte (18:30)' },
+    { value: 'program_radio_revista', label: '📺 Rádio Revista (19-19:30)' },
+    { value: 'program_misturadao', label: '📺 Misturadão (20-20:30)' },
+    { value: 'program_songs_of_love', label: '📺 Songs of Love (22-23:30)' },
+    // Weekend programs
+    { value: 'program_shake_mix', label: '📺 Shake Mix (FDS 08-09:30)' },
+    { value: 'program_conexao_mix', label: '📺 Conexão Mix (FDS 10-12:30)' },
+    { value: 'program_mega_mix', label: '📺 Mega Mix (FDS 13-17:30)' },
+    { value: 'program_sem_parar', label: '📺 Sem Parar (FDS 18-19:30)' },
+    { value: 'program_mega_funk', label: '📺 Mega Funk (FDS 20-20:30)' },
+    { value: 'program_gas_total', label: '📺 Gas Total (FDS 21-22)' },
+    { value: 'program_amnesia', label: '📺 Amnesia (FDS 22:30-23:30)' },
+  ];
+
   const radioOptions = [
     ...stationOptions,
     { value: 'random_pop', label: '🎲 Aleatório (Disney/Metro)', isFixo: false },
@@ -330,6 +360,7 @@ export function SequenceView() {
     ...genreOptions,
     ...yearOptions,
     ...genreYearOptions,
+    ...programOptions,
     ...fixedContentOptions,
   ];
 
@@ -608,6 +639,9 @@ export function SequenceView() {
     if (source.startsWith('fixo_')) {
       return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
     }
+    if (source.startsWith('program_')) {
+      return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
+    }
     if (source.startsWith('genreyear_')) {
       return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
     }
@@ -662,6 +696,10 @@ export function SequenceView() {
       const content = fixedContent.find(c => c.id === contentId);
       return content?.name || 'FIXO';
     }
+    if (source.startsWith('program_')) {
+      const opt = programOptions.find(o => o.value === source);
+      return opt ? opt.label.replace('📺 ', '') : source.replace('program_', '').replace(/_/g, ' ');
+    }
     if (source.startsWith('genreyear_')) {
       const opt = genreYearOptions.find(o => o.value === source);
       if (opt) return opt.label.replace(/^[^\w]+/, '').trim();
@@ -709,6 +747,7 @@ export function SequenceView() {
   const getSourceBadgeLabel = (source: string): string => {
     if (source.startsWith('file_')) return '📂';
     if (source.startsWith('fixo_')) return '📌';
+    if (source.startsWith('program_')) return '📺';
     if (source.startsWith('genreyear_')) return '🎵📅';
     if (source.startsWith('genre_')) return '🎵';
     if (source.startsWith('year_')) return '📅';
@@ -951,11 +990,13 @@ export function SequenceView() {
                             catGenres={catGenres} setCatGenres={setCatGenres}
                             catDecades={catDecades} setCatDecades={setCatDecades}
                             catGenreYear={catGenreYear} setCatGenreYear={setCatGenreYear}
+                            catPrograms={catPrograms} setCatPrograms={setCatPrograms}
                             catSpecials={catSpecials} setCatSpecials={setCatSpecials}
                             catStations={catStations} setCatStations={setCatStations}
                             genreOptions={genreOptions}
                             yearOptions={yearOptions}
                             genreYearOptions={genreYearOptions}
+                            programOptions={programOptions}
                             fixedContentOptions={fixedContentOptions}
                             stationOptions={stationOptions}
                             justDropped={droppedPosition === col1[i].position}
@@ -983,11 +1024,13 @@ export function SequenceView() {
                             catGenres={catGenres} setCatGenres={setCatGenres}
                             catDecades={catDecades} setCatDecades={setCatDecades}
                             catGenreYear={catGenreYear} setCatGenreYear={setCatGenreYear}
+                            catPrograms={catPrograms} setCatPrograms={setCatPrograms}
                             catSpecials={catSpecials} setCatSpecials={setCatSpecials}
                             catStations={catStations} setCatStations={setCatStations}
                             genreOptions={genreOptions}
                             yearOptions={yearOptions}
                             genreYearOptions={genreYearOptions}
+                            programOptions={programOptions}
                             fixedContentOptions={fixedContentOptions}
                             stationOptions={stationOptions}
                             justDropped={droppedPosition === col2[i].position}
@@ -1398,6 +1441,12 @@ export function SequenceView() {
                             ))}
                             <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Gênero + Década</div>
                             {genreYearOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                            <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">📺 Programas</div>
+                            {programOptions.map((option) => (
                               <SelectItem key={option.value} value={option.value}>
                                 {option.label}
                               </SelectItem>
