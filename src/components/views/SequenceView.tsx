@@ -121,6 +121,11 @@ function SortableSequenceItem({ item, isFixoItem, isEditing, ...props }: Sortabl
               <ChevronDown className={`w-3 h-3 transition-transform ${props.catGenreYear ? 'rotate-180' : ''}`} />
             </div>
             {props.catGenreYear && props.genreYearOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            <div className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); props.setCatPrograms(v => !v); }}>
+              <span>📺 Programas</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${props.catPrograms ? 'rotate-180' : ''}`} />
+            </div>
+            {props.catPrograms && props.programOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
             <div className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); props.setCatSpecials(v => !v); }}>
               <span>⭐ Especiais</span>
               <ChevronDown className={`w-3 h-3 transition-transform ${props.catSpecials ? 'rotate-180' : ''}`} />
