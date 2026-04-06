@@ -160,6 +160,7 @@ export async function generateSintoniaTotalBlock(
   const usedKeys = new Set<string>();
   const usedArtists = new Set<string>();
   const coringaCode = ctx.coringaCode;
+  const _seqIdx = { current: 0 };
 
   // Map time to template
   let line: string;
