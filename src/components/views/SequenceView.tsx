@@ -184,6 +184,7 @@ export function SequenceView() {
   const [catGenres, setCatGenres] = useState(true);
   const [catDecades, setCatDecades] = useState(false);
   const [catGenreYear, setCatGenreYear] = useState(false);
+  const [catPrograms, setCatPrograms] = useState(false);
   const [catSpecials, setCatSpecials] = useState(false);
   const [catStations, setCatStations] = useState(true);
   const { 
