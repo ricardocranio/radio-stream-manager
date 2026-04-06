@@ -1124,9 +1124,10 @@ export function useAutoGradeBuilder() {
 
     const blockLogs: BlockLogItem[] = [];
 
-    // Fixed content handling — SKIPPED on Sunday (DOM.txt = 100% monitoring) and when a scheduled sequence is active
+    // Fixed content handling — SKIPPED on Sunday, during scheduled sequences, AND during madrugada (00:00-07:59)
     const isSunday = targetDay === 'dom';
-    const fixedItem = (hasScheduledSequence || isSunday) ? undefined : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil' && fc.type !== 'raridades');
+    const isMadrugada = hour >= 0 && hour <= 7;
+    const fixedItem = (hasScheduledSequence || isSunday || isMadrugada) ? undefined : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil' && fc.type !== 'raridades');
     let fixedContentFile: string | null = null;
     let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
 
