@@ -2380,6 +2380,10 @@ export function useAutoGradeBuilder() {
   const lastRealtimeBlockRef = useRef<string>('');
   const lastWrittenContentHashRef = useRef<string>('');
   const realtimeTickInProgressRef = useRef(false);
+  /** Timestamp when the current tick started — used to detect stale/hung builds */
+  const tickStartedAtRef = useRef<number>(0);
+  /** Maximum time (ms) a single tick is allowed to run before the lock is force-released */
+  const TICK_TIMEOUT_MS = 90_000; // 90 seconds
 
   const getUpcomingBlockInfo = useCallback(() => {
     const now = new Date();
@@ -2396,8 +2400,18 @@ export function useAutoGradeBuilder() {
 
   // Core tick: build grade + write if in window
   const runGradeTick = useCallback(async (reason: string) => {
-    if (realtimeTickInProgressRef.current) return;
+    // Safety: force-release stale lock if previous tick exceeded timeout
+    if (realtimeTickInProgressRef.current) {
+      const elapsed = Date.now() - tickStartedAtRef.current;
+      if (elapsed > TICK_TIMEOUT_MS) {
+        console.warn(`[AUTO-GRADE] ⚠️ Tick anterior travado há ${Math.round(elapsed / 1000)}s — forçando desbloqueio`);
+        realtimeTickInProgressRef.current = false;
+      } else {
+        return;
+      }
+    }
     realtimeTickInProgressRef.current = true;
+    tickStartedAtRef.current = Date.now();
     try {
       const isWebOnly = !getIsElectronEnv();
       const { isRunning } = useRadioStore.getState();
