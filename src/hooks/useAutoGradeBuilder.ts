@@ -2496,12 +2496,18 @@ export function useAutoGradeBuilder() {
       )
       .subscribe((status) => {
         console.log(`[AUTO-GRADE] 📡 Realtime status: ${status}`);
+        // If channel drops, force a polling build immediately
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn(`[AUTO-GRADE] ⚠️ Canal realtime ${status} — acionando build via polling`);
+          void runGradeTickRef.current('realtime-recovery');
+        }
       });
 
-    // Safety polling fallback: every 2 min, in case realtime misses events
+    // Safety polling fallback: every 90s, in case realtime misses events
     const pollingInterval = setInterval(() => {
+      console.log('[AUTO-GRADE] 🔄 Polling fallback tick');
       void runGradeTickRef.current('polling-fallback');
-    }, 120 * 1000);
+    }, 90 * 1000);
 
     // Initial build immediately
     const { isRunning } = useRadioStore.getState();
