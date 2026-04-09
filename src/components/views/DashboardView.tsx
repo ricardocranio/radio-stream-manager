@@ -37,7 +37,6 @@ import { BlockedSongsCard } from '@/components/dashboard/BlockedSongsCard';
 import { P1FreshnessAlertCard } from '@/components/dashboard/P1FreshnessAlertCard';
 import { GradeDecisionLogCard } from '@/components/dashboard/GradeDecisionLogCard';
 import { BurstStatsCard } from '@/components/dashboard/BurstStatsCard';
-import { AllStationsFreshnessCard } from '@/components/dashboard/AllStationsFreshnessCard';
 
 interface DashboardViewProps {
   onNavigate?: (tab: string) => void;
@@ -1114,7 +1113,6 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <BlockedSongsCard />
         <P1FreshnessAlertCard />
-        <AllStationsFreshnessCard />
         <HourlyCapturesCard />
         <OfflineAlertsCard />
         <WeeklyReportCard />

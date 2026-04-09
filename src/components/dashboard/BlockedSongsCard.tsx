@@ -1,9 +1,10 @@
 /**
  * Blocked Songs Dashboard Card
  * Shows how many songs were blocked today and by which rule.
+ * Collapsible with expand/collapse toggle.
  */
-import { useMemo } from 'react';
-import { Shield, Ban, User, Type } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Shield, Ban, User, Type, ChevronDown } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -29,13 +30,11 @@ export function recordBlockedEvent(event: Omit<BlockedEvent, 'timestamp'>): void
       if (data.day !== today) data = { day: today, events: [] };
     }
     data.events.push({ ...event, timestamp: new Date().toISOString() });
-    // Keep max 200 events per day
     if (data.events.length > 200) data.events = data.events.slice(-200);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch { /* ignore */ }
 }
 
-/** Load today's blocked events */
 function loadBlockedEvents(): BlockedEvent[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -47,6 +46,7 @@ function loadBlockedEvents(): BlockedEvent[] {
 }
 
 export function BlockedSongsCard() {
+  const [collapsed, setCollapsed] = useState(true);
   const events = useMemo(() => loadBlockedEvents(), []);
 
   const stats = useMemo(() => {
@@ -70,7 +70,11 @@ export function BlockedSongsCard() {
   return (
     <Card className="glass-card border-red-500/20">
       <CardContent className="p-4 space-y-3">
-        <div className="flex items-center justify-between">
+        {/* Header — always visible, clickable */}
+        <div
+          className="flex items-center justify-between cursor-pointer select-none"
+          onClick={() => setCollapsed(!collapsed)}
+        >
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
               <Shield className="w-4 h-4 text-red-400" />
@@ -80,28 +84,33 @@ export function BlockedSongsCard() {
               <p className="text-xs text-muted-foreground">Músicas impedidas de entrar</p>
             </div>
           </div>
-          <span className="text-2xl font-bold font-mono text-red-400">{stats.total}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold font-mono text-red-400">{stats.total}</span>
+            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${!collapsed ? 'rotate-180' : ''}`} />
+          </div>
         </div>
 
+        {/* Rule badges — always visible as summary */}
         {stats.total > 0 && (
-          <>
-            {/* Rule breakdown */}
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(stats.byRule)
-                .filter(([, count]) => count > 0)
-                .map(([rule, count]) => {
-                  const info = ruleLabels[rule];
-                  const Icon = info.icon;
-                  return (
-                    <Badge key={rule} variant="outline" className={`text-xs ${info.color} border-current/30`}>
-                      <Icon className="w-3 h-3 mr-1" />
-                      {info.label}: {count}
-                    </Badge>
-                  );
-                })}
-            </div>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(stats.byRule)
+              .filter(([, count]) => count > 0)
+              .map(([rule, count]) => {
+                const info = ruleLabels[rule];
+                const Icon = info.icon;
+                return (
+                  <Badge key={rule} variant="outline" className={`text-xs ${info.color} border-current/30`}>
+                    <Icon className="w-3 h-3 mr-1" />
+                    {info.label}: {count}
+                  </Badge>
+                );
+              })}
+          </div>
+        )}
 
-            {/* Source breakdown */}
+        {/* Expanded content */}
+        {!collapsed && stats.total > 0 && (
+          <>
             <div className="flex gap-3 text-xs text-muted-foreground">
               {stats.bySource.download > 0 && <span>📥 Downloads: {stats.bySource.download}</span>}
               {stats.bySource['captured-download'] > 0 && <span>🎙️ Capturadas: {stats.bySource['captured-download']}</span>}
@@ -109,11 +118,10 @@ export function BlockedSongsCard() {
               {stats.bySource.mapa > 0 && <span>🗺️ Mapa: {stats.bySource.mapa}</span>}
             </div>
 
-            {/* Recent blocked songs */}
-            <ScrollArea className="max-h-32">
+            <ScrollArea className="max-h-[180px]">
               <div className="space-y-1">
-                {events.slice(-5).reverse().map((e, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs">
+                {events.slice(-10).reverse().map((e, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs p-1.5 rounded bg-muted/10 border border-border/10">
                     <Ban className="w-3 h-3 text-red-400/60 shrink-0" />
                     <span className="text-muted-foreground truncate">
                       {e.artist} — {e.title}
