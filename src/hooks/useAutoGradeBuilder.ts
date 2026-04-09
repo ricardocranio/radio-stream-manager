@@ -1450,7 +1450,7 @@ export function useAutoGradeBuilder() {
 
           // Downloads SEQUENCIAIS — respeita constraint de sessão ARL única
           // Paralelismo causa conflito de sessão e risco de ban no Deezer
-          const downloadTimeoutBurst = 45000; // 45s per song
+          const downloadTimeoutBurst = 90000; // 90s per song (conexões lentas)
           let burstDownloaded = 0;
           for (const c of missingCandidates) {
               const decision = getDownloadDecision(c.artist, c.title, {
