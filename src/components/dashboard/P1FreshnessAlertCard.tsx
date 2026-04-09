@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRadioStore } from '@/store/radioStore';
 import { supabase } from '@/integrations/supabase/client';
 
-const FRESHNESS_THRESHOLD_MIN = 20;
+const FRESHNESS_THRESHOLD_MIN = 10;
 const CHECK_INTERVAL_MS = 60_000;
 
 export function P1FreshnessAlertCard() {
