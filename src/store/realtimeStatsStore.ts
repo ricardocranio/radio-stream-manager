@@ -143,6 +143,14 @@ export const useRealtimeStatsStore = create<RealtimeStatsState & RealtimeStatsAc
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
+          // Trim cached data to max 5 per station
+          if (state.recentSongsByStation) {
+            for (const key of Object.keys(state.recentSongsByStation)) {
+              if (state.recentSongsByStation[key].length > 5) {
+                state.recentSongsByStation[key] = state.recentSongsByStation[key].slice(0, 5);
+              }
+            }
+          }
           state.setHydrated(true);
         }
       },
