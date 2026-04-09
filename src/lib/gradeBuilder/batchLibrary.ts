@@ -52,7 +52,7 @@ async function findSongMatchWithFallback(
   const normalizedTitle = normalizeTitle(title);
 
   try {
-    console.log(`[BATCH-LIBRARY] 🔍 Buscando: "${artist} - ${title}" (threshold: ${Math.round(threshold * 100)}%, folders: ${musicFolders.length})`);
+    console.log(`[BATCH-LIBRARY] 🔍 Buscando: "${artist} - ${title}" (normalized: "${normalizedArtist} - ${normalizedTitle}") (threshold: ${Math.round(threshold * 100)}%, folders: ${musicFolders.length})`);
     
     // First try with normalized title/artist
     let result = await window.electronAPI.findSongMatch({
@@ -62,8 +62,15 @@ async function findSongMatchWithFallback(
       threshold,
     } as any);
 
+    if (result.exists) {
+      console.log(`[BATCH-LIBRARY] ✅ Match (normalized): sim=${result.similarity ? Math.round(result.similarity * 100) : '?'}% strategy=${result.strategy || '?'} file="${result.filename || result.baseName || '?'}"`);
+    } else {
+      console.log(`[BATCH-LIBRARY] 🔸 No match (normalized): bestSim=${result.similarity ? Math.round(result.similarity * 100) : 0}% bestFile="${result.filename || 'none'}"`);
+    }
+
     // If no match with normalized, try original
     if (!result.exists && (normalizedTitle !== title || normalizedArtist !== artist)) {
+      console.log(`[BATCH-LIBRARY] 🔄 Tentando original: "${artist} - ${title}"`);
       const originalResult = await window.electronAPI.findSongMatch({
         artist,
         title,
@@ -72,23 +79,24 @@ async function findSongMatchWithFallback(
       } as any);
       if (originalResult.exists) {
         result = originalResult;
+        console.log(`[BATCH-LIBRARY] ✅ Match (original): sim=${result.similarity ? Math.round(result.similarity * 100) : '?'}% file="${result.filename || '?'}"`);
+      } else {
+        console.log(`[BATCH-LIBRARY] 🔸 No match (original): bestSim=${originalResult.similarity ? Math.round(originalResult.similarity * 100) : 0}%`);
       }
     }
 
     if (result.exists) {
-      // IMPORTANT: Use the REAL filename from disk (result.filename), not reconstructed baseName
-      // This preserves suffixes like (Feat. ...) (Ao Vivo) that exist in the actual file
       const realFilename = result.filename || (result.baseName ? `${result.baseName}.mp3` : null);
       if (realFilename) {
         console.log(`[BATCH-LIBRARY] ✅ Encontrado: "${artist} - ${title}" → ${realFilename}`);
         return { exists: true, filename: realFilename };
       }
     }
-    console.log(`[BATCH-LIBRARY] ❌ Não encontrado: "${artist} - ${title}"`);
+    console.log(`[BATCH-LIBRARY] ❌ Não encontrado: "${artist} - ${title}" (threshold: ${Math.round(threshold * 100)}%)`);
     return { exists: false };
   } catch (error) {
-    console.error(`[BATCH-LIBRARY] Error matching ${artist} - ${title}:`, error);
-    return { exists: false }; // On error, treat as missing — never write unverified songs
+    console.error(`[BATCH-LIBRARY] 💥 Error matching "${artist} - ${title}":`, error);
+    return { exists: false };
   }
 }
 
