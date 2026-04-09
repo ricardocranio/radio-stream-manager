@@ -1443,25 +1443,34 @@ export function useAutoGradeBuilder() {
         }
 
         if (missingCandidates.length > 0) {
-          console.log(`[AUTO-GRADE] 🚀 PRE-DOWNLOAD BURST: ${missingCandidates.length} músicas ausentes das estações da sequência. Baixando em paralelo...`);
-          const { buildAliasEngine } = await import('@/lib/aliasEngine');
-          const aliasEngine = buildAliasEngine(storeState.songAliases || []);
+          console.log(`[AUTO-GRADE] 🚀 PRE-DOWNLOAD BURST: ${missingCandidates.length} músicas ausentes das estações da sequência. Baixando sequencialmente...`);
           const { getDownloadDecision } = await import('@/lib/downloadGuard');
+          const { useBurstStatsStore } = await import('@/store/burstStatsStore');
+          const burstDetails: Array<{ artist: string; title: string; station: string; status: 'downloaded' | 'failed' | 'timeout' | 'blocked'; reason?: string }> = [];
 
-          // Downloads SEQUENCIAIS — respeita constraint de sessão ARL única
-          // Paralelismo causa conflito de sessão e risco de ban no Deezer
-          const downloadTimeoutBurst = 90000; // 90s per song (conexões lentas)
+          const downloadTimeoutBurst = 90000;
           let burstDownloaded = 0;
+          let burstFailed = 0;
+          let burstTimedOut = 0;
+          let burstBlocked = 0;
+          const burstStartTime = Date.now();
+
           for (const c of missingCandidates) {
               const decision = getDownloadDecision(c.artist, c.title, {
                 blockedSongs: storeState.config.blockedSongs ?? [],
                 forbiddenWords: storeState.config.forbiddenWords ?? [],
                 songAliases: storeState.songAliases ?? [],
               });
-              if (!decision.allowed) continue;
+              if (!decision.allowed) {
+                burstBlocked++;
+                burstDetails.push({ artist: c.artist, title: c.title, station: c.station, status: 'blocked', reason: decision.reason });
+                console.log(`[PRE-DL] 🚫 Bloqueado: ${c.artist} - ${c.title} (${decision.reason})`);
+                continue;
+              }
               const dlArtist = decision.downloadArtist || c.artist;
               const dlTitle = decision.downloadTitle || c.title;
               try {
+                console.log(`[PRE-DL] 🔍 findSongMatch diagnostics for: "${c.artist} - ${c.title}" → download as "${dlArtist} - ${dlTitle}"`);
                 const result = await Promise.race([
                   window.electronAPI!.downloadFromDeezer!({
                     artist: dlArtist, title: dlTitle,
@@ -1473,19 +1482,38 @@ export function useAutoGradeBuilder() {
                 ]);
                 if (result && typeof result === 'object' && 'success' in result && result.success) {
                   burstDownloaded++;
+                  burstDetails.push({ artist: c.artist, title: c.title, station: c.station, status: 'downloaded' });
                   console.log(`[PRE-DL] ✅ ${burstDownloaded}/${missingCandidates.length}: ${dlArtist} - ${dlTitle}`);
                   const { clearVerificationForSong, markSongAsDownloadedWithAlias } = await import('@/lib/libraryVerificationCache');
                   clearVerificationForSong(c.artist, c.title);
                   if (dlArtist !== c.artist || dlTitle !== c.title) clearVerificationForSong(dlArtist, dlTitle);
                   markSongAsDownloadedWithAlias(c.artist, c.title, dlArtist, dlTitle);
                 } else {
+                  burstTimedOut++;
+                  burstDetails.push({ artist: c.artist, title: c.title, station: c.station, status: 'timeout' });
                   console.log(`[PRE-DL] ⏰ Timeout: ${dlArtist} - ${dlTitle}`);
                 }
               } catch (e) {
+                burstFailed++;
+                burstDetails.push({ artist: c.artist, title: c.title, station: c.station, status: 'failed', reason: String(e) });
                 console.warn(`[PRE-DL] ❌ Erro: ${dlArtist} - ${dlTitle}`, e);
               }
           }
-          console.log(`[AUTO-GRADE] 🚀 PRE-DOWNLOAD BURST completo. Iniciando seleção...`);
+
+          const burstDurationMs = Date.now() - burstStartTime;
+          console.log(`[AUTO-GRADE] 🚀 PRE-DOWNLOAD BURST completo: ${burstDownloaded}✅ ${burstFailed}❌ ${burstTimedOut}⏰ ${burstBlocked}🚫 em ${(burstDurationMs / 1000).toFixed(1)}s`);
+          
+          // Store burst stats for dashboard
+          useBurstStatsStore.getState().addEvent({
+            blockTime: timeStr,
+            candidates: missingCandidates.length,
+            downloaded: burstDownloaded,
+            failed: burstFailed,
+            timedOut: burstTimedOut,
+            blocked: burstBlocked,
+            durationMs: burstDurationMs,
+            details: burstDetails,
+          });
         }
       }
     }
