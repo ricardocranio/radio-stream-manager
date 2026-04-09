@@ -36,6 +36,7 @@ import { WeeklyReportCard } from '@/components/dashboard/WeeklyReportCard';
 import { BlockedSongsCard } from '@/components/dashboard/BlockedSongsCard';
 import { P1FreshnessAlertCard } from '@/components/dashboard/P1FreshnessAlertCard';
 import { GradeDecisionLogCard } from '@/components/dashboard/GradeDecisionLogCard';
+import { BurstStatsCard } from '@/components/dashboard/BurstStatsCard';
 
 interface DashboardViewProps {
   onNavigate?: (tab: string) => void;
@@ -1101,6 +1102,9 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
 
       {/* Phase 5: Service Health Dashboard */}
       <ServiceHealthCard />
+
+      {/* Pre-Download Burst Stats */}
+      <BurstStatsCard />
 
       {/* Grade Decision Log */}
       <GradeDecisionLogCard />
