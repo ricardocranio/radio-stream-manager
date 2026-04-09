@@ -17,16 +17,22 @@ export function P1FreshnessAlertCard() {
   const stations = useRadioStore((s) => s.stations);
   const [stationStatus, setStationStatus] = useState<Record<string, { lastSeen: Date | null; fresh: boolean }>>({});
 
-  // Get P1 stations (first in sequence = highest priority)
+  // Get ALL stations from the active sequence
   const p1Stations = useMemo(() => {
     if (!sequence.length) return [];
-    // The first radioSource in sequence is P1
-    const p1Source = sequence[0]?.radioSource;
-    if (!p1Source) return [];
-    
-    // Find station name from ID
-    const station = stations.find(s => s.id === p1Source);
-    return station ? [station.name] : [p1Source];
+    const seen = new Set<string>();
+    const names: string[] = [];
+    for (const entry of sequence) {
+      const src = entry.radioSource;
+      if (!src || src.startsWith('program_')) continue;
+      const station = stations.find(s => s.id === src || s.name === src);
+      const name = station?.name ?? src;
+      if (!seen.has(name)) {
+        seen.add(name);
+        names.push(name);
+      }
+    }
+    return names;
   }, [sequence, stations]);
 
   useEffect(() => {
