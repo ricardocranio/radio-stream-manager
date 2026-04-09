@@ -1114,7 +1114,6 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <BlockedSongsCard />
         <P1FreshnessAlertCard />
-        <AllStationsFreshnessCard />
         <HourlyCapturesCard />
         <OfflineAlertsCard />
         <WeeklyReportCard />
