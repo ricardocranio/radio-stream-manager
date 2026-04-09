@@ -47,6 +47,8 @@ interface ScrapedSong {
   ai_energy: string | null;
 }
 
+type DateRangeOption = '1h' | '6h' | '24h' | '7d' | '30d';
+
 // Colors for charts
 const CHART_COLORS = [
   'hsl(190, 95%, 50%)',
@@ -63,6 +65,84 @@ const PAGE_SIZE = 50;
 const REFRESH_INTERVAL_MS = 60_000; // match 12-min monitor cycle; refresh every 60s
 const METADATA_REFRESH_MS = 5 * 60 * 1000;
 const MAX_SONGS_PER_STATION = 10;
+const REALTIME_REFETCH_DEBOUNCE_MS = 1200;
+
+function getDateThreshold(dateRange: string): Date {
+  switch (dateRange as DateRangeOption) {
+    case '1h':
+      return subHours(new Date(), 1);
+    case '6h':
+      return subHours(new Date(), 6);
+    case '24h':
+      return subDays(new Date(), 1);
+    case '7d':
+      return subDays(new Date(), 7);
+    case '30d':
+      return subDays(new Date(), 30);
+    default:
+      return subDays(new Date(), 1);
+  }
+}
+
+function getSongFingerprint(song: Pick<ScrapedSong, 'station_name' | 'artist' | 'title'>): string {
+  return `${song.station_name}|||${normalizeStr(song.artist)}|||${normalizeStr(song.title)}`;
+}
+
+function matchesSongSearch(song: Pick<ScrapedSong, 'title' | 'artist' | 'station_name'>, searchTerm: string): boolean {
+  if (!searchTerm) return true;
+
+  const term = searchTerm.toLowerCase();
+  return (
+    song.title.toLowerCase().includes(term) ||
+    song.artist.toLowerCase().includes(term) ||
+    song.station_name.toLowerCase().includes(term)
+  );
+}
+
+function buildCappedSongList(inputSongs: ScrapedSong[]): ScrapedSong[] {
+  const stationCounts = new Map<string, number>();
+  const seenSongIds = new Set<string>();
+  const lastFingerprintByStation = new Map<string, string>();
+  const cappedSongs: ScrapedSong[] = [];
+
+  for (const song of inputSongs) {
+    if (seenSongIds.has(song.id)) continue;
+    seenSongIds.add(song.id);
+
+    const currentCount = stationCounts.get(song.station_name) || 0;
+    if (currentCount >= MAX_SONGS_PER_STATION) continue;
+
+    const fingerprint = getSongFingerprint(song);
+    if (lastFingerprintByStation.get(song.station_name) === fingerprint) continue;
+
+    cappedSongs.push(song);
+    stationCounts.set(song.station_name, currentCount + 1);
+    lastFingerprintByStation.set(song.station_name, fingerprint);
+  }
+
+  return cappedSongs;
+}
+
+function mergeRealtimeSong(currentSongs: ScrapedSong[], incomingSong: ScrapedSong): ScrapedSong[] {
+  if (currentSongs.some((song) => song.id === incomingSong.id)) {
+    return currentSongs;
+  }
+
+  const latestSongFromStationIndex = currentSongs.findIndex(
+    (song) => song.station_name === incomingSong.station_name
+  );
+
+  if (latestSongFromStationIndex >= 0) {
+    const latestSongFromStation = currentSongs[latestSongFromStationIndex];
+    if (getSongFingerprint(latestSongFromStation) === getSongFingerprint(incomingSong)) {
+      const nextSongs = [...currentSongs];
+      nextSongs[latestSongFromStationIndex] = incomingSong;
+      return nextSongs;
+    }
+  }
+
+  return buildCappedSongList([incomingSong, ...currentSongs]);
+}
 
 export function CapturedSongsView() {
   const isReady = useDeferredRender();
@@ -86,30 +166,32 @@ export function CapturedSongsView() {
   const [activeTab, setActiveTab] = useState('list');
   const [currentPage, setCurrentPage] = useState(1);
   const lastMetadataLoadRef = useRef(0);
+  const realtimeRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const shouldIncludeRealtimeSong = useCallback((song: ScrapedSong) => {
+    if (new Date(song.scraped_at).getTime() < getDateThreshold(dateRange).getTime()) {
+      return false;
+    }
+
+    if (selectedStation !== 'all' && song.station_name !== selectedStation) {
+      return false;
+    }
+
+    if (selectedGenre !== 'all' && song.ai_genre !== selectedGenre) {
+      return false;
+    }
+
+    if (selectedEnergy !== 'all' && song.ai_energy !== selectedEnergy) {
+      return false;
+    }
+
+    return matchesSongSearch(song, searchTerm);
+  }, [dateRange, searchTerm, selectedEnergy, selectedGenre, selectedStation]);
 
   // Load songs from backend
   const loadSongs = useCallback(async () => {
     try {
-      let dateThreshold: Date;
-      switch (dateRange) {
-        case '1h':
-          dateThreshold = subHours(new Date(), 1);
-          break;
-        case '6h':
-          dateThreshold = subHours(new Date(), 6);
-          break;
-        case '24h':
-          dateThreshold = subDays(new Date(), 1);
-          break;
-        case '7d':
-          dateThreshold = subDays(new Date(), 7);
-          break;
-        case '30d':
-          dateThreshold = subDays(new Date(), 30);
-          break;
-        default:
-          dateThreshold = subDays(new Date(), 1);
-      }
+      const dateThreshold = getDateThreshold(dateRange);
 
       let query = supabase
         .from('scraped_songs')
@@ -125,18 +207,7 @@ export function CapturedSongsView() {
       const { data, error } = await query;
       if (error) throw error;
 
-      // Enforce MAX_SONGS_PER_STATION: keep only the N most recent per station
-      const stationCounts = new Map<string, number>();
-      const capped: ScrapedSong[] = [];
-      for (const song of (data || [])) {
-        const count = stationCounts.get(song.station_name) || 0;
-        if (count < MAX_SONGS_PER_STATION) {
-          capped.push(song);
-          stationCounts.set(song.station_name, count + 1);
-        }
-      }
-
-      const loadedSongs = capped;
+      const loadedSongs = buildCappedSongList(data || []);
       setSongs(loadedSongs);
 
       const uniqueGenres = [...new Set(loadedSongs.map((s) => s.ai_genre).filter(Boolean))] as string[];
@@ -190,22 +261,55 @@ export function CapturedSongsView() {
 
   // Realtime subscription: auto-refresh when new scraped_songs arrive from Python monitor
   useEffect(() => {
+    const scheduleRealtimeRefetch = () => {
+      if (realtimeRefreshTimeoutRef.current) return;
+
+      realtimeRefreshTimeoutRef.current = setTimeout(() => {
+        realtimeRefreshTimeoutRef.current = null;
+        loadSongs();
+      }, REALTIME_REFETCH_DEBOUNCE_MS);
+    };
+
     const channel = supabase
       .channel('captured-songs-realtime')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'scraped_songs' },
-        () => {
-          console.log('[CAPTURED] 📡 Nova captura detectada — recarregando lista fresca');
-          loadSongs();
+        (payload) => {
+          const newSong = payload.new as ScrapedSong | undefined;
+          if (!newSong) {
+            scheduleRealtimeRefetch();
+            return;
+          }
+
+          const usingLiveIncrementalMode =
+            !searchTerm &&
+            selectedStation === 'all' &&
+            selectedGenre === 'all' &&
+            selectedEnergy === 'all';
+
+          if (!usingLiveIncrementalMode) {
+            scheduleRealtimeRefetch();
+            return;
+          }
+
+          if (!shouldIncludeRealtimeSong(newSong)) {
+            return;
+          }
+
+          setSongs((currentSongs) => mergeRealtimeSong(currentSongs, newSong));
         }
       )
       .subscribe();
 
     return () => {
+      if (realtimeRefreshTimeoutRef.current) {
+        clearTimeout(realtimeRefreshTimeoutRef.current);
+        realtimeRefreshTimeoutRef.current = null;
+      }
       supabase.removeChannel(channel);
     };
-  }, [loadSongs]);
+  }, [loadSongs, searchTerm, selectedEnergy, selectedGenre, selectedStation, shouldIncludeRealtimeSong]);
 
   // Periodic fallback refresh (less frequent now that realtime handles updates)
   useEffect(() => {
