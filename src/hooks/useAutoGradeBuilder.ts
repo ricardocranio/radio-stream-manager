@@ -2633,11 +2633,11 @@ export function useAutoGradeBuilder() {
         }
       });
 
-    // Safety polling fallback: every 90s, in case realtime misses events
+    // Safety polling fallback: every 60s, synced with 6-min monitor cycle
     const pollingInterval = setInterval(() => {
-      console.log('[AUTO-GRADE] 🔄 Polling fallback tick');
+      console.log('[AUTO-GRADE] 🔄 Polling fallback tick (60s)');
       void runGradeTickRef.current('polling-fallback');
-    }, 90 * 1000);
+    }, 60 * 1000);
 
     // Initial build immediately
     const { isRunning } = useRadioStore.getState();
