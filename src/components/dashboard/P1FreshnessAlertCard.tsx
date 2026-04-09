@@ -91,8 +91,8 @@ export function P1FreshnessAlertCard() {
               )}
             </div>
             <div>
-              <p className="text-sm font-medium text-foreground">Frescor P1</p>
-              <p className="text-xs text-muted-foreground">Capturas da estação-alvo</p>
+              <p className="text-sm font-medium text-foreground">Frescor da Sequência</p>
+              <p className="text-xs text-muted-foreground">Capturas das estações ativas</p>
             </div>
           </div>
           <Badge variant="outline" className={`text-xs ${hasAlert ? 'border-amber-500/30 text-amber-400' : 'border-emerald-500/30 text-emerald-400'}`}>
