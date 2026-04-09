@@ -37,6 +37,7 @@ import { BlockedSongsCard } from '@/components/dashboard/BlockedSongsCard';
 import { P1FreshnessAlertCard } from '@/components/dashboard/P1FreshnessAlertCard';
 import { GradeDecisionLogCard } from '@/components/dashboard/GradeDecisionLogCard';
 import { BurstStatsCard } from '@/components/dashboard/BurstStatsCard';
+import { AllStationsFreshnessCard } from '@/components/dashboard/AllStationsFreshnessCard';
 
 interface DashboardViewProps {
   onNavigate?: (tab: string) => void;
