@@ -118,19 +118,32 @@ export function BlockedSongsCard() {
               {stats.bySource.mapa > 0 && <span>🗺️ Mapa: {stats.bySource.mapa}</span>}
             </div>
 
-            <ScrollArea className="max-h-[180px]">
+            <ScrollArea className="max-h-[220px]">
               <div className="space-y-1">
-                {events.slice(-10).reverse().map((e, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs p-1.5 rounded bg-muted/10 border border-border/10">
-                    <Ban className="w-3 h-3 text-red-400/60 shrink-0" />
-                    <span className="text-muted-foreground truncate">
-                      {e.artist} — {e.title}
-                    </span>
-                    <Badge variant="outline" className="text-[10px] ml-auto shrink-0">
-                      {ruleLabels[e.rule]?.label}
-                    </Badge>
-                  </div>
-                ))}
+                {events.slice(-15).reverse().map((e, i) => {
+                  const time = new Date(e.timestamp);
+                  const timeStr = time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                  const isAlias = e.rule === 'alias';
+                  return (
+                    <div key={i} className="flex items-center gap-2 text-xs p-1.5 rounded bg-muted/10 border border-border/10">
+                      <Ban className="w-3 h-3 text-red-400/60 shrink-0" />
+                      <span className="text-muted-foreground truncate flex-1">
+                        {e.artist} — {e.title}
+                      </span>
+                      {isAlias && (
+                        <Badge variant="outline" className="text-[9px] border-purple-500/30 text-purple-400 shrink-0">
+                          Alias
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-[9px] shrink-0">
+                        {ruleLabels[e.rule]?.label}
+                      </Badge>
+                      <span className="text-[9px] text-muted-foreground/70 shrink-0 font-mono">
+                        {timeStr}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </ScrollArea>
           </>
