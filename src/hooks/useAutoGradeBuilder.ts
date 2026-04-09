@@ -1388,6 +1388,110 @@ export function useAutoGradeBuilder() {
       return null;
     };
 
+    // === PRE-DOWNLOAD BURST: Proactively download missing songs from sequence stations ===
+    // This runs BEFORE the selection loop to maximize P1 hit rate on Desktop.
+    // Without this, the selection loop's JIT downloads happen one-by-one per position,
+    // causing most positions to fall through to P4/P5/P6 (random library songs).
+    if (getIsElectronEnv() && window.electronAPI?.downloadFromDeezer && !isFullDay) {
+      const storeState = useRadioStore.getState();
+      if (storeState.deezerConfig.enabled && storeState.deezerConfig.arl) {
+        const uniqueStationsInSeq = new Set<string>();
+        for (const seq of activeSequence) {
+          if (seq.radioSource.startsWith('fixo') || seq.radioSource === 'top50' ||
+              seq.radioSource === 'random_pop' || seq.radioSource.startsWith('genre_') ||
+              seq.radioSource.startsWith('year_') || seq.radioSource.startsWith('genreyear_') ||
+              seq.radioSource.startsWith('program_')) continue;
+          const resolvedName = STATION_ID_TO_DB_NAME[seq.radioSource] ||
+            STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()] ||
+            stations.find(s => s.id === seq.radioSource)?.name ||
+            seq.radioSource;
+          uniqueStationsInSeq.add(resolvedName);
+        }
+
+        // Collect top candidates missing from library (max 3 per station, max 12 total)
+        const missingCandidates: Array<{ artist: string; title: string; station: string }> = [];
+        const MAX_PER_STATION = 3;
+        const MAX_TOTAL = 12;
+
+        for (const stName of uniqueStationsInSeq) {
+          if (missingCandidates.length >= MAX_TOTAL) break;
+          // Find pool (case-insensitive)
+          let pool: SongEntry[] = songsByStation[stName] || [];
+          if (pool.length === 0) {
+            for (const [k, v] of Object.entries(songsByStation)) {
+              if (k.toLowerCase().trim() === stName.toLowerCase().trim()) { pool = v; break; }
+            }
+          }
+          // Sort by freshness, pick candidates NOT in library
+          const sorted = [...pool].sort((a, b) => {
+            if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
+            return 0;
+          });
+          let added = 0;
+          for (const candidate of sorted) {
+            if (added >= MAX_PER_STATION || missingCandidates.length >= MAX_TOTAL) break;
+            const cached = getCachedVerification(candidate.artist, candidate.title);
+            // Only check candidates where cache says NOT exists or cache is empty
+            if (cached && cached.exists) continue;
+            // Quick disk check
+            const diskResult = await findSongInLibrary(candidate.artist, candidate.title);
+            if (!diskResult.exists) {
+              missingCandidates.push({ artist: candidate.artist, title: candidate.title, station: stName });
+              added++;
+            }
+          }
+        }
+
+        if (missingCandidates.length > 0) {
+          console.log(`[AUTO-GRADE] 🚀 PRE-DOWNLOAD BURST: ${missingCandidates.length} músicas ausentes das estações da sequência. Baixando em paralelo...`);
+          const { buildAliasEngine } = await import('@/lib/aliasEngine');
+          const aliasEngine = buildAliasEngine(storeState.songAliases || []);
+          const { getDownloadDecision } = await import('@/lib/downloadGuard');
+
+          // Launch downloads in parallel (max 3 concurrent)
+          const CONCURRENT = 3;
+          const downloadTimeoutBurst = 45000; // 45s per song
+          for (let batch = 0; batch < missingCandidates.length; batch += CONCURRENT) {
+            const chunk = missingCandidates.slice(batch, batch + CONCURRENT);
+            const promises = chunk.map(async (c) => {
+              const decision = getDownloadDecision(c.artist, c.title, {
+                blockedSongs: storeState.config.blockedSongs ?? [],
+                forbiddenWords: storeState.config.forbiddenWords ?? [],
+                songAliases: storeState.songAliases ?? [],
+              });
+              if (!decision.allowed) return;
+              const dlArtist = decision.downloadArtist || c.artist;
+              const dlTitle = decision.downloadTitle || c.title;
+              try {
+                const result = await Promise.race([
+                  window.electronAPI!.downloadFromDeezer!({
+                    artist: dlArtist, title: dlTitle,
+                    arl: storeState.deezerConfig.arl,
+                    outputFolder: storeState.deezerConfig.downloadFolder,
+                    quality: storeState.deezerConfig.quality,
+                  }),
+                  new Promise<null>((r) => setTimeout(() => r(null), downloadTimeoutBurst)),
+                ]);
+                if (result && typeof result === 'object' && 'success' in result && result.success) {
+                  console.log(`[PRE-DL] ✅ ${dlArtist} - ${dlTitle}`);
+                  const { clearVerificationForSong, markSongAsDownloadedWithAlias } = await import('@/lib/libraryVerificationCache');
+                  clearVerificationForSong(c.artist, c.title);
+                  if (dlArtist !== c.artist || dlTitle !== c.title) clearVerificationForSong(dlArtist, dlTitle);
+                  markSongAsDownloadedWithAlias(c.artist, c.title, dlArtist, dlTitle);
+                } else {
+                  console.log(`[PRE-DL] ⏰ Timeout: ${dlArtist} - ${dlTitle}`);
+                }
+              } catch (e) {
+                console.warn(`[PRE-DL] ❌ Erro: ${dlArtist} - ${dlTitle}`, e);
+              }
+            });
+            await Promise.all(promises);
+          }
+          console.log(`[AUTO-GRADE] 🚀 PRE-DOWNLOAD BURST completo. Iniciando seleção...`);
+        }
+      }
+    }
+
     // === PHASE 1: Follow the sequence but STOP when approaching max duration ===
     // Each block MUST stay between 29-32 minutes. Stop adding songs near the ceiling.
     const sequenceLength = activeSequence.length;
