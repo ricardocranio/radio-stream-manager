@@ -43,7 +43,7 @@ export function OfflineAlertsCard() {
         });
 
         const now = Date.now();
-        const OFFLINE_THRESHOLD = 30 * 60 * 1000;
+        const OFFLINE_THRESHOLD = 15 * 60 * 1000; // 15 min (synced with 6-min monitor cycle)
 
         const result: StationInfo[] = [];
         for (const station of stations) {
