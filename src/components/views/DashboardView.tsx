@@ -950,7 +950,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
             {enabledStations.map((station, stationIndex) => {
               const colors = colorPalette[stationIndex % colorPalette.length];
-              const songs = realtimeStats.recentSongsByStation[station.name] || [];
+              const songs = (realtimeStats.recentSongsByStation[station.name] || []).slice(0, 5);
               const count24h = realtimeStats.stationCounts[station.name] || 0;
               
               return (
@@ -967,7 +967,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-0 flex-1">
-                    <ScrollArea className="h-[280px]">
+                    <ScrollArea className="h-auto max-h-[260px]">
                       {songs.length > 0 ? (
                         <div className="divide-y divide-border">
                           {songs.map((song, index) => (
