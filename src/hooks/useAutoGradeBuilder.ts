@@ -1448,18 +1448,17 @@ export function useAutoGradeBuilder() {
           const aliasEngine = buildAliasEngine(storeState.songAliases || []);
           const { getDownloadDecision } = await import('@/lib/downloadGuard');
 
-          // Launch downloads in parallel (max 3 concurrent)
-          const CONCURRENT = 3;
+          // Downloads SEQUENCIAIS — respeita constraint de sessão ARL única
+          // Paralelismo causa conflito de sessão e risco de ban no Deezer
           const downloadTimeoutBurst = 45000; // 45s per song
-          for (let batch = 0; batch < missingCandidates.length; batch += CONCURRENT) {
-            const chunk = missingCandidates.slice(batch, batch + CONCURRENT);
-            const promises = chunk.map(async (c) => {
+          let burstDownloaded = 0;
+          for (const c of missingCandidates) {
               const decision = getDownloadDecision(c.artist, c.title, {
                 blockedSongs: storeState.config.blockedSongs ?? [],
                 forbiddenWords: storeState.config.forbiddenWords ?? [],
                 songAliases: storeState.songAliases ?? [],
               });
-              if (!decision.allowed) return;
+              if (!decision.allowed) continue;
               const dlArtist = decision.downloadArtist || c.artist;
               const dlTitle = decision.downloadTitle || c.title;
               try {
@@ -1473,7 +1472,8 @@ export function useAutoGradeBuilder() {
                   new Promise<null>((r) => setTimeout(() => r(null), downloadTimeoutBurst)),
                 ]);
                 if (result && typeof result === 'object' && 'success' in result && result.success) {
-                  console.log(`[PRE-DL] ✅ ${dlArtist} - ${dlTitle}`);
+                  burstDownloaded++;
+                  console.log(`[PRE-DL] ✅ ${burstDownloaded}/${missingCandidates.length}: ${dlArtist} - ${dlTitle}`);
                   const { clearVerificationForSong, markSongAsDownloadedWithAlias } = await import('@/lib/libraryVerificationCache');
                   clearVerificationForSong(c.artist, c.title);
                   if (dlArtist !== c.artist || dlTitle !== c.title) clearVerificationForSong(dlArtist, dlTitle);
@@ -1484,8 +1484,6 @@ export function useAutoGradeBuilder() {
               } catch (e) {
                 console.warn(`[PRE-DL] ❌ Erro: ${dlArtist} - ${dlTitle}`, e);
               }
-            });
-            await Promise.all(promises);
           }
           console.log(`[AUTO-GRADE] 🚀 PRE-DOWNLOAD BURST completo. Iniciando seleção...`);
         }
