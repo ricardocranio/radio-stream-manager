@@ -62,6 +62,7 @@ export function createDownloadGuard({
       };
     }
 
+    // Check original name against blocklist
     const blockMatch = blockedEngine.getBlockMatch(originalArtist, originalTitle);
     if (blockMatch) {
       return {
@@ -73,6 +74,22 @@ export function createDownloadGuard({
         downloadArtist: resolved.artist,
         downloadTitle: resolved.title,
       };
+    }
+
+    // Check alias-resolved name against blocklist (rule = 'alias')
+    if (aliasChanged) {
+      const aliasBlockMatch = blockedEngine.getBlockMatch(resolved.artist, resolved.title);
+      if (aliasBlockMatch) {
+        return {
+          allowed: false,
+          reason: 'blocked',
+          blockRule: 'alias',
+          originalArtist,
+          originalTitle,
+          downloadArtist: resolved.artist,
+          downloadTitle: resolved.title,
+        };
+      }
     }
 
     return {

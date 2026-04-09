@@ -47,7 +47,19 @@ function loadBlockedEvents(): BlockedEvent[] {
 
 export function BlockedSongsCard() {
   const [collapsed, setCollapsed] = useState(true);
-  const events = useMemo(() => loadBlockedEvents(), []);
+  const events = useMemo(() => {
+    const real = loadBlockedEvents();
+    if (real.length > 0) return real;
+    // Mock data for visual testing — remove after confirming
+    const now = new Date();
+    return [
+      { artist: 'Naldo Lima', title: 'Retrovisor', rule: 'exact' as const, source: 'download' as const, timestamp: new Date(now.getTime() - 12 * 60000).toISOString() },
+      { artist: 'MC Kevin', title: 'Cavalgada', rule: 'forbidden' as const, source: 'grade' as const, timestamp: new Date(now.getTime() - 25 * 60000).toISOString() },
+      { artist: 'Deive Leonardo', title: 'Amanhã Não Existe', rule: 'alias' as const, source: 'captured-download' as const, timestamp: new Date(now.getTime() - 38 * 60000).toISOString() },
+      { artist: 'Thiago Jose', title: 'Balançou Balançou', rule: 'wildcard' as const, source: 'download' as const, timestamp: new Date(now.getTime() - 50 * 60000).toISOString() },
+      { artist: 'Promessa D', title: 'Pedido de Socorro', rule: 'partial' as const, source: 'download' as const, timestamp: new Date(now.getTime() - 65 * 60000).toISOString() },
+    ];
+  }, []);
 
   const stats = useMemo(() => {
     const byRule = { exact: 0, wildcard: 0, forbidden: 0, alias: 0, partial: 0 };
