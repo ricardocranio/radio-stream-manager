@@ -348,30 +348,38 @@ export function GradePreviewCard() {
     const nextH = m === '00' ? (h + 1) % 24 : h;
     return `${nextH.toString().padStart(2, '0')}:${m}`;
   })());
-  const blockDuration = realBlockDuration ?? gradeBuilder.pendingBlockDurations?.get(nextBlockTime) ?? undefined;
 
-  // === SINGLE SOURCE: Builder output (exact match with TXT) ===
-  // In web preview (non-Electron), use mock data to demonstrate the radio badges
-  const displaySongs = useMemo(() => {
-    if (!isElectron) return mockSongs;
+  const resolvedPreviewLine = useMemo(() => {
+    if (!isElectron) return null;
     const lines = gradeBuilder.pendingGradeLines;
-    if (!lines || lines.size === 0) return [];
-    // Try next block first
+    if (!lines || lines.size === 0) return null;
+
     const nextLine = lines.get(nextBlockTime);
-    if (nextLine) return parseGradeLine(nextLine);
-    // Try current block
+    if (nextLine) return nextLine;
+
     const now = new Date();
     const currentTime = `${now.getHours().toString().padStart(2, '0')}:${(now.getMinutes() < 30 ? '00' : '30')}`;
     const currentLine = lines.get(currentTime);
-    if (currentLine) return parseGradeLine(currentLine);
-    // Try any available block (show the latest one)
+    if (currentLine) return currentLine;
+
     const sortedKeys = Array.from(lines.keys()).sort();
     if (sortedKeys.length > 0) {
-      const lastKey = sortedKeys[sortedKeys.length - 1];
-      return parseGradeLine(lines.get(lastKey)!);
+      return lines.get(sortedKeys[sortedKeys.length - 1]) || null;
     }
-    return [];
-  }, [gradeBuilder.pendingGradeLines, nextBlockTime, mockSongs]);
+
+    return null;
+  }, [gradeBuilder.pendingGradeLines, nextBlockTime]);
+
+  const displaySongs = useMemo(() => {
+    if (!isElectron) return mockSongs;
+    return resolvedPreviewLine ? parseGradeLine(resolvedPreviewLine) : [];
+  }, [resolvedPreviewLine, mockSongs]);
+
+  const blockDuration = realBlockDuration
+    ?? gradeBuilder.pendingBlockDurations?.get(nextBlockTime)
+    ?? (displaySongs.length > 0
+      ? parseFloat(((displaySongs.filter(s => !s.isSpecial).length * 210 + displaySongs.filter(s => s.isSpecial).length * 7) / 60).toFixed(1))
+      : undefined);
 
   // === Sync display songs to store for cross-component tracking ===
   useEffect(() => {
