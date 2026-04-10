@@ -51,6 +51,17 @@ let isGlobalServicesRunning = false;
 export function GlobalServicesProvider({ children }: { children: React.ReactNode }) {
   const isInitializedRef = useRef(false);
 
+  // Ensure isRunning is true BEFORE any service hook reads it
+  // (fixes race condition where grade builder's initial tick sees isRunning=false)
+  const setIsRunningOnce = useRef(false);
+  if (!setIsRunningOnce.current) {
+    setIsRunningOnce.current = true;
+    const store = useRadioStore.getState();
+    if (!store.isRunning) {
+      useRadioStore.setState({ isRunning: true, lastUpdate: new Date() });
+    }
+  }
+
   // ============= COMPOSE HOOKS =============
   const gradeBuilder = useAutoGradeBuilder();
   useBackgroundCacheCleanup();
