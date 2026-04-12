@@ -122,9 +122,15 @@ function installDeemix() {
 function searchDeezerTrack(artist, title, options = {}) {
   const { minDurationSec = 150, returnAll = false } = options; // 2:30 minimum by default
   return new Promise((resolve, reject) => {
+    const { calculateSimilarity, cleanNormalize, normalizeText } = require('./utils.cjs');
     const searchQuery = encodeURIComponent(`${artist} ${title}`);
     const searchUrl = `https://api.deezer.com/search?q=${searchQuery}&limit=10`;
-    
+
+    const containsEitherWay = (a, b) => {
+      if (!a || !b) return false;
+      return a.includes(b) || b.includes(a);
+    };
+
     https.get(searchUrl, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
@@ -136,28 +142,82 @@ function searchDeezerTrack(artist, title, options = {}) {
             return;
           }
 
+          const searchArtistNorm = normalizeText(artist);
+          const searchTitleNorm = cleanNormalize(title);
+
+          const rankedTracks = result.data
+            .map((track) => {
+              const resultArtist = track.artist?.name || '';
+              const resultTitle = track.title || '';
+              const resultArtistNorm = normalizeText(resultArtist);
+              const resultTitleNorm = cleanNormalize(resultTitle);
+
+              const artistSim = calculateSimilarity(artist, resultArtist);
+              const titleSim = Math.max(
+                calculateSimilarity(title, resultTitle),
+                calculateSimilarity(searchTitleNorm, resultTitleNorm)
+              );
+              const artistExact = searchArtistNorm === resultArtistNorm;
+              const titleContained = containsEitherWay(searchTitleNorm, resultTitleNorm);
+              const durationPenalty = track.duration >= minDurationSec ? 0 : 0.08;
+
+              const score =
+                artistSim * 0.5 +
+                titleSim * 0.4 +
+                (artistExact ? 0.08 : 0) +
+                (titleContained ? 0.07 : 0) -
+                durationPenalty;
+
+              const accepted = artistSim >= 0.72 && (titleSim >= 0.58 || titleContained);
+
+              return {
+                ...track,
+                _match: {
+                  artistSim,
+                  titleSim,
+                  score,
+                  accepted,
+                  artistExact,
+                  titleContained,
+                },
+              };
+            })
+            .sort((a, b) => b._match.score - a._match.score);
+
           if (returnAll) {
-            resolve(result.data);
+            resolve(rankedTracks);
             return;
           }
 
-          // Try to find a version with acceptable duration
-          const validTracks = result.data.filter(t => t.duration >= minDurationSec);
-          
-          if (validTracks.length > 0) {
-            const chosen = validTracks[0];
-            const mins = Math.floor(chosen.duration / 60);
-            const secs = chosen.duration % 60;
-            console.log(`[DEEZER] ✅ Selected: ${chosen.artist.name} - ${chosen.title} (${mins}:${String(secs).padStart(2, '0')}) — passed min ${minDurationSec}s`);
-            resolve(chosen);
-          } else {
-            // All results are too short — use first but warn
-            const first = result.data[0];
-            const mins = Math.floor(first.duration / 60);
-            const secs = first.duration % 60;
-            console.log(`[DEEZER] ⚠️ All results under ${minDurationSec}s. Using: ${first.artist.name} - ${first.title} (${mins}:${String(secs).padStart(2, '0')})`);
-            resolve(first);
+          const chosen = rankedTracks[0];
+          if (!chosen) {
+            reject(new Error('Música não encontrada no Deezer'));
+            return;
           }
+
+          console.log(
+            `[DEEZER] 🔎 Top match: ${chosen.artist.name} - ${chosen.title} ` +
+            `(artist=${(chosen._match.artistSim * 100).toFixed(0)}%, title=${(chosen._match.titleSim * 100).toFixed(0)}%, score=${(chosen._match.score * 100).toFixed(0)}%)`
+          );
+
+          if (!chosen._match.accepted) {
+            reject(
+              new Error(
+                `Resultado inseguro no Deezer para "${artist} - ${title}" → "${chosen.artist.name} - ${chosen.title}"`
+              )
+            );
+            return;
+          }
+
+          const mins = Math.floor(chosen.duration / 60);
+          const secs = chosen.duration % 60;
+          if (chosen.duration >= minDurationSec) {
+            console.log(`[DEEZER] ✅ Selected: ${chosen.artist.name} - ${chosen.title} (${mins}:${String(secs).padStart(2, '0')}) — match seguro`);
+          } else {
+            console.log(`[DEEZER] ⚠️ Selected short track: ${chosen.artist.name} - ${chosen.title} (${mins}:${String(secs).padStart(2, '0')}) — match seguro, mas abaixo de ${minDurationSec}s`);
+          }
+
+          resolve(chosen);
         } catch (e) {
           reject(new Error('Falha ao parsear resposta do Deezer'));
         }
