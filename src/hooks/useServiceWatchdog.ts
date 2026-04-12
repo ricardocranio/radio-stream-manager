@@ -10,7 +10,7 @@ import { useEffect, useRef } from 'react';
 import { logSystemError } from '@/store/gradeLogStore';
 
 const WATCHDOG_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
-const STALE_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes = considered stalled
+const STALE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes = considered stalled
 
 // Module-level heartbeat registry
 const heartbeats: Record<string, number> = {};

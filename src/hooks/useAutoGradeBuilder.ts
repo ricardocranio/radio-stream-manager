@@ -713,7 +713,7 @@ export function useAutoGradeBuilder() {
     const now = Date.now();
     const stationList = Object.keys(songsByStation).map(name => {
       const songs = songsByStation[name];
-      const freshCount = songs.filter(s => s.scrapedAt && (now - new Date(s.scrapedAt).getTime()) <= 20 * 60 * 1000).length;
+      const freshCount = songs.filter(s => s.scrapedAt && (now - new Date(s.scrapedAt).getTime()) <= 15 * 60 * 1000).length;
       return `${name}(${songs.length}, ${freshCount}⚡)`;
     }).join(', ');
     console.log(`[AUTO-GRADE] Pool (total, frescas≤20m): ${stationList}`);

@@ -422,12 +422,12 @@ export async function selectSongForSlot(
     const now = Date.now();
     // Graduated freshness tiers (ms) — try narrow first, widen if empty
     const P1_TIERS_MS = [
-      20 * 60 * 1000,   // Tier 1: ≤20min (fresh — matches monitor 12min cycle)
-      40 * 60 * 1000,   // Tier 2: ≤40min (recent — ~3 cycles)
+      15 * 60 * 1000,   // Tier 1: ≤15min (fresh — matches monitor cycle)
+      30 * 60 * 1000,   // Tier 2: ≤30min (recent — ~3 cycles)
       60 * 60 * 1000,   // Tier 3: ≤1h (still relevant)
       120 * 60 * 1000,  // Tier 4: ≤2h (last resort before P1-EXT)
     ];
-    const P1_TIER_LABELS = ['≤20min', '≤40min', '≤1h', '≤2h'];
+    const P1_TIER_LABELS = ['≤15min', '≤30min', '≤1h', '≤2h'];
 
     // Sort by freshness DESC (newest first)
     const freshnessSorted = [...stationSongs].sort((a, b) => {
@@ -518,8 +518,8 @@ export async function selectSongForSlot(
       // Freshest tier gets most attempts; older tiers get fewer.
       if (!selectedSong && missingFromTier.length > 0) {
         let jitAttemptsP1 = 0;
-        // Tier 1 (≤20min): 10 attempts — most critical, freshest captures
-        // Tier 2 (≤40min): 6 attempts — still very relevant
+        // Tier 1 (≤15min): 10 attempts — most critical, freshest captures
+        // Tier 2 (≤30min): 6 attempts — still very relevant
         // Tier 3 (≤1h): 4 attempts — worth trying
         // Tier 4 (≤2h): 3 attempts — last resort within P1
         const jitBudgetByTier = [10, 6, 4, 3];
