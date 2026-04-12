@@ -1289,9 +1289,16 @@ class RadioMonitor:
                 print(cor(Cores.RED, f"     ⏰ TIMEOUT Playwright: {nome} (>40s)"))
                 self.total_errors += 1
         
+        # === Fonte 5: Fallback no backend ===
+        if SUPABASE_OK:
+            print(cor(Cores.BLUE, f"     ☁️  Tentando fallback no histórico..."))
+            result = get_db_fallback(nome)
+            if result and result.get('tocando_agora'):
+                return {**dados_base, **result}
+
         dados_base["erro"] = "Nenhuma fonte retornou dados"
         return dados_base
-    
+
     async def _atualizar_todas(self):
         """Ciclo principal de scraping com multi-source + buffer de frescor"""
         global SUPABASE_OK
