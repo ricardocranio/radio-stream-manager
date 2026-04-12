@@ -582,6 +582,87 @@ function register({ getMainWindow, safeHandle }) {
       return { success: false, error: error.message };
     }
   });
+
+  // IPC: Validate ID3 tags vs filename — quarantine mismatches
+  handle('validate-id3-integrity', async (event, { folders, threshold }) => {
+    const { calculateSimilarity } = require('./utils.cjs');
+    const minSim = threshold || 0.40;
+    const results = { scanned: 0, quarantined: 0, valid: 0, errors: 0, details: [] };
+    console.log(`[ID3-VALIDATE] 🔍 Starting validation (threshold: ${(minSim * 100).toFixed(0)}%) on ${folders.length} folders`);
+
+    for (const folder of folders) {
+      if (!fs.existsSync(folder)) continue;
+
+      // Scan recursively
+      const walk = (dir) => {
+        let files = [];
+        try {
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              if (entry.name.startsWith('_') || entry.name === 'PkInfo') continue;
+              files = files.concat(walk(full));
+            } else if (/\.(mp3|flac)$/i.test(entry.name)) {
+              files.push(full);
+            }
+          }
+        } catch (e) {}
+        return files;
+      };
+
+      const audioFiles = walk(folder);
+
+      for (const filePath of audioFiles) {
+        results.scanned++;
+        try {
+          const fileName = path.basename(filePath, path.extname(filePath));
+          const parsed = parseArtistTitleFromFilename(fileName + path.extname(filePath));
+          if (!parsed.artist || !parsed.title) { results.valid++; continue; }
+
+          const tags = parseID3TagsFromFile(filePath);
+          if (!tags.artist && !tags.title) { results.valid++; continue; }
+
+          const id3Artist = tags.artist || '';
+          const id3Title = tags.title || '';
+
+          const artistSim = id3Artist ? calculateSimilarity(parsed.artist, id3Artist) : 1;
+          const titleSim = id3Title ? calculateSimilarity(parsed.title, id3Title) : 1;
+
+          // Both artist AND title must fail to be quarantined
+          if (artistSim < minSim && titleSim < minSim) {
+            // Move to quarantine
+            const parentDir = path.dirname(filePath);
+            const quarantineDir = path.join(parentDir, QUARANTINE_FOLDER_NAME);
+            if (!fs.existsSync(quarantineDir)) fs.mkdirSync(quarantineDir, { recursive: true });
+
+            const destPath = path.join(quarantineDir, path.basename(filePath));
+            try { fs.renameSync(filePath, destPath); } catch (e) { fs.copyFileSync(filePath, destPath); fs.unlinkSync(filePath); }
+
+            results.quarantined++;
+            const detail = {
+              file: path.basename(filePath),
+              folder: path.relative(folders[0] || folder, parentDir) || '.',
+              fileArtist: parsed.artist,
+              fileTitle: parsed.title,
+              id3Artist,
+              id3Title,
+              artistSim: Math.round(artistSim * 100),
+              titleSim: Math.round(titleSim * 100),
+            };
+            results.details.push(detail);
+            console.log(`[ID3-VALIDATE] ❌ QUARENTENA: "${parsed.artist} - ${parsed.title}" → ID3: "${id3Artist} - ${id3Title}" (art=${detail.artistSim}%, tit=${detail.titleSim}%)`);
+          } else {
+            results.valid++;
+          }
+        } catch (fileErr) {
+          results.errors++;
+        }
+      }
+    }
+    console.log(`[ID3-VALIDATE] Done: ${results.scanned} scanned, ${results.quarantined} quarantined, ${results.valid} valid, ${results.errors} errors`);
+    return { success: true, ...results };
+  });
+
   handle('move-file-to-genre-folder', async (event, { sourceFolder, fileName, targetSubfolder }) => {
     try {
       const sourcePath = path.join(sourceFolder, fileName);
