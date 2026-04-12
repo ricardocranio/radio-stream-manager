@@ -663,6 +663,84 @@ function register({ getMainWindow, safeHandle }) {
     return { success: true, ...results };
   });
 
+  // IPC: List quarantined files across all library folders
+  handle('list-quarantined-files', async (event, { folders }) => {
+    const files = [];
+    for (const folder of (folders || [])) {
+      const walk = (dir) => {
+        try {
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              if (entry.name === QUARANTINE_FOLDER_NAME) {
+                // List files inside quarantine
+                try {
+                  for (const qf of fs.readdirSync(full)) {
+                    const qfPath = path.join(full, qf);
+                    if (!fs.statSync(qfPath).isFile()) continue;
+                    const parsed = parseArtistTitleFromFilename(qf);
+                    let id3Artist = '', id3Title = '';
+                    try {
+                      const tags = parseID3TagsFromFile(qfPath);
+                      id3Artist = tags.artist || '';
+                      id3Title = tags.title || '';
+                    } catch {}
+                    const stat = fs.statSync(qfPath);
+                    files.push({
+                      path: qfPath,
+                      parentFolder: dir,
+                      filename: qf,
+                      fileArtist: parsed.artist,
+                      fileTitle: parsed.title,
+                      id3Artist,
+                      id3Title,
+                      sizeMB: (stat.size / (1024 * 1024)).toFixed(1),
+                      date: stat.mtimeMs,
+                    });
+                  }
+                } catch {}
+              } else if (!entry.name.startsWith('_')) {
+                walk(full);
+              }
+            }
+          }
+        } catch {}
+      };
+      walk(folder);
+    }
+    return { success: true, files };
+  });
+
+  // IPC: Restore quarantined file back to its parent folder
+  handle('restore-quarantined-file', async (event, { filePath }) => {
+    try {
+      if (!fs.existsSync(filePath)) return { success: false, error: 'Arquivo não encontrado' };
+      const quarantineDir = path.dirname(filePath);
+      const parentDir = path.dirname(quarantineDir);
+      const fileName = path.basename(filePath);
+      const destPath = path.join(parentDir, fileName);
+      if (fs.existsSync(destPath)) return { success: false, error: 'Arquivo já existe na pasta de destino' };
+      try { fs.renameSync(filePath, destPath); } catch { fs.copyFileSync(filePath, destPath); fs.unlinkSync(filePath); }
+      // Cleanup empty quarantine folder
+      try { const remaining = fs.readdirSync(quarantineDir); if (remaining.length === 0) fs.rmdirSync(quarantineDir); } catch {}
+      console.log(`[QUARANTINE] ✅ Restaurado: ${fileName} → ${parentDir}`);
+      return { success: true, restoredTo: destPath };
+    } catch (e) { return { success: false, error: e.message }; }
+  });
+
+  // IPC: Permanently delete quarantined file
+  handle('delete-quarantined-file', async (event, { filePath }) => {
+    try {
+      if (!fs.existsSync(filePath)) return { success: false, error: 'Arquivo não encontrado' };
+      fs.unlinkSync(filePath);
+      // Cleanup empty quarantine folder
+      const quarantineDir = path.dirname(filePath);
+      try { const remaining = fs.readdirSync(quarantineDir); if (remaining.length === 0) fs.rmdirSync(quarantineDir); } catch {}
+      console.log(`[QUARANTINE] 🗑️ Deletado: ${path.basename(filePath)}`);
+      return { success: true };
+    } catch (e) { return { success: false, error: e.message }; }
+  });
+
   handle('move-file-to-genre-folder', async (event, { sourceFolder, fileName, targetSubfolder }) => {
     try {
       const sourcePath = path.join(sourceFolder, fileName);

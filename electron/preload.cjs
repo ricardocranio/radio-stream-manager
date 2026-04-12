@@ -94,6 +94,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   moveFileToGenreFolder: (params) => ipcRenderer.invoke('move-file-to-genre-folder', params),
   reorganizeByGenre: (params) => ipcRenderer.invoke('reorganize-by-genre', params),
   validateId3Integrity: (params) => ipcRenderer.invoke('validate-id3-integrity', params),
+  listQuarantinedFiles: (params) => ipcRenderer.invoke('list-quarantined-files', params),
+  restoreQuarantinedFile: (params) => ipcRenderer.invoke('restore-quarantined-file', params),
+  deleteQuarantinedFile: (params) => ipcRenderer.invoke('delete-quarantined-file', params),
   processTempFiles: (params) => ipcRenderer.invoke('process-temp-files', params),
   
   // Window management
