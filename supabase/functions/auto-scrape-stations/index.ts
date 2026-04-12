@@ -515,8 +515,47 @@ async function processStation(
     }
   }
 
+  // === Source 4: Database fallback (Python monitor / previous scrapes) ===
   if (!parsed.nowPlaying && parsed.recentSongs.length === 0) {
-    return { station: station.name, success: false, songs: 0, error: 'No song data from any source (ORB/Triton/ICY)' };
+    try {
+      // Check radio_historico first (fed by Python monitor)
+      const { data: historico } = await supabase
+        .from('radio_historico')
+        .select('artist, title, captured_at, source')
+        .eq('station_name', station.name)
+        .gte('captured_at', new Date(Date.now() - 60 * 60 * 1000).toISOString()) // last hour
+        .order('captured_at', { ascending: false })
+        .limit(6);
+
+      if (historico && historico.length > 0) {
+        parsed.nowPlaying = { artist: historico[0].artist, title: historico[0].title, timestamp: historico[0].captured_at };
+        parsed.recentSongs = historico.slice(1).map(s => ({ artist: s.artist, title: s.title, timestamp: s.captured_at }));
+        sourceUsed = `db-historico(${historico[0].source || 'monitor'})`;
+        console.log(`[${station.name}] DB fallback: ${historico[0].artist} - ${historico[0].title}`);
+      } else {
+        // Try scraped_songs (previous edge function scrapes)
+        const { data: scraped } = await supabase
+          .from('scraped_songs')
+          .select('artist, title, scraped_at, source')
+          .eq('station_name', station.name)
+          .gte('scraped_at', new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()) // last 6h
+          .order('scraped_at', { ascending: false })
+          .limit(6);
+
+        if (scraped && scraped.length > 0) {
+          parsed.nowPlaying = { artist: scraped[0].artist, title: scraped[0].title, timestamp: scraped[0].scraped_at };
+          parsed.recentSongs = scraped.slice(1).map(s => ({ artist: s.artist, title: s.title, timestamp: s.scraped_at }));
+          sourceUsed = `db-cache(${scraped[0].source || 'unknown'})`;
+          console.log(`[${station.name}] DB cache fallback: ${scraped[0].artist} - ${scraped[0].title}`);
+        }
+      }
+    } catch (dbErr) {
+      console.warn(`[${station.name}] DB fallback error:`, dbErr instanceof Error ? dbErr.message : 'Unknown');
+    }
+  }
+
+  if (!parsed.nowPlaying && parsed.recentSongs.length === 0) {
+    return { station: station.name, success: false, songs: 0, error: 'No song data from any source (ORB/Triton/ICY/DB)' };
   }
 
   let songsInserted = 0;
