@@ -64,6 +64,9 @@ export function useCheckMusicLibrary() {
   const checkSongExists = useCallback(async (artist: string, title: string): Promise<CheckResult> => {
     const threshold = config.similarityThreshold || 0.75;
     
+    // Use ALL folders (musicFolders + downloadFolder + genre subfolders) to avoid cross-folder duplicates
+    const allFolders = getAllSearchFolders();
+    
     // Normalize to match base versions (e.g., "Song (Ao Vivo)" -> "Song")
     const normalizedArtist = normalizeArtist(artist);
     const normalizedTitle = normalizeTitle(title);
@@ -75,7 +78,7 @@ export function useCheckMusicLibrary() {
         let result = await window.electronAPI.findSongMatch({
           artist: normalizedArtist,
           title: normalizedTitle,
-          musicFolders: config.musicFolders,
+          musicFolders: allFolders,
           threshold,
         } as any);
         
@@ -84,7 +87,7 @@ export function useCheckMusicLibrary() {
           const originalResult = await window.electronAPI.findSongMatch({
             artist,
             title,
-            musicFolders: config.musicFolders,
+            musicFolders: allFolders,
             threshold,
           } as any);
           
@@ -149,14 +152,14 @@ export function useCheckMusicLibrary() {
         let result = await window.electronAPI.checkSongExists({
           artist: normalizedArtist,
           title: normalizedTitle,
-          musicFolders: config.musicFolders,
+          musicFolders: allFolders,
         });
         
         if (!result.exists && (normalizedTitle !== title || normalizedArtist !== artist)) {
           result = await window.electronAPI.checkSongExists({
             artist,
             title,
-            musicFolders: config.musicFolders,
+            musicFolders: allFolders,
           });
         }
         
@@ -169,7 +172,7 @@ export function useCheckMusicLibrary() {
 
     // Fallback for web: simulate check (always returns false in web mode)
     return { exists: false };
-  }, [config.musicFolders, config.similarityThreshold, addSimilarityLog]);
+  }, [config.similarityThreshold, addSimilarityLog]);
 
   const checkMultipleSongs = useCallback(async (
     songs: Array<{ artist: string; title: string }>
