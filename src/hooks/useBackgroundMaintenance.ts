@@ -22,6 +22,7 @@ const CLASSIFY_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const PURGE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 const DEDUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const TEMP_PROCESS_INTERVAL_MS = 2 * 60 * 1000; // Every 2 minutes
+const ID3_VALIDATE_INTERVAL_MS = 30 * 60 * 1000; // Every 30 minutes
 const MAINTENANCE_CHECK_MS = 60 * 1000; // Check every minute
 const ID3_SCAN_KEY = 'pgmr_last_id3_scan'; // localStorage key for scan date
 
@@ -30,6 +31,7 @@ export function useBackgroundMaintenance() {
   const lastPurgeRef = useRef<number>(0);
   const lastDedupRef = useRef<number>(0);
   const lastTempProcessRef = useRef<number>(0);
+  const lastId3ValidateRef = useRef<number>(0);
   const lastCompressRef = useRef<string>(''); // Date string of last compression
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const id3ScanRunningRef = useRef(false);
@@ -430,6 +432,46 @@ export function useBackgroundMaintenance() {
     }
   }, []);
 
+  /**
+   * Validate ID3 integrity: compare filenames with ID3 tags.
+   * Files where both artist AND title mismatch are moved to _QUARENTENA_SUSPEITAS.
+   * Runs every 30 minutes silently in the background.
+   */
+  const validateId3Integrity = useCallback(async () => {
+    if (!isElectron || !(window.electronAPI as any)?.validateId3Integrity) return;
+
+    try {
+      const { config, deezerConfig } = useRadioStore.getState();
+      const allFolders = [
+        ...(config.musicFolders || []),
+        deezerConfig.downloadFolder,
+      ].filter(Boolean);
+
+      if (allFolders.length === 0) return;
+
+      const uniqueFolders = [...new Set(allFolders)];
+
+      console.log('[MAINTENANCE] 🛡️ Validação ID3 periódica iniciada...');
+      const result = await (window.electronAPI as any).validateId3Integrity({
+        folders: uniqueFolders,
+        threshold: 0.40,
+      });
+
+      if (result?.success) {
+        if (result.quarantined > 0) {
+          console.log(`[MAINTENANCE] 🛡️ Validação ID3: ${result.quarantined} arquivo(s) em quarentena (${result.scanned} escaneados)`);
+          for (const d of (result.details || []).slice(0, 10)) {
+            console.log(`[MAINTENANCE]   ❌ "${d.fileArtist} - ${d.fileTitle}" → ID3: "${d.id3Artist} - ${d.id3Title}" (art=${d.artistSim}%, tit=${d.titleSim}%)`);
+          }
+        } else {
+          console.log(`[MAINTENANCE] 🛡️ Validação ID3 OK: ${result.scanned} arquivos, todos íntegros`);
+        }
+      }
+    } catch (error) {
+      console.error('[MAINTENANCE] Erro na validação ID3:', error);
+    }
+  }, []);
+
   const start = useCallback(() => {
     // Initial classification after 2 minutes
     setTimeout(() => classifySongs(), 2 * 60 * 1000);
@@ -454,6 +496,11 @@ export function useBackgroundMaintenance() {
       setTimeout(() => purgeBlockedFiles(), 8 * 60 * 1000);
     }
 
+    // ID3 integrity validation after 7 minutes, then every 30 minutes
+    if (isElectron) {
+      setTimeout(() => validateId3Integrity(), 7 * 60 * 1000);
+    }
+
     intervalRef.current = setInterval(() => {
       const now = Date.now();
 
@@ -461,6 +508,12 @@ export function useBackgroundMaintenance() {
       if (isElectron && now - lastTempProcessRef.current >= TEMP_PROCESS_INTERVAL_MS) {
         lastTempProcessRef.current = now;
         processTempFiles();
+      }
+
+      // Validate ID3 integrity every 30 minutes (Electron only)
+      if (isElectron && now - lastId3ValidateRef.current >= ID3_VALIDATE_INTERVAL_MS) {
+        lastId3ValidateRef.current = now;
+        validateId3Integrity();
       }
 
       // Classify every 30 minutes
@@ -490,12 +543,12 @@ export function useBackgroundMaintenance() {
       }
     }, MAINTENANCE_CHECK_MS);
 
-    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, classificação 30min, ID3 scan diário, dedup 24h, purge bloqueados 12h, compressão 4h)');
+    console.log('[MAINTENANCE] ✅ Serviço de manutenção iniciado (temp 2min, ID3 validate 30min, classificação 30min, ID3 scan diário, dedup 24h, purge bloqueados 12h, compressão 4h)');
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [classifySongs, compressHistory, autoDeduplicateLibrary, purgeBlockedFiles, processTempFiles, scanLibraryId3]);
+  }, [classifySongs, compressHistory, autoDeduplicateLibrary, purgeBlockedFiles, processTempFiles, scanLibraryId3, validateId3Integrity]);
 
-  return { start, classifySongs, compressHistory, autoDeduplicateLibrary, purgeBlockedFiles, processTempFiles, scanLibraryId3 };
+  return { start, classifySongs, compressHistory, autoDeduplicateLibrary, purgeBlockedFiles, processTempFiles, scanLibraryId3, validateId3Integrity };
 }
