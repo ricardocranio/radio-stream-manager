@@ -1007,41 +1007,134 @@ class RadioMonitor:
         }
         
         try:
-            await page.goto(url, wait_until='networkidle', timeout=25000)
-            await asyncio.sleep(3)
+            await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            await page.wait_for_selector('.main-content[data-radio-id]', timeout=15000)
+            await asyncio.sleep(2)
             
-            resultado = await page.evaluate('''() => {
-                const seletores = ['.latest-song', '.current-song', '.now-playing'];
-                for (const sel of seletores) {
-                    const el = document.querySelector(sel);
-                    if (el && el.innerText.trim()) return el.innerText.trim();
-                }
-                const np = document.querySelector('#now-playing');
-                if (np && np.nextElementSibling) return np.nextElementSibling.innerText.trim();
-                return null;
-            }''')
-            if resultado:
-                dados["tocando_agora"] = resultado
-            
-            resultado = await page.evaluate('''() => {
-                const songs = [];
-                document.querySelectorAll('a[href*="song"]').forEach(link => {
-                    const text = link.innerText.trim();
-                    if (text.length > 5 && !songs.includes(text)) songs.push(text);
-                });
-                if (songs.length === 0) {
-                    const hist = document.querySelector('#song-history, .song-history');
-                    if (hist) {
-                        hist.querySelectorAll('div').forEach(item => {
-                            const text = item.innerText.trim();
-                            if (text.length > 5 && !songs.includes(text)) songs.push(text);
+            resultado = await page.evaluate('''async () => {
+                const normalizeSongText = (value) => {
+                    if (!value) return null;
+                    const text = String(value).replace(/\s+/g, ' ').trim();
+                    return text.length >= 3 ? text : null;
+                };
+
+                const parseDomHistory = () => {
+                    const songs = [];
+                    const pushSong = (text) => {
+                        const cleaned = normalizeSongText(text);
+                        if (cleaned && !songs.includes(cleaned)) songs.push(cleaned);
+                    };
+
+                    document.querySelectorAll('#song-history a[href*="song"], #song-history .song, #song-history .song-title, #song-history .track, #song-history div').forEach((el) => {
+                        pushSong(el.textContent);
+                    });
+
+                    return songs.slice(0, 10);
+                };
+
+                const parseDomNowPlaying = () => {
+                    const selectors = ['.latest-song', '.current-song', '.now-playing', '#metadata-container .song-name p', '#metadata-container .artist-name'];
+                    for (const sel of selectors) {
+                        const el = document.querySelector(sel);
+                        const text = normalizeSongText(el?.textContent);
+                        if (text) return text;
+                    }
+
+                    const label = document.querySelector('#now-playing');
+                    const siblingText = normalizeSongText(label?.nextElementSibling?.textContent);
+                    if (siblingText) return siblingText;
+                    return null;
+                };
+
+                const root = document.querySelector('.main-content[data-radio-id]');
+                const radioId = root?.getAttribute('data-radio-id');
+                const appCode = location.hostname.includes('staging') ? 'mytuner_website_staging' : 'mytuner_website';
+
+                const formatMetadata = (metadata) => normalizeSongText(metadata);
+                const history = [];
+                let nowPlaying = null;
+                let source = null;
+
+                if (radioId && typeof DG === 'function') {
+                    const dg = new DG(radioId);
+                    const fetchJson = async (kind, endpoint) => {
+                        const timestamp = Date.now();
+                        const resp = await fetch(`${endpoint}?app_codename=${appCode}&radio_id=${radioId}&time=${timestamp}`, {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': dg.execute(timestamp, kind),
+                                'Content-Type': 'application/json',
+                            },
                         });
+                        if (!resp.ok) throw new Error(`MyTuner ${kind} HTTP ${resp.status}`);
+                        return resp.json();
+                    };
+
+                    try {
+                        const [historyData, metadataData] = await Promise.allSettled([
+                            fetchJson('song-history', 'https://metadata-api.mytuner.mobi/api/v1/metadata-api/web/song-history'),
+                            fetchJson('metadata', 'https://metadata-api.mytuner.mobi/api/v1/metadata-api/web/metadata'),
+                        ]);
+
+                        if (historyData.status === 'fulfilled') {
+                            const apiHistory = historyData.value?.song_history || [];
+                            for (const item of apiHistory.slice(-10).reverse()) {
+                                const text = formatMetadata(item?.metadata);
+                                if (text && !history.includes(text)) history.push(text);
+                            }
+                        }
+
+                        if (metadataData.status === 'fulfilled') {
+                            const metadata = formatMetadata(metadataData.value?.radio_metadata?.metadata);
+                            if (metadata) {
+                                nowPlaying = metadata;
+                                source = 'mytuner-api';
+                            }
+                        }
+
+                        if (!nowPlaying && history.length > 0) {
+                            nowPlaying = history[0];
+                            source = source || 'mytuner-api-history';
+                        }
+                    } catch (error) {
+                        console.warn('MyTuner API fallback failed:', error);
                     }
                 }
-                return songs.slice(0, 10);
+
+                if (!nowPlaying) {
+                    const playButton = document.querySelector('#play-button');
+                    if (playButton instanceof HTMLElement) {
+                        playButton.click();
+                        await new Promise((resolve) => setTimeout(resolve, 5000));
+                    } else {
+                        await new Promise((resolve) => setTimeout(resolve, 3000));
+                    }
+
+                    nowPlaying = parseDomNowPlaying();
+                    const domHistory = parseDomHistory();
+                    domHistory.forEach((song) => {
+                        if (!history.includes(song)) history.push(song);
+                    });
+
+                    if (nowPlaying) {
+                        source = source || 'mytuner-dom';
+                    }
+                }
+
+                return {
+                    tocando_agora: nowPlaying,
+                    ultimas_tocadas: history.slice(0, 10),
+                    source: source || 'mytuner',
+                };
             }''')
-            if resultado:
-                dados["ultimas_tocadas"] = resultado
+
+            dados["tocando_agora"] = resultado.get("tocando_agora")
+            dados["ultimas_tocadas"] = resultado.get("ultimas_tocadas", [])
+            dados["source"] = resultado.get("source", "mytuner")
+
+            if not dados["tocando_agora"] and not dados["ultimas_tocadas"]:
+                dados["erro"] = "MyTuner não retornou metadata"
+                self.total_errors += 1
                 
         except Exception as e:
             dados["erro"] = str(e)[:100]
