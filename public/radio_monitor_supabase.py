@@ -1011,7 +1011,7 @@ class RadioMonitor:
             await page.wait_for_selector('.main-content[data-radio-id]', timeout=15000)
             await asyncio.sleep(2)
             
-            resultado = await page.evaluate('''async () => {
+            resultado = await page.evaluate(r'''async () => {
                 const normalizeSongText = (value) => {
                     if (!value) return null;
                     const text = String(value).replace(/\s+/g, ' ').trim();
