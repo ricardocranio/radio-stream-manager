@@ -9,6 +9,7 @@ import { useRef, useCallback, useState } from 'react';
 import { useRadioStore, MissingSong } from '@/store/radioStore';
 import { radioScraperApi } from '@/lib/api/radioScraper';
 import { checkSongInLibrary } from '@/hooks/useCheckMusicLibrary';
+import { getAllSearchFolders } from '@/lib/getAllSearchFolders';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -167,12 +168,13 @@ export function useGlobalScrapingService(
       }
       
       let existsInLibrary = false;
-      if (isElectron && config.musicFolders?.length > 0) {
+      const allFolders = getAllSearchFolders();
+      if (isElectron && allFolders.length > 0) {
         try {
           const result = await checkSongInLibrary(
             songArtist,
             songTitle,
-            config.musicFolders,
+            allFolders,
             config.similarityThreshold || 0.75
           );
           existsInLibrary = result.exists;
