@@ -222,92 +222,106 @@ async function resolveStreamUrl(streamUrl: string): Promise<string> {
 }
 
 async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise<{ artist: string; title: string } | null> {
+  // Try both original and resolved URLs
+  const urlsToTry = [streamUrl];
   try {
-    // First resolve the actual stream URL (follow redirects)
-    const resolvedUrl = await resolveStreamUrl(streamUrl);
-    console.log(`[${stationName}] ICY resolved: ${resolvedUrl.substring(0, 80)}`);
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const resolved = await resolveStreamUrl(streamUrl);
+    console.log(`[${stationName}] ICY resolved: ${resolved.substring(0, 80)}`);
+    if (resolved !== streamUrl) urlsToTry.push(resolved);
+  } catch { /* continue */ }
 
-    const response = await fetch(resolvedUrl, {
-      headers: {
-        'Icy-MetaData': '1',
-        'User-Agent': 'WinampMPEG/5.0',
-        'Accept': '*/*',
-        'Connection': 'close',
-      },
-      signal: controller.signal,
-    });
+  for (const url of urlsToTry) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 18000);
 
-    const metaInt = parseInt(response.headers.get('icy-metaint') || '0', 10);
-    if (!metaInt || !response.body) {
+      const response = await fetch(url, {
+        headers: { 'Icy-MetaData': '1', 'User-Agent': 'WinampMPEG/5.0', 'Accept': '*/*', 'Connection': 'close' },
+        signal: controller.signal,
+      });
+
+      const metaInt = parseInt(response.headers.get('icy-metaint') || '0', 10);
+      if (!metaInt || !response.body) {
+        clearTimeout(timeoutId);
+        await response.body?.cancel();
+        console.warn(`[${stationName}] No ICY metadata support (metaint=${metaInt})`);
+        continue;
+      }
+
+      const reader = response.body.getReader();
+      let buffer = new Uint8Array(0);
+      const MAX_BLOCKS = 8;
+
+      const appendBuffer = (existing: Uint8Array, chunk: Uint8Array): Uint8Array => {
+        const result = new Uint8Array(existing.length + chunk.length);
+        result.set(existing, 0);
+        result.set(chunk, existing.length);
+        return result;
+      };
+
+      const targetBytes = (metaInt + 256) * MAX_BLOCKS;
+      while (buffer.length < targetBytes) {
+        const { done, value } = await reader.read();
+        if (done || !value) break;
+        buffer = appendBuffer(buffer, value);
+      }
+
       clearTimeout(timeoutId);
-      await response.body?.cancel();
-      console.warn(`[${stationName}] No ICY metadata support (metaint=${metaInt})`);
-      return null;
+      await reader.cancel();
+
+      let pos = 0;
+      for (let block = 0; block < MAX_BLOCKS; block++) {
+        if (pos + metaInt >= buffer.length) break;
+        pos += metaInt;
+        if (pos >= buffer.length) break;
+        const metaLength = buffer[pos] * 16;
+        pos += 1;
+        if (metaLength === 0) continue;
+        if (pos + metaLength > buffer.length) break;
+
+        const metaBytes = buffer.slice(pos, pos + metaLength);
+        pos += metaLength;
+
+        const metaString = new TextDecoder('utf-8', { fatal: false }).decode(metaBytes);
+        // Handle apostrophes in titles (e.g. "GUNS N' ROSES - DON'T CRY")
+        const titleMatch = metaString.match(/StreamTitle='(.+?)';/) || metaString.match(/StreamTitle='(.+)'/);
+        if (!titleMatch?.[1]) continue;
+
+        const streamTitle = titleMatch[1].trim();
+        if (!streamTitle || streamTitle.length < 3) continue;
+
+        const dashIdx = streamTitle.indexOf(' - ');
+        if (dashIdx === -1) {
+          console.log(`[${stationName}] ICY block ${block} no dash: "${streamTitle}"`);
+          continue;
+        }
+
+        const artist = streamTitle.substring(0, dashIdx).trim();
+        const title = streamTitle.substring(dashIdx + 3).trim();
+        if (artist.length < 2 || title.length < 2) continue;
+
+        const rejectPatterns = [
+          /COMERCIAL|VINHETA|INSTITUCIONAL|PROPAGANDA|SPOT|BREAK/i,
+          /^(RÁDIO|RADIO)\s/i,
+        ];
+        if (rejectPatterns.some(p => p.test(artist) || p.test(title))) continue;
+
+        console.log(`[${stationName}] ICY metadata (block ${block}): ${artist} - ${title}`);
+        return { artist, title };
+      }
+
+      console.log(`[${stationName}] ICY: ${MAX_BLOCKS} blocks read, no valid metadata found`);
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') {
+        console.warn(`[${stationName}] ICY timeout`);
+      } else {
+        console.warn(`[${stationName}] ICY error:`, e instanceof Error ? e.message : 'Unknown');
+      }
     }
+  }
 
-    const reader = response.body.getReader();
-    let bytesRead = 0;
-    const chunks: Uint8Array[] = [];
-
-    while (bytesRead < metaInt + 8192) {
-      const { done, value } = await reader.read();
-      if (done || !value) break;
-      chunks.push(value);
-      bytesRead += value.length;
-    }
-
-    clearTimeout(timeoutId);
-    await reader.cancel();
-
-    const combined = new Uint8Array(bytesRead);
-    let offset = 0;
-    for (const chunk of chunks) { combined.set(chunk, offset); offset += chunk.length; }
-
-    if (combined.length <= metaInt) return null;
-
-    const metaLength = combined[metaInt] * 16;
-    if (metaLength === 0) return null;
-
-    const metaStart = metaInt + 1;
-    const metaEnd = Math.min(metaStart + metaLength, combined.length);
-    const metaBytes = combined.slice(metaStart, metaEnd);
-    const metaString = new TextDecoder('utf-8', { fatal: false }).decode(metaBytes);
-
-    const titleMatch = metaString.match(/StreamTitle='([^']+)'/);
-    if (!titleMatch || !titleMatch[1]) return null;
-
-    const streamTitle = titleMatch[1].trim();
-    if (!streamTitle || streamTitle.length < 3) return null;
-
-    const dashIdx = streamTitle.indexOf(' - ');
-    if (dashIdx === -1) {
-      console.log(`[${stationName}] ICY title without dash: "${streamTitle}"`);
-      return null;
-    }
-
-    const artist = streamTitle.substring(0, dashIdx).trim();
-    const title = streamTitle.substring(dashIdx + 3).trim();
-
-    if (artist.length < 2 || title.length < 2) return null;
-
-    const rejectPatterns = [
-      /COMERCIAL|VINHETA|INSTITUCIONAL|PROPAGANDA|SPOT|BREAK/i,
-      /^(RÁDIO|RADIO)\s/i,
-    ];
-    if (rejectPatterns.some(p => p.test(artist) || p.test(title))) return null;
-
-    console.log(`[${stationName}] ICY metadata: ${artist} - ${title}`);
-    return { artist, title };
-  } catch (e) {
-    if (e instanceof Error && e.name === 'AbortError') {
-      console.warn(`[${stationName}] ICY timeout`);
-    } else {
-      console.warn(`[${stationName}] ICY error:`, e instanceof Error ? e.message : 'Unknown');
-    }
-    return null;
+  return null;
+}
   }
 }
 
