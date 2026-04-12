@@ -554,64 +554,140 @@ def scrape_triton_api(mount_name: str, station_name: str) -> Optional[Dict]:
 
 
 def scrape_icy_metadata(stream_url: str, station_name: str) -> Optional[Dict]:
-    """Extrai metadados ICY do stream de áudio"""
+    """Extrai metadados ICY do stream de áudio, lendo múltiplos blocos."""
     try:
-        # Resolver redirects primeiro
         head_resp = http_requests.head(stream_url, allow_redirects=True, timeout=5)
         resolved_url = head_resp.url
-        
+
         resp = http_requests.get(resolved_url, headers={
             'Icy-MetaData': '1',
             'User-Agent': 'WinampMPEG/5.0',
         }, stream=True, timeout=10)
-        
+
         meta_int = int(resp.headers.get('icy-metaint', 0))
         if not meta_int:
             resp.close()
             return None
-        
-        # Read audio data + metadata
-        data = resp.raw.read(meta_int + 4096)
-        resp.close()
-        
-        if len(data) <= meta_int:
-            return None
-        
-        meta_length = data[meta_int] * 16
-        if meta_length == 0:
-            return None
-        
-        meta_start = meta_int + 1
-        meta_end = min(meta_start + meta_length, len(data))
-        meta_string = data[meta_start:meta_end].decode('utf-8', errors='ignore')
-        
-        match = re.search(r"StreamTitle='([^']+)'", meta_string)
-        if not match:
-            return None
-        
-        stream_title = match.group(1).strip()
-        if ' - ' not in stream_title:
-            return None
-        
-        parts = stream_title.split(' - ', 1)
-        artist = parts[0].strip()
-        title = parts[1].strip()
-        
-        if len(artist) < 2 or len(title) < 2:
-            return None
-        
-        if is_forbidden(artist, title):
-            return None
-        
-        print(cor(Cores.GREEN, f"     🎵 ICY: {artist} - {title}"))
-        return {
-            "tocando_agora": f"{artist} - {title}",
-            "ultimas_tocadas": [],
-            "source": "icy-stream"
-        }
+
+        try:
+            for _ in range(8):
+                audio_chunk = resp.raw.read(meta_int)
+                if len(audio_chunk) < meta_int:
+                    break
+
+                meta_length_byte = resp.raw.read(1)
+                if not meta_length_byte:
+                    break
+
+                meta_length = meta_length_byte[0] * 16
+                if meta_length == 0:
+                    continue
+
+                metadata_bytes = resp.raw.read(meta_length)
+                if len(metadata_bytes) < meta_length:
+                    break
+
+                meta_string = metadata_bytes.decode('utf-8', errors='ignore')
+                match = re.search(r"StreamTitle='(.+?)';", meta_string)
+                if not match:
+                    continue
+
+                stream_title = match.group(1).strip()
+                if ' - ' not in stream_title:
+                    continue
+
+                artist, title = [part.strip() for part in stream_title.split(' - ', 1)]
+                if len(artist) < 2 or len(title) < 2:
+                    continue
+
+                if is_forbidden(artist, title):
+                    return None
+
+                print(cor(Cores.GREEN, f"     🎵 ICY: {artist} - {title}"))
+                return {
+                    "tocando_agora": f"{artist} - {title}",
+                    "ultimas_tocadas": [],
+                    "source": "icy-stream"
+                }
+        finally:
+            resp.close()
+
+        return None
     except Exception as e:
         print(cor(Cores.YELLOW, f"     ⚠️  ICY erro: {str(e)[:50]}"))
         return None
+
+
+def get_db_fallback(station_name: str) -> Optional[Dict]:
+    """Busca a música mais recente já conhecida no backend para evitar ciclos vazios."""
+    try:
+        scraped_rows = supabase_select('scraped_songs', {
+            'select': 'artist,title,source,scraped_at',
+            'station_name': f'eq.{station_name}',
+            'order': 'scraped_at.desc',
+            'limit': 5,
+        })
+
+        fresh_rows = []
+        now_ts = datetime.now().timestamp()
+        for row in scraped_rows:
+            scraped_at = row.get('scraped_at')
+            if not scraped_at:
+                continue
+            try:
+                ts = datetime.fromisoformat(scraped_at.replace('Z', '+00:00')).timestamp()
+                if now_ts - ts <= 60 * 20:
+                    fresh_rows.append(row)
+            except Exception:
+                continue
+
+        if fresh_rows:
+            songs = []
+            for row in fresh_rows:
+                artist = (row.get('artist') or '').strip()
+                title = (row.get('title') or '').strip()
+                if not artist or not title:
+                    continue
+                song = f"{artist} - {title}"
+                if song not in songs:
+                    songs.append(song)
+
+            if songs:
+                print(cor(Cores.GREEN, f"     ☁️  Fallback DB(sraped): {songs[0]}"))
+                return {
+                    "tocando_agora": songs[0],
+                    "ultimas_tocadas": songs[1:6],
+                    "source": f"db-fallback({fresh_rows[0].get('source') or 'scraped'})"
+                }
+
+        historico_rows = supabase_select('radio_historico', {
+            'select': 'artist,title,source,captured_at',
+            'station_name': f'eq.{station_name}',
+            'order': 'captured_at.desc',
+            'limit': 5,
+        })
+
+        songs = []
+        for row in historico_rows:
+            artist = (row.get('artist') or '').strip()
+            title = (row.get('title') or '').strip()
+            if not artist or not title:
+                continue
+            song = f"{artist} - {title}"
+            if song not in songs:
+                songs.append(song)
+
+        if songs:
+            print(cor(Cores.GREEN, f"     ☁️  Fallback DB(histórico): {songs[0]}"))
+            return {
+                "tocando_agora": songs[0],
+                "ultimas_tocadas": songs[1:6],
+                "source": f"db-historico({historico_rows[0].get('source') or 'historico'})"
+            }
+    except Exception as e:
+        print(cor(Cores.YELLOW, f"     ⚠️  DB fallback erro: {str(e)[:50]}"))
+
+    return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
