@@ -307,7 +307,27 @@ interface ElectronAPI {
   listFolderFiles: (params: FolderListParams) => Promise<FolderListResult>;
   renameMusicFile: (params: RenameMusicFileParams) => Promise<RenameMusicFileResult>;
   scanFixLibrary: (params: { musicFolders: string[] }) => Promise<{ scanned: number; renamed: number; skipped: number; errors: number; details: Array<{ old: string; new: string; status: string; error?: string }> }>;
-  onLibFixProgress: (callback: (progress: { scanned: number; renamed: number; current: string }) => void) => void;
+  scanQuarantineLibrary: (params: { musicFolders: string[] }) => Promise<{
+    success: boolean;
+    scanned: number;
+    quarantined: number;
+    skipped: number;
+    errors: number;
+    quarantineFolderName: string;
+    details: Array<{
+      from: string;
+      to: string;
+      filenameArtist: string;
+      filenameTitle: string;
+      id3Artist: string;
+      id3Title: string;
+      artistSimilarity: number;
+      titleSimilarity: number;
+      status: string;
+      error?: string;
+    }>;
+  }>;
+  onLibFixProgress: (callback: (progress: { scanned: number; renamed?: number; quarantined?: number; current: string }) => void) => void;
   scanBpmTags: (params: BpmScanParams) => Promise<BpmScanResult>;
   readId3Genre: (params: { filePath: string; musicFolders?: string[] }) => Promise<{ success: boolean; genre?: string | null; artist?: string | null; title?: string | null; year?: string | null; error?: string }>;
   saveBpmCache: (params: BpmCacheSaveParams) => Promise<{ success: boolean; error?: string }>;

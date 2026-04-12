@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Tags, Loader2, CheckCircle2, Music, FileText, Wrench, FolderOpen, Database } from 'lucide-react';
+import { Tags, Loader2, CheckCircle2, Music, FileText, Wrench, Database, Shield } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { useRadioStore } from '@/store/radioStore';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useToast } from '@/hooks/use-toast';
@@ -12,7 +11,8 @@ import { normalizeId3Genre, genreToEnergy } from '@/lib/id3GenreUtils';
 
 interface FixProgress {
   scanned: number;
-  renamed: number;
+  renamed?: number;
+  quarantined?: number;
   current: string;
 }
 
@@ -26,9 +26,12 @@ export function Id3ActivityCard() {
   const [fixProgress, setFixProgress] = useState<FixProgress | null>(null);
   const [fixResult, setFixResult] = useState<{ scanned: number; renamed: number; errors: number; purged: number } | null>(null);
 
-  // Catalog scan state
   const [isCataloging, setIsCataloging] = useState(false);
   const [catalogResult, setCatalogResult] = useState<{ scanned: number; enriched: number; genres: number; years: number; inserted: number } | null>(null);
+
+  const [isQuarantining, setIsQuarantining] = useState(false);
+  const [quarantineProgress, setQuarantineProgress] = useState<FixProgress | null>(null);
+  const [quarantineResult, setQuarantineResult] = useState<{ scanned: number; quarantined: number; errors: number } | null>(null);
 
   const id3ProcessedToday = dailyStats.downloaded + dailyStats.skipped;
 
@@ -37,6 +40,7 @@ export function Id3ActivityCard() {
       toast({ title: '⚠️ Disponível apenas no desktop', variant: 'destructive' });
       return;
     }
+
     setIsFixing(true);
     setFixProgress(null);
     setFixResult(null);
@@ -61,10 +65,6 @@ export function Id3ActivityCard() {
     }
   }, [config.musicFolders, toast]);
 
-  /**
-   * Catalog scan: reads ID3 genre/year from ALL music folders and updates
-   * the scraped_songs table in the database. Does NOT modify any files.
-   */
   const handleCatalogScan = useCallback(async () => {
     if (!window.electronAPI?.scanLibraryMetadata) {
       toast({ title: '⚠️ Disponível apenas no desktop', variant: 'destructive' });
@@ -95,7 +95,6 @@ export function Id3ActivityCard() {
         return;
       }
 
-      // Build lookup map from library files
       const libraryMap = new Map<string, { genre: string | null; year: string | null }>();
       for (const song of result.songs as Array<{ artist: string; title: string; genre: string | null; year?: string | null; filename: string }>) {
         const key = `${(song.artist || '').toLowerCase().trim()}|${(song.title || '').toLowerCase().trim()}`;
@@ -106,8 +105,7 @@ export function Id3ActivityCard() {
         });
       }
 
-      // === Phase 1: Update existing songs missing genre or year ===
-      const { data: dbSongs, error } = await supabase
+      const { data: dbSongs } = await supabase
         .from('scraped_songs')
         .select('id, artist, title, ai_genre, year')
         .or('ai_genre.is.null,year.is.null')
@@ -151,8 +149,6 @@ export function Id3ActivityCard() {
         }
       }
 
-      // === Phase 2: Insert local library songs NOT yet in scraped_songs ===
-      // Build set of existing artist|title in DB
       const { data: allDbSongs } = await supabase
         .from('scraped_songs')
         .select('artist, title')
@@ -165,15 +161,14 @@ export function Id3ActivityCard() {
         }
       }
 
-      // Find library songs not in DB that have useful metadata
       const toInsert: Array<{ artist: string; title: string; ai_genre: string; ai_energy: string; year: string | null; station_name: string; source: string }> = [];
       for (const [key, libData] of libraryMap) {
         if (existingKeys.has(key)) continue;
         const [artist, title] = key.split('|');
         if (!artist || !title || artist === 'desconhecido') continue;
-        
+
         const genre = libData.genre || null;
-        if (!genre && !libData.year) continue; // skip if no useful data
+        if (!genre && !libData.year) continue;
 
         toInsert.push({
           artist,
@@ -186,7 +181,6 @@ export function Id3ActivityCard() {
         });
       }
 
-      // Batch insert
       for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
         const batch = toInsert.slice(i, i + BATCH_SIZE);
         const { error: insertError } = await supabase.from('scraped_songs').insert(batch);
@@ -210,30 +204,72 @@ export function Id3ActivityCard() {
     }
   }, [config.musicFolders, deezerConfig?.downloadFolder, toast]);
 
-  useEffect(() => {
-    if (fixResult) {
-      const timer = setTimeout(() => setFixResult(null), 30000);
-      return () => clearTimeout(timer);
+  const handleQuarantineScan = useCallback(async () => {
+    if (!window.electronAPI?.scanQuarantineLibrary) {
+      toast({ title: '⚠️ Disponível apenas no desktop', variant: 'destructive' });
+      return;
     }
+
+    const allFolders = [
+      ...(config.musicFolders || []),
+      deezerConfig?.downloadFolder,
+    ].filter(Boolean) as string[];
+
+    if (allFolders.length === 0) {
+      toast({ title: '⚠️ Nenhuma pasta configurada', description: 'Configure o Banco Musical antes de rodar a quarentena.', variant: 'destructive' });
+      return;
+    }
+
+    setIsQuarantining(true);
+    setQuarantineProgress(null);
+    setQuarantineResult(null);
+
+    window.electronAPI.onLibFixProgress?.((progress) => {
+      setQuarantineProgress(progress);
+    });
+
+    try {
+      const result = await window.electronAPI.scanQuarantineLibrary({ musicFolders: allFolders }) as any;
+      setQuarantineResult({ scanned: result.scanned, quarantined: result.quarantined, errors: result.errors });
+      setQuarantineProgress(null);
+      toast({
+        title: '🛡️ Quarentena concluída',
+        description: `${result.quarantined} arquivo(s) suspeito(s) movidos para ${result.quarantineFolderName} · ${result.errors} erro(s)`,
+      });
+    } catch (err) {
+      toast({ title: '❌ Erro na quarentena', description: String(err), variant: 'destructive' });
+    } finally {
+      setIsQuarantining(false);
+    }
+  }, [config.musicFolders, deezerConfig?.downloadFolder, toast]);
+
+  useEffect(() => {
+    if (!fixResult) return;
+    const timer = setTimeout(() => setFixResult(null), 30000);
+    return () => clearTimeout(timer);
   }, [fixResult]);
 
   useEffect(() => {
-    if (catalogResult) {
-      const timer = setTimeout(() => setCatalogResult(null), 30000);
-      return () => clearTimeout(timer);
-    }
+    if (!catalogResult) return;
+    const timer = setTimeout(() => setCatalogResult(null), 30000);
+    return () => clearTimeout(timer);
   }, [catalogResult]);
 
-  const isActive = isFixing || isCataloging || !!activeDownload;
+  useEffect(() => {
+    if (!quarantineResult) return;
+    const timer = setTimeout(() => setQuarantineResult(null), 30000);
+    return () => clearTimeout(timer);
+  }, [quarantineResult]);
+
+  const isActive = isFixing || isCataloging || isQuarantining || !!activeDownload;
 
   return (
     <Card className="glass-card border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 to-transparent">
       <CardContent className="p-4">
         <div className="flex items-center justify-between gap-3">
-          {/* Left: Icon + Info */}
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'bg-indigo-500/20' : 'bg-indigo-500/10'}`}>
-              {isFixing || isCataloging ? (
+              {isFixing || isCataloging || isQuarantining ? (
                 <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
               ) : (
                 <Tags className="w-5 h-5 text-indigo-400" />
@@ -245,7 +281,7 @@ export function Id3ActivityCard() {
                 {isActive ? (
                   <Badge className="bg-indigo-500/20 text-indigo-400 border-indigo-500/30 text-[10px]">
                     <Loader2 className="w-2.5 h-2.5 mr-1 animate-spin" />
-                    {isCataloging ? 'Catalogando' : 'Processando'}
+                    {isCataloging ? 'Catalogando' : isQuarantining ? 'Quarentena' : 'Processando'}
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-500">
@@ -260,7 +296,6 @@ export function Id3ActivityCard() {
             </div>
           </div>
 
-          {/* Right: Stats + Actions */}
           <div className="flex items-center gap-3 shrink-0">
             <div className="flex items-center gap-3 text-center">
               <div>
@@ -279,14 +314,20 @@ export function Id3ActivityCard() {
                   <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Catalogados</p>
                 </div>
               )}
+              {quarantineResult && (
+                <div>
+                  <p className="text-lg font-bold font-mono text-rose-400 tabular-nums">{quarantineResult.quarantined}</p>
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Quarentena</p>
+                </div>
+              )}
             </div>
 
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-wrap justify-end">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleCatalogScan}
-                disabled={isCataloging || isFixing}
+                disabled={isCataloging || isFixing || isQuarantining}
                 className="gap-1.5 text-xs border-amber-500/30 hover:bg-amber-500/10 text-amber-400"
                 title="Catalogar gênero e ano do acervo local no banco de dados (não altera arquivos)"
               >
@@ -300,8 +341,23 @@ export function Id3ActivityCard() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={handleQuarantineScan}
+                disabled={isFixing || isCataloging || isQuarantining || !window.electronAPI?.scanQuarantineLibrary}
+                className="gap-1.5 text-xs border-rose-500/30 hover:bg-rose-500/10 text-rose-400"
+                title="Mover arquivos suspeitos para _QUARENTENA_SUSPEITAS sem apagar a biblioteca"
+              >
+                {isQuarantining ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Shield className="w-3.5 h-3.5" />
+                )}
+                Quarentena
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleScanFix}
-                disabled={isFixing || isCataloging || !window.electronAPI?.scanFixLibrary}
+                disabled={isFixing || isCataloging || isQuarantining || !window.electronAPI?.scanFixLibrary}
                 className="gap-1.5 text-xs border-indigo-500/30 hover:bg-indigo-500/10"
               >
                 {isFixing ? (
@@ -315,13 +371,12 @@ export function Id3ActivityCard() {
           </div>
         </div>
 
-        {/* Fix Progress */}
         {isFixing && fixProgress && (
           <div className="mt-3 space-y-2 p-3 rounded-lg bg-indigo-500/5 border border-indigo-500/10">
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">Escaneando biblioteca...</span>
               <span className="font-mono text-indigo-400 font-bold">
-                {fixProgress.scanned} escaneados · {fixProgress.renamed} renomeados{(fixProgress as any).purged > 0 ? ` · ${(fixProgress as any).purged} apagados` : ''}
+                {fixProgress.scanned} escaneados · {fixProgress.renamed || 0} renomeados
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs">
@@ -331,7 +386,6 @@ export function Id3ActivityCard() {
           </div>
         )}
 
-        {/* Catalog Progress */}
         {isCataloging && (
           <div className="mt-3 flex items-center gap-2 text-xs p-2 rounded-lg bg-amber-500/5 border border-amber-500/10">
             <Database className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
@@ -339,7 +393,21 @@ export function Id3ActivityCard() {
           </div>
         )}
 
-        {/* Catalog Result */}
+        {isQuarantining && quarantineProgress && (
+          <div className="mt-3 space-y-2 p-3 rounded-lg bg-rose-500/5 border border-rose-500/10">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Verificando divergência entre nome do arquivo e ID3...</span>
+              <span className="font-mono text-rose-400 font-bold">
+                {quarantineProgress.scanned} escaneados · {quarantineProgress.quarantined || 0} movidos
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <Shield className="w-3 h-3 text-rose-400 shrink-0" />
+              <span className="text-muted-foreground truncate">{quarantineProgress.current}</span>
+            </div>
+          </div>
+        )}
+
         {catalogResult && !isCataloging && (
           <div className="mt-3 flex items-center gap-3 text-xs p-2 rounded-lg bg-amber-500/5 border border-amber-500/10">
             <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -352,8 +420,19 @@ export function Id3ActivityCard() {
           </div>
         )}
 
-        {/* Active Download ID3 */}
-        {activeDownload && !isFixing && !isCataloging && (
+        {quarantineResult && !isQuarantining && (
+          <div className="mt-3 flex items-center gap-3 text-xs p-2 rounded-lg bg-rose-500/5 border border-rose-500/10">
+            <CheckCircle2 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            <span className="text-muted-foreground">
+              <span className="text-foreground font-medium">{quarantineResult.scanned}</span> arquivos verificados ·{' '}
+              <span className="text-rose-400 font-medium">{quarantineResult.quarantined}</span> movidos para{' '}
+              <span className="text-foreground font-medium">_QUARENTENA_SUSPEITAS</span> ·{' '}
+              <span className="text-amber-400 font-medium">{quarantineResult.errors}</span> erros
+            </span>
+          </div>
+        )}
+
+        {activeDownload && !isFixing && !isCataloging && !isQuarantining && (
           <div className="mt-3 flex items-center gap-2 text-xs p-2 rounded-lg bg-indigo-500/5 border border-indigo-500/10">
             <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0 animate-pulse" />
             <span className="text-muted-foreground">Lendo ID3:</span>

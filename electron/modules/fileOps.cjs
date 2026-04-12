@@ -2,13 +2,14 @@
 const { ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { sanitizeFolderName, parseID3TagsFromFile, sanitizeForDisk } = require('./utils.cjs');
+const { sanitizeFolderName, parseID3TagsFromFile, sanitizeForDisk, calculateSimilarity, cleanNormalize } = require('./utils.cjs');
 
 // Pastas onde PkInfo deve ser removido automaticamente
 const PKINFO_CLEANUP_FOLDERS = [
   'C:\\Playlist\\Locucoes',
   'C:\\Playlist\\A Voz do Brasil',
 ];
+const QUARANTINE_FOLDER_NAME = '_QUARENTENA_SUSPEITAS';
 
 /**
  * Delete PkInfo folder — ONLY in the two designated folders.
@@ -26,6 +27,48 @@ function deletePkInfoFolder(folder) {
   } catch (err) {
     console.log(`[FILE-OPS] ⚠️ Erro ao remover PkInfo: ${err.message}`);
   }
+}
+
+function isAudioFile(name) {
+  return /\.(mp3|flac|wav|ogg|m4a|aac|wma)$/i.test(name);
+}
+
+function parseArtistTitleFromFilename(filename) {
+  const ext = path.extname(filename);
+  const baseName = path.basename(filename, ext);
+  const dashIdx = baseName.indexOf(' - ');
+
+  if (dashIdx <= 0) {
+    return { artist: '', title: baseName };
+  }
+
+  return {
+    artist: baseName.substring(0, dashIdx).trim(),
+    title: baseName.substring(dashIdx + 3).trim(),
+  };
+}
+
+function ensureDir(dirPath) {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+}
+
+function buildUniqueTargetPath(targetPath) {
+  if (!fs.existsSync(targetPath)) return targetPath;
+
+  const dir = path.dirname(targetPath);
+  const ext = path.extname(targetPath);
+  const base = path.basename(targetPath, ext);
+  let counter = 2;
+
+  while (counter < 10000) {
+    const candidate = path.join(dir, `${base} (${counter})${ext}`);
+    if (!fs.existsSync(candidate)) return candidate;
+    counter++;
+  }
+
+  return path.join(dir, `${base} (${Date.now()})${ext}`);
 }
 
 let _getMainWindow = null;
@@ -66,12 +109,12 @@ function register({ getMainWindow, safeHandle }) {
     console.log('[PURGE] Starting purge of blocked files...');
     const deleted = [];
     const errors = [];
-    
+
     const blockedList = (blockedSongs || []).map(s => s.toLowerCase().trim());
     const blockedExact = new Set(blockedList.filter(s => !s.endsWith(' - *')));
     const blockedWildcardArtists = blockedList.filter(s => s.endsWith(' - *')).map(s => s.replace(/ - \*$/, ''));
     const forbiddenLower = (forbiddenWords || []).map(w => w.toLowerCase().trim()).filter(Boolean);
-    
+
     const isBlockedFile = (filename) => {
       const baseName = path.basename(filename, path.extname(filename)).toLowerCase();
       const dashIdx = baseName.indexOf(' - ');
@@ -87,7 +130,7 @@ function register({ getMainWindow, safeHandle }) {
       if (forbiddenLower.some(word => artist.includes(word) || title.includes(word) || baseName.includes(word))) return true;
       return false;
     };
-    
+
     const scanFolder = (folder) => {
       try {
         if (!fs.existsSync(folder)) return;
@@ -96,7 +139,7 @@ function register({ getMainWindow, safeHandle }) {
           const fullPath = path.join(folder, item.name);
           if (item.isDirectory()) {
             scanFolder(fullPath);
-          } else if (/\.(mp3|flac|wav|ogg|m4a)$/i.test(item.name)) {
+          } else if (isAudioFile(item.name)) {
             if (isBlockedFile(item.name)) {
               try {
                 fs.unlinkSync(fullPath);
@@ -111,11 +154,11 @@ function register({ getMainWindow, safeHandle }) {
         errors.push({ file: folder, error: err.message });
       }
     };
-    
+
     for (const folder of (musicFolders || [])) {
       scanFolder(folder);
     }
-    
+
     console.log(`[PURGE] Complete: ${deleted.length} files deleted, ${errors.length} errors`);
     return { success: true, deleted, errors, deletedCount: deleted.length };
   });
@@ -159,7 +202,7 @@ function register({ getMainWindow, safeHandle }) {
     console.log('[LIB-FIX] Starting library scan (audit only, NO rename to preserve user changes)...');
     const results = { scanned: 0, renamed: 0, skipped: 0, errors: 0, purged: 0, details: [] };
     const mainWindow = _getMainWindow();
-    
+
     const scanFolder = (folder) => {
       try {
         if (!fs.existsSync(folder)) return;
@@ -181,9 +224,146 @@ function register({ getMainWindow, safeHandle }) {
         console.error(`[LIB-FIX] Error scanning ${folder}:`, err.message);
       }
     };
-    
+
     for (const folder of (musicFolders || [])) { scanFolder(folder); }
     console.log(`[LIB-FIX] Done: ${results.scanned} scanned (audit only, 0 renamed to preserve user changes)`);
+    return results;
+  });
+
+  // IPC: Scan library and move suspicious files to quarantine based on filename vs ID3 mismatch.
+  handle('scan-quarantine-library', async (event, { musicFolders }) => {
+    console.log('[LIB-QUAR] Starting suspicious library scan...');
+    const results = {
+      success: true,
+      scanned: 0,
+      quarantined: 0,
+      skipped: 0,
+      errors: 0,
+      quarantineFolderName: QUARANTINE_FOLDER_NAME,
+      details: [],
+    };
+    const mainWindow = _getMainWindow();
+
+    const sendProgress = (current) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('lib-fix-progress', {
+          scanned: results.scanned,
+          quarantined: results.quarantined,
+          current,
+        });
+      }
+    };
+
+    const scanFolder = (folder, rootFolder) => {
+      try {
+        if (!fs.existsSync(folder)) return;
+        const items = fs.readdirSync(folder, { withFileTypes: true });
+        for (const item of items) {
+          const fullPath = path.join(folder, item.name);
+
+          if (item.isDirectory()) {
+            if (item.name === '_temp' || item.name === QUARANTINE_FOLDER_NAME) continue;
+            scanFolder(fullPath, rootFolder);
+            continue;
+          }
+
+          if (!isAudioFile(item.name)) continue;
+
+          results.scanned++;
+          sendProgress(item.name);
+
+          try {
+            const parsed = parseArtistTitleFromFilename(item.name);
+            if (!parsed.artist || !parsed.title) {
+              results.skipped++;
+              continue;
+            }
+
+            const tags = parseID3TagsFromFile(fullPath);
+            const id3Artist = (tags.artist || '').trim();
+            const id3Title = (tags.title || '').trim();
+            if (!id3Artist || !id3Title) {
+              results.skipped++;
+              continue;
+            }
+
+            const artistSimilarity = Math.max(
+              calculateSimilarity(parsed.artist, id3Artist),
+              calculateSimilarity(cleanNormalize(parsed.artist), cleanNormalize(id3Artist))
+            );
+            const titleSimilarity = Math.max(
+              calculateSimilarity(parsed.title, id3Title),
+              calculateSimilarity(cleanNormalize(parsed.title), cleanNormalize(id3Title))
+            );
+            const combinedSimilarity = (artistSimilarity + titleSimilarity) / 2;
+            const isSuspicious = artistSimilarity < 0.55 || titleSimilarity < 0.5 || combinedSimilarity < 0.62;
+
+            if (!isSuspicious) {
+              results.skipped++;
+              continue;
+            }
+
+            const quarantineRoot = path.join(rootFolder, QUARANTINE_FOLDER_NAME);
+            const relativePath = path.relative(rootFolder, fullPath);
+            const targetPath = buildUniqueTargetPath(path.join(quarantineRoot, relativePath));
+            ensureDir(path.dirname(targetPath));
+            fs.renameSync(fullPath, targetPath);
+
+            results.quarantined++;
+            results.details.push({
+              from: fullPath,
+              to: targetPath,
+              filenameArtist: parsed.artist,
+              filenameTitle: parsed.title,
+              id3Artist,
+              id3Title,
+              artistSimilarity,
+              titleSimilarity,
+              status: 'quarantined',
+            });
+
+            console.warn(
+              `[LIB-QUAR] 🚨 ${item.name} → ID3="${id3Artist} - ${id3Title}" ` +
+              `(artist=${Math.round(artistSimilarity * 100)}%, title=${Math.round(titleSimilarity * 100)}%)`
+            );
+          } catch (fileErr) {
+            results.errors++;
+            results.details.push({
+              from: fullPath,
+              to: '',
+              filenameArtist: '',
+              filenameTitle: item.name,
+              id3Artist: '',
+              id3Title: '',
+              artistSimilarity: 0,
+              titleSimilarity: 0,
+              status: 'error',
+              error: fileErr.message,
+            });
+          }
+        }
+      } catch (err) {
+        results.errors++;
+        results.details.push({
+          from: folder,
+          to: '',
+          filenameArtist: '',
+          filenameTitle: '',
+          id3Artist: '',
+          id3Title: '',
+          artistSimilarity: 0,
+          titleSimilarity: 0,
+          status: 'error',
+          error: err.message,
+        });
+      }
+    };
+
+    for (const folder of (musicFolders || [])) {
+      scanFolder(folder, folder);
+    }
+
+    console.log(`[LIB-QUAR] Done: ${results.quarantined} quarantined from ${results.scanned} scanned`);
     return results;
   });
 
