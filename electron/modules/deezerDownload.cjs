@@ -330,6 +330,51 @@ function register({ getMainWindow, showNotification, safeHandle }) {
                 console.warn(`[DEEMIX] ⚠️ Could not read ID3 tags: ${tagErr.message}`);
               }
 
+              // === POST-DOWNLOAD ID3 VALIDATION ===
+              // Verify that the actual file content (ID3 tags) matches what we searched for.
+              // This catches cases where Deezer returns the wrong track despite passing the
+              // pre-download similarity check (e.g., search "Joao Gomes - Dengo" but get "Sorriso Maroto").
+              if (id3Artist && id3Title) {
+                const id3ArtistSim = calculateSimilarity(artist, id3Artist);
+                const id3TitleSim = calculateSimilarity(title, id3Title);
+                const deezerArtistSim = calculateSimilarity(artist, track.artist.name);
+                const deezerTitleSim = calculateSimilarity(title, track.title);
+                
+                console.log(`[DEEMIX] 🔍 Post-DL validation: ID3 artist=${(id3ArtistSim * 100).toFixed(0)}%, ID3 title=${(id3TitleSim * 100).toFixed(0)}%`);
+                console.log(`[DEEMIX] 🔍 Post-DL validation: API artist=${(deezerArtistSim * 100).toFixed(0)}%, API title=${(deezerTitleSim * 100).toFixed(0)}%`);
+                
+                // If ID3 tags are very different from BOTH search params AND Deezer API result,
+                // the file is likely corrupted/wrong
+                const id3MatchesSearch = id3ArtistSim >= 0.45 || id3TitleSim >= 0.50;
+                const id3MatchesApi = calculateSimilarity(track.artist.name, id3Artist) >= 0.50;
+                
+                if (!id3MatchesSearch && !id3MatchesApi) {
+                  console.warn(`[DEEMIX] ❌ ID3 MISMATCH: Buscou "${artist} - ${title}", API="${track.artist.name} - ${track.title}", mas ID3="${id3Artist} - ${id3Title}"`);
+                  try { fs.unlinkSync(tempFilePath); } catch (e) {}
+                  const mainWindow = _getMainWindow();
+                  if (mainWindow) {
+                    mainWindow.webContents.send('download-warning', {
+                      artist, title,
+                      message: `❌ Arquivo rejeitado: ID3 "${id3Artist} - ${id3Title}" não corresponde a "${artist} - ${title}"`
+                    });
+                  }
+                  resolve({ success: false, error: `Conteúdo errado: esperava "${artist} - ${title}" mas arquivo contém "${id3Artist} - ${id3Title}"` });
+                  return;
+                }
+                
+                // Warn if ID3 doesn't match search but matches API (API returned different track)
+                if (!id3MatchesSearch && id3MatchesApi) {
+                  console.warn(`[DEEMIX] ⚠️ ID3 difere da busca: buscou "${artist} - ${title}" mas baixou "${id3Artist} - ${id3Title}" (Deezer API match OK)`);
+                  const mainWindow = _getMainWindow();
+                  if (mainWindow) {
+                    mainWindow.webContents.send('download-warning', {
+                      artist, title,
+                      message: `⚠️ Conteúdo divergente: "${id3Artist} - ${id3Title}" (buscava "${artist} - ${title}")`
+                    });
+                  }
+                }
+              }
+
               // Sanitize: use shared utility from utils.cjs (handles accents, &, filesystem chars)
               // Detect corrupted ID3 chars (encoding artifacts like Ø, ÿ in unexpected positions)
               const hasCorruptedChars = (str) => {
@@ -344,21 +389,17 @@ function register({ getMainWindow, showNotification, safeHandle }) {
               const safeId3Title = id3Title && !hasCorruptedChars(id3Title) ? id3Title : null;
               
               // Use shared disk sanitization from utils.cjs
-              // Use search params when Deezer returned a very different track
-              const useSearchNames = track._useSearchNames === true;
-              const finalArtist = useSearchNames
-                ? sanitizeForDisk(track._searchArtist || artist, 'artist')
-                : sanitizeForDisk(track.artist.name || safeId3Artist || artist, 'artist');
-              const finalTitle = useSearchNames
-                ? sanitizeForDisk(track._searchTitle || title, 'title')
-                : sanitizeForDisk(track.title || safeId3Title || title, 'title');
+              // ALWAYS use original search params for filename to ensure consistency
+              // The Deezer API may return different names that don't match radio capture
+              const finalArtist = sanitizeForDisk(artist, 'artist');
+              const finalTitle = sanitizeForDisk(title, 'title');
               const finalFilename = `${finalArtist} - ${finalTitle}.mp3`;
               const finalFilePath = path.join(finalOutputFolder, finalFilename);
               
               if (safeId3Artist !== id3Artist || safeId3Title !== id3Title) {
-                console.log(`[DEEMIX] ⚠️ ID3 tags had corrupted chars, using Deezer API names instead`);
+                console.log(`[DEEMIX] ⚠️ ID3 tags had corrupted chars, using search params for filename`);
                 console.log(`[DEEMIX]   ID3: "${id3Artist}" / "${id3Title}"`);
-                console.log(`[DEEMIX]   API: "${track.artist.name}" / "${track.title}"`);
+                console.log(`[DEEMIX]   Search: "${artist}" / "${title}"`);
               }
               
               console.log(`[DEEMIX] 📛 Rename: "${validFile}" → "${finalFilename}"`);
