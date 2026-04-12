@@ -461,45 +461,102 @@ function register({ getMainWindow, safeHandle }) {
     }
   });
 
-  // IPC: Reorganize existing files by ID3 genre (only Rock/Metal)
-  handle('reorganize-by-genre', async (event, { sourceFolder, genreRoutes }) => {
+  // ── Genre normalization map (mirrors id3GenreUtils.ts) ──
+  const ID3_GENRE_TEXT_MAP = {
+    pop:'POP','synth-pop':'POP','indie pop':'POP','dance pop':'POP','pop rock':'POP','electropop':'POP','teen pop':'POP','power pop':'POP','j-pop':'POP','k-pop':'POP','art pop':'POP','dream pop':'POP','chamber pop':'POP','sunshine pop':'POP','bubblegum pop':'POP',
+    rock:'ROCK','rock and roll':'ROCK','classic rock':'ROCK','alternative rock':'ROCK','alternative':'ROCK','indie rock':'ROCK','punk rock':'ROCK',punk:'ROCK','post-punk':'ROCK',grunge:'ROCK','hard rock':'ROCK','soft rock':'ROCK','progressive rock':'ROCK','psychedelic rock':'ROCK','garage rock':'ROCK','southern rock':'ROCK','stoner rock':'ROCK','folk rock':'ROCK','blues rock':'ROCK','new wave':'ROCK','brit pop':'ROCK',britpop:'ROCK','post-rock':'ROCK',emo:'ROCK','pop punk':'ROCK',ska:'ROCK',
+    metal:'METAL','heavy metal':'METAL','death metal':'METAL','black metal':'METAL','thrash metal':'METAL','power metal':'METAL','doom metal':'METAL','symphonic metal':'METAL','nu metal':'METAL','nu-metal':'METAL',metalcore:'METAL','progressive metal':'METAL','gothic metal':'METAL','folk metal':'METAL','speed metal':'METAL','groove metal':'METAL','industrial metal':'METAL','melodic death metal':'METAL',deathcore:'METAL',djent:'METAL',hardcore:'METAL',
+    sertanejo:'SERTANEJO','sertanejo universitário':'SERTANEJO','sertanejo universitario':'SERTANEJO','sertanejo raiz':'SERTANEJO','sertanejo pop':'SERTANEJO','country brasileiro':'SERTANEJO','música sertaneja':'SERTANEJO','musica sertaneja':'SERTANEJO',
+    pagode:'PAGODE',samba:'PAGODE','samba rock':'PAGODE','samba de roda':'PAGODE','partido alto':'PAGODE',
+    mpb:'MPB','música popular brasileira':'MPB','musica popular brasileira':'MPB','bossa nova':'MPB','tropicalia':'MPB','tropicália':'MPB',blues:'MPB',brazilian:'MPB',
+    'hip-hop':'RAP/HIP-HOP','hip hop':'RAP/HIP-HOP',rap:'RAP/HIP-HOP',trap:'RAP/HIP-HOP','boom bap':'RAP/HIP-HOP','rap brasileiro':'RAP/HIP-HOP','gangsta rap':'RAP/HIP-HOP','conscious hip hop':'RAP/HIP-HOP',
+    electronic:'ELETRONICA',dance:'ELETRONICA',edm:'ELETRONICA',house:'ELETRONICA','deep house':'ELETRONICA',techno:'ELETRONICA',trance:'ELETRONICA',dubstep:'ELETRONICA','drum and bass':'ELETRONICA','drum & bass':'ELETRONICA',dnb:'ELETRONICA',ambient:'ELETRONICA','lo-fi':'ELETRONICA',lofi:'ELETRONICA',chillout:'ELETRONICA','future bass':'ELETRONICA',synthwave:'ELETRONICA',disco:'ELETRONICA','nu-disco':'ELETRONICA','progressive house':'ELETRONICA','electro house':'ELETRONICA','tropical house':'ELETRONICA',
+    funk:'FUNK','funk carioca':'FUNK','funk brasileiro':'FUNK','funk melody':'FUNK','funk ostentação':'FUNK','funk ostentacao':'FUNK','baile funk':'FUNK','funk pop':'FUNK',
+    gospel:'GOSPEL',christian:'GOSPEL',worship:'GOSPEL','música gospel':'GOSPEL','musica gospel':'GOSPEL',ccm:'GOSPEL','christian rock':'GOSPEL',praise:'GOSPEL',
+    'forró':'FORRO',forro:'FORRO','forró eletrônico':'FORRO','forro eletronico':'FORRO','axé':'FORRO',axe:'FORRO',arrocha:'FORRO',piseiro:'FORRO',pisadinha:'FORRO',
+    reggaeton:'REGGAETON','reggaetón':'REGGAETON','latin pop':'REGGAETON',latin:'LATINA',latina:'LATINA','latin urban':'REGGAETON',bachata:'REGGAETON',salsa:'LATINA',cumbia:'LATINA',merengue:'LATINA',
+    'r&b':'R&B',rnb:'R&B',soul:'R&B','neo soul':'R&B','neo-soul':'R&B','contemporary r&b':'R&B',motown:'R&B',
+    country:'COUNTRY','country pop':'COUNTRY',americana:'COUNTRY',bluegrass:'COUNTRY',
+    jazz:'JAZZ','smooth jazz':'JAZZ','jazz fusion':'JAZZ','acid jazz':'JAZZ','cool jazz':'JAZZ','free jazz':'JAZZ',
+    classical:'CLASSICA','clássica':'CLASSICA',classica:'CLASSICA',erudita:'CLASSICA',opera:'CLASSICA','ópera':'CLASSICA',orchestral:'CLASSICA','chamber music':'CLASSICA',
+    indie:'INDIE','indie folk':'INDIE','indie electronic':'INDIE',
+    reggae:'REGGAE','roots reggae':'REGGAE',dub:'REGGAE',dancehall:'REGGAE',
+    brega:'FORRO',tecnobrega:'FORRO','brega funk':'FUNK',lambada:'FORRO',manguebeat:'MPB',maracatu:'MPB',
+  };
+
+  function normalizeGenreCJS(raw) {
+    if (!raw || raw.trim().length === 0) return 'OUTRO';
+    const lower = raw.toLowerCase().replace(/[()]/g, '').trim();
+    // Numeric ID3v1
+    const num = parseInt(lower);
+    if (!isNaN(num) && lower === String(num)) {
+      const numMap = {0:'MPB',1:'ROCK',2:'POP',3:'ELETRONICA',4:'ELETRONICA',5:'FUNK',6:'RAP/HIP-HOP',7:'R&B',8:'JAZZ',9:'METAL',10:'POP',11:'POP',13:'POP',14:'R&B',15:'RAP/HIP-HOP',16:'REGGAE',17:'ROCK',18:'ELETRONICA',20:'ROCK',32:'CLASSICA',37:'R&B',38:'ROCK',40:'ROCK',52:'ELETRONICA',80:'COUNTRY',86:'LATINA',100:'PAGODE',101:'MPB',129:'METAL',131:'INDIE',137:'METAL',138:'METAL',144:'METAL'};
+      return numMap[num] || 'OUTRO';
+    }
+    // Direct match
+    if (ID3_GENRE_TEXT_MAP[lower]) return ID3_GENRE_TEXT_MAP[lower];
+    // Combined genres: "Samba/Pagode"
+    const sep = /[;\\/|,&]/;
+    if (sep.test(lower)) {
+      const parts = lower.split(sep).map(p => p.trim()).filter(Boolean);
+      for (const part of parts) {
+        if (ID3_GENRE_TEXT_MAP[part]) return ID3_GENRE_TEXT_MAP[part];
+      }
+    }
+    // Partial match
+    for (const [key, value] of Object.entries(ID3_GENRE_TEXT_MAP)) {
+      if (lower.includes(key) && key.length >= 3) return value;
+    }
+    return 'OUTRO';
+  }
+
+  // IPC: Reorganize existing files by ID3 genre (all configured genres + default folder)
+  handle('reorganize-by-genre', async (event, { sourceFolder, genreRoutes, defaultFolder }) => {
     console.log(`[GENRE-REORG] 🔍 Scanning: ${sourceFolder}`);
     const results = { scanned: 0, moved: 0, skipped: 0, errors: 0, details: [] };
     try {
       if (!fs.existsSync(sourceFolder)) {
         return { success: false, error: `Pasta não encontrada: ${sourceFolder}` };
       }
-      const files = fs.readdirSync(sourceFolder).filter(f => /\.(mp3|flac)$/i.test(f));
+      const files = fs.readdirSync(sourceFolder).filter(f => /\.(mp3|flac|wav|ogg|m4a|aac|wma)$/i.test(f));
       results.scanned = files.length;
       console.log(`[GENRE-REORG] Found ${files.length} audio files`);
 
-      // Build genre map from routes: { 'rock': 'Rock', 'metal': 'Metal' }
-      const genreMap = {};
+      // Build normalized genre → folder map
+      const genreToFolder = {};
       for (const route of (genreRoutes || [])) {
         if (route.genre && route.folderName) {
-          genreMap[route.genre.toLowerCase()] = route.folderName;
+          genreToFolder[route.genre.toUpperCase()] = route.folderName;
         }
       }
+      const fallbackFolder = defaultFolder || null;
 
       for (const file of files) {
         try {
           const filePath = path.join(sourceFolder, file);
           const tags = parseID3TagsFromFile(filePath);
-          const rawGenre = (tags.genre || '').toLowerCase().replace(/[()]/g, '').trim();
-          
-          if (!rawGenre) {
-            results.skipped++;
+          const rawGenre = tags.genre || '';
+
+          if (!rawGenre.trim()) {
+            // No genre tag — use default folder if configured
+            if (fallbackFolder) {
+              const targetFolder = path.join(sourceFolder, fallbackFolder);
+              if (!fs.existsSync(targetFolder)) fs.mkdirSync(targetFolder, { recursive: true });
+              const targetPath = path.join(targetFolder, file);
+              if (fs.existsSync(targetPath)) { results.skipped++; continue; }
+              try { fs.renameSync(filePath, targetPath); } catch (e) { fs.copyFileSync(filePath, targetPath); fs.unlinkSync(filePath); }
+              results.moved++;
+              results.details.push({ file, genre: 'sem tag', folder: fallbackFolder });
+              console.log(`[GENRE-REORG] ✅ ${file} → ${fallbackFolder}/ (sem tag)`);
+            } else {
+              results.skipped++;
+            }
             continue;
           }
 
-          // Check if genre matches any route
-          let matchedFolder = null;
-          for (const [genreKey, folder] of Object.entries(genreMap)) {
-            if (rawGenre.includes(genreKey)) {
-              matchedFolder = folder;
-              break;
-            }
-          }
+          // Normalize using full logic
+          const normalized = normalizeGenreCJS(rawGenre);
+          const matchedFolder = genreToFolder[normalized] || fallbackFolder;
 
           if (!matchedFolder) {
             results.skipped++;
@@ -507,34 +564,13 @@ function register({ getMainWindow, safeHandle }) {
           }
 
           const targetFolder = path.join(sourceFolder, matchedFolder);
-          if (!fs.existsSync(targetFolder)) {
-            fs.mkdirSync(targetFolder, { recursive: true });
-          }
-          
-          // PRESERVE user-modified filename — never rename files already in the final library.
-          // Only _temp → final moves apply sanitization. Files in main folders keep their names.
-          const finalFileName = file;
-          
-          const targetPath = path.join(targetFolder, finalFileName);
-          if (fs.existsSync(targetPath)) {
-            // If sanitized version exists, delete source
-            if (finalFileName !== file) {
-              try { fs.unlinkSync(filePath); } catch (e) {}
-              results.skipped++;
-              continue;
-            }
-            results.skipped++;
-            continue;
-          }
-          try {
-            fs.renameSync(filePath, targetPath);
-          } catch (e) {
-            fs.copyFileSync(filePath, targetPath);
-            fs.unlinkSync(filePath);
-          }
+          if (!fs.existsSync(targetFolder)) fs.mkdirSync(targetFolder, { recursive: true });
+          const targetPath = path.join(targetFolder, file);
+          if (fs.existsSync(targetPath)) { results.skipped++; continue; }
+          try { fs.renameSync(filePath, targetPath); } catch (e) { fs.copyFileSync(filePath, targetPath); fs.unlinkSync(filePath); }
           results.moved++;
-          results.details.push({ file: finalFileName, genre: rawGenre, folder: matchedFolder });
-          console.log(`[GENRE-REORG] ✅ ${file} → ${matchedFolder}/${finalFileName} (${rawGenre})`);
+          results.details.push({ file, genre: `${rawGenre} → ${normalized}`, folder: matchedFolder });
+          console.log(`[GENRE-REORG] ✅ ${file} → ${matchedFolder}/ (${rawGenre} → ${normalized})`);
         } catch (fileErr) {
           results.errors++;
           console.warn(`[GENRE-REORG] ⚠️ Erro em ${file}: ${fileErr.message}`);
