@@ -222,93 +222,105 @@ async function resolveStreamUrl(streamUrl: string): Promise<string> {
 }
 
 async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise<{ artist: string; title: string } | null> {
+  // Try both original and resolved URLs
+  const urlsToTry = [streamUrl];
   try {
-    // First resolve the actual stream URL (follow redirects)
-    const resolvedUrl = await resolveStreamUrl(streamUrl);
-    console.log(`[${stationName}] ICY resolved: ${resolvedUrl.substring(0, 80)}`);
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const resolved = await resolveStreamUrl(streamUrl);
+    console.log(`[${stationName}] ICY resolved: ${resolved.substring(0, 80)}`);
+    if (resolved !== streamUrl) urlsToTry.push(resolved);
+  } catch { /* continue */ }
 
-    const response = await fetch(resolvedUrl, {
-      headers: {
-        'Icy-MetaData': '1',
-        'User-Agent': 'WinampMPEG/5.0',
-        'Accept': '*/*',
-        'Connection': 'close',
-      },
-      signal: controller.signal,
-    });
+  for (const url of urlsToTry) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 18000);
 
-    const metaInt = parseInt(response.headers.get('icy-metaint') || '0', 10);
-    if (!metaInt || !response.body) {
+      const response = await fetch(url, {
+        headers: { 'Icy-MetaData': '1', 'User-Agent': 'WinampMPEG/5.0', 'Accept': '*/*', 'Connection': 'close' },
+        signal: controller.signal,
+      });
+
+      const metaInt = parseInt(response.headers.get('icy-metaint') || '0', 10);
+      if (!metaInt || !response.body) {
+        clearTimeout(timeoutId);
+        await response.body?.cancel();
+        console.warn(`[${stationName}] No ICY metadata support (metaint=${metaInt})`);
+        continue;
+      }
+
+      const reader = response.body.getReader();
+      let buffer = new Uint8Array(0);
+      const MAX_BLOCKS = 8;
+
+      const appendBuffer = (existing: Uint8Array, chunk: Uint8Array): Uint8Array => {
+        const result = new Uint8Array(existing.length + chunk.length);
+        result.set(existing, 0);
+        result.set(chunk, existing.length);
+        return result;
+      };
+
+      const targetBytes = (metaInt + 256) * MAX_BLOCKS;
+      while (buffer.length < targetBytes) {
+        const { done, value } = await reader.read();
+        if (done || !value) break;
+        buffer = appendBuffer(buffer, value);
+      }
+
       clearTimeout(timeoutId);
-      await response.body?.cancel();
-      console.warn(`[${stationName}] No ICY metadata support (metaint=${metaInt})`);
-      return null;
+      await reader.cancel();
+
+      let pos = 0;
+      for (let block = 0; block < MAX_BLOCKS; block++) {
+        if (pos + metaInt >= buffer.length) break;
+        pos += metaInt;
+        if (pos >= buffer.length) break;
+        const metaLength = buffer[pos] * 16;
+        pos += 1;
+        if (metaLength === 0) continue;
+        if (pos + metaLength > buffer.length) break;
+
+        const metaBytes = buffer.slice(pos, pos + metaLength);
+        pos += metaLength;
+
+        const metaString = new TextDecoder('utf-8', { fatal: false }).decode(metaBytes);
+        // Handle apostrophes in titles (e.g. "GUNS N' ROSES - DON'T CRY")
+        const titleMatch = metaString.match(/StreamTitle='(.+?)';/) || metaString.match(/StreamTitle='(.+)'/);
+        if (!titleMatch?.[1]) continue;
+
+        const streamTitle = titleMatch[1].trim();
+        if (!streamTitle || streamTitle.length < 3) continue;
+
+        const dashIdx = streamTitle.indexOf(' - ');
+        if (dashIdx === -1) {
+          console.log(`[${stationName}] ICY block ${block} no dash: "${streamTitle}"`);
+          continue;
+        }
+
+        const artist = streamTitle.substring(0, dashIdx).trim();
+        const title = streamTitle.substring(dashIdx + 3).trim();
+        if (artist.length < 2 || title.length < 2) continue;
+
+        const rejectPatterns = [
+          /COMERCIAL|VINHETA|INSTITUCIONAL|PROPAGANDA|SPOT|BREAK/i,
+          /^(RÁDIO|RADIO)\s/i,
+        ];
+        if (rejectPatterns.some(p => p.test(artist) || p.test(title))) continue;
+
+        console.log(`[${stationName}] ICY metadata (block ${block}): ${artist} - ${title}`);
+        return { artist, title };
+      }
+
+      console.log(`[${stationName}] ICY: ${MAX_BLOCKS} blocks read, no valid metadata found`);
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') {
+        console.warn(`[${stationName}] ICY timeout`);
+      } else {
+        console.warn(`[${stationName}] ICY error:`, e instanceof Error ? e.message : 'Unknown');
+      }
     }
-
-    const reader = response.body.getReader();
-    let bytesRead = 0;
-    const chunks: Uint8Array[] = [];
-
-    while (bytesRead < metaInt + 8192) {
-      const { done, value } = await reader.read();
-      if (done || !value) break;
-      chunks.push(value);
-      bytesRead += value.length;
-    }
-
-    clearTimeout(timeoutId);
-    await reader.cancel();
-
-    const combined = new Uint8Array(bytesRead);
-    let offset = 0;
-    for (const chunk of chunks) { combined.set(chunk, offset); offset += chunk.length; }
-
-    if (combined.length <= metaInt) return null;
-
-    const metaLength = combined[metaInt] * 16;
-    if (metaLength === 0) return null;
-
-    const metaStart = metaInt + 1;
-    const metaEnd = Math.min(metaStart + metaLength, combined.length);
-    const metaBytes = combined.slice(metaStart, metaEnd);
-    const metaString = new TextDecoder('utf-8', { fatal: false }).decode(metaBytes);
-
-    const titleMatch = metaString.match(/StreamTitle='([^']+)'/);
-    if (!titleMatch || !titleMatch[1]) return null;
-
-    const streamTitle = titleMatch[1].trim();
-    if (!streamTitle || streamTitle.length < 3) return null;
-
-    const dashIdx = streamTitle.indexOf(' - ');
-    if (dashIdx === -1) {
-      console.log(`[${stationName}] ICY title without dash: "${streamTitle}"`);
-      return null;
-    }
-
-    const artist = streamTitle.substring(0, dashIdx).trim();
-    const title = streamTitle.substring(dashIdx + 3).trim();
-
-    if (artist.length < 2 || title.length < 2) return null;
-
-    const rejectPatterns = [
-      /COMERCIAL|VINHETA|INSTITUCIONAL|PROPAGANDA|SPOT|BREAK/i,
-      /^(RÁDIO|RADIO)\s/i,
-    ];
-    if (rejectPatterns.some(p => p.test(artist) || p.test(title))) return null;
-
-    console.log(`[${stationName}] ICY metadata: ${artist} - ${title}`);
-    return { artist, title };
-  } catch (e) {
-    if (e instanceof Error && e.name === 'AbortError') {
-      console.warn(`[${stationName}] ICY timeout`);
-    } else {
-      console.warn(`[${stationName}] ICY error:`, e instanceof Error ? e.message : 'Unknown');
-    }
-    return null;
   }
+
+  return null;
 }
 
 // ===== OnlineRadioBox Parsing =====
@@ -503,8 +515,47 @@ async function processStation(
     }
   }
 
+  // === Source 4: Database fallback (Python monitor / previous scrapes) ===
   if (!parsed.nowPlaying && parsed.recentSongs.length === 0) {
-    return { station: station.name, success: false, songs: 0, error: 'No song data from any source (ORB/Triton/ICY)' };
+    try {
+      // Check radio_historico first (fed by Python monitor)
+      const { data: historico } = await supabase
+        .from('radio_historico')
+        .select('artist, title, captured_at, source')
+        .eq('station_name', station.name)
+        .gte('captured_at', new Date(Date.now() - 60 * 60 * 1000).toISOString()) // last hour
+        .order('captured_at', { ascending: false })
+        .limit(6);
+
+      if (historico && historico.length > 0) {
+        parsed.nowPlaying = { artist: historico[0].artist, title: historico[0].title, timestamp: historico[0].captured_at };
+        parsed.recentSongs = historico.slice(1).map(s => ({ artist: s.artist, title: s.title, timestamp: s.captured_at }));
+        sourceUsed = `db-historico(${historico[0].source || 'monitor'})`;
+        console.log(`[${station.name}] DB fallback: ${historico[0].artist} - ${historico[0].title}`);
+      } else {
+        // Try scraped_songs (previous edge function scrapes)
+        const { data: scraped } = await supabase
+          .from('scraped_songs')
+          .select('artist, title, scraped_at, source')
+          .eq('station_name', station.name)
+          .gte('scraped_at', new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()) // last 6h
+          .order('scraped_at', { ascending: false })
+          .limit(6);
+
+        if (scraped && scraped.length > 0) {
+          parsed.nowPlaying = { artist: scraped[0].artist, title: scraped[0].title, timestamp: scraped[0].scraped_at };
+          parsed.recentSongs = scraped.slice(1).map(s => ({ artist: s.artist, title: s.title, timestamp: s.scraped_at }));
+          sourceUsed = `db-cache(${scraped[0].source || 'unknown'})`;
+          console.log(`[${station.name}] DB cache fallback: ${scraped[0].artist} - ${scraped[0].title}`);
+        }
+      }
+    } catch (dbErr) {
+      console.warn(`[${station.name}] DB fallback error:`, dbErr instanceof Error ? dbErr.message : 'Unknown');
+    }
+  }
+
+  if (!parsed.nowPlaying && parsed.recentSongs.length === 0) {
+    return { station: station.name, success: false, songs: 0, error: 'No song data from any source (ORB/Triton/ICY/DB)' };
   }
 
   let songsInserted = 0;

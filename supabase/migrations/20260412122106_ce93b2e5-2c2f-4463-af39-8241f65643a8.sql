@@ -1,0 +1,1 @@
+UPDATE public.radio_stations SET stream_url = 'https://playerservices.streamtheworld.com/api/livestream-redirect/BLINK102FM.mp3' WHERE name = 'Blink 102 FM';
