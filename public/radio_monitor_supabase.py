@@ -653,7 +653,7 @@ def get_db_fallback(station_name: str) -> Optional[Dict]:
                     songs.append(song)
 
             if songs:
-                print(cor(Cores.GREEN, f"     ☁️  Fallback DB(sraped): {songs[0]}"))
+                print(cor(Cores.GREEN, f"     ☁️  Fallback DB(scraped): {songs[0]}"))
                 return {
                     "tocando_agora": songs[0],
                     "ultimas_tocadas": songs[1:6],
