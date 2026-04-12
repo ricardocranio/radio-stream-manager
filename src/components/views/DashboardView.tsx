@@ -1118,6 +1118,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         <OfflineAlertsCard />
         <WeeklyReportCard />
         <DuplicateDetectorCard />
+        <QuarantineCard />
       </div>
     </div>
   );
