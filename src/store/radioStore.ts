@@ -946,6 +946,30 @@ export const useRadioStore = create<RadioState>()(
           if (missing.length > 0) {
             state.songAliases = [...existing, ...missing];
           }
+          // Auto-migrate genre routes: ensure all default routes are present
+          const defaultGenreRoutes: Array<{genre: string; folderName: string}> = [
+            { genre: 'POP', folderName: 'Pop' },
+            { genre: 'ROCK', folderName: 'Rock' },
+            { genre: 'METAL', folderName: 'Metal' },
+            { genre: 'SERTANEJO', folderName: 'Sertanejo' },
+            { genre: 'PAGODE', folderName: 'Pagode' },
+            { genre: 'MPB', folderName: 'MPB' },
+            { genre: 'RAP/HIP-HOP', folderName: 'Hip Hop' },
+            { genre: 'ELETRONICA', folderName: 'Dance' },
+          ];
+          if (state.deezerConfig) {
+            const existingRoutes = state.deezerConfig.genreRoutes || [];
+            const existingGenres = new Set(existingRoutes.map(r => r.genre.toUpperCase()));
+            const missingRoutes = defaultGenreRoutes.filter(r => !existingGenres.has(r.genre));
+            if (missingRoutes.length > 0) {
+              state.deezerConfig.genreRoutes = [...existingRoutes, ...missingRoutes];
+              console.log(`[STORE] Auto-migrated ${missingRoutes.length} genre routes: ${missingRoutes.map(r => r.genre).join(', ')}`);
+            }
+            // Ensure genre routing is enabled
+            if (state.deezerConfig.genreRoutingEnabled === undefined) {
+              state.deezerConfig.genreRoutingEnabled = true;
+            }
+          }
           // Fix NOT code: must be vinheta, not monitored
           if (state.mapasConfig?.codeConfigs) {
             state.mapasConfig.codeConfigs = state.mapasConfig.codeConfigs.map(c =>
