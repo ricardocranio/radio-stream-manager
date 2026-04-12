@@ -432,6 +432,46 @@ export function useBackgroundMaintenance() {
     }
   }, []);
 
+  /**
+   * Validate ID3 integrity: compare filenames with ID3 tags.
+   * Files where both artist AND title mismatch are moved to _QUARENTENA_SUSPEITAS.
+   * Runs every 30 minutes silently in the background.
+   */
+  const validateId3Integrity = useCallback(async () => {
+    if (!isElectron || !(window.electronAPI as any)?.validateId3Integrity) return;
+
+    try {
+      const { config, deezerConfig } = useRadioStore.getState();
+      const allFolders = [
+        ...(config.musicFolders || []),
+        deezerConfig.downloadFolder,
+      ].filter(Boolean);
+
+      if (allFolders.length === 0) return;
+
+      const uniqueFolders = [...new Set(allFolders)];
+
+      console.log('[MAINTENANCE] 🛡️ Validação ID3 periódica iniciada...');
+      const result = await (window.electronAPI as any).validateId3Integrity({
+        folders: uniqueFolders,
+        threshold: 0.40,
+      });
+
+      if (result?.success) {
+        if (result.quarantined > 0) {
+          console.log(`[MAINTENANCE] 🛡️ Validação ID3: ${result.quarantined} arquivo(s) em quarentena (${result.scanned} escaneados)`);
+          for (const d of (result.details || []).slice(0, 10)) {
+            console.log(`[MAINTENANCE]   ❌ "${d.fileArtist} - ${d.fileTitle}" → ID3: "${d.id3Artist} - ${d.id3Title}" (art=${d.artistSim}%, tit=${d.titleSim}%)`);
+          }
+        } else {
+          console.log(`[MAINTENANCE] 🛡️ Validação ID3 OK: ${result.scanned} arquivos, todos íntegros`);
+        }
+      }
+    } catch (error) {
+      console.error('[MAINTENANCE] Erro na validação ID3:', error);
+    }
+  }, []);
+
   const start = useCallback(() => {
     // Initial classification after 2 minutes
     setTimeout(() => classifySongs(), 2 * 60 * 1000);
