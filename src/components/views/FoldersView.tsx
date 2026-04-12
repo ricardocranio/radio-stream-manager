@@ -110,7 +110,7 @@ export function FoldersView() {
             {fixProgress && (
               <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 space-y-1">
                 <p className="text-sm font-mono text-primary">
-                  📂 {fixProgress.scanned} escaneados · ✅ {fixProgress.renamed} renomeados
+                  📂 {fixProgress.scanned} escaneados · ✅ {fixProgress.renamed || 0} renomeados
                 </p>
                 <p className="text-xs text-muted-foreground truncate">
                   {fixProgress.current}
