@@ -101,31 +101,32 @@ function register({ getMainWindow, showNotification, safeHandle }) {
         
         // === SIMILARITY VALIDATION ===
         // Verify the Deezer result actually matches what we searched for
-        const { calculateSimilarity, normalizeText } = require('./utils.cjs');
-        const searchArtistNorm = normalizeText(artist);
-        const searchTitleNorm = normalizeText(title);
-        const resultArtistNorm = normalizeText(track.artist.name);
-        const resultTitleNorm = normalizeText(track.title);
+        const { calculateSimilarity } = require('./utils.cjs');
+        const artistSim = track._match?.artistSim ?? calculateSimilarity(artist, track.artist.name);
+        const titleSim = track._match?.titleSim ?? calculateSimilarity(title, track.title);
+        const combinedSim = track._match?.score ?? ((artistSim + titleSim) / 2);
+        const accepted = track._match?.accepted ?? (artistSim >= 0.72 && titleSim >= 0.58);
         
-        const artistSim = calculateSimilarity(artist, track.artist.name);
-        const titleSim = calculateSimilarity(title, track.title);
-        const combinedSim = (artistSim + titleSim) / 2;
+        console.log(`[DEEMIX] 🔍 Similarity: artist=${(artistSim * 100).toFixed(0)}%, title=${(titleSim * 100).toFixed(0)}%, score=${(combinedSim * 100).toFixed(0)}%`);
         
-        console.log(`[DEEMIX] 🔍 Similarity: artist=${(artistSim * 100).toFixed(0)}%, title=${(titleSim * 100).toFixed(0)}%, combined=${(combinedSim * 100).toFixed(0)}%`);
-        
-        // If the result is too different, flag it and prefer original search names for the filename
-        if (combinedSim < 0.4) {
-          console.warn(`[DEEMIX] ⚠️ BAIXA SIMILARIDADE (${(combinedSim * 100).toFixed(0)}%): buscou "${artist} - ${title}" mas Deezer retornou "${track.artist.name} - ${track.title}"`);
-          // Store flag to use search params for filename instead of API result
-          track._useSearchNames = true;
-          track._searchArtist = artist;
-          track._searchTitle = title;
-          
+        if (!accepted) {
+          console.warn(`[DEEMIX] ❌ MATCH INSEGURO: buscou "${artist} - ${title}" mas Deezer retornou "${track.artist.name} - ${track.title}"`);
           const mainWindow = _getMainWindow();
           if (mainWindow) {
             mainWindow.webContents.send('download-warning', {
               artist, title,
-              message: `⚠️ Deezer retornou faixa diferente: "${track.artist.name} - ${track.title}" (similaridade: ${(combinedSim * 100).toFixed(0)}%)`
+              message: `❌ Match inseguro bloqueado: "${track.artist.name} - ${track.title}"`
+            });
+          }
+          return { success: false, error: `Match inseguro no Deezer para ${artist} - ${title}` };
+        }
+
+        if (combinedSim < 0.78) {
+          const mainWindow = _getMainWindow();
+          if (mainWindow) {
+            mainWindow.webContents.send('download-warning', {
+              artist, title,
+              message: `⚠️ Match aproximado aceito: "${track.artist.name} - ${track.title}" (score: ${(combinedSim * 100).toFixed(0)}%)`
             });
           }
         }
