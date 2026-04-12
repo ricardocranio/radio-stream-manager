@@ -593,7 +593,56 @@ export function SettingsView() {
                         <p className="text-xs text-muted-foreground mt-1">
                           Escaneia todas as pastas e move arquivos para subpastas por gênero ID3 (normalização completa)
                         </p>
-                      </div>
+                       </div>
+                       <div className="pt-2 border-t border-border">
+                         <Button
+                           variant="outline"
+                           size="sm"
+                           className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+                           disabled={!window.electronAPI?.isElectron}
+                           onClick={async () => {
+                             if (!(window.electronAPI as any)?.validateId3Integrity) {
+                               toast({ title: 'Recurso Desktop', description: 'Disponível apenas no app desktop.', variant: 'destructive' });
+                               return;
+                             }
+                             toast({ title: '🔍 Validando ID3...', description: 'Comparando nomes de arquivos com tags ID3 internas...' });
+                             try {
+                               const foldersToScan = [
+                                 deezerConfig.downloadFolder,
+                                 ...(localConfig.musicFolders || []),
+                               ].filter(Boolean);
+                               const uniqueFolders = [...new Set(foldersToScan)];
+                               
+                               const result = await (window.electronAPI as any).validateId3Integrity({
+                                 folders: uniqueFolders,
+                                 threshold: 0.40,
+                               });
+                               
+                               if (result?.success) {
+                                 const detailsList = (result.details || []).slice(0, 5).map((d: any) => 
+                                   `• "${d.fileArtist} - ${d.fileTitle}" → ID3: "${d.id3Artist}" (${d.artistSim}%)`
+                                 ).join('\n');
+                                 
+                                 toast({
+                                   title: result.quarantined > 0 
+                                     ? `⚠️ ${result.quarantined} arquivo(s) em quarentena`
+                                     : '✅ Todos os arquivos válidos',
+                                   description: result.quarantined > 0
+                                     ? `${result.scanned} escaneados, ${result.quarantined} movidos para _QUARENTENA_SUSPEITAS\n${detailsList}`
+                                     : `${result.scanned} arquivos verificados, todos com ID3 correto`,
+                                 });
+                               }
+                             } catch (err) {
+                               toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                             }
+                           }}
+                         >
+                           <Shield className="w-3 h-3 mr-1" /> Validar Integridade ID3
+                         </Button>
+                         <p className="text-xs text-muted-foreground mt-1">
+                           Compara nome do arquivo com tags ID3. Arquivos com conteúdo errado vão para _QUARENTENA_SUSPEITAS
+                         </p>
+                       </div>
                     </div>
                   )}
                 </div>
