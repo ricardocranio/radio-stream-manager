@@ -31,6 +31,7 @@ export function useBackgroundMaintenance() {
   const lastPurgeRef = useRef<number>(0);
   const lastDedupRef = useRef<number>(0);
   const lastTempProcessRef = useRef<number>(0);
+  const lastId3ValidateRef = useRef<number>(0);
   const lastCompressRef = useRef<string>(''); // Date string of last compression
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const id3ScanRunningRef = useRef(false);
