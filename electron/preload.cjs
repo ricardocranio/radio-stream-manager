@@ -81,6 +81,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listFolderFiles: (params) => ipcRenderer.invoke('list-folder-files', params),
   renameMusicFile: (params) => ipcRenderer.invoke('rename-music-file', params),
   scanFixLibrary: (params) => ipcRenderer.invoke('scan-fix-library', params),
+  scanQuarantineLibrary: (params) => ipcRenderer.invoke('scan-quarantine-library', params),
   onLibFixProgress: (callback) => {
     ipcRenderer.removeAllListeners('lib-fix-progress');
     ipcRenderer.on('lib-fix-progress', (_, progress) => callback(progress));
