@@ -22,6 +22,7 @@ const CLASSIFY_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const PURGE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 const DEDUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const TEMP_PROCESS_INTERVAL_MS = 2 * 60 * 1000; // Every 2 minutes
+const ID3_VALIDATE_INTERVAL_MS = 30 * 60 * 1000; // Every 30 minutes
 const MAINTENANCE_CHECK_MS = 60 * 1000; // Check every minute
 const ID3_SCAN_KEY = 'pgmr_last_id3_scan'; // localStorage key for scan date
 
