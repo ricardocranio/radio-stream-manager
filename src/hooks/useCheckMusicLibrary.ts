@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useRadioStore } from '@/store/radioStore';
 import { useSimilarityLogStore } from '@/store/similarityLogStore';
+import { getAllSearchFolders } from '@/lib/getAllSearchFolders';
 import { 
   getCachedVerification, 
   setCachedVerification, 
