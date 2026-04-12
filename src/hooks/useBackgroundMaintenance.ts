@@ -496,6 +496,11 @@ export function useBackgroundMaintenance() {
       setTimeout(() => purgeBlockedFiles(), 8 * 60 * 1000);
     }
 
+    // ID3 integrity validation after 7 minutes, then every 30 minutes
+    if (isElectron) {
+      setTimeout(() => validateId3Integrity(), 7 * 60 * 1000);
+    }
+
     intervalRef.current = setInterval(() => {
       const now = Date.now();
 
@@ -503,6 +508,12 @@ export function useBackgroundMaintenance() {
       if (isElectron && now - lastTempProcessRef.current >= TEMP_PROCESS_INTERVAL_MS) {
         lastTempProcessRef.current = now;
         processTempFiles();
+      }
+
+      // Validate ID3 integrity every 30 minutes (Electron only)
+      if (isElectron && now - lastId3ValidateRef.current >= ID3_VALIDATE_INTERVAL_MS) {
+        lastId3ValidateRef.current = now;
+        validateId3Integrity();
       }
 
       // Classify every 30 minutes
