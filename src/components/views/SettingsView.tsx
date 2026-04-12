@@ -570,6 +570,7 @@ export function SettingsView() {
                                 const result = await (window.electronAPI as any).reorganizeByGenre({
                                   sourceFolder: folder,
                                   genreRoutes: deezerConfig.genreRoutes || [],
+                                  defaultFolder: deezerConfig.genreDefaultFolder || 'Musicas',
                                 });
                                 if (result?.success) {
                                   totalScanned += result.scanned || 0;
