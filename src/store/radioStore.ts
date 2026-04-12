@@ -421,8 +421,14 @@ const defaultDeezerConfig: DeezerConfig = {
   autoDownloadIntervalMinutes: 1, // Legacy - now uses 5s between downloads
   genreRoutingEnabled: true,
   genreRoutes: [
+    { genre: 'POP', folderName: 'Pop' },
     { genre: 'ROCK', folderName: 'Rock' },
     { genre: 'METAL', folderName: 'Metal' },
+    { genre: 'SERTANEJO', folderName: 'Sertanejo' },
+    { genre: 'PAGODE', folderName: 'Pagode' },
+    { genre: 'MPB', folderName: 'MPB' },
+    { genre: 'RAP/HIP-HOP', folderName: 'Hip Hop' },
+    { genre: 'ELETRONICA', folderName: 'Dance' },
   ],
   genreDefaultFolder: 'Musicas',
 };

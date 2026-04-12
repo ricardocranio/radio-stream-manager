@@ -12,7 +12,7 @@ export function FoldersView() {
   const { toast } = useToast();
   const [localConfig, setLocalConfig] = useState(config);
   const [isFixing, setIsFixing] = useState(false);
-  const [fixProgress, setFixProgress] = useState<{ scanned: number; renamed: number; current: string } | null>(null);
+  const [fixProgress, setFixProgress] = useState<{ scanned: number; renamed?: number; quarantined?: number; current: string } | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [duplicates, setDuplicates] = useState<Array<{
     keep: { name: string; path: string; size: number };
@@ -110,7 +110,7 @@ export function FoldersView() {
             {fixProgress && (
               <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 space-y-1">
                 <p className="text-sm font-mono text-primary">
-                  📂 {fixProgress.scanned} escaneados · ✅ {fixProgress.renamed} renomeados
+                  📂 {fixProgress.scanned} escaneados · ✅ {fixProgress.renamed || 0} renomeados
                 </p>
                 <p className="text-xs text-muted-foreground truncate">
                   {fixProgress.current}
