@@ -340,10 +340,17 @@ async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise
         pos += metaLength;
 
         const metaString = new TextDecoder('utf-8', { fatal: false }).decode(metaBytes);
-        const titleMatch = metaString.match(/StreamTitle='([^']+)'/);
-        if (!titleMatch?.[1]) continue;
-
-        const streamTitle = titleMatch[1].trim();
+        // Use greedy match up to ';' delimiter to handle apostrophes in song names
+        // e.g. StreamTitle='GUNS N' ROSES - DON'T CRY';StreamUrl=''
+        const titleMatch = metaString.match(/StreamTitle='(.+?)';/);
+        if (!titleMatch?.[1]) {
+          // Fallback: try without semicolon delimiter (some stations omit it)
+          const fallbackMatch = metaString.match(/StreamTitle='(.+)'/);
+          if (!fallbackMatch?.[1]) continue;
+          var streamTitle = fallbackMatch[1].trim();
+        } else {
+          var streamTitle = titleMatch[1].trim();
+        }
         
         // Try "Artist - Title" format
         const dashIdx = streamTitle.indexOf(' - ');
