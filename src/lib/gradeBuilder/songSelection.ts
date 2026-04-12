@@ -422,12 +422,12 @@ export async function selectSongForSlot(
     const now = Date.now();
     // Graduated freshness tiers (ms) — try narrow first, widen if empty
     const P1_TIERS_MS = [
-      20 * 60 * 1000,   // Tier 1: ≤20min (fresh — matches monitor 12min cycle)
-      40 * 60 * 1000,   // Tier 2: ≤40min (recent — ~3 cycles)
+      15 * 60 * 1000,   // Tier 1: ≤15min (fresh — matches monitor cycle)
+      30 * 60 * 1000,   // Tier 2: ≤30min (recent — ~3 cycles)
       60 * 60 * 1000,   // Tier 3: ≤1h (still relevant)
       120 * 60 * 1000,  // Tier 4: ≤2h (last resort before P1-EXT)
     ];
-    const P1_TIER_LABELS = ['≤20min', '≤40min', '≤1h', '≤2h'];
+    const P1_TIER_LABELS = ['≤15min', '≤30min', '≤1h', '≤2h'];
 
     // Sort by freshness DESC (newest first)
     const freshnessSorted = [...stationSongs].sort((a, b) => {
