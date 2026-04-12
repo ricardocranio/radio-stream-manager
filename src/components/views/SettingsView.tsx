@@ -570,6 +570,7 @@ export function SettingsView() {
                                 const result = await (window.electronAPI as any).reorganizeByGenre({
                                   sourceFolder: folder,
                                   genreRoutes: deezerConfig.genreRoutes || [],
+                                  defaultFolder: deezerConfig.genreDefaultFolder || 'Musicas',
                                 });
                                 if (result?.success) {
                                   totalScanned += result.scanned || 0;
@@ -590,7 +591,7 @@ export function SettingsView() {
                           <ArrowRightLeft className="w-3 h-3 mr-1" /> Reorganizar Biblioteca por Gênero
                         </Button>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Escaneia todas as pastas da biblioteca e move Rock/Metal para subpastas
+                          Escaneia todas as pastas e move arquivos para subpastas por gênero ID3 (normalização completa)
                         </p>
                       </div>
                     </div>
