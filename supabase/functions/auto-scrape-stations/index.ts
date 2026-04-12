@@ -322,8 +322,6 @@ async function fetchIcyMetadata(streamUrl: string, stationName: string): Promise
 
   return null;
 }
-  }
-}
 
 // ===== OnlineRadioBox Parsing =====
 
