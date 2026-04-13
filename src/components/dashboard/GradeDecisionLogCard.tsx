@@ -3,7 +3,7 @@
  * Visual timeline showing why each song was chosen in the last grade build.
  */
 import { useMemo, useState } from 'react';
-import { Brain, ChevronDown, Music, SkipForward, ArrowRightLeft, AlertTriangle, FileText } from 'lucide-react';
+import { Brain, ChevronDown, Music, SkipForward, ArrowRightLeft, AlertTriangle, FileText, Search, Zap } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,6 +17,25 @@ const typeConfig: Record<string, { icon: typeof Music; label: string; color: str
   missing: { icon: AlertTriangle, label: 'Faltando', color: 'text-red-400', bg: 'bg-red-500/10' },
   fixed: { icon: FileText, label: 'Fixo', color: 'text-blue-400', bg: 'bg-blue-500/10' },
 };
+
+/** Detect special matching strategies from the reason string */
+function getSpecialBadges(reason?: string): Array<{ label: string; className: string }> {
+  if (!reason) return [];
+  const badges: Array<{ label: string; className: string }> = [];
+  if (reason.includes('P1-DEEP')) {
+    badges.push({ label: '🔎 P1-DEEP', className: 'text-purple-400 border-purple-500/30 bg-purple-500/10' });
+  }
+  if (reason.includes('relaxed') || reason.includes('relaxado')) {
+    badges.push({ label: '⚡ Relaxed', className: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10' });
+  }
+  if (reason.includes('alias forward') || reason.includes('alias reverso')) {
+    badges.push({ label: '🔄 Alias', className: 'text-orange-400 border-orange-500/30 bg-orange-500/10' });
+  }
+  if (reason.includes('JIT')) {
+    badges.push({ label: '⏬ JIT', className: 'text-sky-400 border-sky-500/30 bg-sky-500/10' });
+  }
+  return badges;
+}
 
 export function GradeDecisionLogCard() {
   const blockLogs = useGradeLogStore((s) => s.blockLogs);
