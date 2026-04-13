@@ -108,6 +108,34 @@ async function findSongMatchWithFallback(
       }
     }
 
+    // Fallback 3: Try with ampersand-normalized names (& ↔ E)
+    if (!result.exists) {
+      const ampArtist = normalizeAmpersand(artist);
+      const ampTitle = normalizeAmpersand(title);
+      if (ampArtist !== normalizedArtist || ampTitle !== normalizedTitle) {
+        const ampResult = await window.electronAPI.findSongMatch({
+          artist: ampArtist, title: ampTitle, musicFolders, threshold,
+        } as any);
+        if (ampResult.exists) {
+          result = ampResult;
+          console.log(`[BATCH-LIBRARY] ✅ Match (ampersand-norm): sim=${result.similarity ? Math.round(result.similarity * 100) : '?'}% file="${result.filename || '?'}"`);
+        }
+      }
+    }
+
+    // Fallback 4: If threshold > 0.60, retry with relaxed threshold (0.60)
+    // This catches close matches that miss the strict threshold
+    if (!result.exists && threshold > 0.60) {
+      const RELAXED = 0.60;
+      const relaxedResult = await window.electronAPI.findSongMatch({
+        artist: normalizedArtist, title: normalizedTitle, musicFolders, threshold: RELAXED,
+      } as any);
+      if (relaxedResult.exists) {
+        result = relaxedResult;
+        console.log(`[BATCH-LIBRARY] ✅ Match (relaxed ${Math.round(RELAXED * 100)}%): sim=${result.similarity ? Math.round(result.similarity * 100) : '?'}% file="${result.filename || '?'}"`);
+      }
+    }
+
     if (result.exists) {
       const realFilename = result.filename || (result.baseName ? `${result.baseName}.mp3` : null);
       if (realFilename) {
