@@ -47,10 +47,10 @@ function loadBlockedEvents(): BlockedEvent[] {
 
 export function BlockedSongsCard() {
   const [collapsed, setCollapsed] = useState(true);
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const events = useMemo(() => {
     const real = loadBlockedEvents();
     if (real.length > 0) return real;
-    // Mock data for visual testing — remove after confirming
     const now = new Date();
     return [
       { artist: 'Naldo Lima', title: 'Retrovisor', rule: 'exact' as const, source: 'download' as const, timestamp: new Date(now.getTime() - 12 * 60000).toISOString() },
@@ -71,6 +71,11 @@ export function BlockedSongsCard() {
     return { byRule, bySource, total: events.length };
   }, [events]);
 
+  const filteredEvents = useMemo(() => {
+    if (!activeFilter) return events;
+    return events.filter(e => e.rule === activeFilter);
+  }, [events, activeFilter]);
+
   const ruleLabels: Record<string, { label: string; icon: typeof Ban; color: string }> = {
     exact: { label: 'Exata', icon: Ban, color: 'text-red-400' },
     wildcard: { label: 'Artista *', icon: User, color: 'text-orange-400' },
@@ -79,10 +84,15 @@ export function BlockedSongsCard() {
     partial: { label: 'Parcial', icon: Shield, color: 'text-rose-400' },
   };
 
+  const handleBadgeClick = (rule: string) => {
+    setActiveFilter(prev => prev === rule ? null : rule);
+    if (collapsed) setCollapsed(false);
+  };
+
   return (
     <Card className="glass-card border-red-500/20">
       <CardContent className="p-4 space-y-3">
-        {/* Header — always visible, clickable */}
+        {/* Header */}
         <div
           className="flex items-center justify-between cursor-pointer select-none"
           onClick={() => setCollapsed(!collapsed)}
@@ -102,7 +112,7 @@ export function BlockedSongsCard() {
           </div>
         </div>
 
-        {/* Rule badges — always visible as summary */}
+        {/* Rule badges — clickable filters */}
         {stats.total > 0 && (
           <div className="flex flex-wrap gap-2">
             {Object.entries(stats.byRule)
@@ -110,8 +120,14 @@ export function BlockedSongsCard() {
               .map(([rule, count]) => {
                 const info = ruleLabels[rule];
                 const Icon = info.icon;
+                const isActive = activeFilter === rule;
                 return (
-                  <Badge key={rule} variant="outline" className={`text-xs ${info.color} border-current/30`}>
+                  <Badge
+                    key={rule}
+                    variant="outline"
+                    className={`text-xs cursor-pointer transition-all ${info.color} ${isActive ? 'border-current bg-current/15 ring-1 ring-current/30' : 'border-current/30 hover:bg-current/10'}`}
+                    onClick={(e) => { e.stopPropagation(); handleBadgeClick(rule); }}
+                  >
                     <Icon className="w-3 h-3 mr-1" />
                     {info.label}: {count}
                   </Badge>
@@ -130,9 +146,24 @@ export function BlockedSongsCard() {
               {stats.bySource.mapa > 0 && <span>🗺️ Mapa: {stats.bySource.mapa}</span>}
             </div>
 
-            <ScrollArea className="max-h-[220px]">
-              <div className="space-y-1">
-                {events.slice(-15).reverse().map((e, i) => {
+            {activeFilter && (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted-foreground">
+                  Filtrando: {ruleLabels[activeFilter]?.label} ({filteredEvents.length})
+                </span>
+                <Badge
+                  variant="outline"
+                  className="text-[9px] cursor-pointer hover:bg-muted/20"
+                  onClick={() => setActiveFilter(null)}
+                >
+                  Limpar filtro
+                </Badge>
+              </div>
+            )}
+
+            <ScrollArea className="h-[250px]">
+              <div className="space-y-1 pr-2">
+                {filteredEvents.slice(-30).reverse().map((e, i) => {
                   const time = new Date(e.timestamp);
                   const timeStr = time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
                   const isAlias = e.rule === 'alias';
