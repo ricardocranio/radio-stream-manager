@@ -12,27 +12,50 @@ import type { LibraryCheckResult } from './types';
 const BATCH_CONCURRENCY = 5; // Max parallel Electron IPC calls
 
 /**
- * Remove common suffixes like (Ao Vivo), (Live), (Acústico), [Remix], etc.
- * This allows matching "Song (Ao Vivo)" with "Song" in the library
+ * Strip accents/diacritics from a string for fuzzy matching.
  */
-function normalizeTitle(title: string): string {
-  return title
-    .replace(/\s*\((?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^)]*|ft\.?[^)]*)\)/gi, '')
-    .replace(/\s*\[(?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^]]*|ft\.?[^]]*)\]/gi, '')
+function stripAccents(str: string): string {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
+ * Normalize ampersand vs "E"/"e" — common in Brazilian duo names.
+ * "Henrique & Juliano" ↔ "Henrique E Juliano"
+ */
+function normalizeAmpersand(str: string): string {
+  return str
+    .replace(/\s*&\s*/g, ' E ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 /**
+ * Remove common suffixes like (Ao Vivo), (Live), (Acústico), [Remix], etc.
+ * This allows matching "Song (Ao Vivo)" with "Song" in the library
+ */
+function normalizeTitle(title: string): string {
+  return stripAccents(
+    title
+      .replace(/\s*\((?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^)]*|ft\.?[^)]*)\)/gi, '')
+      .replace(/\s*\[(?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^]]*|ft\.?[^]]*)\]/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}
+
+/**
  * Normalize artist name for comparison.
- * IMPORTANT: Do NOT strip & because it's part of duo names (e.g., "Diego & Victor Hugo").
- * Only strip feat/ft suffixes which are truly secondary.
+ * Strips feat/ft suffixes and normalizes ampersand/accents.
  */
 function normalizeArtist(artist: string): string {
-  return artist
-    .replace(/\s*(?:feat\.?|ft\.?|featuring|part\.?|c\/)\s*.+$/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return stripAccents(
+    normalizeAmpersand(
+      artist
+        .replace(/\s*(?:feat\.?|ft\.?|featuring|part\.?|c\/)\s*.+$/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+    )
+  );
 }
 
 /**
