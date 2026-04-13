@@ -63,6 +63,16 @@ export function GradeDecisionLogCard() {
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [latestBuildLogs]);
 
+  const specialCounts = useMemo(() => {
+    let deep = 0, relaxed = 0, jit = 0;
+    for (const log of latestBuildLogs) {
+      if (log.reason?.includes('P1-DEEP')) deep++;
+      if (log.reason?.includes('relaxed') || log.reason?.includes('relaxado')) relaxed++;
+      if (log.reason?.includes('JIT')) jit++;
+    }
+    return { deep, relaxed, jit };
+  }, [latestBuildLogs]);
+
   const summary = useMemo(() => {
     const s = { used: 0, skipped: 0, substituted: 0, missing: 0, fixed: 0 };
     for (const log of latestBuildLogs) {
