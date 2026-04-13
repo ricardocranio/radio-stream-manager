@@ -117,6 +117,16 @@ export function GradeDecisionLogCard() {
                       ✗{summary.missing}
                     </Badge>
                   )}
+                  {specialCounts.deep > 0 && (
+                    <Badge variant="outline" className="text-[10px] text-purple-400 border-purple-500/30">
+                      🔎{specialCounts.deep}
+                    </Badge>
+                  )}
+                  {specialCounts.relaxed > 0 && (
+                    <Badge variant="outline" className="text-[10px] text-cyan-400 border-cyan-500/30">
+                      ⚡{specialCounts.relaxed}
+                    </Badge>
+                  )}
                 </div>
                 <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
               </div>
