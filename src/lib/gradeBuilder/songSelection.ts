@@ -676,6 +676,57 @@ export async function selectSongForSlot(
   }
 
   // ============================================================
+  // PRIORITY P1-DEEP: Query radio_historico_stats for most-played
+  // songs from the target station (most-played = most likely downloaded).
+  // This catches songs that were downloaded in previous sessions but
+  // aren't in the current scraped_songs/radio_historico pool.
+  // ============================================================
+  if (!selectedSong && stationName) {
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data: statsData } = await supabase
+        .from('radio_historico_stats')
+        .select('title, artist, station_name, play_count')
+        .eq('station_name', stationName)
+        .order('play_count', { ascending: false })
+        .limit(80);
+
+      if (statsData && statsData.length > 0) {
+        const deepCandidates = statsData
+          .filter(s => isValidCandidate(s.title, s.artist))
+          .map(s => ({ artist: s.artist, title: s.title }));
+
+        if (deepCandidates.length > 0) {
+          console.log(`[SONG-SELECT] 🔎 [P1-DEEP] Tentando ${deepCandidates.length} músicas mais tocadas de "${stationName}" (historico_stats)`);
+          const deepMap = await ctx.batchFindSongsInLibrary(deepCandidates);
+
+          for (const candidate of deepCandidates) {
+            const r = (deepMap as Map<string, any>).get(toLibKey(candidate.artist, candidate.title)) as { exists: boolean; filename?: string } | undefined;
+            if (r?.exists) {
+              const correctFilename = r.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              selectedSong = {
+                title: candidate.title, artist: candidate.artist,
+                station: stationName, style: stationStyle,
+                filename: correctFilename, existsInLibrary: true,
+              };
+              logs.push({
+                blockTime: timeStr, type: 'used',
+                title: candidate.title, artist: candidate.artist,
+                station: stationName, style: stationStyle,
+                reason: `[P1-DEEP] Mais tocada de "${stationName}" (historico_stats, na biblioteca)`,
+              });
+              console.log(`[SONG-SELECT] ✅ [P1-DEEP] Selecionada: "${candidate.artist} - ${candidate.title}" (mais tocada de ${stationName})`);
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[SONG-SELECT] ⚠️ P1-DEEP falhou:', e);
+    }
+  }
+
+  // ============================================================
   // PRIORITY P0-SAME: Carry-over from the SAME station first
   // Before trying any other station, check if we have carry-over
   // songs specifically from the target station.
