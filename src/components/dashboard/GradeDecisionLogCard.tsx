@@ -128,12 +128,18 @@ export function GradeDecisionLogCard() {
                     {logs.map((log, i) => {
                       const cfg = typeConfig[log.type] || typeConfig.used;
                       const Icon = cfg.icon;
+                      const specialBadges = getSpecialBadges(log.reason);
                       return (
                         <div key={i} className={`flex items-center gap-2 text-xs p-1.5 rounded ${cfg.bg}`}>
                           <Icon className={`w-3 h-3 ${cfg.color} shrink-0`} />
                           <span className="text-foreground truncate flex-1">
                             {log.artist} — {log.title}
                           </span>
+                          {specialBadges.map((sb, j) => (
+                            <Badge key={j} variant="outline" className={`text-[10px] shrink-0 ${sb.className}`}>
+                              {sb.label}
+                            </Badge>
+                          ))}
                           {log.station && log.station !== 'FALLBACK' && (
                             <Badge variant="outline" className="text-[10px] shrink-0">{log.station}</Badge>
                           )}
