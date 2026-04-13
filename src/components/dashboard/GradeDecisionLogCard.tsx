@@ -3,7 +3,7 @@
  * Visual timeline showing why each song was chosen in the last grade build.
  */
 import { useMemo, useState } from 'react';
-import { Brain, ChevronDown, Music, SkipForward, ArrowRightLeft, AlertTriangle, FileText } from 'lucide-react';
+import { Brain, ChevronDown, Music, SkipForward, ArrowRightLeft, AlertTriangle, FileText, Search, Zap } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,6 +17,25 @@ const typeConfig: Record<string, { icon: typeof Music; label: string; color: str
   missing: { icon: AlertTriangle, label: 'Faltando', color: 'text-red-400', bg: 'bg-red-500/10' },
   fixed: { icon: FileText, label: 'Fixo', color: 'text-blue-400', bg: 'bg-blue-500/10' },
 };
+
+/** Detect special matching strategies from the reason string */
+function getSpecialBadges(reason?: string): Array<{ label: string; className: string }> {
+  if (!reason) return [];
+  const badges: Array<{ label: string; className: string }> = [];
+  if (reason.includes('P1-DEEP')) {
+    badges.push({ label: '🔎 P1-DEEP', className: 'text-purple-400 border-purple-500/30 bg-purple-500/10' });
+  }
+  if (reason.includes('relaxed') || reason.includes('relaxado')) {
+    badges.push({ label: '⚡ Relaxed', className: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10' });
+  }
+  if (reason.includes('alias forward') || reason.includes('alias reverso')) {
+    badges.push({ label: '🔄 Alias', className: 'text-orange-400 border-orange-500/30 bg-orange-500/10' });
+  }
+  if (reason.includes('JIT')) {
+    badges.push({ label: '⏬ JIT', className: 'text-sky-400 border-sky-500/30 bg-sky-500/10' });
+  }
+  return badges;
+}
 
 export function GradeDecisionLogCard() {
   const blockLogs = useGradeLogStore((s) => s.blockLogs);
@@ -42,6 +61,16 @@ export function GradeDecisionLogCard() {
     }
     // Sort by block time
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [latestBuildLogs]);
+
+  const specialCounts = useMemo(() => {
+    let deep = 0, relaxed = 0, jit = 0;
+    for (const log of latestBuildLogs) {
+      if (log.reason?.includes('P1-DEEP')) deep++;
+      if (log.reason?.includes('relaxed') || log.reason?.includes('relaxado')) relaxed++;
+      if (log.reason?.includes('JIT')) jit++;
+    }
+    return { deep, relaxed, jit };
   }, [latestBuildLogs]);
 
   const summary = useMemo(() => {
@@ -88,6 +117,16 @@ export function GradeDecisionLogCard() {
                       ✗{summary.missing}
                     </Badge>
                   )}
+                  {specialCounts.deep > 0 && (
+                    <Badge variant="outline" className="text-[10px] text-purple-400 border-purple-500/30">
+                      🔎{specialCounts.deep}
+                    </Badge>
+                  )}
+                  {specialCounts.relaxed > 0 && (
+                    <Badge variant="outline" className="text-[10px] text-cyan-400 border-cyan-500/30">
+                      ⚡{specialCounts.relaxed}
+                    </Badge>
+                  )}
                 </div>
                 <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
               </div>
@@ -109,12 +148,18 @@ export function GradeDecisionLogCard() {
                     {logs.map((log, i) => {
                       const cfg = typeConfig[log.type] || typeConfig.used;
                       const Icon = cfg.icon;
+                      const specialBadges = getSpecialBadges(log.reason);
                       return (
                         <div key={i} className={`flex items-center gap-2 text-xs p-1.5 rounded ${cfg.bg}`}>
                           <Icon className={`w-3 h-3 ${cfg.color} shrink-0`} />
                           <span className="text-foreground truncate flex-1">
                             {log.artist} — {log.title}
                           </span>
+                          {specialBadges.map((sb, j) => (
+                            <Badge key={j} variant="outline" className={`text-[10px] shrink-0 ${sb.className}`}>
+                              {sb.label}
+                            </Badge>
+                          ))}
                           {log.station && log.station !== 'FALLBACK' && (
                             <Badge variant="outline" className="text-[10px] shrink-0">{log.station}</Badge>
                           )}
