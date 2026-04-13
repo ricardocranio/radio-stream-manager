@@ -12,27 +12,50 @@ import type { LibraryCheckResult } from './types';
 const BATCH_CONCURRENCY = 5; // Max parallel Electron IPC calls
 
 /**
- * Remove common suffixes like (Ao Vivo), (Live), (Acústico), [Remix], etc.
- * This allows matching "Song (Ao Vivo)" with "Song" in the library
+ * Strip accents/diacritics from a string for fuzzy matching.
  */
-function normalizeTitle(title: string): string {
-  return title
-    .replace(/\s*\((?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^)]*|ft\.?[^)]*)\)/gi, '')
-    .replace(/\s*\[(?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^]]*|ft\.?[^]]*)\]/gi, '')
+function stripAccents(str: string): string {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
+ * Normalize ampersand vs "E"/"e" — common in Brazilian duo names.
+ * "Henrique & Juliano" ↔ "Henrique E Juliano"
+ */
+function normalizeAmpersand(str: string): string {
+  return str
+    .replace(/\s*&\s*/g, ' E ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 /**
+ * Remove common suffixes like (Ao Vivo), (Live), (Acústico), [Remix], etc.
+ * This allows matching "Song (Ao Vivo)" with "Song" in the library
+ */
+function normalizeTitle(title: string): string {
+  return stripAccents(
+    title
+      .replace(/\s*\((?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^)]*|ft\.?[^)]*)\)/gi, '')
+      .replace(/\s*\[(?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^]]*|ft\.?[^]]*)\]/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}
+
+/**
  * Normalize artist name for comparison.
- * IMPORTANT: Do NOT strip & because it's part of duo names (e.g., "Diego & Victor Hugo").
- * Only strip feat/ft suffixes which are truly secondary.
+ * Strips feat/ft suffixes and normalizes ampersand/accents.
  */
 function normalizeArtist(artist: string): string {
-  return artist
-    .replace(/\s*(?:feat\.?|ft\.?|featuring|part\.?|c\/)\s*.+$/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return stripAccents(
+    normalizeAmpersand(
+      artist
+        .replace(/\s*(?:feat\.?|ft\.?|featuring|part\.?|c\/)\s*.+$/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+    )
+  );
 }
 
 /**
@@ -82,6 +105,34 @@ async function findSongMatchWithFallback(
         console.log(`[BATCH-LIBRARY] ✅ Match (original): sim=${result.similarity ? Math.round(result.similarity * 100) : '?'}% file="${result.filename || '?'}"`);
       } else {
         console.log(`[BATCH-LIBRARY] 🔸 No match (original): bestSim=${originalResult.similarity ? Math.round(originalResult.similarity * 100) : 0}%`);
+      }
+    }
+
+    // Fallback 3: Try with ampersand-normalized names (& ↔ E)
+    if (!result.exists) {
+      const ampArtist = normalizeAmpersand(artist);
+      const ampTitle = normalizeAmpersand(title);
+      if (ampArtist !== normalizedArtist || ampTitle !== normalizedTitle) {
+        const ampResult = await window.electronAPI.findSongMatch({
+          artist: ampArtist, title: ampTitle, musicFolders, threshold,
+        } as any);
+        if (ampResult.exists) {
+          result = ampResult;
+          console.log(`[BATCH-LIBRARY] ✅ Match (ampersand-norm): sim=${result.similarity ? Math.round(result.similarity * 100) : '?'}% file="${result.filename || '?'}"`);
+        }
+      }
+    }
+
+    // Fallback 4: If threshold > 0.60, retry with relaxed threshold (0.60)
+    // This catches close matches that miss the strict threshold
+    if (!result.exists && threshold > 0.60) {
+      const RELAXED = 0.60;
+      const relaxedResult = await window.electronAPI.findSongMatch({
+        artist: normalizedArtist, title: normalizedTitle, musicFolders, threshold: RELAXED,
+      } as any);
+      if (relaxedResult.exists) {
+        result = relaxedResult;
+        console.log(`[BATCH-LIBRARY] ✅ Match (relaxed ${Math.round(RELAXED * 100)}%): sim=${result.similarity ? Math.round(result.similarity * 100) : '?'}% file="${result.filename || '?'}"`);
       }
     }
 
