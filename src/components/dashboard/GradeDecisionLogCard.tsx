@@ -134,7 +134,17 @@ export function GradeDecisionLogCard() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="flex gap-1.5">
+                <div className="flex gap-1.5 flex-wrap">
+                  {specialCounts.p1Fresh > 0 && (
+                    <Badge variant="outline" className="text-[10px] text-green-400 border-green-500/30">
+                      🔥{specialCounts.p1Fresh}
+                    </Badge>
+                  )}
+                  {specialCounts.p1Ext > 0 && (
+                    <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
+                      📡{specialCounts.p1Ext}
+                    </Badge>
+                  )}
                   {summary.used > 0 && (
                     <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
                       ✓{summary.used}
