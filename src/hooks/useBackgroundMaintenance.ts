@@ -28,10 +28,12 @@ const ID3_SCAN_KEY = 'pgmr_last_id3_scan'; // localStorage key for scan date
 
 export function useBackgroundMaintenance() {
   const lastClassifyRef = useRef<number>(0);
-  const lastPurgeRef = useRef<number>(0);
-  const lastDedupRef = useRef<number>(0);
+  // Initialize to Date.now() so the interval doesn't fire these immediately on boot
+  // (prevents double-execution: once from setTimeout + once from interval seeing 0 as stale)
+  const lastPurgeRef = useRef<number>(Date.now());
+  const lastDedupRef = useRef<number>(Date.now());
   const lastTempProcessRef = useRef<number>(0);
-  const lastId3ValidateRef = useRef<number>(0);
+  const lastId3ValidateRef = useRef<number>(Date.now());
   const lastCompressRef = useRef<string>(''); // Date string of last compression
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const id3ScanRunningRef = useRef(false);
