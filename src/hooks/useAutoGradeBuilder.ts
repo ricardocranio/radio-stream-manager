@@ -2015,16 +2015,18 @@ export function useAutoGradeBuilder() {
   // ==================== Pending Grade (in-memory buffer) ====================
 
   /** Holds the latest generated grade content in memory, ready to be flushed to disk */
-  const pendingGradeRef = useRef<{ lineMap: Map<string, string>; filename: string; blockKey: string } | null>(() => {
-    // Restore from localStorage so disk writes work immediately after restart
-    const dayCode = DAY_CODES_BY_INDEX[new Date().getDay()];
-    const persisted = loadGradeFromStorage(dayCode);
-    if (persisted && persisted.lineMap.size > 0) {
-      const filename = `${dayCode.toUpperCase()}.txt`;
-      return { lineMap: persisted.lineMap, filename, blockKey: '' };
-    }
-    return null;
-  });
+  const pendingGradeRef = useRef<{ lineMap: Map<string, string>; filename: string; blockKey: string } | null>(
+    (() => {
+      // Restore from localStorage so disk writes work immediately after restart
+      const dayCode = DAY_CODES_BY_INDEX[new Date().getDay()];
+      const persisted = loadGradeFromStorage(dayCode);
+      if (persisted && persisted.lineMap.size > 0) {
+        const filename = `${dayCode.toUpperCase()}.txt`;
+        return { lineMap: persisted.lineMap, filename, blockKey: '' };
+      }
+      return null;
+    })()
+  );
 
   // ==================== Incremental Build (silent, in-memory) ====================
 
