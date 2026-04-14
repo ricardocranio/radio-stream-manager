@@ -2246,20 +2246,27 @@ export function useAutoGradeBuilder() {
         console.log(`[AUTO-GRADE] 🔄 Bloco ${thirdTimeKey} desbloqueado para atualização (${thirdMinutesAway} min restantes)`);
       }
 
-      // Fully resolved blocks: LOCK rules
+      // === LOCK RULES ===
+      // BLOCO ATUAL: NUNCA reconstrói (já está tocando/prestes a tocar).
+      // Exceções: forceRegenerate manual, sequência agendada, ou se não existe nenhuma linha ainda.
+      const currentHasContent = !!currentExistingLine;
       const shouldBuildCurrent = forceRegenerate || currentCoveredBySchedule
         ? true
-        : (!currentLocked && !currentFullyResolved) || currentSaturdayMismatch || currentSundayMismatch;
+        : (!currentHasContent) || currentSaturdayMismatch || currentSundayMismatch;
+      
+      // BLOCOS NEXT/THIRD: sempre rebuildam com dados frescos enquanto estiverem incompletos.
+      // Mesmo se completos, continuam sendo atualizados fora da janela de 10 min.
+      // Dentro dos 10 min, travam definitivamente se completos.
       const shouldBuildNext = forceRegenerate || nextCoveredBySchedule
         ? true
         : nextShouldLock
-          ? ((!nextLocked && !nextFullyResolved) || nextSaturdayMismatch || nextSundayMismatch)  // dentro dos 10 min — só build se incompleto
-          : true;  // fora dos 10 min — sempre rebuild para incorporar dados frescos
+          ? ((!nextLocked && !nextFullyResolved) || nextSaturdayMismatch || nextSundayMismatch)
+          : (!nextFullyResolved || true);  // fora dos 10 min — sempre rebuild para incorporar frescor
       const shouldBuildThird = forceRegenerate || thirdCoveredBySchedule
         ? true
         : thirdShouldLock
           ? ((!thirdLocked && !thirdFullyResolved) || thirdSaturdayMismatch || thirdSundayMismatch)
-          : true;
+          : (!thirdFullyResolved || true);
 
       console.log(`[AUTO-GRADE] 🔮 Lookahead: ${currentTimeKey} (${shouldBuildCurrent ? 'BUILD' : '🔒LOCKED'}), ${nextTimeKey} (${shouldBuildNext ? nextShouldLock ? 'BUILD-FINAL' : '🔄UPDATE' : '🔒LOCKED'} ${nextMinutesAway}min), ${thirdTimeKey} (${shouldBuildThird ? thirdShouldLock ? 'BUILD-FINAL' : '🔄UPDATE' : '🔒LOCKED'} ${thirdMinutesAway}min)`);
 
