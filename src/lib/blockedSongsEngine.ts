@@ -85,8 +85,20 @@ export function buildBlockedEngine(
       const titleMatches = tN === frag || (frag.length >= 6 && tN.includes(frag));
       if (!titleMatches) continue;
 
-      const artistMatches =
-        (aN.includes(entry.artist) || entry.artist.includes(aN));
+      // Artist matching: require full-word match, not just substring.
+      // Split both into words and check if ALL words of the blocked artist appear in the candidate
+      // (or vice-versa for short blocked names). This avoids "Naldo Lima" blocking "Gusttavo Lima".
+      const entryWords = entry.artist.split(' ').filter(w => w.length >= 2);
+      const candidateWords = aN.split(' ').filter(w => w.length >= 2);
+
+      // At least 60% of blocked artist words must appear in candidate (and exact match on surname-like words)
+      const matchingWords = entryWords.filter(w => candidateWords.includes(w));
+      const matchRatio = entryWords.length > 0 ? matchingWords.length / entryWords.length : 0;
+
+      // Require ALL words to match (strict), or if single-word artist, require exact equality
+      const artistMatches = entryWords.length === 1
+        ? candidateWords.includes(entryWords[0])
+        : matchRatio >= 1.0;
 
       if (artistMatches) {
         return 'partial';
