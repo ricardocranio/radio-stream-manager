@@ -90,10 +90,10 @@ describe('normalizeStr', () => {
     expect(result).toBe('cancao da america');
   });
 
-  it('strips feat inside parentheses as version suffix', () => {
-    // (feat. ...) is matched by VERSION_SUFFIXES pattern and stripped
+  it('keeps (feat. ...) parentheses since feat is not a version suffix', () => {
+    // feat is NOT in VERSION_SUFFIXES, so (feat. X) is preserved
     const result = normalizeStr('Flowers (feat. Miley Cyrus)');
-    expect(result).toBe('flowers');
+    expect(result).toBe('flowers (feat. miley cyrus)');
   });
 });
 
