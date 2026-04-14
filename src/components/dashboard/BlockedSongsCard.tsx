@@ -5,8 +5,7 @@
  */
 import { useState, useMemo } from 'react';
 import { Shield, Ban, User, Type, ChevronDown } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 const STORAGE_KEY = 'pgmr_blocked_today';
