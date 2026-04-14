@@ -301,21 +301,20 @@ describe('integration: scraping → alias → block → grade pipeline', () => {
       }
     }
 
-    // Verify correct songs made it through
-    expect(gradeSongs).toHaveLength(5);
+    // BALACHIC is in blocked list AND has alias — blocked takes priority
+    // So: 4 pass (Gusttavo Lima, Simone Mendes, MC Kevinho, Artista Limpo)
+    //     6 blocked (Naldo Lima, PROMESSA D, BALACHIC, Ikaro Mendes, MC Kevin, Artista Ganja)
+    expect(gradeSongs).toHaveLength(4);
     expect(gradeSongs.map(s => s.artist)).toContain('Gusttavo Lima');
     expect(gradeSongs.map(s => s.artist)).toContain('Simone Mendes');
     expect(gradeSongs.map(s => s.artist)).toContain('MC Kevinho');
     expect(gradeSongs.map(s => s.artist)).toContain('Artista Limpo');
 
-    // Verify BALACHIC was resolved to Xand Aviao via alias
-    const xandSong = gradeSongs.find(s => s.artist.trim() === 'Xand Aviao');
-    expect(xandSong).toBeDefined();
-
     // Verify blocked songs were caught
-    expect(blockedEvents).toHaveLength(5);
+    expect(blockedEvents).toHaveLength(6);
     expect(blockedEvents.map(s => s.artist)).toContain('Naldo Lima');
     expect(blockedEvents.map(s => s.artist)).toContain('PROMESSA D');
+    expect(blockedEvents.map(s => s.artist)).toContain('BALACHIC');
     expect(blockedEvents.map(s => s.artist)).toContain('Ikaro Mendes');
     expect(blockedEvents.map(s => s.artist)).toContain('MC Kevin');
     expect(blockedEvents.map(s => s.artist)).toContain('Artista Ganja');
@@ -328,14 +327,14 @@ describe('integration: scraping → alias → block → grade pipeline', () => {
     expect(blockedEvents.map(s => s.artist)).not.toContain('MC Kevinho');
   });
 
-  it('alias-resolved songs use corrected metadata', () => {
+  it('alias-resolved songs use corrected metadata even when blocked', () => {
+    // BALACHIC is blocked (in blocklist) but alias still resolves for download fields
     const balachicDecision = guard('BALACHIC', 'ERA UMA VEZ(AO VIVO)');
-    expect(balachicDecision.allowed).toBe(true);
+    expect(balachicDecision.allowed).toBe(false);
     expect(balachicDecision.downloadArtist.trim()).toBe('Xand Aviao');
 
     const promessaDecision = guard('PROMESSA D', 'PEDIDO DE SOCORRO');
     expect(promessaDecision.allowed).toBe(false);
-    // Even though blocked, download fields show the corrected name
     expect(promessaDecision.downloadArtist).toBe('Gustavo Mioto');
   });
 
