@@ -757,6 +757,31 @@ export function GradePreviewCard() {
                 const stationKey = `${normalizeKey(song.artist)}-${normalizeKey(song.title || '')}`;
                 const stationName = songStationMap[stationKey];
 
+                // Extract freshness from grade decision logs
+                const freshnessMin = (() => {
+                  if (song.isSpecial) return null;
+                  const songKey = `${normalizeKey(song.artist)}-${normalizeKey(song.title || '')}`;
+                  // Check logs for this song's freshness
+                  const logs = nextBlockTime !== '--:--' ? getLogsByBlock(nextBlockTime) : [];
+                  for (const log of logs) {
+                    const logKey = `${normalizeKey(log.artist)}-${normalizeKey(log.title || '')}`;
+                    if (logKey === songKey && log.reason) {
+                      const match = log.reason.match(/frescor:\s*(\d+)min/);
+                      if (match) return parseInt(match[1], 10);
+                    }
+                  }
+                  return null;
+                })();
+
+                // Freshness color for song title text
+                const freshnessTextClass = freshnessMin !== null
+                  ? freshnessMin < 10
+                    ? 'text-green-400'
+                    : freshnessMin <= 15
+                      ? 'text-amber-400'
+                      : 'text-red-400'
+                  : '';
+
                 return (
                   <div
                     key={index}
@@ -784,13 +809,24 @@ export function GradePreviewCard() {
                         </span>
                       ) : (
                         <>
-                          <p className="text-sm font-medium truncate leading-tight">
+                          <p className={`text-sm font-medium truncate leading-tight ${freshnessTextClass}`}>
                             {song.title || song.artist}
                           </p>
                           <div className="flex items-center gap-1.5">
-                            <p className="text-xs text-muted-foreground truncate">
+                            <p className={`text-xs truncate ${freshnessTextClass || 'text-muted-foreground'}`}>
                               {song.artist}
                             </p>
+                            {freshnessMin !== null && (
+                              <Badge variant="outline" className={`text-[8px] px-1 py-0 shrink-0 ${
+                                freshnessMin < 10
+                                  ? 'text-green-400 border-green-500/30 bg-green-500/10'
+                                  : freshnessMin <= 15
+                                    ? 'text-amber-400 border-amber-500/30 bg-amber-500/10'
+                                    : 'text-red-400 border-red-500/30 bg-red-500/10'
+                              }`}>
+                                {freshnessMin}min
+                              </Badge>
+                            )}
                             {stationName && (
                               <Badge variant="outline" className="text-[9px] px-1 py-0 bg-accent/30 text-accent-foreground/70 border-accent/40 shrink-0">
                                 <Radio className="w-2.5 h-2.5 mr-0.5" />
