@@ -32,9 +32,9 @@ export function normalizeStr(s: string): string {
     .replace(/([a-z0-9])([(\[])/g, '$1 $2')
     // Normalise feat variations: "feat.", "feat", "ft.", "ft", "featuring" → "feat"
     .replace(/\b(feat\.?|ft\.?|featuring)\b/gi, 'feat')
-    // Strip remaining punctuation that doesn't carry meaning for matching
-    // Keep hyphens (artist separators), parentheses and brackets (live/acoustic tags)
-    .replace(/[,;:!?¿¡@#$%^&*+={}|\\/<>~_]/g, ' ')
+    // Strip punctuation that doesn't carry meaning for matching
+    // Keep: hyphens, parentheses, brackets, asterisks (wildcards)
+    .replace(/[,;:!?¿¡@#$%^&+={}|\\/<>~_"]/g, ' ')
     // Collapse multiple spaces
     .replace(/\s+/g, ' ')
     .trim();
