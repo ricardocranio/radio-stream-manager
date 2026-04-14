@@ -78,17 +78,26 @@ export function useBackgroundMaintenance() {
         return;
       }
 
-      const allFolders = [
+      // SAFETY: Only scan root download folder and root music folders.
+      // Exclude genre-routed subfolders to prevent accidental deletion of intentionally moved files.
+      const rootFolders = [
         ...config.musicFolders,
         deezerConfig.downloadFolder,
       ].filter(Boolean);
 
-      if (allFolders.length === 0) return;
+      const genreRoutes = deezerConfig.genreRoutes || [];
+      const routedFolderNames = new Set(genreRoutes.map(r => r.folderName.toLowerCase()));
+      const safeFolders = rootFolders.filter(f => {
+        const folderName = f.replace(/[\\/]+$/, '').split(/[\\/]/).pop()?.toLowerCase() || '';
+        return !routedFolderNames.has(folderName);
+      });
+
+      if (safeFolders.length === 0) return;
 
       console.log(`[MAINTENANCE] 🗑️ Verificando arquivos bloqueados (${blockedSongs.length} bloqueios, ${forbiddenWords.length} palavras proibidas)...`);
 
       const result = await window.electronAPI.purgeBlockedFiles({
-        musicFolders: allFolders,
+        musicFolders: safeFolders,
         blockedSongs,
         forbiddenWords,
       });
