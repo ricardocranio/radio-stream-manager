@@ -853,6 +853,9 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         </div>
       </Card>
 
+      {/* P1 Freshness — below preview */}
+      <P1FreshnessAlertCard />
+
       {/* Grades Montadas — Collapsible */}
       <Card className="glass-card">
         <CardHeader className="pb-2 cursor-pointer select-none" onClick={() => setScheduleCollapsed(!scheduleCollapsed)}>
@@ -1100,7 +1103,6 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       </Card>
 
 
-
       {/* Phase 5: Service Health Dashboard */}
       <ServiceHealthCard />
 
@@ -1113,8 +1115,6 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       {/* Blocked Songs — Full width collapsible */}
       <BlockedSongsCard />
 
-      {/* P1 Freshness — Full width collapsible */}
-      <P1FreshnessAlertCard />
 
       {/* Phase 6: Intelligence Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
