@@ -1099,6 +1099,8 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         </div></div>
       </Card>
 
+      {/* P1 Freshness — below preview */}
+      <P1FreshnessAlertCard />
 
 
 
