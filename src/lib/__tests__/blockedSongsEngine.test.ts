@@ -14,6 +14,9 @@ const blockedSongs = [
   "YGOR E KELVEN - O QUE EU FACO AGORA",
   "Kaize - Olha onde eu to",
   "MC Kevin - Cavalgada",
+  "Jefi - Marquinha De Fita",
+  "JEFFINHO - MARQUINHA DE FITINHA",
+  "Eurides Nunes - FARROUPILHA",
 ];
 
 const forbiddenWords = ["ganja", "mega sena"];
@@ -68,12 +71,49 @@ describe('blockedSongsEngine', () => {
     });
   });
 
-  describe('forward alias check in engine', () => {
-    it('blocks wrong name that maps to blocked corrected name via alias', () => {
-      // "Naldo Lima - Retrovisor" is blocked directly AND has alias → Gusttavo Lima
-      // The forward check should detect this
-      const match = engine.getBlockMatch('naldo lima', 'retrovisor');
-      expect(match).not.toBeNull();
+  describe('partial matching — shared surnames must NOT cause false positives', () => {
+    it('Gusttavo Lima is NOT blocked by "Naldo Lima - Retrovisor" partial match', () => {
+      // "Lima" is shared but "Naldo" ≠ "Gusttavo" — all words must match
+      expect(engine.getBlockMatch('Gusttavo Lima', 'Retrovisor')).toBeNull();
+    });
+
+    it('Simone Mendes is NOT blocked by "Ikaro Mendes - *" wildcard', () => {
+      // Wildcard checks exact artist name, not partial
+      expect(engine.getBlockMatch('Simone Mendes', 'Qualquer Musica')).toBeNull();
+    });
+
+    it('MC Kevinho is NOT blocked by "MC Kevin - Cavalgada"', () => {
+      // "Kevin" ≠ "Kevinho", partial word match must fail
+      expect(engine.getBlockMatch('MC Kevinho', 'Cavalgada')).toBeNull();
+    });
+
+    it('Jefi does NOT block Jefferson Moraes via partial', () => {
+      expect(engine.getBlockMatch('Jefferson Moraes', 'Marquinha De Fita')).toBeNull();
+    });
+
+    it('Thiago Brava is NOT blocked by "thiago jose" entry', () => {
+      // Different multi-word artist — "jose" ≠ "brava"
+      expect(engine.getBlockMatch('Thiago Brava', 'balançou balançou(ao vivo)')).toBeNull();
+    });
+  });
+
+  describe('acentuation edge cases', () => {
+    it('blocks regardless of accent differences', () => {
+      // "balançou" vs "balancou" — NFD normalization strips accents
+      expect(engine.getBlockMatch('thiago jose', 'balancou balancou(ao vivo)')).not.toBeNull();
+    });
+
+    it('blocks "Eurides Nunes - FARROUPILHA" with accent variations', () => {
+      expect(engine.getBlockMatch('EURIDES NUNES', 'Farroupilha')).not.toBeNull();
+      expect(engine.getBlockMatch('eurides nunes', 'farroupilha')).not.toBeNull();
+    });
+
+    it('blocks forbidden word with accents', () => {
+      expect(engine.getBlockMatch('Artista', 'Mega Sena ao vivo')).toEqual({ rule: 'forbidden' });
+    });
+
+    it('handles mixed case and extra spaces', () => {
+      expect(engine.getBlockMatch('  NALDO LIMA  ', '  retrovisor  ')).not.toBeNull();
     });
   });
 });
@@ -97,7 +137,6 @@ describe('downloadGuard — forward alias integration', () => {
   });
 
   it('resolves alias and uses corrected name for download', () => {
-    // Naldo Lima → alias → Gusttavo Lima, but Naldo Lima is blocked
     const decision = guard('Naldo Lima', 'Retrovisor');
     expect(decision.downloadArtist).toBe('Gusttavo Lima');
     expect(decision.downloadTitle).toBe('Retrovisor');
@@ -105,16 +144,18 @@ describe('downloadGuard — forward alias integration', () => {
   });
 
   it('blocks wrong artist with wildcard even after alias resolution', () => {
-    // "PROMESSA D - PEDIDO DE SOCORRO" has alias → Gustavo Mioto
-    // But PROMESSA D - * is blocked by wildcard
     const decision = guard('PROMESSA D', 'PEDIDO DE SOCORRO');
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toBe('blocked');
   });
 
   it('allows correct artist that was alias target of wildcard-blocked artist', () => {
-    // Gustavo Mioto should pass even though PROMESSA D (alias source) is wildcard-blocked
     const decision = guard('Gustavo Mioto', 'Pedido De Socorro (Ao Vivo)');
+    expect(decision.allowed).toBe(true);
+  });
+
+  it('allows Felipe Amorim even though Wellington Paixone is wildcard-blocked', () => {
+    const decision = guard('Felipe Amorim', 'Vou na Sua Casa');
     expect(decision.allowed).toBe(true);
   });
 });
