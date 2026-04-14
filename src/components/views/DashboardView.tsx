@@ -1110,10 +1110,14 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       {/* Grade Decision Log */}
       <GradeDecisionLogCard />
 
+      {/* Blocked Songs — Full width collapsible */}
+      <BlockedSongsCard />
+
+      {/* P1 Freshness — Full width collapsible */}
+      <P1FreshnessAlertCard />
+
       {/* Phase 6: Intelligence Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <BlockedSongsCard />
-        <P1FreshnessAlertCard />
         <HourlyCapturesCard />
         <OfflineAlertsCard />
         <WeeklyReportCard />
