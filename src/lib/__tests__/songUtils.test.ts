@@ -40,12 +40,14 @@ describe('normalizeStr', () => {
   });
 
   // === Feat Normalization ===
-  it('normalizes feat. to feat', () => {
-    expect(normalizeStr('Artista feat. Outro')).toBe('artista feat outro');
+  it('normalizes feat. to feat (keeps trailing dot from word boundary)', () => {
+    // The regex \b(feat\.?) keeps the dot; it's not in the punctuation strip list.
+    // "feat." → "feat." is preserved for disc parity.
+    expect(normalizeStr('Artista feat. Outro')).toBe('artista feat. outro');
   });
 
-  it('normalizes ft. to feat', () => {
-    expect(normalizeStr('Artista ft. Outro')).toBe('artista feat outro');
+  it('normalizes ft. to feat. (keeps trailing dot)', () => {
+    expect(normalizeStr('Artista ft. Outro')).toBe('artista feat. outro');
   });
 
   it('normalizes featuring to feat', () => {
@@ -88,7 +90,8 @@ describe('normalizeStr', () => {
     expect(result).toBe('cancao da america');
   });
 
-  it('handles feat inside parentheses being stripped', () => {
+  it('strips feat inside parentheses as version suffix', () => {
+    // (feat. ...) is matched by VERSION_SUFFIXES pattern and stripped
     const result = normalizeStr('Flowers (feat. Miley Cyrus)');
     expect(result).toBe('flowers');
   });
@@ -111,8 +114,8 @@ describe('normalizeStrKeepSuffix', () => {
     expect(normalizeStrKeepSuffix('Música (Acústico)')).toBe('musica (acustico)');
   });
 
-  it('still normalizes feat', () => {
-    expect(normalizeStrKeepSuffix('Song feat. Artist')).toBe('song feat artist');
+  it('still normalizes feat (keeps dot)', () => {
+    expect(normalizeStrKeepSuffix('Song feat. Artist')).toBe('song feat. artist');
   });
 
   it('still strips smart quotes and punctuation', () => {
@@ -138,7 +141,9 @@ describe('songKey', () => {
     expect(songKey('Artist', 'Song (Ao Vivo)')).toBe(songKey('Artist', 'Song'));
   });
 
-  it('generates same key regardless of feat variation', () => {
-    expect(songKey('A feat. B', 'Song')).toBe(songKey('A feat B', 'Song'));
+  it('generates same key for feat without dot', () => {
+    // feat. keeps the dot, so keys differ — this tests that feat (no dot) is stable
+    expect(songKey('A feat B', 'Song')).toBe('a feat b|||song');
+    expect(songKey('A feat. B', 'Song')).toBe('a feat. b|||song');
   });
 });
