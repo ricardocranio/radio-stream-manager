@@ -63,7 +63,7 @@ function parseGradeLine(line: string): PreviewSong[] {
 export function GradePreviewCard() {
   const { config, stations, scheduledSequences, setGradePreviewSongKeys } = useRadioStore();
   const { gradeBuilder } = useGlobalServices();
-  const { getLogsByBlock } = useGradeLogStore();
+  const { getLogsByBlock, blockLogs } = useGradeLogStore();
   const [libraryStatus, setLibraryStatus] = useState<Record<string, LibraryStatus>>({});
   const [isCheckingLibrary, setIsCheckingLibrary] = useState(false);
   const [realBlockDuration, setRealBlockDuration] = useState<number | null>(null);
@@ -72,6 +72,7 @@ export function GradePreviewCard() {
   const [songCount, setSongCount] = useState(0);
   const [dynamicMockSongs, setDynamicMockSongs] = useState<PreviewSong[]>([]);
   const [dynamicStationMap, setDynamicStationMap] = useState<Record<string, string>>({});
+  const [freshnessMap, setFreshnessMap] = useState<Record<string, number>>({});
 
   // === DYNAMIC MOCK DATA: Fetch real songs from DB based on active sequence ===
   useEffect(() => {
@@ -403,6 +404,43 @@ export function GradePreviewCard() {
       .replace(/\s+/g, ' ');
   }, []);
 
+  const buildFreshnessKey = useCallback((artist: string, title: string, stationName?: string | null) => {
+    const songKey = `${normalizeKey(artist)}-${normalizeKey(title || '')}`;
+    return stationName ? `${normalizeKey(stationName)}::${songKey}` : songKey;
+  }, [normalizeKey]);
+
+  const getFreshnessTone = useCallback((freshnessMin: number | null) => {
+    if (freshnessMin === null) {
+      return {
+        row: 'bg-card/50 border-border/50 hover:border-border',
+        text: '',
+        badge: '',
+      };
+    }
+
+    if (freshnessMin < 10) {
+      return {
+        row: 'bg-success/10 border-success/30 hover:border-success/40',
+        text: 'text-success',
+        badge: 'text-success border-success/30 bg-success/10',
+      };
+    }
+
+    if (freshnessMin <= 15) {
+      return {
+        row: 'bg-warning/10 border-warning/30 hover:border-warning/40',
+        text: 'text-warning',
+        badge: 'text-warning border-warning/30 bg-warning/10',
+      };
+    }
+
+    return {
+      row: 'bg-destructive/10 border-destructive/30 hover:border-destructive/40',
+      text: 'text-destructive',
+      badge: 'text-destructive border-destructive/30 bg-destructive/10',
+    };
+  }, []);
+
   // Build a map of song key -> station from builder's pendingStationMap (immediate)
   // Falls back to gradeLogStore for backwards compatibility
   const songStationMap = useMemo(() => {
@@ -436,6 +474,130 @@ export function GradePreviewCard() {
     }
     return map;
   }, [nextBlockTime, getLogsByBlock, dynamicStationMap, normalizeKey, gradeBuilder.pendingStationMap]);
+
+  const freshnessFromLogs = useMemo(() => {
+    const map: Record<string, number> = {};
+
+    const registerLogs = (logs: ReturnType<typeof getLogsByBlock>) => {
+      for (const log of logs) {
+        if (!log.artist || !log.title || !log.reason) continue;
+        const match = log.reason.match(/frescor:\s*(\d+)min/i);
+        if (!match) continue;
+
+        const freshnessMin = parseInt(match[1], 10);
+        const baseKey = buildFreshnessKey(log.artist, log.title);
+        const stationKey = log.station ? buildFreshnessKey(log.artist, log.title, log.station) : null;
+
+        if (map[baseKey] === undefined || freshnessMin < map[baseKey]) {
+          map[baseKey] = freshnessMin;
+        }
+
+        if (stationKey && (map[stationKey] === undefined || freshnessMin < map[stationKey])) {
+          map[stationKey] = freshnessMin;
+        }
+      }
+    };
+
+    if (nextBlockTime !== '--:--') {
+      registerLogs(getLogsByBlock(nextBlockTime));
+    }
+
+    const now = new Date();
+    const currentBlockTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes() < 30 ? '00' : '30'}`;
+    if (currentBlockTime !== nextBlockTime) {
+      registerLogs(getLogsByBlock(currentBlockTime));
+    }
+
+    registerLogs(blockLogs.filter(log => log.type === 'used'));
+
+    return map;
+  }, [nextBlockTime, getLogsByBlock, blockLogs, buildFreshnessKey]);
+
+  useEffect(() => {
+    const songsToResolve = displaySongs
+      .filter(song => !song.isSpecial && song.artist && song.title)
+      .map(song => {
+        const baseSongKey = `${normalizeKey(song.artist)}-${normalizeKey(song.title || '')}`;
+        return {
+          artist: song.artist,
+          title: song.title || '',
+          stationName: songStationMap[baseSongKey] || null,
+        };
+      });
+
+    if (songsToResolve.length === 0) {
+      setFreshnessMap({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadFreshness = async () => {
+      const recentFreshness: Record<string, number> = {};
+      const sinceIso = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+
+      const applyRows = (rows: Array<{ artist: string; title: string; station_name: string | null; scraped_at: string }>) => {
+        for (const row of rows) {
+          const freshnessMin = Math.max(0, Math.round((Date.now() - new Date(row.scraped_at).getTime()) / 60000));
+          const baseKey = buildFreshnessKey(row.artist, row.title);
+          const stationKey = row.station_name ? buildFreshnessKey(row.artist, row.title, row.station_name) : null;
+
+          if (recentFreshness[baseKey] === undefined || freshnessMin < recentFreshness[baseKey]) {
+            recentFreshness[baseKey] = freshnessMin;
+          }
+
+          if (stationKey && (recentFreshness[stationKey] === undefined || freshnessMin < recentFreshness[stationKey])) {
+            recentFreshness[stationKey] = freshnessMin;
+          }
+        }
+      };
+
+      const coverageCount = () => songsToResolve.filter(song => {
+        const stationKey = song.stationName ? buildFreshnessKey(song.artist, song.title, song.stationName) : null;
+        const baseKey = buildFreshnessKey(song.artist, song.title);
+        return (stationKey && recentFreshness[stationKey] !== undefined) || recentFreshness[baseKey] !== undefined;
+      }).length;
+
+      try {
+        const stationNames = [...new Set(songsToResolve.map(song => song.stationName).filter(Boolean))] as string[];
+
+        if (stationNames.length > 0) {
+          const { data } = await supabase
+            .from('scraped_songs')
+            .select('artist, title, station_name, scraped_at')
+            .in('station_name', stationNames)
+            .gte('scraped_at', sinceIso)
+            .order('scraped_at', { ascending: false })
+            .limit(400);
+
+          if (data) applyRows(data);
+        }
+
+        if (coverageCount() < songsToResolve.length) {
+          const { data } = await supabase
+            .from('scraped_songs')
+            .select('artist, title, station_name, scraped_at')
+            .gte('scraped_at', sinceIso)
+            .order('scraped_at', { ascending: false })
+            .limit(400);
+
+          if (data) applyRows(data);
+        }
+      } catch (error) {
+        console.warn('[PREVIEW] Falha ao carregar frescor real para o preview:', error);
+      }
+
+      if (!cancelled) {
+        setFreshnessMap(recentFreshness);
+      }
+    };
+
+    loadFreshness();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [displaySongs, songStationMap, normalizeKey, buildFreshnessKey]);
 
   // Get the raw grade line from builder
   const nextBlockLine = useMemo(() => {
@@ -756,55 +918,16 @@ export function GradePreviewCard() {
                 const isMissing = libraryStatus[song.filename.toLowerCase()] === 'missing';
                 const stationKey = `${normalizeKey(song.artist)}-${normalizeKey(song.title || '')}`;
                 const stationName = songStationMap[stationKey];
-
-                // Extract freshness from grade decision logs
-                const freshnessMin = (() => {
-                  if (song.isSpecial) return null;
-                  const sKey = `${normalizeKey(song.artist)}-${normalizeKey(song.title || '')}`;
-                  
-                  // Helper to find freshness in a log array
-                  const findInLogs = (logs: ReturnType<typeof getLogsByBlock>) => {
-                    for (const log of logs) {
-                      const logKey = `${normalizeKey(log.artist)}-${normalizeKey(log.title || '')}`;
-                      if (logKey === sKey && log.reason) {
-                        const match = log.reason.match(/frescor:\s*(\d+)min/);
-                        if (match) return parseInt(match[1], 10);
-                      }
-                    }
-                    return null;
-                  };
-
-                  // 1) Try exact blockTime match
-                  if (nextBlockTime !== '--:--') {
-                    const result = findInLogs(getLogsByBlock(nextBlockTime));
-                    if (result !== null) return result;
-                  }
-
-                  // 2) Fallback: try current blockTime (may differ from next)
-                  const now = new Date();
-                  const curTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes() < 30 ? '00' : '30'}`;
-                  if (curTime !== nextBlockTime) {
-                    const result = findInLogs(getLogsByBlock(curTime));
-                    if (result !== null) return result;
-                  }
-
-                  // 3) Fallback: search ALL recent logs (last build)
-                  const allLogs = useGradeLogStore.getState().blockLogs;
-                  const recentLogs = allLogs.filter(l => l.type === 'used');
-                  const result = findInLogs(recentLogs);
-                  if (result !== null) return result;
-
-                  return null;
-                })();
-
-                // Freshness color for song title text
-                const freshnessTextClass = freshnessMin !== null
-                  ? freshnessMin < 10
-                    ? 'text-green-400'
-                    : freshnessMin <= 15
-                      ? 'text-amber-400'
-                      : 'text-red-400'
-                  : '';
+                const baseFreshnessKey = buildFreshnessKey(song.artist, song.title || '');
+                const stationFreshnessKey = stationName ? buildFreshnessKey(song.artist, song.title || '', stationName) : null;
+                const freshnessMin = song.isSpecial
+                  ? null
+                  : (stationFreshnessKey ? freshnessMap[stationFreshnessKey] : undefined)
+                    ?? freshnessMap[baseFreshnessKey]
+                    ?? (stationFreshnessKey ? freshnessFromLogs[stationFreshnessKey] : undefined)
+                    ?? freshnessFromLogs[baseFreshnessKey]
+                    ?? null;
+                const freshnessTone = getFreshnessTone(freshnessMin);
 
                 return (
                   <div
@@ -814,7 +937,7 @@ export function GradePreviewCard() {
                         ? 'bg-red-500/10 border-red-500/30'
                         : song.isSpecial
                           ? 'bg-purple-500/10 border-purple-500/20'
-                          : 'bg-card/50 border-border/50 hover:border-border'
+                          : freshnessTone.row
                     }`}
                   >
                     {/* Position */}
@@ -833,21 +956,15 @@ export function GradePreviewCard() {
                         </span>
                       ) : (
                         <>
-                          <p className={`text-sm font-medium truncate leading-tight ${freshnessTextClass}`}>
+                          <p className={`text-sm font-medium truncate leading-tight ${freshnessTone.text}`}>
                             {song.title || song.artist}
                           </p>
                           <div className="flex items-center gap-1.5">
-                            <p className={`text-xs truncate ${freshnessTextClass || 'text-muted-foreground'}`}>
+                            <p className={`text-xs truncate ${freshnessTone.text || 'text-muted-foreground'}`}>
                               {song.artist}
                             </p>
                             {freshnessMin !== null && (
-                              <Badge variant="outline" className={`text-[8px] px-1 py-0 shrink-0 ${
-                                freshnessMin < 10
-                                  ? 'text-green-400 border-green-500/30 bg-green-500/10'
-                                  : freshnessMin <= 15
-                                    ? 'text-amber-400 border-amber-500/30 bg-amber-500/10'
-                                    : 'text-red-400 border-red-500/30 bg-red-500/10'
-                              }`}>
+                              <Badge variant="outline" className={`text-[8px] px-1 py-0 shrink-0 ${freshnessTone.badge}`}>
                                 {freshnessMin}min
                               </Badge>
                             )}
