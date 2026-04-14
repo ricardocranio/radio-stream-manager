@@ -518,11 +518,12 @@ export async function selectSongForSlot(
       // Freshest tier gets most attempts; older tiers get fewer.
       if (!selectedSong && missingFromTier.length > 0) {
         let jitAttemptsP1 = 0;
-        // Tier 1 (≤15min): 10 attempts — most critical, freshest captures
-        // Tier 2 (≤30min): 6 attempts — still very relevant
-        // Tier 3 (≤1h): 4 attempts — worth trying
-        // Tier 4 (≤2h): 3 attempts — last resort within P1
-        const jitBudgetByTier = [10, 6, 4, 3];
+        // AGGRESSIVE JIT budgets — fresh songs MUST be downloaded to respect monitoring
+        // Tier 1 (≤15min): 15 attempts — most critical, freshest captures from monitored station
+        // Tier 2 (≤30min): 10 attempts — still very relevant
+        // Tier 3 (≤1h): 6 attempts — worth trying
+        // Tier 4 (≤2h): 4 attempts — last resort within P1
+        const jitBudgetByTier = [15, 10, 6, 4];
         const maxJitAttemptsP1 = jitBudgetByTier[tierIdx] || 3;
         let missingMarks = 0;
 
