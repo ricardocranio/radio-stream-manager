@@ -90,114 +90,105 @@ export function BlockedSongsCard() {
   };
 
   return (
-    <Card className="glass-card border-red-500/20">
-      <CardContent className="p-4 space-y-3">
-        {/* Header */}
-        <div
-          className="flex items-center justify-between cursor-pointer select-none"
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
-              <Shield className="w-4 h-4 text-red-400" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">Bloqueios Hoje</p>
-              <p className="text-xs text-muted-foreground">Músicas impedidas de entrar</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold font-mono text-red-400">{stats.total}</span>
-            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${!collapsed ? 'rotate-180' : ''}`} />
-          </div>
-        </div>
-
-        {/* Rule badges — clickable filters */}
-        {stats.total > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(stats.byRule)
-              .filter(([, count]) => count > 0)
-              .map(([rule, count]) => {
-                const info = ruleLabels[rule];
-                const Icon = info.icon;
-                const isActive = activeFilter === rule;
-                return (
-                  <Badge
-                    key={rule}
-                    variant="outline"
-                    className={`text-xs cursor-pointer transition-all ${info.color} ${isActive ? 'border-current bg-current/15 ring-1 ring-current/30' : 'border-current/30 hover:bg-current/10'}`}
-                    onClick={(e) => { e.stopPropagation(); handleBadgeClick(rule); }}
-                  >
-                    <Icon className="w-3 h-3 mr-1" />
-                    {info.label}: {count}
-                  </Badge>
-                );
-              })}
-          </div>
-        )}
-
-        {/* Expanded content */}
-        {!collapsed && stats.total > 0 && (
-          <>
-            <div className="flex gap-3 text-xs text-muted-foreground">
-              {stats.bySource.download > 0 && <span>📥 Downloads: {stats.bySource.download}</span>}
-              {stats.bySource['captured-download'] > 0 && <span>🎙️ Capturadas: {stats.bySource['captured-download']}</span>}
-              {stats.bySource.grade > 0 && <span>📋 Grade: {stats.bySource.grade}</span>}
-              {stats.bySource.mapa > 0 && <span>🗺️ Mapa: {stats.bySource.mapa}</span>}
-            </div>
-
-            {activeFilter && (
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground">
-                  Filtrando: {ruleLabels[activeFilter]?.label} ({filteredEvents.length})
-                </span>
-                <Badge
-                  variant="outline"
-                  className="text-[9px] cursor-pointer hover:bg-muted/20"
-                  onClick={() => setActiveFilter(null)}
-                >
-                  Limpar filtro
-                </Badge>
+    <Card className="glass-card">
+      <CardHeader className="pb-2 cursor-pointer select-none" onClick={() => setCollapsed(!collapsed)}>
+        <CardTitle className="text-sm md:text-base flex items-center gap-2">
+          <Shield className="w-4 h-4 text-red-400" />
+          Bloqueios Hoje
+          <span className="text-2xl font-bold font-mono text-red-400 ml-auto mr-2">{stats.total}</span>
+          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${!collapsed ? 'rotate-180' : ''}`} />
+        </CardTitle>
+      </CardHeader>
+      <div className="collapsible-content" data-open={!collapsed}>
+        <div>
+          <CardContent className="pt-0 space-y-3">
+            {/* Rule badges — clickable filters */}
+            {stats.total > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(stats.byRule)
+                  .filter(([, count]) => count > 0)
+                  .map(([rule, count]) => {
+                    const info = ruleLabels[rule];
+                    const Icon = info.icon;
+                    const isActive = activeFilter === rule;
+                    return (
+                      <Badge
+                        key={rule}
+                        variant="outline"
+                        className={`text-xs cursor-pointer transition-all ${info.color} ${isActive ? 'border-current bg-current/15 ring-1 ring-current/30' : 'border-current/30 hover:bg-current/10'}`}
+                        onClick={(e) => { e.stopPropagation(); handleBadgeClick(rule); }}
+                      >
+                        <Icon className="w-3 h-3 mr-1" />
+                        {info.label}: {count}
+                      </Badge>
+                    );
+                  })}
               </div>
             )}
 
-            <ScrollArea className="h-[250px]">
-              <div className="space-y-1 pr-2">
-                {filteredEvents.slice(-30).reverse().map((e, i) => {
-                  const time = new Date(e.timestamp);
-                  const timeStr = time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                  const isAlias = e.rule === 'alias';
-                  return (
-                    <div key={i} className="flex items-center gap-2 text-xs p-1.5 rounded bg-muted/10 border border-border/10">
-                      <Ban className="w-3 h-3 text-red-400/60 shrink-0" />
-                      <span className="text-muted-foreground truncate flex-1">
-                        {e.artist} — {e.title}
-                      </span>
-                      {isAlias && (
-                        <Badge variant="outline" className="text-[9px] border-purple-500/30 text-purple-400 shrink-0">
-                          Alias
-                        </Badge>
-                      )}
-                      <Badge variant="outline" className="text-[9px] shrink-0">
-                        {ruleLabels[e.rule]?.label}
-                      </Badge>
-                      <span className="text-[9px] text-muted-foreground/70 shrink-0 font-mono">
-                        {timeStr}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </ScrollArea>
-          </>
-        )}
+            {stats.total > 0 && (
+              <>
+                <div className="flex gap-3 text-xs text-muted-foreground">
+                  {stats.bySource.download > 0 && <span>📥 Downloads: {stats.bySource.download}</span>}
+                  {stats.bySource['captured-download'] > 0 && <span>🎙️ Capturadas: {stats.bySource['captured-download']}</span>}
+                  {stats.bySource.grade > 0 && <span>📋 Grade: {stats.bySource.grade}</span>}
+                  {stats.bySource.mapa > 0 && <span>🗺️ Mapa: {stats.bySource.mapa}</span>}
+                </div>
 
-        {stats.total === 0 && (
-          <p className="text-xs text-muted-foreground/60 text-center py-2">
-            Nenhuma música bloqueada hoje
-          </p>
-        )}
-      </CardContent>
+                {activeFilter && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground">
+                      Filtrando: {ruleLabels[activeFilter]?.label} ({filteredEvents.length})
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="text-[9px] cursor-pointer hover:bg-muted/20"
+                      onClick={() => setActiveFilter(null)}
+                    >
+                      Limpar filtro
+                    </Badge>
+                  </div>
+                )}
+
+                <ScrollArea className="max-h-[400px]">
+                  <div className="space-y-1 pr-2">
+                    {filteredEvents.slice(-30).reverse().map((e, i) => {
+                      const time = new Date(e.timestamp);
+                      const timeStr = time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                      const isAlias = e.rule === 'alias';
+                      return (
+                        <div key={i} className="flex items-center gap-2 text-xs p-1.5 rounded bg-muted/10 border border-border/10">
+                          <Ban className="w-3 h-3 text-red-400/60 shrink-0" />
+                          <span className="text-muted-foreground truncate flex-1">
+                            {e.artist} — {e.title}
+                          </span>
+                          {isAlias && (
+                            <Badge variant="outline" className="text-[9px] border-purple-500/30 text-purple-400 shrink-0">
+                              Alias
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className="text-[9px] shrink-0">
+                            {ruleLabels[e.rule]?.label}
+                          </Badge>
+                          <span className="text-[9px] text-muted-foreground/70 shrink-0 font-mono">
+                            {timeStr}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              </>
+            )}
+
+            {stats.total === 0 && (
+              <p className="text-xs text-muted-foreground/60 text-center py-2">
+                Nenhuma música bloqueada hoje
+              </p>
+            )}
+          </CardContent>
+        </div>
+      </div>
     </Card>
   );
 }
