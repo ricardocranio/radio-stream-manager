@@ -760,16 +760,40 @@ export function GradePreviewCard() {
                 // Extract freshness from grade decision logs
                 const freshnessMin = (() => {
                   if (song.isSpecial) return null;
-                  const songKey = `${normalizeKey(song.artist)}-${normalizeKey(song.title || '')}`;
-                  // Check logs for this song's freshness
-                  const logs = nextBlockTime !== '--:--' ? getLogsByBlock(nextBlockTime) : [];
-                  for (const log of logs) {
-                    const logKey = `${normalizeKey(log.artist)}-${normalizeKey(log.title || '')}`;
-                    if (logKey === songKey && log.reason) {
-                      const match = log.reason.match(/frescor:\s*(\d+)min/);
-                      if (match) return parseInt(match[1], 10);
+                  const sKey = `${normalizeKey(song.artist)}-${normalizeKey(song.title || '')}`;
+                  
+                  // Helper to find freshness in a log array
+                  const findInLogs = (logs: ReturnType<typeof getLogsByBlock>) => {
+                    for (const log of logs) {
+                      const logKey = `${normalizeKey(log.artist)}-${normalizeKey(log.title || '')}`;
+                      if (logKey === sKey && log.reason) {
+                        const match = log.reason.match(/frescor:\s*(\d+)min/);
+                        if (match) return parseInt(match[1], 10);
+                      }
                     }
+                    return null;
+                  };
+
+                  // 1) Try exact blockTime match
+                  if (nextBlockTime !== '--:--') {
+                    const result = findInLogs(getLogsByBlock(nextBlockTime));
+                    if (result !== null) return result;
                   }
+
+                  // 2) Fallback: try current blockTime (may differ from next)
+                  const now = new Date();
+                  const curTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes() < 30 ? '00' : '30'}`;
+                  if (curTime !== nextBlockTime) {
+                    const result = findInLogs(getLogsByBlock(curTime));
+                    if (result !== null) return result;
+                  }
+
+                  // 3) Fallback: search ALL recent logs (last build)
+                  const allLogs = useGradeLogStore.getState().blockLogs;
+                  const recentLogs = allLogs.filter(l => l.type === 'used');
+                  const result = findInLogs(recentLogs);
+                  if (result !== null) return result;
+
                   return null;
                 })();
 
