@@ -135,16 +135,18 @@ export function useAutoGradeBuilder() {
     // Restore persisted grade from localStorage on mount
     const dayCode = DAY_CODES_BY_INDEX[new Date().getDay()];
     const persisted = loadGradeFromStorage(dayCode);
+    const restoredLineMap = persisted?.lineMap || new Map();
     return {
       isBuilding: false, lastBuildTime: null,
       currentBlock: '--:--', nextBlock: '--:--',
-      lastSavedFile: null, error: null, blocksGenerated: 0,
+      lastSavedFile: null, error: null,
+      blocksGenerated: restoredLineMap.size, // Reflect restored blocks
       isAutoEnabled: true, nextBuildIn: 0,
       minutesBeforeBlock: DEFAULT_MINUTES_BEFORE_BLOCK,
       fullDayProgress: 0, fullDayTotal: 0,
       skippedSongs: 0, substitutedSongs: 0, missingSongs: 0,
       currentProcessingSong: null, currentProcessingBlock: null, lastSaveProgress: 0,
-      pendingGradeLines: persisted?.lineMap || new Map(),
+      pendingGradeLines: restoredLineMap,
       pendingBlockDurations: new Map(),
       pendingStationMap: {},
     };
@@ -2013,7 +2015,18 @@ export function useAutoGradeBuilder() {
   // ==================== Pending Grade (in-memory buffer) ====================
 
   /** Holds the latest generated grade content in memory, ready to be flushed to disk */
-  const pendingGradeRef = useRef<{ lineMap: Map<string, string>; filename: string; blockKey: string } | null>(null);
+  const pendingGradeRef = useRef<{ lineMap: Map<string, string>; filename: string; blockKey: string } | null>(
+    (() => {
+      // Restore from localStorage so disk writes work immediately after restart
+      const dayCode = DAY_CODES_BY_INDEX[new Date().getDay()];
+      const persisted = loadGradeFromStorage(dayCode);
+      if (persisted && persisted.lineMap.size > 0) {
+        const filename = `${dayCode.toUpperCase()}.txt`;
+        return { lineMap: persisted.lineMap, filename, blockKey: '' };
+      }
+      return null;
+    })()
+  );
 
   // ==================== Incremental Build (silent, in-memory) ====================
 
@@ -2258,6 +2271,11 @@ export function useAutoGradeBuilder() {
         else builtBlocksRef.current.delete(nextTimeKey);
         if (thirdFullyResolved) builtBlocksRef.current.add(thirdTimeKey);
         else builtBlocksRef.current.delete(thirdTimeKey);
+        // CRITICAL: populate pendingGradeRef even when all blocks are locked
+        // so that flushGradeToDisk can write to disk on the next tick
+        if (!pendingGradeRef.current || pendingGradeRef.current.lineMap.size < lineMap.size) {
+          pendingGradeRef.current = { lineMap, filename, blockKey: thirdTimeKey };
+        }
         setState(prev => ({
           ...prev,
           isBuilding: false,
