@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildBlockedEngine } from '../blockedSongsEngine';
 import { createDownloadGuard } from '../downloadGuard';
+import { normalizeStr, songKey } from '../songUtils';
+import { buildAliasEngine } from '../aliasEngine';
 
 const blockedSongs = [
   "Naldo Lima - Retrovisor",
@@ -114,8 +116,60 @@ describe('blockedSongsEngine', () => {
 
     it('handles mixed case and extra spaces', () => {
       expect(engine.getBlockMatch('  NALDO LIMA  ', '  retrovisor  ')).not.toBeNull();
+  });
+
+  describe('enhanced normalisation — special chars, punctuation, feat', () => {
+    it('matches despite missing space before parenthesis', () => {
+      // "balancou(ao vivo)" vs "balancou (ao vivo)"
+      expect(normalizeStr('balancou(ao vivo)')).toBe(normalizeStr('balancou (ao vivo)'));
+    });
+
+    it('matches despite smart quotes and curly quotes', () => {
+      expect(normalizeStr("it\u2019s")).toBe(normalizeStr("it's"));
+      expect(normalizeStr('it\u2019s')).toBe(normalizeStr('its'));
+    });
+
+    it('normalises feat variations', () => {
+      expect(normalizeStr('Artist feat. Other')).toBe(normalizeStr('Artist ft. Other'));
+      expect(normalizeStr('Artist feat Other')).toBe(normalizeStr('Artist featuring Other'));
+    });
+
+    it('normalises em-dash and en-dash to hyphen', () => {
+      expect(normalizeStr('A \u2013 B')).toBe(normalizeStr('A - B'));
+      expect(normalizeStr('A \u2014 B')).toBe(normalizeStr('A - B'));
+    });
+
+    it('strips commas, semicolons, and decorative punctuation', () => {
+      expect(normalizeStr('Hello, World!')).toBe(normalizeStr('Hello World'));
+    });
+
+    it('songKey matches across accent + punctuation variations', () => {
+      const k1 = songKey('Gustavo Mioto', 'Pedido De Socorro (Ao Vivo)');
+      const k2 = songKey('GUSTAVO MIOTO', 'PEDIDO DE SOCORRO(AO VIVO)');
+      expect(k1).toBe(k2);
     });
   });
+
+  describe('aliasEngine — enhanced matching', () => {
+    const aliasEngine = buildAliasEngine(aliases);
+
+    it('resolves alias with accent differences', () => {
+      const result = aliasEngine.resolve('THIAGO JOSE', 'BALANCOU BALANÇOU(AO VIVO)');
+      expect(result.artist).toBe('Thiaguinho');
+    });
+
+    it('resolves alias with extra spaces', () => {
+      const result = aliasEngine.resolve('  BLACKBIRDS  ', ' Meus Herois ');
+      expect(result.artist).toBe('Tiee');
+    });
+
+    it('resolves alias with missing space before parenthesis', () => {
+      const result = aliasEngine.resolve('BALACHIC', 'ERA UMA VEZ(AO VIVO)');
+      // The alias data has trailing space "Xand Aviao " — resolve returns raw value
+      expect(result.artist.trim()).toBe('Xand Aviao');
+    });
+  });
+});
 });
 
 describe('downloadGuard — forward alias integration', () => {
