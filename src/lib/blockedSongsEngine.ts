@@ -54,17 +54,11 @@ export function buildBlockedEngine(
 
   // Forward alias map: wrong name → correct name
   const aliasFromMap = new Map<string, { toArtist: string; toTitle: string }>();
-  // Reverse alias map: correct name → wrong name (for reverse blocking)
-  const aliasReverseMap = new Map<string, { fromArtist: string; fromTitle: string }>();
 
   for (const alias of aliases) {
     aliasFromMap.set(songKey(alias.fromArtist, alias.fromTitle), {
       toArtist: alias.toArtist,
       toTitle: alias.toTitle,
-    });
-    aliasReverseMap.set(songKey(alias.toArtist, alias.toTitle), {
-      fromArtist: alias.fromArtist,
-      fromTitle: alias.fromTitle,
     });
   }
 
