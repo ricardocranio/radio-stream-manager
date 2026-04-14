@@ -79,6 +79,77 @@ export function GradePreviewCard() {
     if (isElectron) return;
 
     const fetchRealSongsForPreview = async () => {
+      const buildRecentFallbackSongs = async () => {
+        try {
+          const sinceIso = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+          const { data } = await supabase
+            .from('scraped_songs')
+            .select('artist, title, station_name, scraped_at')
+            .gte('scraped_at', sinceIso)
+            .order('scraped_at', { ascending: false })
+            .limit(80);
+
+          if (!data || data.length === 0) {
+            setDynamicMockSongs(getDefaultMockSongs());
+            setDynamicStationMap({});
+            return;
+          }
+
+          const uniqueRows: Array<{ artist: string; title: string; station_name: string | null }> = [];
+          const usedKeys = new Set<string>();
+
+          for (const row of data) {
+            const key = `${row.artist.toLowerCase().trim()}|${row.title.toLowerCase().trim()}`;
+            if (usedKeys.has(key)) continue;
+            usedKeys.add(key);
+            uniqueRows.push(row);
+            if (uniqueRows.length >= 8) break;
+          }
+
+          if (uniqueRows.length === 0) {
+            setDynamicMockSongs(getDefaultMockSongs());
+            setDynamicStationMap({});
+            return;
+          }
+
+          const fallbackSongs: PreviewSong[] = [];
+          const fallbackStationMap: Record<string, string> = {};
+          let position = 1;
+
+          uniqueRows.forEach((row, index) => {
+            fallbackSongs.push({
+              position: position++,
+              filename: `${row.artist} - ${row.title}.mp3`,
+              artist: row.artist,
+              title: row.title,
+              isSpecial: false,
+              durationSec: 210,
+            });
+
+            const normalizedKey = `${row.artist.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')}-${row.title.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')}`;
+            fallbackStationMap[normalizedKey] = row.station_name || 'Recente';
+
+            const shouldInsertVht = index < uniqueRows.length - 1 && (index % 2 === 0);
+            if (shouldInsertVht) {
+              fallbackSongs.push({
+                position: position++,
+                filename: 'VHT_RADIO.mp3',
+                artist: 'VHT_RADIO',
+                title: '',
+                isSpecial: true,
+                durationSec: 7,
+              });
+            }
+          });
+
+          setDynamicMockSongs(fallbackSongs);
+          setDynamicStationMap(fallbackStationMap);
+        } catch {
+          setDynamicMockSongs(getDefaultMockSongs());
+          setDynamicStationMap({});
+        }
+      };
+
       // Get active sequence for the next block time
       const activeSeq = getActiveSequence();
       
@@ -112,8 +183,8 @@ export function GradePreviewCard() {
         });
 
       if (genrePositions.length === 0 && stationPositions.length === 0 && yearPositions.length === 0) {
-        // No genres, years or stations in sequence — use fallback mock
-        setDynamicMockSongs(getDefaultMockSongs());
+        // No direct station/genre/year sources — use latest real captures as fallback
+        await buildRecentFallbackSongs();
         return;
       }
 
@@ -312,7 +383,7 @@ export function GradePreviewCard() {
         setDynamicMockSongs(songs);
         setDynamicStationMap(stationMap);
       } else {
-        setDynamicMockSongs(getDefaultMockSongs());
+        await buildRecentFallbackSongs();
       }
     };
 
