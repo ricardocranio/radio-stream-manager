@@ -28,10 +28,12 @@ const ID3_SCAN_KEY = 'pgmr_last_id3_scan'; // localStorage key for scan date
 
 export function useBackgroundMaintenance() {
   const lastClassifyRef = useRef<number>(0);
-  const lastPurgeRef = useRef<number>(0);
-  const lastDedupRef = useRef<number>(0);
+  // Initialize to Date.now() so the interval doesn't fire these immediately on boot
+  // (prevents double-execution: once from setTimeout + once from interval seeing 0 as stale)
+  const lastPurgeRef = useRef<number>(Date.now());
+  const lastDedupRef = useRef<number>(Date.now());
   const lastTempProcessRef = useRef<number>(0);
-  const lastId3ValidateRef = useRef<number>(0);
+  const lastId3ValidateRef = useRef<number>(Date.now());
   const lastCompressRef = useRef<string>(''); // Date string of last compression
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const id3ScanRunningRef = useRef(false);
@@ -76,17 +78,26 @@ export function useBackgroundMaintenance() {
         return;
       }
 
-      const allFolders = [
+      // SAFETY: Only scan root download folder and root music folders.
+      // Exclude genre-routed subfolders to prevent accidental deletion of intentionally moved files.
+      const rootFolders = [
         ...config.musicFolders,
         deezerConfig.downloadFolder,
       ].filter(Boolean);
 
-      if (allFolders.length === 0) return;
+      const genreRoutes = deezerConfig.genreRoutes || [];
+      const routedFolderNames = new Set(genreRoutes.map(r => r.folderName.toLowerCase()));
+      const safeFolders = rootFolders.filter(f => {
+        const folderName = f.replace(/[\\/]+$/, '').split(/[\\/]/).pop()?.toLowerCase() || '';
+        return !routedFolderNames.has(folderName);
+      });
+
+      if (safeFolders.length === 0) return;
 
       console.log(`[MAINTENANCE] 🗑️ Verificando arquivos bloqueados (${blockedSongs.length} bloqueios, ${forbiddenWords.length} palavras proibidas)...`);
 
       const result = await window.electronAPI.purgeBlockedFiles({
-        musicFolders: allFolders,
+        musicFolders: safeFolders,
         blockedSongs,
         forbiddenWords,
       });
@@ -106,15 +117,26 @@ export function useBackgroundMaintenance() {
 
     try {
       const { config, deezerConfig } = useRadioStore.getState();
-      const allFolders = [
+      // IMPORTANT: Only scan the ROOT download folder and root music folders.
+      // Do NOT include genre-routed subfolders — they contain intentionally moved files
+      // that could be mistakenly seen as duplicates of files in the parent folder.
+      const rootFolders = [
         ...config.musicFolders,
         deezerConfig.downloadFolder,
       ].filter(Boolean);
 
-      if (allFolders.length === 0) return;
+      // Exclude genre-routed subfolders from dedup scan
+      const genreRoutes = deezerConfig.genreRoutes || [];
+      const routedFolderNames = new Set(genreRoutes.map(r => r.folderName.toLowerCase()));
+      const safeFolders = rootFolders.filter(f => {
+        const folderName = f.replace(/[\\/]+$/, '').split(/[\\/]/).pop()?.toLowerCase() || '';
+        return !routedFolderNames.has(folderName);
+      });
+
+      if (safeFolders.length === 0) return;
 
       console.log('[MAINTENANCE] 🔍 Escaneando duplicatas na biblioteca...');
-      const scanResult = await window.electronAPI.scanDuplicates({ musicFolders: allFolders });
+      const scanResult = await window.electronAPI.scanDuplicates({ musicFolders: safeFolders });
 
       if (!scanResult?.duplicates || scanResult.duplicates.length === 0) {
         console.log('[MAINTENANCE] ✅ Nenhuma duplicata encontrada na biblioteca');
@@ -127,7 +149,24 @@ export function useBackgroundMaintenance() {
         group.remove.map((f: any) => f.path)
       );
 
-      const deleteResult = await window.electronAPI.deleteDuplicates({ filePaths: filesToDelete });
+      // Safety: never delete files inside genre-routed folders
+      const safeFilesToDelete = filesToDelete.filter((filePath: string) => {
+        const normalizedPath = filePath.toLowerCase().replace(/\\/g, '/');
+        for (const routeName of routedFolderNames) {
+          if (normalizedPath.includes(`/${routeName}/`) || normalizedPath.includes(`\\${routeName}\\`)) {
+            console.log(`[MAINTENANCE] 🛡️ Protegido contra exclusão (pasta roteada): ${filePath}`);
+            return false;
+          }
+        }
+        return true;
+      });
+
+      if (safeFilesToDelete.length === 0) {
+        console.log('[MAINTENANCE] ✅ Nenhuma duplicata segura para remoção (todas em pastas protegidas)');
+        return;
+      }
+
+      const deleteResult = await window.electronAPI.deleteDuplicates({ filePaths: safeFilesToDelete });
       console.log(`[MAINTENANCE] ✅ ${deleteResult.deleted} arquivo(s) duplicado(s) removido(s) automaticamente`);
     } catch (error) {
       console.error('[MAINTENANCE] Erro na deduplicação automática:', error);
@@ -449,7 +488,16 @@ export function useBackgroundMaintenance() {
 
       if (allFolders.length === 0) return;
 
-      const uniqueFolders = [...new Set(allFolders)];
+      // Exclude genre-routed subfolders from ID3 validation
+      // (routed files may have been renamed by aliases, causing false positives)
+      const genreRoutes = deezerConfig.genreRoutes || [];
+      const routedFolderNames = new Set(genreRoutes.map(r => r.folderName.toLowerCase()));
+      const safeFolders = allFolders.filter(f => {
+        const folderName = f.replace(/[\\/]+$/, '').split(/[\\/]/).pop()?.toLowerCase() || '';
+        return !routedFolderNames.has(folderName);
+      });
+
+      const uniqueFolders = [...new Set(safeFolders)];
 
       console.log('[MAINTENANCE] 🛡️ Validação ID3 periódica iniciada...');
       const result = await (window.electronAPI as any).validateId3Integrity({
