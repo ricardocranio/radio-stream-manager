@@ -95,13 +95,15 @@ export function GradeDecisionLogCard() {
   }, [latestBuildLogs]);
 
   const specialCounts = useMemo(() => {
-    let deep = 0, relaxed = 0, jit = 0;
+    let p1Fresh = 0, p1Ext = 0, deep = 0, relaxed = 0, jit = 0;
     for (const log of latestBuildLogs) {
+      if (log.reason?.includes('[P1]') && !log.reason?.includes('[P1-')) p1Fresh++;
+      if (log.reason?.includes('[P1-EXT]')) p1Ext++;
       if (log.reason?.includes('P1-DEEP')) deep++;
       if (log.reason?.includes('relaxed') || log.reason?.includes('relaxado')) relaxed++;
       if (log.reason?.includes('JIT')) jit++;
     }
-    return { deep, relaxed, jit };
+    return { p1Fresh, p1Ext, deep, relaxed, jit };
   }, [latestBuildLogs]);
 
   const summary = useMemo(() => {
