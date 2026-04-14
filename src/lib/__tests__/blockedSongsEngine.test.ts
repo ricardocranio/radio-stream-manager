@@ -14,6 +14,9 @@ const blockedSongs = [
   "YGOR E KELVEN - O QUE EU FACO AGORA",
   "Kaize - Olha onde eu to",
   "MC Kevin - Cavalgada",
+  "Jefi - Marquinha De Fita",
+  "JEFFINHO - MARQUINHA DE FITINHA",
+  "Eurides Nunes - FARROUPILHA",
 ];
 
 const forbiddenWords = ["ganja", "mega sena"];
