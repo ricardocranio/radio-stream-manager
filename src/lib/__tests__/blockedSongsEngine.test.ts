@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildBlockedEngine } from '../blockedSongsEngine';
 import { createDownloadGuard } from '../downloadGuard';
+import { normalizeStr, songKey } from '../songUtils';
+import { buildAliasEngine } from '../aliasEngine';
 
 const blockedSongs = [
   "Naldo Lima - Retrovisor",
