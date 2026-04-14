@@ -1392,7 +1392,7 @@ export function useAutoGradeBuilder() {
     // This runs BEFORE the selection loop to maximize P1 hit rate on Desktop.
     // Without this, the selection loop's JIT downloads happen one-by-one per position,
     // causing most positions to fall through to P4/P5/P6 (random library songs).
-    if (getIsElectronEnv() && window.electronAPI?.downloadFromDeezer && !isFullDay) {
+    if (getIsElectronEnv() && window.electronAPI?.downloadFromDeezer) {
       const storeState = useRadioStore.getState();
       if (storeState.deezerConfig.enabled && storeState.deezerConfig.arl) {
         const uniqueStationsInSeq = new Set<string>();
@@ -1408,10 +1408,11 @@ export function useAutoGradeBuilder() {
           uniqueStationsInSeq.add(resolvedName);
         }
 
-        // Collect top candidates missing from library (max 3 per station, max 12 total)
+        // Collect top candidates missing from library
+        // AGGRESSIVE: 6 per station, 30 total — ensures P1 has maximum fresh songs available
         const missingCandidates: Array<{ artist: string; title: string; station: string }> = [];
-        const MAX_PER_STATION = 3;
-        const MAX_TOTAL = 12;
+        const MAX_PER_STATION = 6;
+        const MAX_TOTAL = 30;
 
         for (const stName of uniqueStationsInSeq) {
           if (missingCandidates.length >= MAX_TOTAL) break;
