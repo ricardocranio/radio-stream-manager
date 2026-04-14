@@ -123,132 +123,109 @@ export function P1FreshnessAlertCard() {
   if (p1Stations.length === 0) return null;
 
   return (
-    <Card className={`glass-card ${hasAlert ? 'border-amber-500/30 bg-amber-500/5' : 'border-emerald-500/20'}`}>
-      <CardContent className="p-4 space-y-2">
-        {/* Header */}
-        <div
-          className="flex items-center justify-between cursor-pointer select-none"
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${hasAlert ? 'bg-amber-500/10' : 'bg-emerald-500/10'}`}>
-              {hasAlert ? (
-                <AlertTriangle className="w-4 h-4 text-amber-400 animate-pulse" />
-              ) : (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              )}
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">Frescor da Sequência</p>
-              <p className="text-xs text-muted-foreground">{freshCount}/{entries.length} estações ativas</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className={`text-xs ${hasAlert ? 'border-amber-500/30 text-amber-400' : 'border-emerald-500/30 text-emerald-400'}`}>
-              {hasAlert ? '⚠️ Sem dados' : '✓ Ativo'}
-            </Badge>
-            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${!collapsed ? 'rotate-180' : ''}`} />
-          </div>
-        </div>
-
-        {/* Summary when collapsed */}
-        {collapsed && entries.length > 0 && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {entries.slice(0, 2).map(([station, status]) => (
-              <span key={station} className="flex items-center gap-1">
-                <Radio className={`w-3 h-3 ${status.fresh ? 'text-emerald-400' : 'text-amber-400'}`} />
-                {station}
-                {status.lastSeen && <span className="text-[10px]">({Math.floor((Date.now() - status.lastSeen.getTime()) / 60000)}m)</span>}
-              </span>
-            ))}
-            {entries.length > 2 && <span className="text-[10px]">+{entries.length - 2}</span>}
-          </div>
-        )}
-
-        {/* Expanded station list */}
-        {!collapsed && (
-          <ScrollArea className="max-h-[500px]">
-            <div className="space-y-1 pr-2">
-              {entries
-                .sort(([, a], [, b]) => (a.fresh === b.fresh ? 0 : a.fresh ? 1 : -1))
-                .map(([station, status]) => {
-                  const isExpanded = expandedStations.has(station);
-                  return (
-                    <div key={station} className="rounded bg-muted/30 overflow-hidden">
-                      {/* Station row */}
-                      <div
-                        className="flex items-center justify-between text-xs p-2 cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={(e) => { e.stopPropagation(); toggleStation(station); }}
-                      >
-                        <div className="flex items-center gap-2">
-                          {status.recentSongs.length > 0 ? (
-                            <ChevronRight className={`w-3 h-3 text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
-                          ) : (
-                            <span className="w-3" />
-                          )}
-                          <Radio className={`w-3 h-3 ${status.fresh ? 'text-emerald-400' : 'text-amber-400'}`} />
-                          <span className="text-foreground font-medium">{station}</span>
+    <Card className="glass-card">
+      <CardHeader className="pb-2 cursor-pointer select-none" onClick={() => setCollapsed(!collapsed)}>
+        <CardTitle className="text-sm md:text-base flex items-center gap-2">
+          {hasAlert ? (
+            <AlertTriangle className="w-4 h-4 text-amber-400 animate-pulse" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          )}
+          Frescor da Sequência
+          <span className="text-xs text-muted-foreground font-normal">{freshCount}/{entries.length} estações ativas</span>
+          <Badge variant="outline" className={`text-xs ml-auto mr-2 ${hasAlert ? 'border-amber-500/30 text-amber-400' : 'border-emerald-500/30 text-emerald-400'}`}>
+            {hasAlert ? '⚠️ Sem dados' : '✓ Ativo'}
+          </Badge>
+          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${!collapsed ? 'rotate-180' : ''}`} />
+        </CardTitle>
+      </CardHeader>
+      <div className="collapsible-content" data-open={!collapsed}>
+        <div>
+          <CardContent className="pt-0 space-y-2">
+            {/* Station list */}
+            <ScrollArea className="max-h-[500px]">
+              <div className="space-y-1 pr-2">
+                {entries
+                  .sort(([, a], [, b]) => (a.fresh === b.fresh ? 0 : a.fresh ? 1 : -1))
+                  .map(([station, status]) => {
+                    const isExpanded = expandedStations.has(station);
+                    return (
+                      <div key={station} className="rounded bg-muted/30 overflow-hidden">
+                        {/* Station row */}
+                        <div
+                          className="flex items-center justify-between text-xs p-2 cursor-pointer hover:bg-muted/50 transition-colors"
+                          onClick={(e) => { e.stopPropagation(); toggleStation(station); }}
+                        >
+                          <div className="flex items-center gap-2">
+                            {status.recentSongs.length > 0 ? (
+                              <ChevronRight className={`w-3 h-3 text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+                            ) : (
+                              <span className="w-3" />
+                            )}
+                            <Radio className={`w-3 h-3 ${status.fresh ? 'text-emerald-400' : 'text-amber-400'}`} />
+                            <span className="text-foreground font-medium">{station}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-muted-foreground">
+                            <Clock className="w-3 h-3" />
+                            {status.lastSeen ? (
+                              <span className={status.fresh ? '' : 'text-amber-400 font-medium'}>
+                                {Math.floor((Date.now() - status.lastSeen.getTime()) / 60000)} min atrás
+                              </span>
+                            ) : (
+                              <span className="text-amber-400">Sem dados</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <Clock className="w-3 h-3" />
-                          {status.lastSeen ? (
-                            <span className={status.fresh ? '' : 'text-amber-400 font-medium'}>
-                              {Math.floor((Date.now() - status.lastSeen.getTime()) / 60000)} min atrás
-                            </span>
-                          ) : (
-                            <span className="text-amber-400">Sem dados</span>
-                          )}
-                        </div>
+
+                        {/* Expanded: last 3 songs */}
+                        {isExpanded && status.recentSongs.length > 0 && (
+                          <div className="border-t border-border/30 px-2 pb-2">
+                            {status.recentSongs.map((song, idx) => {
+                              const used = isSongUsed(song.artist, song.title);
+                              const ago = Math.floor((Date.now() - new Date(song.scraped_at).getTime()) / 60000);
+                              return (
+                                <div
+                                  key={`${station}-${idx}`}
+                                  className={`flex items-center justify-between text-[11px] py-1.5 px-2 mt-1 rounded ${used ? 'bg-emerald-500/10' : 'bg-background/30'}`}
+                                >
+                                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                    {used ? (
+                                      <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                                    ) : (
+                                      <Music2 className="w-3 h-3 text-muted-foreground/50 shrink-0" />
+                                    )}
+                                    <span className="truncate text-foreground/80">
+                                      <span className="font-medium">{song.artist}</span>
+                                      <span className="text-muted-foreground"> — {song.title}</span>
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0 ml-2">
+                                    {used && (
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-emerald-500/30 text-emerald-400">
+                                        Usada
+                                      </Badge>
+                                    )}
+                                    <span className="text-muted-foreground text-[10px]">{ago}m</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
+                    );
+                  })}
+              </div>
+            </ScrollArea>
 
-                      {/* Expanded: last 3 songs */}
-                      {isExpanded && status.recentSongs.length > 0 && (
-                        <div className="border-t border-border/30 px-2 pb-2">
-                          {status.recentSongs.map((song, idx) => {
-                            const used = isSongUsed(song.artist, song.title);
-                            const ago = Math.floor((Date.now() - new Date(song.scraped_at).getTime()) / 60000);
-                            return (
-                              <div
-                                key={`${station}-${idx}`}
-                                className={`flex items-center justify-between text-[11px] py-1.5 px-2 mt-1 rounded ${used ? 'bg-emerald-500/10' : 'bg-background/30'}`}
-                              >
-                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                  {used ? (
-                                    <Check className="w-3 h-3 text-emerald-400 shrink-0" />
-                                  ) : (
-                                    <Music2 className="w-3 h-3 text-muted-foreground/50 shrink-0" />
-                                  )}
-                                  <span className="truncate text-foreground/80">
-                                    <span className="font-medium">{song.artist}</span>
-                                    <span className="text-muted-foreground"> — {song.title}</span>
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0 ml-2">
-                                  {used && (
-                                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-emerald-500/30 text-emerald-400">
-                                      Usada
-                                    </Badge>
-                                  )}
-                                  <span className="text-muted-foreground text-[10px]">{ago}m</span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
-          </ScrollArea>
-        )}
-
-        {allFresh && collapsed && (
-          <p className="text-xs text-emerald-400/60 text-center">
-            Capturando normalmente — dados frescos &lt;{FRESHNESS_THRESHOLD_MIN}min
-          </p>
-        )}
-      </CardContent>
+            {allFresh && (
+              <p className="text-xs text-emerald-400/60 text-center">
+                Capturando normalmente — dados frescos &lt;{FRESHNESS_THRESHOLD_MIN}min
+              </p>
+            )}
+          </CardContent>
+        </div>
+      </div>
     </Card>
   );
 }
