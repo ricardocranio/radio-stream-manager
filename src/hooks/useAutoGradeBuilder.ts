@@ -2271,6 +2271,11 @@ export function useAutoGradeBuilder() {
         else builtBlocksRef.current.delete(nextTimeKey);
         if (thirdFullyResolved) builtBlocksRef.current.add(thirdTimeKey);
         else builtBlocksRef.current.delete(thirdTimeKey);
+        // CRITICAL: populate pendingGradeRef even when all blocks are locked
+        // so that flushGradeToDisk can write to disk on the next tick
+        if (!pendingGradeRef.current || pendingGradeRef.current.lineMap.size < lineMap.size) {
+          pendingGradeRef.current = { lineMap, filename, blockKey: thirdTimeKey };
+        }
         setState(prev => ({
           ...prev,
           isBuilding: false,
