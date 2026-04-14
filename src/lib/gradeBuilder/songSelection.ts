@@ -5,19 +5,19 @@
  * specifies a radio station, and songs MUST come from that station's captures.
  * Randomness is only acceptable as the absolute last resort.
  * 
- * Order: P1 → P1-EXT → P0 → P1.5 → P0.75 → P4 → P5 → P6
+ * Order: P1 → P1-EXT → P1-OLDER → P1-DEEP → P0-SAME → P0 → P1.5 → P0.75 → P4 → P5 → P6
  * 
- * P1:     Station Pool — fresh songs (≤15min) from the configured radio station
- * P1-EXT: Station Pool Extended — OLDER songs from the SAME station (preserves identity)
- * P0:     Carry-over — songs from previous blocks now downloaded
- * P1.5:   DNA/Style match — songs from other stations with same style (4 JIT attempts)
- * P0.75:  TOP25 — songs from the ranking TOP25
- * P4:     General Pool — STYLE-FILTERED first, then any (3 JIT for same style)
- * P5:     Curadoria — random ranking song
- * P6:     Coringa — wildcard fallback code (mus/rom/jov)
- * 
- * P0.5 (fresh from ANY station) was REMOVED because it caused random selection
- * that broke the monitoring sequence identity.
+ * P1:       FRESCOR — songs ≤15min from the configured radio station (what's playing NOW)
+ * P1-EXT:   Graduated tiers — ≤15min(anti-rep retry) → ≤30min → ≤1h → ≤2h from SAME station
+ * P1-OLDER: Same station, songs >2h (preserves station identity)
+ * P1-DEEP:  Most-played from station via radio_historico_stats
+ * P0-SAME:  Carry-over — songs from previous blocks, SAME station
+ * P0:       Carry-over — songs from previous blocks, any station
+ * P1.5:     DNA/Style match — songs from other stations with same style (4 JIT attempts)
+ * P0.75:    TOP25 — songs from the ranking TOP25
+ * P4:       General Pool — STYLE-FILTERED first, then any (3 JIT for same style)
+ * P5:       Curadoria — random ranking song
+ * P6:       Coringa — wildcard fallback code (mus/rom/jov)
  */
 
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
