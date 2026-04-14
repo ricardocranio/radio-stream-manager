@@ -135,16 +135,18 @@ export function useAutoGradeBuilder() {
     // Restore persisted grade from localStorage on mount
     const dayCode = DAY_CODES_BY_INDEX[new Date().getDay()];
     const persisted = loadGradeFromStorage(dayCode);
+    const restoredLineMap = persisted?.lineMap || new Map();
     return {
       isBuilding: false, lastBuildTime: null,
       currentBlock: '--:--', nextBlock: '--:--',
-      lastSavedFile: null, error: null, blocksGenerated: 0,
+      lastSavedFile: null, error: null,
+      blocksGenerated: restoredLineMap.size, // Reflect restored blocks
       isAutoEnabled: true, nextBuildIn: 0,
       minutesBeforeBlock: DEFAULT_MINUTES_BEFORE_BLOCK,
       fullDayProgress: 0, fullDayTotal: 0,
       skippedSongs: 0, substitutedSongs: 0, missingSongs: 0,
       currentProcessingSong: null, currentProcessingBlock: null, lastSaveProgress: 0,
-      pendingGradeLines: persisted?.lineMap || new Map(),
+      pendingGradeLines: restoredLineMap,
       pendingBlockDurations: new Map(),
       pendingStationMap: {},
     };
