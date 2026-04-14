@@ -35,6 +35,7 @@ import type {
   SongEntry, UsedSong, CarryOverSong, BlockStats, BlockLogItem, BlockResult, GradeContext,
 } from '@/lib/gradeBuilder/types';
 import { mergeGradeLinePreservingResolved } from '@/lib/gradeBuilder/lineMerge';
+import { computeStableContentHash } from '@/lib/gradeBuilder/contentHash';
 import { saveGradeToStorage, loadGradeFromStorage, clearGradeStorage } from '@/lib/gradeBuilder/gradePersistence';
 import { resolveVinhetasInLine, resolveVinhetasInGrade, resetVinhetaPool } from '@/lib/gradeBuilder/vinhetaResolver';
 import { saveOfflineSongCache, loadOfflineSongCache } from '@/lib/offlineSongCache';
@@ -2603,12 +2604,12 @@ export function useAutoGradeBuilder() {
       // Disk write within the configured window — re-write whenever content changes
       const shouldWrite = !isWebOnly && minutesUntilBlock <= state.minutesBeforeBlock;
       if (shouldWrite && pendingGradeRef.current) {
-        // Compute a simple hash of the current lineMap content to detect changes
+        // Compute a stable hash of the full grade content to detect changes reliably
         const currentContent = Array.from(pendingGradeRef.current.lineMap.keys())
           .sort()
           .map(t => pendingGradeRef.current!.lineMap.get(t))
           .join('\n');
-        const contentHash = currentContent.length + ':' + currentContent.slice(0, 200) + currentContent.slice(-200);
+        const contentHash = computeStableContentHash(currentContent);
         
         if (contentHash !== lastWrittenContentHashRef.current) {
           console.log(`[AUTO-GRADE] 📝 Conteúdo da grade mudou — re-escrevendo no disco para bloco ${blockKey} (${minutesUntilBlock} min antes)`);
@@ -2631,7 +2632,7 @@ export function useAutoGradeBuilder() {
     if (realtimeBuildRef.current) clearTimeout(realtimeBuildRef.current);
     realtimeBuildRef.current = setTimeout(() => {
       void runGradeTickRef.current('realtime-event');
-    }, 3000); // 3s debounce — batches rapid inserts
+    }, 1500); // 1.5s debounce — mais responsivo sem rebuild em excesso
   }, []); // stable — uses ref
 
   // Realtime subscription: triggers build on new scraped_songs
@@ -2645,7 +2646,7 @@ export function useAutoGradeBuilder() {
 
     console.log('[AUTO-GRADE] 📡 Realtime grade builder ATIVO — monta assim que novos dados chegam');
 
-    // Subscribe to scraped_songs inserts
+    // Subscribe to fresh monitoring inserts that can improve the next blocks
     const channel = supabase
       .channel('grade-realtime-trigger')
       .on(
@@ -2654,6 +2655,15 @@ export function useAutoGradeBuilder() {
         (payload) => {
           const song = payload.new as { artist?: string; station_name?: string };
           console.log(`[AUTO-GRADE] 📡 Nova captura: ${song.artist || '?'} (${song.station_name || '?'}) — disparando montagem`);
+          debouncedRealtimeBuild();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'radio_historico' },
+        (payload) => {
+          const song = payload.new as { artist?: string; station_name?: string };
+          console.log(`[AUTO-GRADE] 📜 Novo histórico fresco: ${song.artist || '?'} (${song.station_name || '?'}) — disparando montagem`);
           debouncedRealtimeBuild();
         }
       )
@@ -2666,11 +2676,11 @@ export function useAutoGradeBuilder() {
         }
       });
 
-    // Safety polling fallback: every 60s, synced with 6-min monitor cycle
+    // Safety polling fallback: tighter interval for packaged desktop reliability
     const pollingInterval = setInterval(() => {
-      console.log('[AUTO-GRADE] 🔄 Polling fallback tick (60s)');
+      console.log('[AUTO-GRADE] 🔄 Polling fallback tick (30s)');
       void runGradeTickRef.current('polling-fallback');
-    }, 60 * 1000);
+    }, 30 * 1000);
 
     // Initial build immediately
     const { isRunning } = useRadioStore.getState();
