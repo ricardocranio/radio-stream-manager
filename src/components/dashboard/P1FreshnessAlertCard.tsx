@@ -167,8 +167,8 @@ export function P1FreshnessAlertCard() {
 
         {/* Expanded station list */}
         {!collapsed && (
-          <ScrollArea className="max-h-[350px]">
-            <div className="space-y-1">
+          <ScrollArea className="max-h-[500px]">
+            <div className="space-y-1 pr-2">
               {entries
                 .sort(([, a], [, b]) => (a.fresh === b.fresh ? 0 : a.fresh ? 1 : -1))
                 .map(([station, status]) => {
