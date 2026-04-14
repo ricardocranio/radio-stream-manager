@@ -656,7 +656,7 @@ export async function selectSongForSlot(
   }
 
   // ============================================================
-  // PRIORITY P1-EXT: Same station, older songs (beyond graduated tiers)
+  // PRIORITY P1-OLDER: Same station, songs older than 2h
   // When ALL graduated tiers found no songs, try ALL remaining songs
   // from the SAME station regardless of age. This preserves station
   // identity and is MUCH more assertive than jumping to other stations.
