@@ -4,19 +4,15 @@
  * Instead of checking songs one-by-one (sequential), this module
  * checks multiple candidates in parallel using Promise.all with
  * concurrency limiting to avoid overwhelming the Electron IPC.
+ * 
+ * Normalization is delegated to songUtils.ts to avoid duplication.
  */
 
 import { getIsElectronEnv } from './constants';
+import { normalizeStr, normalizeStrKeepSuffix } from '@/lib/songUtils';
 import type { LibraryCheckResult } from './types';
 
 const BATCH_CONCURRENCY = 5; // Max parallel Electron IPC calls
-
-/**
- * Strip accents/diacritics from a string for fuzzy matching.
- */
-function stripAccents(str: string): string {
-  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
 
 /**
  * Normalize ampersand vs "E"/"e" — common in Brazilian duo names.
@@ -30,32 +26,19 @@ function normalizeAmpersand(str: string): string {
 }
 
 /**
- * Remove common suffixes like (Ao Vivo), (Live), (Acústico), [Remix], etc.
- * This allows matching "Song (Ao Vivo)" with "Song" in the library
+ * Normalize title for library file search.
+ * Uses normalizeStr (strips suffixes like "Ao Vivo") for fuzzy matching.
  */
-function normalizeTitle(title: string): string {
-  return stripAccents(
-    title
-      .replace(/\s*\((?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^)]*|ft\.?[^)]*)\)/gi, '')
-      .replace(/\s*\[(?:ao\s*vivo|live|acustico|acústico|acoustic|remix|remaster(?:ed)?|radio\s*edit|single\s*version|album\s*version|explicit|clean|feat\.?[^]]*|ft\.?[^]]*)\]/gi, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-  );
+function normalizeTitleForSearch(title: string): string {
+  return normalizeStr(title);
 }
 
 /**
- * Normalize artist name for comparison.
- * Strips feat/ft suffixes and normalizes ampersand/accents.
+ * Normalize artist for library file search.
+ * Uses normalizeStr (strips feat/ft, accents, ampersand) for fuzzy matching.
  */
-function normalizeArtist(artist: string): string {
-  return stripAccents(
-    normalizeAmpersand(
-      artist
-        .replace(/\s*(?:feat\.?|ft\.?|featuring|part\.?|c\/)\s*.+$/gi, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-    )
-  );
+function normalizeArtistForSearch(artist: string): string {
+  return normalizeStr(artist);
 }
 
 /**
@@ -71,13 +54,13 @@ async function findSongMatchWithFallback(
     return { exists: true };
   }
 
-  const normalizedArtist = normalizeArtist(artist);
-  const normalizedTitle = normalizeTitle(title);
+  const normalizedArtist = normalizeArtistForSearch(artist);
+  const normalizedTitle = normalizeTitleForSearch(title);
 
   try {
     console.log(`[BATCH-LIBRARY] 🔍 Buscando: "${artist} - ${title}" (normalized: "${normalizedArtist} - ${normalizedTitle}") (threshold: ${Math.round(threshold * 100)}%, folders: ${musicFolders.length})`);
     
-    // First try with normalized title/artist
+    // First try with normalized title/artist (suffixes stripped)
     let result = await window.electronAPI.findSongMatch({
       artist: normalizedArtist,
       title: normalizedTitle,
@@ -91,7 +74,26 @@ async function findSongMatchWithFallback(
       console.log(`[BATCH-LIBRARY] 🔸 No match (normalized): bestSim=${result.similarity ? Math.round(result.similarity * 100) : 0}% bestFile="${result.filename || 'none'}"`);
     }
 
-    // If no match with normalized, try original
+    // If no match with normalized, try with suffixes preserved (normalizeStrKeepSuffix)
+    if (!result.exists) {
+      const keepSuffixArtist = normalizeStrKeepSuffix(artist);
+      const keepSuffixTitle = normalizeStrKeepSuffix(title);
+      if (keepSuffixArtist !== normalizedArtist || keepSuffixTitle !== normalizedTitle) {
+        console.log(`[BATCH-LIBRARY] 🔄 Tentando com sufixos preservados: "${keepSuffixArtist} - ${keepSuffixTitle}"`);
+        const suffixResult = await window.electronAPI.findSongMatch({
+          artist: keepSuffixArtist,
+          title: keepSuffixTitle,
+          musicFolders,
+          threshold,
+        } as any);
+        if (suffixResult.exists) {
+          result = suffixResult;
+          console.log(`[BATCH-LIBRARY] ✅ Match (keep-suffix): sim=${result.similarity ? Math.round(result.similarity * 100) : '?'}% file="${result.filename || '?'}"`);
+        }
+      }
+    }
+
+    // Fallback 3: Try original strings (no normalization at all)
     if (!result.exists && (normalizedTitle !== title || normalizedArtist !== artist)) {
       console.log(`[BATCH-LIBRARY] 🔄 Tentando original: "${artist} - ${title}"`);
       const originalResult = await window.electronAPI.findSongMatch({
@@ -103,12 +105,10 @@ async function findSongMatchWithFallback(
       if (originalResult.exists) {
         result = originalResult;
         console.log(`[BATCH-LIBRARY] ✅ Match (original): sim=${result.similarity ? Math.round(result.similarity * 100) : '?'}% file="${result.filename || '?'}"`);
-      } else {
-        console.log(`[BATCH-LIBRARY] 🔸 No match (original): bestSim=${originalResult.similarity ? Math.round(originalResult.similarity * 100) : 0}%`);
       }
     }
 
-    // Fallback 3: Try with ampersand-normalized names (& ↔ E)
+    // Fallback 4: Try with ampersand-normalized names (& ↔ E)
     if (!result.exists) {
       const ampArtist = normalizeAmpersand(artist);
       const ampTitle = normalizeAmpersand(title);
@@ -123,8 +123,7 @@ async function findSongMatchWithFallback(
       }
     }
 
-    // Fallback 4: If threshold > 0.60, retry with relaxed threshold (0.60)
-    // This catches close matches that miss the strict threshold
+    // Fallback 5: If threshold > 0.60, retry with relaxed threshold (0.60)
     if (!result.exists && threshold > 0.60) {
       const RELAXED = 0.60;
       const relaxedResult = await window.electronAPI.findSongMatch({
@@ -164,7 +163,6 @@ export async function batchFindSongsInLibrary(
   
   if (!getIsElectronEnv() || !window.electronAPI?.findSongMatch) {
     console.log(`[BATCH-LIBRARY] 🌐 Modo web detectado (isElectron: ${getIsElectronEnv()}, hasAPI: ${!!window.electronAPI?.findSongMatch}) - assumindo todas existem`);
-    // Web mode: assume all exist
     for (const song of songs) {
       const key = `${song.artist.toLowerCase().trim()}|${song.title.toLowerCase().trim()}`;
       results.set(key, { exists: true });
@@ -199,7 +197,6 @@ export async function batchFindSongsInLibrary(
     }
   }
 
-  // Log summary
   const found = Array.from(results.values()).filter(r => r.exists).length;
   console.log(`[BATCH-LIBRARY] Verificação: ${found}/${results.size} músicas encontradas (threshold: ${Math.round(threshold * 100)}%)`);
 
@@ -217,7 +214,7 @@ export async function findSongInLibrary(
 ): Promise<LibraryCheckResult> {
   if (!getIsElectronEnv() || !window.electronAPI?.findSongMatch) {
     console.log(`[BATCH-LIBRARY] 🌐 findSongInLibrary: modo web (isElectron: ${getIsElectronEnv()}) - assumindo existe`);
-    return { exists: true }; // Web mode: assume exists
+    return { exists: true };
   }
   
   return findSongMatchWithFallback(artist, title, musicFolders, threshold);
