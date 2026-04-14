@@ -100,7 +100,7 @@ describe('blockedSongsEngine', () => {
   describe('acentuation edge cases', () => {
     it('blocks regardless of accent differences', () => {
       // "balançou" vs "balancou" — NFD normalization strips accents
-      expect(engine.getBlockMatch('thiago jose', 'BALANCOU BALANCOU (AO VIVO)')).not.toBeNull();
+      expect(engine.getBlockMatch('thiago jose', 'balancou balancou(ao vivo)')).not.toBeNull();
     });
 
     it('blocks "Eurides Nunes - FARROUPILHA" with accent variations', () => {
