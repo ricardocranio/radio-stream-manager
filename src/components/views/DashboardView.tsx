@@ -853,6 +853,9 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         </div>
       </Card>
 
+      {/* P1 Freshness — below preview */}
+      <P1FreshnessAlertCard />
+
       {/* Grades Montadas — Collapsible */}
       <Card className="glass-card">
         <CardHeader className="pb-2 cursor-pointer select-none" onClick={() => setScheduleCollapsed(!scheduleCollapsed)}>
