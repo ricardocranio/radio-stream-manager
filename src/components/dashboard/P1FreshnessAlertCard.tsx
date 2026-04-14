@@ -13,7 +13,40 @@ import { useGradeLogStore } from '@/store/gradeLogStore';
 import { supabase } from '@/integrations/supabase/client';
 
 const FRESHNESS_THRESHOLD_MIN = 10;
+const FRESHNESS_WARNING_MIN = 15;
 const CHECK_INTERVAL_MS = 60_000;
+
+type FreshnessLevel = 'fresh' | 'warning' | 'stale' | 'unknown';
+
+const FRESHNESS_STYLES: Record<FreshnessLevel, { icon: string; badge: string; text: string }> = {
+  fresh: {
+    icon: 'text-success',
+    badge: 'border-success/25 bg-success/10 text-success',
+    text: 'text-success',
+  },
+  warning: {
+    icon: 'text-warning',
+    badge: 'border-warning/25 bg-warning/10 text-warning',
+    text: 'text-warning',
+  },
+  stale: {
+    icon: 'text-destructive',
+    badge: 'border-destructive/25 bg-destructive/10 text-destructive',
+    text: 'text-destructive',
+  },
+  unknown: {
+    icon: 'text-destructive',
+    badge: 'border-destructive/25 bg-destructive/10 text-destructive',
+    text: 'text-destructive',
+  },
+};
+
+function getFreshnessLevel(ageMinutes: number | null): FreshnessLevel {
+  if (ageMinutes == null) return 'unknown';
+  if (ageMinutes <= FRESHNESS_THRESHOLD_MIN) return 'fresh';
+  if (ageMinutes <= FRESHNESS_WARNING_MIN) return 'warning';
+  return 'stale';
+}
 
 interface StationSong {
   title: string;
@@ -23,7 +56,9 @@ interface StationSong {
 
 interface StationInfo {
   lastSeen: Date | null;
+  ageMinutes: number | null;
   fresh: boolean;
+  level: FreshnessLevel;
   recentSongs: StationSong[];
 }
 
@@ -94,16 +129,20 @@ export function P1FreshnessAlertCard() {
 
           if (data && data.length > 0) {
             const lastSeen = new Date(data[0].scraped_at);
+            const ageMinutes = Math.floor((Date.now() - lastSeen.getTime()) / 60000);
+            const level = getFreshnessLevel(ageMinutes);
             status[stationName] = {
               lastSeen,
-              fresh: lastSeen.toISOString() > cutoff,
+              ageMinutes,
+              fresh: level === 'fresh',
+              level,
               recentSongs: data.map(d => ({ title: d.title, artist: d.artist, scraped_at: d.scraped_at })),
             };
           } else {
-            status[stationName] = { lastSeen: null, fresh: false, recentSongs: [] };
+            status[stationName] = { lastSeen: null, ageMinutes: null, fresh: false, level: 'unknown', recentSongs: [] };
           }
         } catch {
-          status[stationName] = { lastSeen: null, fresh: false, recentSongs: [] };
+          status[stationName] = { lastSeen: null, ageMinutes: null, fresh: false, level: 'unknown', recentSongs: [] };
         }
       }
 
@@ -127,14 +166,14 @@ export function P1FreshnessAlertCard() {
       <CardHeader className="pb-2 cursor-pointer select-none" onClick={() => setCollapsed(!collapsed)}>
         <CardTitle className="text-sm md:text-base flex items-center gap-2">
           {hasAlert ? (
-            <AlertTriangle className="w-4 h-4 text-amber-400 animate-pulse" />
+            <AlertTriangle className="w-4 h-4 text-warning animate-pulse" />
           ) : (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <CheckCircle2 className="w-4 h-4 text-success" />
           )}
           Frescor da Sequência
           <span className="text-xs text-muted-foreground font-normal">{freshCount}/{entries.length} estações ativas</span>
-          <Badge variant="outline" className={`text-xs ml-auto mr-2 ${hasAlert ? 'border-amber-500/30 text-amber-400' : 'border-emerald-500/30 text-emerald-400'}`}>
-            {hasAlert ? '⚠️ Sem dados' : '✓ Ativo'}
+          <Badge variant="outline" className={`text-xs ml-auto mr-2 ${hasAlert ? 'border-warning/25 bg-warning/10 text-warning' : 'border-success/25 bg-success/10 text-success'}`}>
+            {hasAlert ? '⚠️ Atenção' : '✓ Ativo'}
           </Badge>
           <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${!collapsed ? 'rotate-180' : ''}`} />
         </CardTitle>
@@ -146,9 +185,13 @@ export function P1FreshnessAlertCard() {
             <ScrollArea className="max-h-[500px]">
               <div className="space-y-1 pr-2">
                 {entries
-                  .sort(([, a], [, b]) => (a.fresh === b.fresh ? 0 : a.fresh ? 1 : -1))
+                  .sort(([, a], [, b]) => {
+                    const severity = { unknown: 0, stale: 1, warning: 2, fresh: 3 } as const;
+                    return severity[a.level] - severity[b.level];
+                  })
                   .map(([station, status]) => {
                     const isExpanded = expandedStations.has(station);
+                    const freshnessStyle = FRESHNESS_STYLES[status.level];
                     return (
                       <div key={station} className="rounded bg-muted/30 overflow-hidden">
                         {/* Station row */}
@@ -162,17 +205,20 @@ export function P1FreshnessAlertCard() {
                             ) : (
                               <span className="w-3" />
                             )}
-                            <Radio className={`w-3 h-3 ${status.fresh ? 'text-emerald-400' : 'text-amber-400'}`} />
+                            <Radio className={`w-3 h-3 ${freshnessStyle.icon}`} />
                             <span className="text-foreground font-medium">{station}</span>
                           </div>
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <Clock className="w-3 h-3" />
+                          <div className="flex items-center gap-1">
                             {status.lastSeen ? (
-                              <span className={status.fresh ? '' : 'text-amber-400 font-medium'}>
-                                {Math.floor((Date.now() - status.lastSeen.getTime()) / 60000)} min atrás
-                              </span>
+                              <Badge variant="outline" className={`h-5 gap-1 px-1.5 text-[10px] font-medium ${freshnessStyle.badge}`}>
+                                <Clock className="w-3 h-3" />
+                                {status.ageMinutes} min atrás
+                              </Badge>
                             ) : (
-                              <span className="text-amber-400">Sem dados</span>
+                              <Badge variant="outline" className={`h-5 gap-1 px-1.5 text-[10px] font-medium ${freshnessStyle.badge}`}>
+                                <Clock className="w-3 h-3" />
+                                Sem dados
+                              </Badge>
                             )}
                           </div>
                         </div>
@@ -201,7 +247,7 @@ export function P1FreshnessAlertCard() {
                                   </div>
                                   <div className="flex items-center gap-1 shrink-0 ml-2">
                                     {used && (
-                                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-emerald-500/30 text-emerald-400">
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-success/25 text-success">
                                         Usada
                                       </Badge>
                                     )}
@@ -219,7 +265,7 @@ export function P1FreshnessAlertCard() {
             </ScrollArea>
 
             {allFresh && (
-              <p className="text-xs text-emerald-400/60 text-center">
+              <p className="text-xs text-success/70 text-center">
                 Capturando normalmente — dados frescos &lt;{FRESHNESS_THRESHOLD_MIN}min
               </p>
             )}
