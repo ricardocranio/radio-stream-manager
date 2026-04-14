@@ -122,15 +122,6 @@ export function buildBlockedEngine(
       }
     }
 
-    // Check 3: REVERSE alias — if this is the CORRECTED name, check if the WRONG name is blocked
-    // This catches songs arriving with corrected names when the block list has the wrong name
-    const reverseResolved = aliasReverseMap.get(`${aN}|||${tN}`);
-    if (reverseResolved) {
-      if (checkDirect(normalizeStr(reverseResolved.fromArtist), normalizeStr(reverseResolved.fromTitle))) {
-        return { rule: 'alias' };
-      }
-    }
-
     return null;
   }
 
