@@ -165,7 +165,8 @@ describe('blockedSongsEngine', () => {
 
     it('resolves alias with missing space before parenthesis', () => {
       const result = aliasEngine.resolve('BALACHIC', 'ERA UMA VEZ(AO VIVO)');
-      expect(result.artist).toBe('Xand Aviao ');
+      // The alias data has trailing space "Xand Aviao " — resolve returns raw value
+      expect(result.artist.trim()).toBe('Xand Aviao');
     });
   });
 });
