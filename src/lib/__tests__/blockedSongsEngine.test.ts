@@ -213,3 +213,134 @@ describe('downloadGuard — forward alias integration', () => {
     expect(decision.allowed).toBe(true);
   });
 });
+
+describe('suffix normalisation', () => {
+  it('strips (Ao Vivo) suffix', () => {
+    expect(normalizeStr('Retrovisor (Ao Vivo)')).toBe(normalizeStr('Retrovisor'));
+  });
+
+  it('strips [Live] suffix', () => {
+    expect(normalizeStr('River [Live]')).toBe(normalizeStr('River'));
+  });
+
+  it('strips (Acústico) suffix', () => {
+    expect(normalizeStr('Mala (Acústico)')).toBe(normalizeStr('Mala'));
+  });
+
+  it('strips (Remix) suffix', () => {
+    expect(normalizeStr('Blinding Lights (Remix)')).toBe(normalizeStr('Blinding Lights'));
+  });
+
+  it('strips (Radio Edit) suffix', () => {
+    expect(normalizeStr('Song (Radio Edit)')).toBe(normalizeStr('Song'));
+  });
+
+  it('strips (Remastered) suffix', () => {
+    expect(normalizeStr('Bohemian Rhapsody (Remastered)')).toBe(normalizeStr('Bohemian Rhapsody'));
+  });
+
+  it('strips (Ao Vivo em Lisboa) suffix', () => {
+    expect(normalizeStr('Olho Marrom (Ao Vivo em Lisboa)')).toBe(normalizeStr('Olho Marrom'));
+  });
+
+  it('matches songs with vs without version suffix', () => {
+    const k1 = songKey('Gustavo Mioto', 'Pedido De Socorro');
+    const k2 = songKey('Gustavo Mioto', 'Pedido De Socorro (Ao Vivo)');
+    expect(k1).toBe(k2);
+  });
+
+  it('blocked song matches even with extra suffix', () => {
+    const engine = buildBlockedEngine(
+      ["Artista X - Musica Y"],
+      [],
+      []
+    );
+    expect(engine.getBlockMatch('Artista X', 'Musica Y (Ao Vivo)')).not.toBeNull();
+  });
+});
+
+describe('integration: scraping → alias → block → grade pipeline', () => {
+  // Simulates scraped songs arriving from radios
+  const scrapedSongs = [
+    { artist: 'Naldo Lima', title: 'Retrovisor', station: 'BH FM' },                       // blocked (exact) + has alias
+    { artist: 'PROMESSA D', title: 'PEDIDO DE SOCORRO', station: 'Band FM' },               // blocked (wildcard)
+    { artist: 'BALACHIC', title: 'ERA UMA VEZ(AO VIVO)', station: 'Globo RJ' },             // alias → Xand Aviao, NOT blocked
+    { artist: 'Gusttavo Lima', title: 'Retrovisor', station: 'BH FM' },                     // correct artist, NOT blocked
+    { artist: 'Simone Mendes', title: 'Saudade Proibida (Ao Vivo)', station: 'Band FM' },   // NOT blocked (was false positive before)
+    { artist: 'Ikaro Mendes', title: 'SAUDADE PROIBIDA', station: 'Globo RJ' },             // blocked (wildcard) + has alias
+    { artist: 'MC Kevin', title: 'Cavalgada', station: 'BH FM' },                           // blocked (exact)
+    { artist: 'MC Kevinho', title: 'Cavalgada', station: 'BH FM' },                         // NOT blocked (different artist)
+    { artist: 'Artista Limpo', title: 'Musica Legal', station: 'Band FM' },                  // NOT blocked
+    { artist: 'Artista Ganja', title: 'Party Time', station: 'Band FM' },                   // blocked (forbidden word)
+  ];
+
+  const guard = createDownloadGuard({
+    blockedSongs,
+    forbiddenWords,
+    songAliases: aliases,
+  });
+
+  it('correctly filters blocked songs from grade candidates', () => {
+    const gradeSongs: Array<{ artist: string; title: string; station: string }> = [];
+    const blockedEvents: Array<{ artist: string; title: string; reason: string }> = [];
+
+    for (const song of scrapedSongs) {
+      const decision = guard(song.artist, song.title);
+      if (decision.allowed) {
+        gradeSongs.push({
+          artist: decision.downloadArtist,
+          title: decision.downloadTitle,
+          station: song.station,
+        });
+      } else {
+        blockedEvents.push({
+          artist: song.artist,
+          title: song.title,
+          reason: decision.reason,
+        });
+      }
+    }
+
+    // BALACHIC is in blocked list AND has alias — blocked takes priority
+    // So: 4 pass (Gusttavo Lima, Simone Mendes, MC Kevinho, Artista Limpo)
+    //     6 blocked (Naldo Lima, PROMESSA D, BALACHIC, Ikaro Mendes, MC Kevin, Artista Ganja)
+    expect(gradeSongs).toHaveLength(4);
+    expect(gradeSongs.map(s => s.artist)).toContain('Gusttavo Lima');
+    expect(gradeSongs.map(s => s.artist)).toContain('Simone Mendes');
+    expect(gradeSongs.map(s => s.artist)).toContain('MC Kevinho');
+    expect(gradeSongs.map(s => s.artist)).toContain('Artista Limpo');
+
+    // Verify blocked songs were caught
+    expect(blockedEvents).toHaveLength(6);
+    expect(blockedEvents.map(s => s.artist)).toContain('Naldo Lima');
+    expect(blockedEvents.map(s => s.artist)).toContain('PROMESSA D');
+    expect(blockedEvents.map(s => s.artist)).toContain('BALACHIC');
+    expect(blockedEvents.map(s => s.artist)).toContain('Ikaro Mendes');
+    expect(blockedEvents.map(s => s.artist)).toContain('MC Kevin');
+    expect(blockedEvents.map(s => s.artist)).toContain('Artista Ganja');
+
+    // CRITICAL: Gusttavo Lima must NEVER be blocked
+    expect(blockedEvents.map(s => s.artist)).not.toContain('Gusttavo Lima');
+    // CRITICAL: Simone Mendes must NEVER be blocked
+    expect(blockedEvents.map(s => s.artist)).not.toContain('Simone Mendes');
+    // CRITICAL: MC Kevinho must NEVER be blocked
+    expect(blockedEvents.map(s => s.artist)).not.toContain('MC Kevinho');
+  });
+
+  it('alias-resolved songs use corrected metadata even when blocked', () => {
+    // BALACHIC is blocked (in blocklist) but alias still resolves for download fields
+    const balachicDecision = guard('BALACHIC', 'ERA UMA VEZ(AO VIVO)');
+    expect(balachicDecision.allowed).toBe(false);
+    expect(balachicDecision.downloadArtist.trim()).toBe('Xand Aviao');
+
+    const promessaDecision = guard('PROMESSA D', 'PEDIDO DE SOCORRO');
+    expect(promessaDecision.allowed).toBe(false);
+    expect(promessaDecision.downloadArtist).toBe('Gustavo Mioto');
+  });
+
+  it('suffix variations do not bypass blocking', () => {
+    // Even with (Ao Vivo) appended, Naldo Lima should still be blocked
+    const decision = guard('Naldo Lima', 'Retrovisor (Ao Vivo)');
+    expect(decision.allowed).toBe(false);
+  });
+});
