@@ -19,9 +19,40 @@ const typeConfig: Record<string, { icon: typeof Music; label: string; color: str
 };
 
 /** Detect special matching strategies from the reason string */
+/** Extract freshness age in minutes from reason string */
+function extractFreshnessMin(reason?: string): number | null {
+  if (!reason) return null;
+  const match = reason.match(/frescor:\s*(\d+)min/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+/** Get freshness color class based on age */
+function getFreshnessColorClass(ageMin: number): string {
+  if (ageMin < 10) return 'text-green-400 border-green-500/30 bg-green-500/10';
+  if (ageMin <= 15) return 'text-amber-400 border-amber-500/30 bg-amber-500/10';
+  return 'text-red-400 border-red-500/30 bg-red-500/10';
+}
+
 function getSpecialBadges(reason?: string): Array<{ label: string; className: string }> {
   if (!reason) return [];
   const badges: Array<{ label: string; className: string }> = [];
+  
+  // P1 FRESCOR (≤15min, the freshest)
+  if (reason.includes('[P1]') && !reason.includes('[P1-')) {
+    const ageMin = extractFreshnessMin(reason);
+    const colorClass = ageMin !== null ? getFreshnessColorClass(ageMin) : 'text-green-400 border-green-500/30 bg-green-500/10';
+    const label = ageMin !== null ? `🔥 P1 ${ageMin}min` : '🔥 P1 FRESCOR';
+    badges.push({ label, className: colorClass });
+  }
+  
+  // P1-EXT (graduated tiers ≤30min, ≤1h, ≤2h, >2h)
+  if (reason.includes('[P1-EXT]')) {
+    const ageMin = extractFreshnessMin(reason);
+    const colorClass = ageMin !== null ? getFreshnessColorClass(ageMin) : 'text-amber-400 border-amber-500/30 bg-amber-500/10';
+    const label = ageMin !== null ? `📡 P1-EXT ${ageMin}min` : '📡 P1-EXT';
+    badges.push({ label, className: colorClass });
+  }
+  
   if (reason.includes('P1-DEEP')) {
     badges.push({ label: '🔎 P1-DEEP', className: 'text-purple-400 border-purple-500/30 bg-purple-500/10' });
   }
