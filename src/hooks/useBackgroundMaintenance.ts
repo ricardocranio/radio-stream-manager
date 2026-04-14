@@ -488,7 +488,16 @@ export function useBackgroundMaintenance() {
 
       if (allFolders.length === 0) return;
 
-      const uniqueFolders = [...new Set(allFolders)];
+      // Exclude genre-routed subfolders from ID3 validation
+      // (routed files may have been renamed by aliases, causing false positives)
+      const genreRoutes = deezerConfig.genreRoutes || [];
+      const routedFolderNames = new Set(genreRoutes.map(r => r.folderName.toLowerCase()));
+      const safeFolders = allFolders.filter(f => {
+        const folderName = f.replace(/[\\/]+$/, '').split(/[\\/]/).pop()?.toLowerCase() || '';
+        return !routedFolderNames.has(folderName);
+      });
+
+      const uniqueFolders = [...new Set(safeFolders)];
 
       console.log('[MAINTENANCE] 🛡️ Validação ID3 periódica iniciada...');
       const result = await (window.electronAPI as any).validateId3Integrity({
