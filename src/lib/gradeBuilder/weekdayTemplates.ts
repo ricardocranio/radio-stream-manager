@@ -208,7 +208,7 @@ export async function generatePainelFlashbackBlock(
   if (minute === 0) {
     line = `${timeStr} (ID=PAINEL FLASHBACK) vht,"NOTICIA_DA_HORA_12HORAS_${dayName}.mp3","painel flashback _ bloco 01.mp3",vht,"AS_ULTIMAS_DO_ESPORTE_EDICAO01_${dayName}.mp3","painel flashback _ bloco 02.mp3",vht`;
   } else {
-    line = `${timeStr} (ID=PAINEL FLASHBACK) vht,"AS_ULTIMAS_DO_ESPORTE_EDICAO02_${dayName}.mp3","painel flashback _ bloco 01.mp3",vht,"FATOS_E_BOATOS_EDICAO01_${dayName}.mp3",vht,"painel flashback _ bloco 02.mp3",vht`;
+    line = `${timeStr} (ID=PAINEL FLASHBACK) vht,"AS_ULTIMAS_DO_ESPORTE_EDICAO02_${dayName}.mp3","painel flashback _ bloco 03.mp3",vht,"FATOS_E_BOATOS_EDICAO01_${dayName}.mp3",vht,"painel flashback _ bloco 04.mp3",vht`;
   }
 
   logs.push({ blockTime: timeStr, type: 'fixed', title: 'Painel Flashback', artist: `Bloco ${timeStr}`, station: 'FIXO', reason: 'Template Painel Flashback' });
