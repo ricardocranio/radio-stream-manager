@@ -2165,11 +2165,19 @@ export function useAutoGradeBuilder() {
       const thirdFullyResolved = thirdExistingLine ? isBlockFullyResolved(thirdExistingLine, coringaCode) : false;
 
       // Heal stale locks persisted from previous cycles/sessions
-      if (currentLocked && !currentFullyResolved) {
+      // CURRENT BLOCK: lock as soon as it has ANY content — it's already playing/about to play
+      const currentHasAnyContent = !!currentExistingLine;
+      if (currentHasAnyContent && !forceRegenerate && !currentCoveredBySchedule) {
+        builtBlocksRef.current.add(currentTimeKey);
+        currentLocked = true;
+        // Don't log every cycle — only on first lock
+      } else if (currentLocked && !currentHasAnyContent) {
         builtBlocksRef.current.delete(currentTimeKey);
         currentLocked = false;
-        console.log(`[AUTO-GRADE] 🔓 Lock antigo removido de ${currentTimeKey} (bloco ainda incompleto)`);
+        console.log(`[AUTO-GRADE] 🔓 Lock removido de ${currentTimeKey} (sem conteúdo)`);
       }
+
+      // NEXT/THIRD: heal locks only if incomplete (allow continuous refresh)
       if (nextLocked && !nextFullyResolved) {
         builtBlocksRef.current.delete(nextTimeKey);
         nextLocked = false;
@@ -2184,15 +2192,14 @@ export function useAutoGradeBuilder() {
       // Blocks covered by scheduled sequences should NOT be locked — they must always rebuild
       if (currentFullyResolved && !forceRegenerate && !currentCoveredBySchedule) {
         builtBlocksRef.current.add(currentTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${currentTimeKey} COMPLETO (todas as músicas resolvidas) — travado`);
       }
       if (nextFullyResolved && !forceRegenerate && !nextCoveredBySchedule) {
         builtBlocksRef.current.add(nextTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} COMPLETO (todas as músicas resolvidas) — travado`);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${nextTimeKey} COMPLETO — travado`);
       }
       if (thirdFullyResolved && !forceRegenerate && !thirdCoveredBySchedule) {
         builtBlocksRef.current.add(thirdTimeKey);
-        console.log(`[AUTO-GRADE] 🔒 Bloco ${thirdTimeKey} COMPLETO (todas as músicas resolvidas) — travado`);
+        console.log(`[AUTO-GRADE] 🔒 Bloco ${thirdTimeKey} COMPLETO — travado`);
       }
 
       // Detect legacy weekday lines that should never persist on Saturday
