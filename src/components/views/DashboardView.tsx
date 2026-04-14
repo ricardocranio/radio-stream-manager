@@ -1102,10 +1102,6 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         </div></div>
       </Card>
 
-      {/* P1 Freshness — below preview */}
-      <P1FreshnessAlertCard />
-
-
 
       {/* Phase 5: Service Health Dashboard */}
       <ServiceHealthCard />
@@ -1119,8 +1115,6 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       {/* Blocked Songs — Full width collapsible */}
       <BlockedSongsCard />
 
-      {/* P1 Freshness — Full width collapsible */}
-      <P1FreshnessAlertCard />
 
       {/* Phase 6: Intelligence Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
