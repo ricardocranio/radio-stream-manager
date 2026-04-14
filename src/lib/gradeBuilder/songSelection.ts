@@ -646,7 +646,7 @@ export async function selectSongForSlot(
       // JIT for older station songs — AGGRESSIVE: up to 8 attempts to respect sequence
       if (!selectedSong) {
         let jitExtAttempts = 0;
-        const maxJitExt = 8;
+        const maxJitExt = 12;
         console.log(`[SONG-SELECT] ⚠️ [P1-EXT] Nenhuma música antiga de "${stationName}" na biblioteca. Tentando JIT agressivo (${maxJitExt} tentativas)...`);
         for (const candidate of olderStationSongs) {
           if (jitExtAttempts >= maxJitExt) break;
