@@ -60,14 +60,15 @@ export function useDailyGradePreBuild(gradeBuilder: GradeBuilder) {
       console.log(`[PRE-BUILD-24h] 🌅 Iniciando montagem completa da grade (${reason})`);
 
       try {
-        const result = await gradeBuilder.buildFullDayGrade();
-        if (result) {
-          markRanToday();
-          console.log('[PRE-BUILD-24h] ✅ Grade 24h montada com sucesso — slots dinâmicos serão refinados em tempo real');
-          reportServiceHeartbeat('daily-prebuild' as any);
-        } else {
-          console.warn('[PRE-BUILD-24h] ⚠️ buildFullDayGrade retornou vazio — tentará novamente no próximo ciclo');
-        }
+        await gradeBuilder.buildFullDayGrade();
+        markRanToday();
+        console.log('[PRE-BUILD-24h] ✅ Grade 24h montada — slots dinâmicos serão refinados em tempo real');
+        reportServiceHeartbeat('daily-prebuild' as any);
+      } catch (err) {
+        console.error('[PRE-BUILD-24h] ❌ Erro ao montar grade 24h:', err);
+      } finally {
+        runningRef.current = false;
+      }
       } catch (err) {
         console.error('[PRE-BUILD-24h] ❌ Erro ao montar grade 24h:', err);
       } finally {
