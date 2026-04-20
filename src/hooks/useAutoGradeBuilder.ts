@@ -2562,6 +2562,9 @@ export function useAutoGradeBuilder() {
     return { blockKey, minutesUntilBlock };
   }, []);
 
+  /** Lock window (minutes): blocks within this window from airtime are frozen */
+  const P1_REFRESH_LOCK_MINUTES = 30;
+
   // Core tick: build grade + write if in window
   const runGradeTick = useCallback(async (reason: string) => {
     // Safety: force-release stale lock if previous tick exceeded timeout
@@ -2589,16 +2592,26 @@ export function useAutoGradeBuilder() {
         void buildNextDayGradeRef.current();
       }
 
-      // New cycle detection — unlock next block
+      // === P1-REFRESH LOCK (Entrega 2) ===
+      // If the next block is within the lock window, freeze it: no further P1
+      // refresh should rewrite slots. The block will go to air as-is.
+      if (minutesUntilBlock <= P1_REFRESH_LOCK_MINUTES && !builtBlocksRef.current.has(blockKey)) {
+        builtBlocksRef.current.add(blockKey);
+        console.log(`[P1-REFRESH] 🔒 LOCK ${P1_REFRESH_LOCK_MINUTES}min — bloco ${blockKey} congelado para no ar (faltam ${minutesUntilBlock}min)`);
+      }
+
+      // New cycle detection — unlock next block (only if outside lock window)
       if (lastRealtimeBlockRef.current !== blockKey) {
         console.log(`[AUTO-GRADE] 🔓 Ciclo ${lastRealtimeBlockRef.current || 'inicial'} → ${blockKey} (${reason})`);
-        builtBlocksRef.current.delete(blockKey);
+        if (minutesUntilBlock > P1_REFRESH_LOCK_MINUTES) {
+          builtBlocksRef.current.delete(blockKey);
+        }
         lastRealtimeBlockRef.current = blockKey;
         lastWrittenContentHashRef.current = ''; // Reset hash for new cycle
       }
 
       // Always run tick build; per-block lock/completeness is decided inside buildGrade
-      console.log(`[AUTO-GRADE] ⚡ Tick realtime para bloco ${blockKey} (${reason})`);
+      console.log(`[P1-REFRESH] ⚡ Tick (${reason}) → próximo bloco ${blockKey} em ${minutesUntilBlock}min`);
       await buildGrade(false, false);
 
       // Disk write within the configured window — re-write whenever content changes
