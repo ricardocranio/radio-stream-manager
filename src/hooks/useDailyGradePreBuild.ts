@@ -69,11 +69,6 @@ export function useDailyGradePreBuild(gradeBuilder: GradeBuilder) {
       } finally {
         runningRef.current = false;
       }
-      } catch (err) {
-        console.error('[PRE-BUILD-24h] ❌ Erro ao montar grade 24h:', err);
-      } finally {
-        runningRef.current = false;
-      }
     };
 
     // 1) Catch-up no boot (espera o daily-reset 01:00 finalizar primeiro)
