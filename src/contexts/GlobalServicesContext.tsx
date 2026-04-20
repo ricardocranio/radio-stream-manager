@@ -80,6 +80,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   const dailyReportService = useDailyReport();
   const mapaBuilder = useAutoMapaBuilder();
   const contentCleanupService = useContentCleanupService();
+  useDailyAutoReset(); // Daily 01:00 system reset (idempotent)
 
   // ============= DEFERRED INITIALIZATION =============
   // Delay heavy services to let the UI render first (fixes black screen on Electron)
@@ -127,6 +128,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
       console.log(`║ 📉 Ranking Decay: ✅ ATIVO (5%/dia)`.padEnd(65) + '║');
       console.log(`║ 🗺️ Mapas JIT:     ✅ ATIVO (20 min antes)`.padEnd(65) + '║');
       console.log(`║ 🗑️ Content Clean: ✅ ATIVO (15 min antes)`.padEnd(65) + '║');
+      console.log(`║ 🔄 Reset 01:00:   ✅ ATIVO (diário automático)`.padEnd(65) + '║');
       console.log('╚══════════════════════════════════════════════════════════════╝');
 
       // Start services in staggered waves to avoid CPU spikes
