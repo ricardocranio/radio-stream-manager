@@ -28,6 +28,7 @@ import { useDailyReport } from '@/hooks/useDailyReport';
 import { useAutoMapaBuilder } from '@/hooks/useAutoMapaBuilder';
 import { useContentCleanupService } from '@/hooks/useContentCleanupService';
 import { useDailyAutoReset } from '@/hooks/useDailyAutoReset';
+import { useDailyGradePreBuild } from '@/hooks/useDailyGradePreBuild';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -81,6 +82,7 @@ export function GlobalServicesProvider({ children }: { children: React.ReactNode
   const mapaBuilder = useAutoMapaBuilder();
   const contentCleanupService = useContentCleanupService();
   useDailyAutoReset(); // Daily 01:00 system reset (idempotent)
+  useDailyGradePreBuild(gradeBuilder); // Pre-build 24h grade after daily reset (Entrega 1)
 
   // ============= DEFERRED INITIALIZATION =============
   // Delay heavy services to let the UI render first (fixes black screen on Electron)
