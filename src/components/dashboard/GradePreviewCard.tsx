@@ -925,9 +925,6 @@ export function GradePreviewCard() {
             <Music className="w-3 h-3" />
             {songCount} músicas
           </span>
-          <span className="flex items-center gap-1">
-            🎵 {vhtCount} VHTs
-          </span>
           {blockDuration && (
             <span className="flex items-center gap-1 font-medium text-foreground">
               <Clock className="w-3 h-3" />
@@ -985,7 +982,11 @@ export function GradePreviewCard() {
             </div>
           ) : (
             <div className="space-y-1.5">
-              {displaySongs.map((song, index) => {
+              {displaySongs
+                .filter(s => !s.isSpecial)
+                .map((song, index, arr) => {
+                  // Renumber visible positions sequentially (1..N), ignoring vinhetas
+                  const displayPosition = index + 1;
                 const isMissing = libraryStatus[song.filename.toLowerCase()] === 'missing';
                 const stationKey = `${normalizeKey(song.artist)}-${normalizeKey(song.title || '')}`;
                 const stationName = songStationMap[stationKey];
@@ -1013,7 +1014,7 @@ export function GradePreviewCard() {
                   >
                     {/* Position */}
                     <span className="text-xs font-mono text-muted-foreground w-5 text-right shrink-0">
-                      {song.position}
+                      {displayPosition}
                     </span>
 
                     {/* Library icon */}
