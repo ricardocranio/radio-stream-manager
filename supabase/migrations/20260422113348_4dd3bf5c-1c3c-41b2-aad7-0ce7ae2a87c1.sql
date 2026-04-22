@@ -1,0 +1,1 @@
+UPDATE radio_historico SET source = 'db-historico' WHERE source LIKE 'db-%(%'; UPDATE scraped_songs SET source = 'python_monitor' WHERE source LIKE 'db-%(%';
