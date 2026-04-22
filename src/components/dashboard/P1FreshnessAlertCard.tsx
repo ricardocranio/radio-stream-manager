@@ -4,10 +4,11 @@
  * Shows last 3 songs per station with "used in grade" indicator.
  */
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertTriangle, Radio, CheckCircle2, Clock, ChevronDown, ChevronRight, Music2, Check } from 'lucide-react';
+import { AlertTriangle, Radio, CheckCircle2, Clock, ChevronDown, ChevronRight, Music2, Check, Settings2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useRadioStore } from '@/store/radioStore';
 import { useGradeLogStore } from '@/store/gradeLogStore';
 import { supabase } from '@/integrations/supabase/client';
@@ -62,6 +63,20 @@ interface StationInfo {
   recentSongs: StationSong[];
 }
 
+const LS_KEY = 'freshness-selected-stations';
+
+function loadSelectedStations(): string[] | null {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+function saveSelectedStations(names: string[]) {
+  localStorage.setItem(LS_KEY, JSON.stringify(names));
+}
+
 export function P1FreshnessAlertCard() {
   const sequence = useRadioStore((s) => s.sequence);
   const stations = useRadioStore((s) => s.stations);
@@ -69,23 +84,16 @@ export function P1FreshnessAlertCard() {
   const [stationStatus, setStationStatus] = useState<Record<string, StationInfo>>({});
   const [collapsed, setCollapsed] = useState(true);
   const [expandedStations, setExpandedStations] = useState<Set<string>>(new Set());
+  const [showSelector, setShowSelector] = useState(false);
+  const [selectedStations, setSelectedStations] = useState<string[]>([]);
 
-  // Build a set of used song keys from grade logs for quick lookup
-  const usedSongKeys = useMemo(() => {
-    const keys = new Set<string>();
-    for (const log of blockLogs) {
-      if (log.type === 'used') {
-        keys.add(`${log.artist.toLowerCase().trim()}|${log.title.toLowerCase().trim()}`);
-      }
-    }
-    return keys;
-  }, [blockLogs]);
+  // All available station names (from store)
+  const allStationNames = useMemo(() => {
+    return stations.filter(s => s.enabled).map(s => s.name).sort();
+  }, [stations]);
 
-  const isSongUsed = useCallback((artist: string, title: string) => {
-    return usedSongKeys.has(`${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`);
-  }, [usedSongKeys]);
-
-  const p1Stations = useMemo(() => {
+  // Stations from the active sequence (used as default)
+  const sequenceStations = useMemo(() => {
     if (!sequence.length) return [];
     const seen = new Set<string>();
     const names: string[] = [];
@@ -101,6 +109,43 @@ export function P1FreshnessAlertCard() {
     }
     return names;
   }, [sequence, stations]);
+
+  // Initialize selected stations from localStorage or default to sequence stations
+  useEffect(() => {
+    const saved = loadSelectedStations();
+    if (saved && saved.length > 0) {
+      setSelectedStations(saved);
+    } else if (sequenceStations.length > 0) {
+      setSelectedStations(sequenceStations);
+    }
+  }, [sequenceStations]);
+
+  const toggleStationSelection = (name: string) => {
+    setSelectedStations(prev => {
+      const next = prev.includes(name)
+        ? prev.filter(n => n !== name)
+        : [...prev, name];
+      saveSelectedStations(next);
+      return next;
+    });
+  };
+
+  const p1Stations = selectedStations;
+
+  // Build a set of used song keys from grade logs for quick lookup
+  const usedSongKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const log of blockLogs) {
+      if (log.type === 'used') {
+        keys.add(`${log.artist.toLowerCase().trim()}|${log.title.toLowerCase().trim()}`);
+      }
+    }
+    return keys;
+  }, [blockLogs]);
+
+  const isSongUsed = useCallback((artist: string, title: string) => {
+    return usedSongKeys.has(`${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`);
+  }, [usedSongKeys]);
 
   const toggleStation = (stationName: string) => {
     setExpandedStations(prev => {
@@ -159,7 +204,7 @@ export function P1FreshnessAlertCard() {
   const freshCount = entries.filter(([, s]) => s.fresh).length;
   const allFresh = entries.length > 0 && !hasAlert;
 
-  if (p1Stations.length === 0) return null;
+  if (p1Stations.length === 0 && allStationNames.length === 0) return null;
 
   return (
     <Card className="glass-card">
@@ -175,12 +220,41 @@ export function P1FreshnessAlertCard() {
           <Badge variant="outline" className={`text-xs ml-auto mr-2 ${hasAlert ? 'border-warning/25 bg-warning/10 text-warning' : 'border-success/25 bg-success/10 text-success'}`}>
             {hasAlert ? '⚠️ Atenção' : '✓ Ativo'}
           </Badge>
+          <button
+            className="p-1 rounded hover:bg-muted/50 transition-colors"
+            onClick={(e) => { e.stopPropagation(); setShowSelector(!showSelector); }}
+            title="Selecionar estações"
+          >
+            <Settings2 className="w-4 h-4 text-muted-foreground" />
+          </button>
           <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${!collapsed ? 'rotate-180' : ''}`} />
         </CardTitle>
       </CardHeader>
       <div className="collapsible-content" data-open={!collapsed}>
         <div>
           <CardContent className="pt-0 space-y-2">
+            {/* Station selector */}
+            {showSelector && (
+              <div className="rounded-lg border border-border/40 bg-muted/20 p-2 space-y-1.5">
+                <p className="text-[11px] text-muted-foreground font-medium mb-1">Selecione as rádios para monitorar:</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+                  {allStationNames.map(name => (
+                    <label
+                      key={name}
+                      className="flex items-center gap-1.5 text-[11px] text-foreground/80 cursor-pointer hover:bg-muted/30 rounded px-1.5 py-1 transition-colors"
+                    >
+                      <Checkbox
+                        checked={selectedStations.includes(name)}
+                        onCheckedChange={() => toggleStationSelection(name)}
+                        className="h-3.5 w-3.5"
+                      />
+                      {name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Station list */}
             <ScrollArea className="max-h-[500px]">
               <div className="space-y-1 pr-2">
