@@ -7,26 +7,56 @@
   },
   "radios": [
     {
-      "nome": "BH FM 102.1",
-      "url": "https://mytuner-radio.com/pt/radio/radio-bh-fm-402270",
+      "nome": "Disney FM",
+      "url": "https://mytuner-radio.com/pt/radio/radio-disney-424866/",
       "tipo": "mytuner",
       "ativo": true
     },
     {
-      "nome": "Clube FM Brasília 105.5",
+      "nome": "BH FM",
+      "url": "https://mytuner-radio.com/pt/radio/radio-bh-fm-402270/",
+      "tipo": "mytuner",
+      "ativo": true
+    },
+    {
+      "nome": "Rádio Globo RJ",
+      "url": "https://mytuner-radio.com/pt/radio/radio-globo-rj-402262/",
+      "tipo": "mytuner",
+      "ativo": true
+    },
+    {
+      "nome": "Mix FM",
+      "url": "https://mytuner-radio.com/pt/radio/mix-fm-sao-paulo-408793/",
+      "tipo": "mytuner",
+      "ativo": true
+    },
+    {
+      "nome": "Clube FM",
       "url": "https://mytuner-radio.com/pt/radio/radio-clube-fm-brasilia-1055-406812/",
       "tipo": "mytuner",
       "ativo": true
     },
     {
-      "nome": "Band FM 96.1",
+      "nome": "Band FM",
       "url": "https://mytuner-radio.com/pt/radio/band-fm-413397/",
       "tipo": "mytuner",
       "ativo": true
     },
     {
-      "nome": "Rádio Globo RJ 98.1",
-      "url": "https://mytuner-radio.com/pt/radio/radio-globo-rj-402262/",
+      "nome": "Metropolitana FM",
+      "url": "https://mytuner-radio.com/pt/radio/radio-metropolitana-fm-412906/",
+      "tipo": "mytuner",
+      "ativo": true
+    },
+    {
+      "nome": "Blink 102 FM",
+      "url": "https://mytuner-radio.com/pt/radio/radio-blink-102-fm-407711/",
+      "tipo": "mytuner",
+      "ativo": true
+    },
+    {
+      "nome": "89 Rock",
+      "url": "https://mytuner-radio.com/pt/radio/89-fm-a-radio-rock-395698/",
       "tipo": "mytuner",
       "ativo": true
     }
