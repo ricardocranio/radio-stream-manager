@@ -204,7 +204,7 @@ export function P1FreshnessAlertCard() {
   const freshCount = entries.filter(([, s]) => s.fresh).length;
   const allFresh = entries.length > 0 && !hasAlert;
 
-  if (p1Stations.length === 0) return null;
+  if (p1Stations.length === 0 && allStationNames.length === 0) return null;
 
   return (
     <Card className="glass-card">
@@ -220,12 +220,41 @@ export function P1FreshnessAlertCard() {
           <Badge variant="outline" className={`text-xs ml-auto mr-2 ${hasAlert ? 'border-warning/25 bg-warning/10 text-warning' : 'border-success/25 bg-success/10 text-success'}`}>
             {hasAlert ? '⚠️ Atenção' : '✓ Ativo'}
           </Badge>
+          <button
+            className="p-1 rounded hover:bg-muted/50 transition-colors"
+            onClick={(e) => { e.stopPropagation(); setShowSelector(!showSelector); }}
+            title="Selecionar estações"
+          >
+            <Settings2 className="w-4 h-4 text-muted-foreground" />
+          </button>
           <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${!collapsed ? 'rotate-180' : ''}`} />
         </CardTitle>
       </CardHeader>
       <div className="collapsible-content" data-open={!collapsed}>
         <div>
           <CardContent className="pt-0 space-y-2">
+            {/* Station selector */}
+            {showSelector && (
+              <div className="rounded-lg border border-border/40 bg-muted/20 p-2 space-y-1.5">
+                <p className="text-[11px] text-muted-foreground font-medium mb-1">Selecione as rádios para monitorar:</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+                  {allStationNames.map(name => (
+                    <label
+                      key={name}
+                      className="flex items-center gap-1.5 text-[11px] text-foreground/80 cursor-pointer hover:bg-muted/30 rounded px-1.5 py-1 transition-colors"
+                    >
+                      <Checkbox
+                        checked={selectedStations.includes(name)}
+                        onCheckedChange={() => toggleStationSelection(name)}
+                        className="h-3.5 w-3.5"
+                      />
+                      {name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Station list */}
             <ScrollArea className="max-h-[500px]">
               <div className="space-y-1 pr-2">
