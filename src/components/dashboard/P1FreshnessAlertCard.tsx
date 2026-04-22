@@ -4,10 +4,11 @@
  * Shows last 3 songs per station with "used in grade" indicator.
  */
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertTriangle, Radio, CheckCircle2, Clock, ChevronDown, ChevronRight, Music2, Check } from 'lucide-react';
+import { AlertTriangle, Radio, CheckCircle2, Clock, ChevronDown, ChevronRight, Music2, Check, Settings2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useRadioStore } from '@/store/radioStore';
 import { useGradeLogStore } from '@/store/gradeLogStore';
 import { supabase } from '@/integrations/supabase/client';
