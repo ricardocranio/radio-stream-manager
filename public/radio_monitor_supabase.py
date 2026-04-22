@@ -403,7 +403,7 @@ def parse_song_text(text: str) -> Dict[str, str]:
 
 CONFIG_PADRAO = {
     "configuracao": {
-        "intervalo_minutos": 12,
+        "intervalo_minutos": 6,
         "mostrar_navegador": False,
         "arquivo_historico": os.path.join(_DATA_DIR, "radio_historico.json"),
         "arquivo_relatorio": os.path.join(_DATA_DIR, "radio_relatorio.txt")
