@@ -63,6 +63,20 @@ interface StationInfo {
   recentSongs: StationSong[];
 }
 
+const LS_KEY = 'freshness-selected-stations';
+
+function loadSelectedStations(): string[] | null {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+function saveSelectedStations(names: string[]) {
+  localStorage.setItem(LS_KEY, JSON.stringify(names));
+}
+
 export function P1FreshnessAlertCard() {
   const sequence = useRadioStore((s) => s.sequence);
   const stations = useRadioStore((s) => s.stations);
@@ -70,23 +84,16 @@ export function P1FreshnessAlertCard() {
   const [stationStatus, setStationStatus] = useState<Record<string, StationInfo>>({});
   const [collapsed, setCollapsed] = useState(true);
   const [expandedStations, setExpandedStations] = useState<Set<string>>(new Set());
+  const [showSelector, setShowSelector] = useState(false);
+  const [selectedStations, setSelectedStations] = useState<string[]>([]);
 
-  // Build a set of used song keys from grade logs for quick lookup
-  const usedSongKeys = useMemo(() => {
-    const keys = new Set<string>();
-    for (const log of blockLogs) {
-      if (log.type === 'used') {
-        keys.add(`${log.artist.toLowerCase().trim()}|${log.title.toLowerCase().trim()}`);
-      }
-    }
-    return keys;
-  }, [blockLogs]);
+  // All available station names (from store)
+  const allStationNames = useMemo(() => {
+    return stations.filter(s => s.enabled).map(s => s.name).sort();
+  }, [stations]);
 
-  const isSongUsed = useCallback((artist: string, title: string) => {
-    return usedSongKeys.has(`${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`);
-  }, [usedSongKeys]);
-
-  const p1Stations = useMemo(() => {
+  // Stations from the active sequence (used as default)
+  const sequenceStations = useMemo(() => {
     if (!sequence.length) return [];
     const seen = new Set<string>();
     const names: string[] = [];
@@ -102,6 +109,43 @@ export function P1FreshnessAlertCard() {
     }
     return names;
   }, [sequence, stations]);
+
+  // Initialize selected stations from localStorage or default to sequence stations
+  useEffect(() => {
+    const saved = loadSelectedStations();
+    if (saved && saved.length > 0) {
+      setSelectedStations(saved);
+    } else if (sequenceStations.length > 0) {
+      setSelectedStations(sequenceStations);
+    }
+  }, [sequenceStations]);
+
+  const toggleStationSelection = (name: string) => {
+    setSelectedStations(prev => {
+      const next = prev.includes(name)
+        ? prev.filter(n => n !== name)
+        : [...prev, name];
+      saveSelectedStations(next);
+      return next;
+    });
+  };
+
+  const p1Stations = selectedStations;
+
+  // Build a set of used song keys from grade logs for quick lookup
+  const usedSongKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const log of blockLogs) {
+      if (log.type === 'used') {
+        keys.add(`${log.artist.toLowerCase().trim()}|${log.title.toLowerCase().trim()}`);
+      }
+    }
+    return keys;
+  }, [blockLogs]);
+
+  const isSongUsed = useCallback((artist: string, title: string) => {
+    return usedSongKeys.has(`${artist.toLowerCase().trim()}|${title.toLowerCase().trim()}`);
+  }, [usedSongKeys]);
 
   const toggleStation = (stationName: string) => {
     setExpandedStations(prev => {
