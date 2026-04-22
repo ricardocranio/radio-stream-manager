@@ -657,7 +657,7 @@ def get_db_fallback(station_name: str) -> Optional[Dict]:
                 return {
                     "tocando_agora": songs[0],
                     "ultimas_tocadas": songs[1:6],
-                    "source": f"db-fallback({fresh_rows[0].get('source') or 'scraped'})"
+                    "source": "db-fallback(scraped)"
                 }
 
         historico_rows = supabase_select('radio_historico', {
@@ -682,7 +682,7 @@ def get_db_fallback(station_name: str) -> Optional[Dict]:
             return {
                 "tocando_agora": songs[0],
                 "ultimas_tocadas": songs[1:6],
-                "source": f"db-historico({historico_rows[0].get('source') or 'historico'})"
+                "source": "db-historico"
             }
     except Exception as e:
         print(cor(Cores.YELLOW, f"     ⚠️  DB fallback erro: {str(e)[:50]}"))
