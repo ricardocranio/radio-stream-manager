@@ -1380,13 +1380,16 @@ class RadioMonitor:
                 
                 dados = await self._scrape_station_multisource(radio, page)
                 
-                # ── Alimentar buffer de frescor ──────────────────────
+                # ── Alimentar buffer de frescor (máx 2 músicas por ciclo) ──
                 songs_para_buffer = []
                 if dados.get("tocando_agora"):
                     songs_para_buffer.append(dados["tocando_agora"])
-                for s in (dados.get("ultimas_tocadas") or []):
-                    if s and len(s) > 5:
-                        songs_para_buffer.append(s)
+                if len(songs_para_buffer) < 2:
+                    for s in (dados.get("ultimas_tocadas") or []):
+                        if s and len(s) > 5:
+                            songs_para_buffer.append(s)
+                            if len(songs_para_buffer) >= 2:
+                                break
                 
                 if songs_para_buffer:
                     self.atualizar_recentes(radio['nome'], songs_para_buffer)
