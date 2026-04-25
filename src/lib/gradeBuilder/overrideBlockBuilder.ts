@@ -16,7 +16,7 @@
  */
 import type { HourOverride } from '@/lib/locucao/locucaoSchedulePolicy';
 import type { SequenceConfig } from '@/types/radio';
-import type { BlockResult, BlockLogItem, GradeContext, SongEntry, SelectionContext } from './types';
+import type { BlockResult, BlockLogItem, GradeContext, SongEntry, BlockStats } from './types';
 import { selectSongForSlot } from './songSelection';
 import { sanitizeGradeLine } from './sanitize';
 
@@ -27,8 +27,21 @@ export interface OverrideBlockArgs {
   override: HourOverride;
   songsByStation: Record<string, SongEntry[]>;
   ctx: GradeContext;
-  filterChars: string;
+  filterChars: string[];
   isFullDay: boolean;
+}
+
+interface InternalSelectionContext {
+  timeStr: string;
+  isFullDay: boolean;
+  usedInBlock: Set<string>;
+  usedArtistsInBlock: Set<string>;
+  songsByStation: Record<string, SongEntry[]>;
+  allSongsPool: SongEntry[];
+  carryOverByStation: Record<string, SongEntry[]>;
+  stationSongIndex: Record<string, number>;
+  logs: BlockLogItem[];
+  stats: BlockStats;
 }
 
 function isGradeToken(rs: string): boolean {
@@ -73,10 +86,10 @@ export async function buildBlockFromOverride(args: OverrideBlockArgs): Promise<B
   const allSongsPool: SongEntry[] = [];
   for (const list of Object.values(songsByStation)) allSongsPool.push(...list);
 
-  const selCtx: SelectionContext = {
+  const selCtx: InternalSelectionContext = {
     timeStr, isFullDay, usedInBlock, usedArtistsInBlock,
     songsByStation, allSongsPool, carryOverByStation: {}, stationSongIndex,
-    logs: blockLogs, stats: { used: 0, missing: 0, substituted: 0 } as any,
+    logs: blockLogs, stats: { used: 0, missing: 0, substituted: 0 } as unknown as BlockStats,
   };
 
   for (const pos of seq) {
