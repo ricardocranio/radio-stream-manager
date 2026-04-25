@@ -218,6 +218,19 @@ export function resolveLocucao(
   const vars = buildVars(kind, now, block, radioName);
   const text = applyVars(templateRaw, vars);
 
+  // Diagnóstico da política (whitelist horários, blacklist programas, NOTICIAS)
+  let policyStatus: ResolvedLocucao['policyStatus'];
+  if (block) {
+    const policy = loadPolicy();
+    const eligibility = checkBlockEligibility(block.time, block.programLabel, policy);
+    const autoOpenPosFromNews = findOpenPosAfterNews(block.rawTokens, policy);
+    policyStatus = {
+      allowed: eligibility.allowed,
+      reason: eligibility.detail,
+      autoOpenPosFromNews,
+    };
+  }
+
   return {
     text,
     voiceId: voice.voiceId,
@@ -228,6 +241,7 @@ export function resolveLocucao(
     vars,
     blockTime: block?.time,
     blockProgram: block?.programLabel,
+    policyStatus,
   };
 }
 
