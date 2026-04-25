@@ -489,17 +489,34 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                     )}
                   </div>
                   <div className="flex gap-0.5 mt-1 flex-wrap">
-                    {row.effectiveSequence.map((it) => (
-                      <span
-                        key={it.position}
-                        className={`text-[9px] px-1.5 py-0.5 rounded font-mono border ${getStationColor(it.radioSource)} ${
-                          showSeq ? '' : 'opacity-50 line-through decoration-rose-400/60'
-                        }`}
-                        title={`Posição ${it.position} — ${getSourceDisplayName(it.radioSource)}${showSeq ? '' : ' (LOC bloqueada — sequência mostrada apenas para referência)'}`}
-                      >
-                        {it.position.toString().padStart(2, '0')}·{getSourceDisplayName(it.radioSource).slice(0, 6)}
-                      </span>
-                    ))}
+                    {row.effectiveSequence.map((it: any) => {
+                      // Cores por TIPO de token da grade real
+                      const kind = it.gradeKind as GradePosition['kind'] | undefined;
+                      const cls = kind === 'mus'
+                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                        : kind === 'vht'
+                          ? 'bg-sky-500/15 text-sky-300 border-sky-500/40'
+                          : kind === 'vhtn'
+                            ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                            : kind === 'fun'
+                              ? 'bg-pink-500/15 text-pink-300 border-pink-500/40'
+                              : kind === 'fixed'
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                : getStationColor(it.radioSource);
+                      const display = it.gradeLabel || getSourceDisplayName(it.radioSource);
+                      const short = kind === 'fixed' ? display : display.toUpperCase().slice(0, 8);
+                      return (
+                        <span
+                          key={it.position}
+                          className={`text-[9px] px-1.5 py-0.5 rounded font-mono border ${cls} ${
+                            showSeq ? '' : 'opacity-50 line-through decoration-rose-400/60'
+                          }`}
+                          title={`Posição ${it.position} — ${display}${kind ? ` (${kind})` : ''}${showSeq ? '' : ' (LOC bloqueada — referência)'}`}
+                        >
+                          {it.position.toString().padStart(2, '0')}·{short}
+                        </span>
+                      );
+                    })}
                     {!showSeq && (
                       <span className="text-[9px] text-muted-foreground italic ml-1">
                         ⛔ {row.reason}
