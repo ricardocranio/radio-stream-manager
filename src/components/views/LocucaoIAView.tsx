@@ -170,6 +170,18 @@ export function LocucaoIAView() {
     const v = localStorage.getItem(STORAGE_KEY_AUTOSAVE);
     return v === null ? true : v === 'true';
   });
+  // Mapa: preset → voiceId. Se vazio, cai na voz global (voiceId).
+  const [presetVoices, setPresetVoices] = useState<Record<PresetKey, string>>(() => {
+    try {
+      const s = localStorage.getItem(STORAGE_KEY_PRESET_VOICES);
+      if (s) return { manha: '', tarde: '', noite: '', fim_de_semana: '', ...JSON.parse(s) };
+    } catch {}
+    return { manha: '', tarde: '', noite: '', fim_de_semana: '' };
+  });
+  const [usePresetVoice, setUsePresetVoice] = useState<boolean>(() => {
+    const v = localStorage.getItem(STORAGE_KEY_USE_PRESET_VOICE);
+    return v === null ? true : v === 'true';
+  });
 
   const { config } = useRadioStore();
 
