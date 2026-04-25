@@ -521,7 +521,10 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                               Editar {row.hour.toString().padStart(2, '0')}:00 — {DAY_LABELS[selectedDay]}
                             </div>
                             <div className="text-[10px] text-muted-foreground">
-                              Padrão: {row.fixedSlot?.program || 'Música livre'}
+                              Programa padrão: {row.fixedSlot?.program || 'Música livre'}
+                              {row.fromScheduled && (
+                                <span className="ml-1 text-violet-400">• base: sequência agendada</span>
+                              )}
                             </div>
                           </div>
                           <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30">
