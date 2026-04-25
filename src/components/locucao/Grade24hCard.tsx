@@ -465,6 +465,11 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                         seq. custom ({row.effectiveSequence.length})
                       </Badge>
                     )}
+                    {!row.hasCustomSeq && row.fromScheduled && (
+                      <Badge variant="outline" className="text-[9px] bg-violet-500/10 text-violet-400 border-violet-500/30" title="Sequência programada para esta hora (Sequence Scheduler)">
+                        seq. agendada
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex gap-0.5 mt-1 flex-wrap">
                     {row.effectiveSequence.map((it) => (
