@@ -453,10 +453,16 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     <Card className="glass-card border-primary/20">
       <CardHeader className="border-b border-border pb-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <CardTitle className="flex items-center gap-2 text-lg">
+          <button
+            type="button"
+            onClick={() => setCollapsed((c) => !c)}
+            className="flex items-center gap-2 text-lg font-semibold hover:text-primary transition-colors"
+            title={collapsed ? 'Expandir' : 'Encolher'}
+          >
+            <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`} />
             <Clock className="w-5 h-5 text-primary" />
             Grade 24h — {DAY_LABELS[selectedDay]}
-          </CardTitle>
+          </button>
           <div className="flex items-center gap-1 text-xs">
             <Badge variant="outline" className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
               ✓ {counts.allowed}h livres
@@ -469,25 +475,28 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
             </Badge>
           </div>
         </div>
-        <div className="flex gap-1 mt-2 flex-wrap items-center">
-          <Calendar className="w-4 h-4 text-muted-foreground mr-1" />
-          {DAY_KEYS.map((d) => (
-            <Button
-              key={d}
-              size="sm"
-              variant={selectedDay === d ? 'default' : 'outline'}
-              className="h-7 px-2 text-xs"
-              onClick={() => setSelectedDay(d)}
-            >
-              {DAY_LABELS[d]}
-              {d === today && <span className="ml-1 text-[9px] opacity-70">hoje</span>}
-            </Button>
-          ))}
-          <span className="text-[10px] text-muted-foreground ml-2">
-            💡 Clique no <Pencil className="w-3 h-3 inline" /> para editar posições, programa e LOC
-          </span>
-        </div>
+        {!collapsed && (
+          <div className="flex gap-1 mt-2 flex-wrap items-center">
+            <Calendar className="w-4 h-4 text-muted-foreground mr-1" />
+            {DAY_KEYS.map((d) => (
+              <Button
+                key={d}
+                size="sm"
+                variant={selectedDay === d ? 'default' : 'outline'}
+                className="h-7 px-2 text-xs"
+                onClick={() => setSelectedDay(d)}
+              >
+                {DAY_LABELS[d]}
+                {d === today && <span className="ml-1 text-[9px] opacity-70">hoje</span>}
+              </Button>
+            ))}
+            <span className="text-[10px] text-muted-foreground ml-2">
+              💡 Clique no <Pencil className="w-3 h-3 inline" /> para editar posições, programa e LOC
+            </span>
+          </div>
+        )}
       </CardHeader>
+      {!collapsed && (
       <CardContent className="p-0">
         <div className="divide-y divide-border">
           {rows.map((row) => {
