@@ -381,6 +381,22 @@ export function LocucaoIAView() {
                 <Label>Pasta para salvar (Electron)</Label>
                 <Input value={folder} onChange={e => setFolder(e.target.value)} placeholder="C:\Playlist\Locucoes" />
               </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-border/50 p-3 bg-muted/20">
+                <div className="space-y-0.5 pr-4">
+                  <Label htmlFor="autosave-switch" className="text-sm font-medium">
+                    Salvar automaticamente no disco
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Ao gerar uma locução, o MP3 é gravado imediatamente na pasta acima usando o nome padrão.
+                  </p>
+                </div>
+                <Switch
+                  id="autosave-switch"
+                  checked={autoSave}
+                  onCheckedChange={setAutoSave}
+                />
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
