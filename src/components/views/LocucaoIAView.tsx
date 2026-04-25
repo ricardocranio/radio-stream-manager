@@ -1202,6 +1202,11 @@ export function LocucaoIAView() {
           </Card>
         </TabsContent>
 
+        {/* AGENDAMENTO (whitelist horários, blacklist programas, tokens de notícias) */}
+        <TabsContent value="schedule" className="space-y-4">
+          <LocucaoSchedulePolicyEditor />
+        </TabsContent>
+
         {/* VOZ */}
         <TabsContent value="voice" className="space-y-4">
           <Card>
