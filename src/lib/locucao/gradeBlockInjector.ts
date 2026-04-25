@@ -254,6 +254,7 @@ export async function injectLocucaoInGrade(
       closePos: opts.closePos,
       position: opts.position,
       policy: opts.policy,
+      date,
     });
     if (result.skipped) {
       return {
