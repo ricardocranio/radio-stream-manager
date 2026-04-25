@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { useRadioStore } from '@/store/radioStore';
 import { extractNextBlockFromGrade, type BlockExtraction } from '@/lib/locucao/gradeBlockReader';
 import { injectLocucaoInGrade, injectMarkersIntoTokens } from '@/lib/locucao/gradeBlockInjector';
+import { LocucaoSchedulePolicyEditor } from '@/components/locucao/LocucaoSchedulePolicyEditor';
 
 const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
 
