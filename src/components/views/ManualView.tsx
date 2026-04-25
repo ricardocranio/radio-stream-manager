@@ -224,13 +224,27 @@ Na aba **Templates**, edite os textos usando variáveis: \`{musica1}\`, \`{artis
 **Voz & Configurações:**
 - 14 vozes PT-BR pré-selecionadas (masculinas graves recomendadas para FM).
 - Sliders de **Estabilidade**, **Similaridade**, **Estilo** e **Velocidade**.
-- Pasta de destino configurável (padrão: \`C:\\Playlist\\Locucoes\`).
+- Pasta de destino configurável (padrão: \`C:\\Playlist\\Locucoes-IA\` — criada automaticamente).
 
 **🆕 Auto-save no disco:**
 Há um interruptor **"Salvar automaticamente no disco"** (aba Voz & Configurações), **ativado por padrão**.
 Quando ligado, cada locução gerada é gravada imediatamente como MP3 na pasta configurada, com nome padrão:
 \`ANUNCIO_<rádio>_<data-hora>.mp3\` ou \`DESANUNCIO_<rádio>_<data-hora>.mp3\`.
-Você ainda pode regravar manualmente via botão "Salvar em disco". Para desativar (e salvar só sob demanda), desligue o interruptor — a preferência fica memorizada.
+
+**🆕 Auto-leitura da grade (zero intervenção):**
+Com o interruptor **"Auto-ler grade"** ligado (padrão), o sistema lê o \`.txt\` do dia, encontra o **próximo bloco** e preenche automaticamente:
+- **Anúncio** → 2 **primeiras** músicas do bloco.
+- **Desanúncio** → 2 **últimas** músicas do bloco.
+Use o botão **"Carregar próximo bloco"** para forçar a releitura. Os nomes são resolvidos lendo a tag ID3 dos arquivos da biblioteca.
+
+**🆕 Posição da locução no bloco:**
+Configure onde o marcador será inserido na linha do bloco:
+- **Início (LOC)** → anúncio (entrada do bloco).
+- **Final (LOC_END)** → desanúncio (saída do bloco).
+- **Início e Final** → ambos.
+
+Com **"Inserir auto. ao gerar"** ligado (padrão), ao gerar o áudio o sistema escreve o marcador correspondente (\`LOC\` ou \`LOC_END\`) diretamente na linha do bloco no \`.txt\` da grade — assim a automação sabe exatamente onde reproduzir o MP3.
+Para inserir manualmente, use o botão **"Inserir na grade agora"**.
 
 **Quando usar:**
 - Anúncio: entrada do bloco — apresenta as 2 próximas músicas.
