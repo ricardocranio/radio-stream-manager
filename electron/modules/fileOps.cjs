@@ -1006,6 +1006,26 @@ function register({ getMainWindow, safeHandle }) {
     }
     return results;
   });
+
+  // IPC: Save locucao MP3 (base64) to disk
+  handle('save-locucao', async (event, { folder, filename, audioBase64 }) => {
+    try {
+      if (!folder || !filename || !audioBase64) {
+        return { success: false, error: 'folder, filename and audioBase64 are required' };
+      }
+      ensureDir(folder);
+      const safeName = sanitizeForDisk ? sanitizeForDisk(filename) : filename.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
+      const finalName = /\.mp3$/i.test(safeName) ? safeName : `${safeName}.mp3`;
+      const fullPath = path.join(folder, finalName);
+      const buf = Buffer.from(audioBase64, 'base64');
+      fs.writeFileSync(fullPath, buf);
+      console.log(`[LOCUCAO] 💾 Saved: ${fullPath} (${buf.length} bytes)`);
+      return { success: true, path: fullPath, sizeBytes: buf.length };
+    } catch (err) {
+      console.error('[LOCUCAO] Save error:', err);
+      return { success: false, error: err.message };
+    }
+  });
 }
 
 module.exports = { register };

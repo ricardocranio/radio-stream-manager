@@ -1,4 +1,4 @@
-import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic, Music, Database, Calendar, BarChart3, ChevronDown, PanelLeftClose, PanelLeftOpen, Swords, MapIcon, BookOpen } from 'lucide-react';
+import { Radio, Settings, ListMusic, Activity, Clock, FolderOpen, AlertTriangle, TrendingUp, Terminal, Download, FileCode, Newspaper, Layers, Mic, Music, Database, Calendar, BarChart3, ChevronDown, PanelLeftClose, PanelLeftOpen, Swords, MapIcon, BookOpen, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAutoDownloadStore } from '@/store/autoDownloadStore';
 import { useRadioStore } from '@/store/radioStore';
@@ -38,6 +38,7 @@ const staticNavItems: Omit<NavItem, 'badge' | 'badgeType'>[] = [
   { id: 'mapas', label: 'Mapas Comerciais', icon: MapIcon, group: 'grade' },
   { id: 'ranking', label: 'Ranking TOP25', icon: TrendingUp, group: 'library' },
   { id: 'vozbrasil', label: 'Voz do Brasil', icon: Mic, group: 'library' },
+  { id: 'locucaoia', label: 'Locuções IA', icon: Sparkles, group: 'library' },
   { id: 'missing', label: 'Faltando', icon: AlertTriangle, group: 'library' },
   { id: 'folders', label: 'Pastas', icon: FolderOpen, group: 'library' },
   { id: 'logs', label: 'Logs', icon: Terminal, group: 'system' },
