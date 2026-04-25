@@ -12,9 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Mic, Play, Save, Loader2, Volume2, Sparkles } from 'lucide-react';
+import { Mic, Play, Save, Loader2, Volume2, Sparkles, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useRadioStore } from '@/store/radioStore';
+import { extractNextBlockFromGrade, type BlockExtraction } from '@/lib/locucao/gradeBlockReader';
 
 const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
 
@@ -99,6 +101,8 @@ export function LocucaoIAView() {
     return v === null ? true : v === 'true';
   });
 
+  const { config } = useRadioStore();
+
   const [slot, setSlot] = useState<Slot>({
     musica1: '',
     artista1: '',
@@ -107,6 +111,13 @@ export function LocucaoIAView() {
     radio: 'BH FM',
     hora: '',
   });
+
+  const [autoFromGrade, setAutoFromGrade] = useState<boolean>(() => {
+    const v = localStorage.getItem('locucaoIA_autoFromGrade');
+    return v === null ? true : v === 'true';
+  });
+  const [lastBlock, setLastBlock] = useState<BlockExtraction | null>(null);
+  const [loadingGrade, setLoadingGrade] = useState(false);
 
   const [generating, setGenerating] = useState<'anuncio' | 'desanuncio' | null>(null);
   const [audioUrls, setAudioUrls] = useState<{ anuncio?: { url: string; base64: string }; desanuncio?: { url: string; base64: string } }>({});
@@ -117,6 +128,56 @@ export function LocucaoIAView() {
   useEffect(() => { localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_FOLDER, folder); }, [folder]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_AUTOSAVE, String(autoSave)); }, [autoSave]);
+  useEffect(() => { localStorage.setItem('locucaoIA_autoFromGrade', String(autoFromGrade)); }, [autoFromGrade]);
+
+  /** Reads next block from grade .txt and applies first2 (anúncio) + last2 (desanúncio) into slot. */
+  const fillFromGrade = async (kind: 'anuncio' | 'desanuncio' | 'both' = 'both', silent = false): Promise<BlockExtraction | null> => {
+    if (!isElectron) {
+      if (!silent) toast.error('Auto-preenchimento só funciona no app Desktop (Electron).');
+      return null;
+    }
+    setLoadingGrade(true);
+    try {
+      const block = await extractNextBlockFromGrade({
+        gradeFolder: config.gradeFolder,
+        musicFolders: config.musicFolders || [],
+        coringaCode: config.coringaCode || 'mus',
+        allowCurrent: true,
+      });
+      if (!block) {
+        if (!silent) toast.error('Nenhum bloco resolvido encontrado na grade do dia.');
+        return null;
+      }
+      setLastBlock(block);
+      setSlot(prev => {
+        const next = { ...prev, hora: block.time };
+        if (kind === 'anuncio' || kind === 'both') {
+          if (block.first2[0]) { next.musica1 = block.first2[0].title; next.artista1 = block.first2[0].artist; }
+          if (block.first2[1]) { next.musica2 = block.first2[1].title; next.artista2 = block.first2[1].artist; }
+        }
+        if (kind === 'desanuncio') {
+          if (block.last2[0]) { next.musica1 = block.last2[0].title; next.artista1 = block.last2[0].artist; }
+          if (block.last2[1]) { next.musica2 = block.last2[1].title; next.artista2 = block.last2[1].artist; }
+        }
+        return next;
+      });
+      if (!silent) toast.success(`Bloco ${block.time} (${block.programLabel}) carregado da grade`);
+      return block;
+    } catch (err: any) {
+      if (!silent) toast.error(`Erro ao ler grade: ${err?.message}`);
+      return null;
+    } finally {
+      setLoadingGrade(false);
+    }
+  };
+
+  // Auto-fill on mount when option is enabled
+  useEffect(() => {
+    if (autoFromGrade && isElectron) {
+      fillFromGrade('both', true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const previewAnuncio = useMemo(() => applyTemplate(templates.anuncio, slot), [templates.anuncio, slot]);
   const previewDesanuncio = useMemo(() => applyTemplate(templates.desanuncio, slot), [templates.desanuncio, slot]);
@@ -150,15 +211,44 @@ export function LocucaoIAView() {
   };
 
   const generate = async (kind: 'anuncio' | 'desanuncio') => {
-    const text = kind === 'anuncio' ? previewAnuncio : previewDesanuncio;
-    if (!text.trim()) {
+    // If auto-from-grade is enabled, refresh the slot with the latest block data
+    // (anúncio = first 2 songs of next block; desanúncio = last 2 songs of next block)
+    let textToUse = kind === 'anuncio' ? previewAnuncio : previewDesanuncio;
+    if (autoFromGrade && isElectron) {
+      const block = await fillFromGrade(kind, true);
+      if (block) {
+        const refreshedSlot: Slot = {
+          ...slot,
+          hora: block.time,
+          ...(kind === 'anuncio'
+            ? {
+                musica1: block.first2[0]?.title || '',
+                artista1: block.first2[0]?.artist || '',
+                musica2: block.first2[1]?.title || '',
+                artista2: block.first2[1]?.artist || '',
+              }
+            : {
+                musica1: block.last2[0]?.title || '',
+                artista1: block.last2[0]?.artist || '',
+                musica2: block.last2[1]?.title || '',
+                artista2: block.last2[1]?.artist || '',
+              }),
+        };
+        textToUse = applyTemplate(
+          kind === 'anuncio' ? templates.anuncio : templates.desanuncio,
+          refreshedSlot,
+        );
+      }
+    }
+
+    if (!textToUse.trim()) {
       toast.error('Texto vazio — preencha as músicas/artistas primeiro.');
       return;
     }
     setGenerating(kind);
     try {
       const { data, error } = await supabase.functions.invoke('generate-locucao', {
-        body: { text, voiceId, ...settings },
+        body: { text: textToUse, voiceId, ...settings },
       });
       if (error) throw error;
       if (!data?.audioBase64) throw new Error('Resposta sem áudio');
@@ -213,8 +303,43 @@ export function LocucaoIAView() {
         <TabsContent value="generate" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Dados do bloco (2 primeiras músicas)</CardTitle>
-              <CardDescription>Preencha as informações que serão inseridas no template.</CardDescription>
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <CardTitle className="text-base">Dados do bloco</CardTitle>
+                  <CardDescription>
+                    Anúncio usa as 2 <strong>primeiras</strong> músicas do próximo bloco; desanúncio usa as 2 <strong>últimas</strong>.
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border/50 bg-muted/20">
+                    <Switch
+                      id="auto-grade"
+                      checked={autoFromGrade}
+                      onCheckedChange={setAutoFromGrade}
+                    />
+                    <Label htmlFor="auto-grade" className="text-xs cursor-pointer">Auto-ler grade</Label>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => fillFromGrade('both')} disabled={loadingGrade}>
+                    {loadingGrade ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+                    Carregar próximo bloco
+                  </Button>
+                </div>
+              </div>
+              {lastBlock && (
+                <div className="mt-3 text-xs text-muted-foreground rounded-md border border-primary/20 bg-primary/5 p-2">
+                  📻 Bloco <strong>{lastBlock.time}</strong> — {lastBlock.programLabel} ({lastBlock.filename})
+                  {lastBlock.first2.length > 0 && (
+                    <div className="mt-1">
+                      <span className="text-foreground">Primeiras:</span> {lastBlock.first2.map(s => `${s.artist} - ${s.title}`).join(' · ')}
+                    </div>
+                  )}
+                  {lastBlock.last2.length > 0 && (
+                    <div>
+                      <span className="text-foreground">Últimas:</span> {lastBlock.last2.map(s => `${s.artist} - ${s.title}`).join(' · ')}
+                    </div>
+                  )}
+                </div>
+              )}
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
