@@ -407,16 +407,21 @@ export function LocucaoIAView() {
       return;
     }
     setGenerating(kind);
+    // Resolve voz: se usePresetVoice e o preset ativo tem voz definida, usa-a; senão usa a global.
+    const activePreset = detectActivePreset();
+    const presetVoice = usePresetVoice ? presetVoices[activePreset] : '';
+    const effectiveVoiceId = presetVoice || voiceId;
     try {
       const { data, error } = await supabase.functions.invoke('generate-locucao', {
-        body: { text: textToUse, voiceId, ...settings },
+        body: { text: textToUse, voiceId: effectiveVoiceId, ...settings },
       });
       if (error) throw error;
       if (!data?.audioBase64) throw new Error('Resposta sem áudio');
 
       const url = `data:audio/mpeg;base64,${data.audioBase64}`;
       setAudioUrls(prev => ({ ...prev, [kind]: { url, base64: data.audioBase64 } }));
-      toast.success(`${kind === 'anuncio' ? 'Anúncio' : 'Desanúncio'} gerado (${Math.round((data.sizeBytes || 0) / 1024)} KB)`);
+      const voiceLabel = VOICES.find(v => v.id === effectiveVoiceId)?.label.split(' —')[0] || 'voz';
+      toast.success(`${kind === 'anuncio' ? 'Anúncio' : 'Desanúncio'} gerado com ${voiceLabel} (${Math.round((data.sizeBytes || 0) / 1024)} KB)`);
 
       if (autoSave) {
         await persistAudio(kind, data.audioBase64, url, true);
