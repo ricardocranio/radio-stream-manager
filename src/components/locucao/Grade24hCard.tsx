@@ -618,6 +618,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
           })}
         </div>
       </CardContent>
+      )}
 
       {/* ===== Dialog de edição (janela grande) ===== */}
       <Dialog
