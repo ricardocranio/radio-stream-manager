@@ -59,7 +59,22 @@ const DEFAULT_TEMPLATES: Templates = {
 };
 
 // ===== Presets por período do dia =====
-type PresetKey = 'manha' | 'tarde' | 'noite' | 'fim_de_semana';
+type PeriodPresetKey = 'manha' | 'tarde' | 'noite' | 'fim_de_semana';
+type DayPresetKey = 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab';
+type PresetKey = PeriodPresetKey;
+
+const DAY_PRESETS: Record<DayPresetKey, { label: string; emoji: string; dayIndex: number }> = {
+  dom: { label: 'Domingo', emoji: '🛋️', dayIndex: 0 },
+  seg: { label: 'Segunda', emoji: '☕', dayIndex: 1 },
+  ter: { label: 'Terça', emoji: '📻', dayIndex: 2 },
+  qua: { label: 'Quarta', emoji: '🎧', dayIndex: 3 },
+  qui: { label: 'Quinta', emoji: '🎶', dayIndex: 4 },
+  sex: { label: 'Sexta', emoji: '🎤', dayIndex: 5 },
+  sab: { label: 'Sábado', emoji: '🎉', dayIndex: 6 },
+};
+
+const DAY_KEYS: DayPresetKey[] = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+function dayKeyFromIndex(i: number): DayPresetKey { return DAY_KEYS[i]; }
 
 const PRESETS: Record<PresetKey, { label: string; emoji: string; templates: Templates }> = {
   manha: {
