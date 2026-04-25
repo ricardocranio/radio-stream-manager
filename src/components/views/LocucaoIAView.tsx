@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useRadioStore } from '@/store/radioStore';
 import { extractNextBlockFromGrade, type BlockExtraction } from '@/lib/locucao/gradeBlockReader';
+import { injectLocucaoInGrade, type LocPosition } from '@/lib/locucao/gradeBlockInjector';
 
 const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
 
