@@ -125,7 +125,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   const today = useMemo(() => dayKeyFromDate(new Date()), []);
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
   const [policy, setPolicy] = useState<LocucaoSchedulePolicy>(() => loadPolicy());
-  const [editingHour, setEditingHour] = useState<number | null>(null);
+  const [editingBlock, setEditingBlock] = useState<{ hour: number; minute: number } | null>(null);
 
   // Draft buffer — só persiste no localStorage quando o usuário clica "Salvar".
   interface Draft {
