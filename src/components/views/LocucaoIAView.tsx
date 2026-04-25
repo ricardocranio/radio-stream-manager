@@ -119,8 +119,19 @@ export function LocucaoIAView() {
   });
   const [lastBlock, setLastBlock] = useState<BlockExtraction | null>(null);
   const [loadingGrade, setLoadingGrade] = useState(false);
-  const [locPosition, setLocPosition] = useState<LocPosition>(() => {
-    return (localStorage.getItem('locucaoIA_position') as LocPosition) || 'inicio_fim';
+  // Numeric positions (1-based, counting only music tokens; ignores VHT/VHTN)
+  // openPos: posição da música ANTES da qual o LOC (abertura) é inserido
+  // closePos: posição da música APÓS a qual o LOC_END (fechamento) é inserido
+  // null = não inserir esse marcador
+  const [openPos, setOpenPos] = useState<number | null>(() => {
+    const v = localStorage.getItem('locucaoIA_openPos');
+    if (v === null) return 1;
+    return v === '' ? null : Number(v);
+  });
+  const [closePos, setClosePos] = useState<number | null>(() => {
+    const v = localStorage.getItem('locucaoIA_closePos');
+    if (v === null) return 7;
+    return v === '' ? null : Number(v);
   });
   const [autoInsertInGrade, setAutoInsertInGrade] = useState<boolean>(() => {
     const v = localStorage.getItem('locucaoIA_autoInsertInGrade');
