@@ -764,6 +764,8 @@ export function SequenceView() {
     if (source.startsWith('genreyear_')) return '🎵📅';
     if (source.startsWith('genre_')) return '🎵';
     if (source.startsWith('year_')) return '📅';
+    if (source === 'LOC') return '🎙️ LOC';
+    if (source === 'LOC_END') return '🎙️ END';
     if (source === 'random_pop') return 'ALEAT';
     if (source === 'top50') return 'TOP25';
     const station = stations.find(s => s.id === source);
