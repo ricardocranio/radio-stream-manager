@@ -156,7 +156,8 @@ function applyTemplate(tpl: string, slot: Slot, now: Date = new Date()): string 
     .replace(/\{hora\}/gi, slot.hora || '')
     .replace(/\{dia\}/gi, v.dia)
     .replace(/\{periodo\}/gi, v.periodo)
-    .replace(/\{saudacao\}/gi, v.saudacao);
+    .replace(/\{saudacao\}/gi, v.saudacao)
+    .replace(/\{fim_de_semana\}/gi, v.fimDeSemana);
 }
 
 export function LocucaoIAView() {
