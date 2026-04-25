@@ -661,6 +661,9 @@ export function SequenceView() {
     if (source.startsWith('year_')) {
       return 'bg-teal-500/20 text-teal-400 border-teal-500/30';
     }
+    if (source === 'LOC' || source === 'LOC_END') {
+      return 'bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30';
+    }
     
     const colors: Record<string, string> = {
       bh: 'bg-primary/20 text-primary border-primary/30',
