@@ -1165,11 +1165,19 @@ export function LocucaoIAView() {
                   className="font-mono text-sm"
                   placeholder="Ex.: Você acabou de ouvir {artista2} com {musica2}…"
                 />
-                <div className="rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 p-2">
-                  <div className="text-[10px] uppercase tracking-wider text-fuchsia-400/80 mb-1">Pré-visualização ao vivo</div>
-                  <div className="text-sm text-foreground leading-relaxed">
-                    {previewDesanuncio || <span className="italic text-muted-foreground">Preencha os dados do bloco na aba Gerar para ver o preview com músicas reais.</span>}
+                <div className="rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 p-2 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] uppercase tracking-wider text-fuchsia-400/80">Pré-visualização ao vivo (LOC_END)</div>
+                    {lastBlock && <div className="text-[10px] text-muted-foreground">bloco {lastBlock.time} · {lastBlock.programLabel}</div>}
                   </div>
+                  <div className="text-sm text-foreground leading-relaxed">
+                    {editorPreviewDesanuncio}
+                  </div>
+                  {!lastBlock && (
+                    <div className="text-[10px] italic text-muted-foreground">
+                      Usa as 2 ÚLTIMAS músicas do bloco. Carregue o próximo bloco na aba <span className="text-fuchsia-400">Gerar</span>.
+                    </div>
+                  )}
                 </div>
               </div>
 
