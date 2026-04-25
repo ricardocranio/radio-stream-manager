@@ -188,6 +188,7 @@ export function SequenceView() {
   const [catPrograms, setCatPrograms] = useState(false);
   const [catSpecials, setCatSpecials] = useState(false);
   const [catStations, setCatStations] = useState(true);
+  const [catLocucao, setCatLocucao] = useState(false);
   const { 
     sequence, 
     setSequence, 
