@@ -411,17 +411,34 @@ export function LocucaoIAView() {
                   <Sparkles className="h-4 w-4 text-primary" />
                   <span className="text-sm font-medium">Posição da locução no bloco</span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-end">
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto] gap-3 items-end">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Onde inserir o marcador</Label>
-                    <Select value={locPosition} onValueChange={(v) => setLocPosition(v as LocPosition)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="inicio">Início do bloco (LOC) — anúncio</SelectItem>
-                        <SelectItem value="fim">Final do bloco (LOC_END) — desanúncio</SelectItem>
-                        <SelectItem value="inicio_fim">Início e Final (anúncio + desanúncio)</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs">Posição abertura (LOC) — antes da música nº</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={20}
+                      value={openPos ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setOpenPos(v === '' || Number(v) <= 0 ? null : Number(v));
+                      }}
+                      placeholder="vazio = não inserir"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Posição fechamento (LOC_END) — após música nº</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={20}
+                      value={closePos ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setClosePos(v === '' || Number(v) <= 0 ? null : Number(v));
+                      }}
+                      placeholder="vazio = não inserir"
+                    />
                   </div>
                   <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-border/50 bg-background">
                     <Switch
@@ -444,10 +461,13 @@ export function LocucaoIAView() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Marcadores gravados na linha do bloco no <code className="px-1 bg-muted rounded">.txt</code> da grade:
-                  {' '}<code className="px-1 bg-muted rounded">LOC</code> (início) e
-                  {' '}<code className="px-1 bg-muted rounded">LOC_END</code> (fim).
-                  O player de automação reproduzirá o MP3 salvo nessas posições.
+                  Posições contam <strong>apenas músicas</strong> (VHT/VHTN são ignorados).
+                  Ex.: <code className="px-1 bg-muted rounded">abertura=1</code> insere{' '}
+                  <code className="px-1 bg-muted rounded">LOC</code> antes da 1ª música;{' '}
+                  <code className="px-1 bg-muted rounded">fechamento=7</code> insere{' '}
+                  <code className="px-1 bg-muted rounded">LOC_END</code> depois da 7ª música.
+                  Deixe vazio para não inserir aquele marcador.
+                  Você também pode editar manualmente esses tokens na <strong>Sequência Padrão</strong>.
                 </p>
               </div>
             </CardHeader>
