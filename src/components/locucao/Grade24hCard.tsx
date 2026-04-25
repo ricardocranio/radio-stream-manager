@@ -58,6 +58,8 @@ interface HourRow {
   override?: { locked?: boolean; programName?: string; sequence?: HourOverridePosition[] };
   effectiveSequence: Array<{ position: number; radioSource: string; customFileName?: string }>;
   hasCustomSeq: boolean;
+  /** True quando a base vem de uma ScheduledSequence (não da sequência global). */
+  fromScheduled?: boolean;
 }
 
 function findFixedSlotForHour(slots: FixedSlot[], hour: number): FixedSlot | undefined {
