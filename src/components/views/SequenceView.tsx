@@ -1471,6 +1471,9 @@ export function SequenceView() {
                                 {option.label}
                               </SelectItem>
                             ))}
+                            <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">🎙️ Locução</div>
+                            <SelectItem value="LOC">🎙️ LOC — Abertura de locução</SelectItem>
+                            <SelectItem value="LOC_END">🎙️ LOC_END — Fechamento de locução</SelectItem>
                             <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Emissoras</div>
                             {stationOptions.map((option) => (
                               <SelectItem key={option.value} value={option.value}>
