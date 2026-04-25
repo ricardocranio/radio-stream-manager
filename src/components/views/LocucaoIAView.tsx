@@ -447,10 +447,13 @@ export function LocucaoIAView() {
       return;
     }
     setGenerating(kind);
-    // Resolve voz: se usePresetVoice e o preset ativo tem voz definida, usa-a; senão usa a global.
-    const activePreset = detectActivePreset(effectiveNow());
+    // Resolve voz: prioridade dia da semana > preset de período > voz global.
+    const nowEff = effectiveNow();
+    const activePreset = detectActivePreset(nowEff);
+    const dayKey = dayKeyFromIndex(nowEff.getDay());
+    const dayVoice = usePresetVoice ? dayVoices[dayKey] : '';
     const presetVoice = usePresetVoice ? presetVoices[activePreset] : '';
-    const effectiveVoiceId = presetVoice || voiceId;
+    const effectiveVoiceId = dayVoice || presetVoice || voiceId;
     try {
       const { data, error } = await supabase.functions.invoke('generate-locucao', {
         body: { text: textToUse, voiceId: effectiveVoiceId, ...settings },
