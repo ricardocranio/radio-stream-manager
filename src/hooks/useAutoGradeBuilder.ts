@@ -42,6 +42,8 @@ import { saveOfflineSongCache, loadOfflineSongCache } from '@/lib/offlineSongCac
 import { saveCrossDayBuffer, loadCrossDayBuffer } from '@/lib/crossDayRepetition';
 import { loadBpmCacheFromDisk, enrichSongsWithBpmCache } from '@/lib/bpmCacheBridge';
 import { reportServiceHeartbeat } from '@/hooks/useServiceWatchdog';
+import { loadPolicy as loadLocucaoPolicy, getHourOverride, type DayKey } from '@/lib/locucao/locucaoSchedulePolicy';
+import { buildBlockFromOverride } from '@/lib/gradeBuilder/overrideBlockBuilder';
 
 // === MODULE-LEVEL VHT DURATION CACHE ===
 let _cachedAvgVhtDurationSec: number | null = null;
