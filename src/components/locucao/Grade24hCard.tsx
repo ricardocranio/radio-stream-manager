@@ -202,8 +202,8 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     savePolicy(next);
   };
 
-  const patchOverride = (hour: number, patch: Partial<{ locked: boolean | null; programName: string | null; sequence: HourOverridePosition[] | null }>) => {
-    const key = overrideKey(selectedDay, hour);
+  const patchOverride = (hour: number, minute: number, patch: Partial<{ locked: boolean | null; programName: string | null; sequence: HourOverridePosition[] | null }>) => {
+    const key = overrideKey(selectedDay, hour, minute);
     const prev = policy.hourOverrides?.[key] || {};
     const next: { locked?: boolean; programName?: string; sequence?: HourOverridePosition[] } = { ...prev };
 
@@ -226,24 +226,22 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     persist({ ...policy, hourOverrides: overrides });
   };
 
-  const clearOverride = (hour: number) => {
-    const key = overrideKey(selectedDay, hour);
+  const clearOverride = (hour: number, minute: number) => {
+    const key = overrideKey(selectedDay, hour, minute);
     if (!policy.hourOverrides?.[key]) return;
     const overrides = { ...policy.hourOverrides };
     delete overrides[key];
     persist({ ...policy, hourOverrides: overrides });
-    toast({ title: 'Override removido', description: `${hour.toString().padStart(2, '0')}:00 voltou ao padrão.` });
+    toast({ title: 'Override removido', description: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} voltou ao padrão.` });
   };
 
   // ---------- Draft helpers (popover de edição) ----------
   /**
-   * Sequência base "como vai pra grade .txt" para um horário específico:
-   * usa as posições REAIS do template do dia (mus/vht/VHTN/fun/arquivos
-   * fixos como SHAKE_MIX_BLOCO01). Cai pra sequência global apenas se o
-   * template não definir nada.
+   * Sequência base "como vai pra grade .txt" para um bloco específico
+   * (hora + minuto): usa as posições REAIS do template do dia.
    */
-  const baseSeqFor = (hour: number): HourOverridePosition[] => {
-    const real = getRealGradePositions({ day: selectedDay, hour });
+  const baseSeqFor = (hour: number, minute: number): HourOverridePosition[] => {
+    const real = getRealGradePositions({ day: selectedDay, hour, minute });
     if (real.length > 0) {
       return real.map((p) => ({ position: p.position, radioSource: gradePosToRadioSource(p) }));
     }
@@ -251,19 +249,19 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     return resolved.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
   };
 
-  const openEditor = (hour: number) => {
-    const ovr = policy.hourOverrides?.[overrideKey(selectedDay, hour)];
+  const openEditor = (hour: number, minute: number) => {
+    const ovr = policy.hourOverrides?.[overrideKey(selectedDay, hour, minute)];
     setDraft({
       locked: ovr?.locked,
       programName: ovr?.programName ?? '',
-      sequence: ovr?.sequence ? [...ovr.sequence] : baseSeqFor(hour),
+      sequence: ovr?.sequence ? [...ovr.sequence] : baseSeqFor(hour, minute),
       seqDirty: !!ovr?.sequence,
     });
-    setEditingHour(hour);
+    setEditingBlock({ hour, minute });
   };
 
   const closeEditor = () => {
-    setEditingHour(null);
+    setEditingBlock(null);
     setDraft(null);
   };
 
@@ -300,11 +298,11 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     updateDraft({ sequence: cur, seqDirty: true });
   };
   const draftResetSeq = () => {
-    if (!draft || editingHour === null) return;
-    updateDraft({ sequence: baseSeqFor(editingHour), seqDirty: false });
+    if (!draft || !editingBlock) return;
+    updateDraft({ sequence: baseSeqFor(editingBlock.hour, editingBlock.minute), seqDirty: false });
   };
 
-  const commitDraft = (hour: number) => {
+  const commitDraft = (hour: number, minute: number) => {
     if (!draft) return;
     const next: { locked?: boolean; programName?: string; sequence?: HourOverridePosition[] } = {};
     if (draft.locked === true || draft.locked === false) next.locked = draft.locked;
@@ -312,12 +310,12 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     if (trimmedName) next.programName = trimmedName;
     if (draft.seqDirty) next.sequence = draft.sequence.map((it, i) => ({ ...it, position: i + 1 }));
 
-    const key = overrideKey(selectedDay, hour);
+    const key = overrideKey(selectedDay, hour, minute);
     const overrides = { ...(policy.hourOverrides || {}) };
     if (Object.keys(next).length === 0) delete overrides[key];
     else overrides[key] = next;
     persist({ ...policy, hourOverrides: overrides });
-    toast({ title: 'Salvo!', description: `Horário ${hour.toString().padStart(2, '0')}:00 atualizado.` });
+    toast({ title: 'Salvo!', description: `Bloco ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} atualizado.` });
     closeEditor();
   };
 
