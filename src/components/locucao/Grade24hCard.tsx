@@ -58,6 +58,8 @@ interface HourRow {
   override?: { locked?: boolean; programName?: string; sequence?: HourOverridePosition[] };
   effectiveSequence: Array<{ position: number; radioSource: string; customFileName?: string }>;
   hasCustomSeq: boolean;
+  /** True quando a base vem de uma ScheduledSequence (não da sequência global). */
+  fromScheduled?: boolean;
 }
 
 function findFixedSlotForHour(slots: FixedSlot[], hour: number): FixedSlot | undefined {
@@ -78,6 +80,42 @@ function findScheduledProgram(programs: ProgramSchedule[], hour: number): string
   return p?.programName;
 }
 
+/**
+ * Resolve a sequência base que será efetivamente usada por aquele
+ * dia/hora — replica a lógica de `getActiveSequence` da store, mas
+ * para um par (DayKey, hour) arbitrário, considerando:
+ *   1. ScheduledSequences habilitadas que cubram a hora no dia (maior prioridade vence)
+ *   2. Fallback: sequência global (`sequence`)
+ * Assim o que é mostrado na Grade24h é IDÊNTICO ao que vai pra grade .txt.
+ */
+function resolveSequenceForHour(
+  day: DayKey,
+  hour: number,
+  scheduledSequences: Array<{
+    enabled: boolean;
+    weekDays: string[];
+    startHour: number; startMinute: number;
+    endHour: number; endMinute: number;
+    priority: number;
+    sequence: SequenceConfig[];
+  }>,
+  defaultSequence: SequenceConfig[],
+): SequenceConfig[] {
+  const targetMinutes = hour * 60; // checa o início da hora (HH:00)
+  const active = scheduledSequences
+    .filter((s) => s.enabled)
+    .filter((s) => s.weekDays.length === 0 || s.weekDays.includes(day))
+    .filter((s) => {
+      const start = s.startHour * 60 + s.startMinute;
+      const end = s.endHour * 60 + s.endMinute;
+      if (end <= start) return targetMinutes >= start || targetMinutes < end;
+      return targetMinutes >= start && targetMinutes < end;
+    })
+    .sort((a, b) => b.priority - a.priority);
+  if (active.length > 0) return active[0].sequence;
+  return defaultSequence;
+}
+
 export function Grade24hCard({ sequence, programs, getStationColor, getSourceDisplayName }: Grade24hCardProps) {
   const today = useMemo(() => dayKeyFromDate(new Date()), []);
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
@@ -94,7 +132,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   const [draft, setDraft] = useState<Draft | null>(null);
   const { toast } = useToast();
 
-  const { stations, fixedContent } = useRadioStore();
+  const { stations, fixedContent, scheduledSequences } = useRadioStore();
 
   const fixedSlots = useMemo(() => getFixedScheduleForDay(selectedDay), [selectedDay]);
 
@@ -164,15 +202,22 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   };
 
   // ---------- Draft helpers (popover de edição) ----------
-  const baseSeqFor = (): HourOverridePosition[] =>
-    sequence.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
+  /**
+   * Sequência base "como vai pra grade .txt" para um horário específico:
+   * leva em conta as ScheduledSequences ativas naquele dia/hora (prioridade)
+   * e cai pra `sequence` global como fallback. IDÊNTICO ao que o gerador grava.
+   */
+  const baseSeqFor = (hour: number): HourOverridePosition[] => {
+    const resolved = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
+    return resolved.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
+  };
 
   const openEditor = (hour: number) => {
     const ovr = policy.hourOverrides?.[overrideKey(selectedDay, hour)];
     setDraft({
       locked: ovr?.locked,
       programName: ovr?.programName ?? '',
-      sequence: ovr?.sequence ? [...ovr.sequence] : baseSeqFor(),
+      sequence: ovr?.sequence ? [...ovr.sequence] : baseSeqFor(hour),
       seqDirty: !!ovr?.sequence,
     });
     setEditingHour(hour);
@@ -216,8 +261,8 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     updateDraft({ sequence: cur, seqDirty: true });
   };
   const draftResetSeq = () => {
-    if (!draft) return;
-    updateDraft({ sequence: baseSeqFor(), seqDirty: false });
+    if (!draft || editingHour === null) return;
+    updateDraft({ sequence: baseSeqFor(editingHour), seqDirty: false });
   };
 
   const commitDraft = (hour: number) => {
@@ -282,16 +327,18 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
         }
       }
 
-      const effectiveSequence = override?.sequence || sequence.map((s) => ({
+      const resolvedBase = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
+      const fromScheduled = resolvedBase !== sequence;
+      const effectiveSequence = override?.sequence || resolvedBase.map((s) => ({
         position: s.position, radioSource: s.radioSource, customFileName: s.customFileName,
       }));
 
       return {
         hour, programName, fixedSlot: slot, locStatus, reason, override,
-        effectiveSequence, hasCustomSeq: !!override?.sequence,
+        effectiveSequence, hasCustomSeq: !!override?.sequence, fromScheduled,
       };
     });
-  }, [selectedDay, policy, fixedSlots, programs, sequence]);
+  }, [selectedDay, policy, fixedSlots, programs, sequence, scheduledSequences]);
 
   const statusBadge = (row: HourRow) => {
     switch (row.locStatus) {
@@ -418,6 +465,11 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                         seq. custom ({row.effectiveSequence.length})
                       </Badge>
                     )}
+                    {!row.hasCustomSeq && row.fromScheduled && (
+                      <Badge variant="outline" className="text-[9px] bg-violet-500/10 text-violet-400 border-violet-500/30" title="Sequência programada para esta hora (Sequence Scheduler)">
+                        seq. agendada
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex gap-0.5 mt-1 flex-wrap">
                     {row.effectiveSequence.map((it) => (
@@ -469,7 +521,10 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                               Editar {row.hour.toString().padStart(2, '0')}:00 — {DAY_LABELS[selectedDay]}
                             </div>
                             <div className="text-[10px] text-muted-foreground">
-                              Padrão: {row.fixedSlot?.program || 'Música livre'}
+                              Programa padrão: {row.fixedSlot?.program || 'Música livre'}
+                              {row.fromScheduled && (
+                                <span className="ml-1 text-violet-400">• base: sequência agendada</span>
+                              )}
                             </div>
                           </div>
                           <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30">
