@@ -222,7 +222,7 @@ export function resolveLocucao(
   let policyStatus: ResolvedLocucao['policyStatus'];
   if (block) {
     const policy = loadPolicy();
-    const eligibility = checkBlockEligibility(block.time, block.programLabel, policy);
+    const eligibility = checkBlockEligibility(block.time, block.programLabel, policy, now);
     const autoOpenPosFromNews = findOpenPosAfterNews(block.rawTokens, policy);
     policyStatus = {
       allowed: eligibility.allowed,
