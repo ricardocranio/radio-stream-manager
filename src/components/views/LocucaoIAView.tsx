@@ -164,10 +164,14 @@ export function LocucaoIAView() {
       const r = await injectLocucaoInGrade({
         gradeFolder: config.gradeFolder,
         targetTime: lastBlock.time,
-        position: locPosition,
+        openPos,
+        closePos,
       });
       if (r.success) {
-        if (!silent) toast.success(`📌 Locução marcada no bloco ${lastBlock.time} (${locPosition})`);
+        const parts: string[] = [];
+        if (openPos) parts.push(`LOC@${openPos}`);
+        if (closePos) parts.push(`LOC_END@${closePos}`);
+        if (!silent) toast.success(`📌 Locução marcada no bloco ${lastBlock.time} (${parts.join(' + ') || 'sem marcadores'})`);
         return true;
       }
       if (!silent) toast.error(r.error || 'Falha ao inserir na grade.');
