@@ -274,6 +274,8 @@ export function LocucaoIAView() {
   useEffect(() => { localStorage.setItem('locucaoIA_openPos', openPos === null ? '' : String(openPos)); }, [openPos]);
   useEffect(() => { localStorage.setItem('locucaoIA_closePos', closePos === null ? '' : String(closePos)); }, [closePos]);
   useEffect(() => { localStorage.setItem('locucaoIA_autoInsertInGrade', String(autoInsertInGrade)); }, [autoInsertInGrade]);
+  // Persiste o nome da rádio para o resolver usado pelos tooltips/preview da Sequência.
+  useEffect(() => { localStorage.setItem('locucaoIA_radioName', slot.radio || ''); }, [slot.radio]);
 
   /** Inject LOC/LOC_END markers in the day's grade .txt at the targeted block time. */
   const insertLocucaoInGrade = async (silent = false): Promise<boolean> => {
