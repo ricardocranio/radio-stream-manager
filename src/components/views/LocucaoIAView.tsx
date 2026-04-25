@@ -233,6 +233,33 @@ export function LocucaoIAView() {
   const previewAnuncio = useMemo(() => applyTemplate(templates.anuncio, slot), [templates.anuncio, slot]);
   const previewDesanuncio = useMemo(() => applyTemplate(templates.desanuncio, slot), [templates.desanuncio, slot]);
 
+  // Prévia em tempo real da linha do bloco com LOC/LOC_END nas posições escolhidas
+  const blockPreview = useMemo(() => {
+    if (!lastBlock) return null;
+    const original = lastBlock.rawTokens;
+    const withMarkers = injectMarkersIntoTokens(original, openPos, closePos);
+    return { original, withMarkers };
+  }, [lastBlock, openPos, closePos]);
+
+  const SEPARATOR_TOKENS = new Set(['VHT', 'VHTN', 'LOC', 'LOC_END']);
+  const isMarker = (t: string) => {
+    const u = t.toUpperCase();
+    return u === 'LOC' || u === 'LOC_END';
+  };
+  const isVinheta = (t: string) => {
+    const u = t.toUpperCase();
+    return u === 'VHT' || u === 'VHTN';
+  };
+  // Computa o índice musical (1-based) de cada token na lista final
+  const computeMusicIndices = (tokens: string[]): (number | null)[] => {
+    let n = 0;
+    return tokens.map((t) => {
+      if (SEPARATOR_TOKENS.has(t.toUpperCase())) return null;
+      n++;
+      return n;
+    });
+  };
+
   const buildFilename = (kind: 'anuncio' | 'desanuncio') => {
     const ts = new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-');
     const tag = kind === 'anuncio' ? 'ANUNCIO' : 'DESANUNCIO';
