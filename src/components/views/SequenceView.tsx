@@ -35,6 +35,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { LocucaoBadgePopover } from '@/components/locucao/LocucaoBadgePopover';
+import { Grade24hCard } from '@/components/locucao/Grade24hCard';
 
 const WEEK_DAYS: { value: WeekDay; label: string }[] = [
   { value: 'dom', label: 'Dom' },
@@ -215,6 +216,7 @@ export function SequenceView() {
     updateScheduledSequence,
     removeScheduledSequence,
     fixedContent,
+    programs,
   } = useRadioStore();
   const { toast } = useToast();
   const [localSequence, setLocalSequence] = useState(sequence);
@@ -1217,6 +1219,14 @@ export function SequenceView() {
 
         {/* Preview */}
         <Collapsible open={previewOpen} onOpenChange={setPreviewOpen}>
+        {/* Grade 24h — visão completa hora a hora */}
+        <Grade24hCard
+          sequence={activeScheduled ? activeSequence : localSequence}
+          programs={programs}
+          getStationColor={getStationColor}
+          getSourceDisplayName={getSourceDisplayName}
+        />
+
         <Card className="glass-card">
           <CardHeader className="border-b border-border p-0">
             <CollapsibleTrigger className="w-full flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors cursor-pointer">
