@@ -67,6 +67,18 @@ export function LocucaoBadgePopover({ source, className, label }: Props) {
               </div>
             )}
 
+            {info.policyStatus && (
+              <div className={`text-[10px] rounded p-1.5 border ${info.policyStatus.allowed ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300' : 'border-red-500/40 bg-red-500/10 text-red-300'}`}>
+                {info.policyStatus.allowed ? (
+                  info.policyStatus.autoOpenPosFromNews
+                    ? <>✓ Bloco permitido · LOC auto entra <strong>após NOTÍCIAS</strong> (posição {info.policyStatus.autoOpenPosFromNews}).</>
+                    : <>✓ Bloco permitido pela política de agendamento.</>
+                ) : (
+                  <>⛔ {info.policyStatus.reason || 'Bloco bloqueado pela política.'}</>
+                )}
+              </div>
+            )}
+
             <div className="space-y-1">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                 Texto que será falado
