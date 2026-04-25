@@ -326,8 +326,8 @@ export function LocucaoIAView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const previewAnuncio = useMemo(() => applyTemplate(templates.anuncio, slot), [templates.anuncio, slot]);
-  const previewDesanuncio = useMemo(() => applyTemplate(templates.desanuncio, slot), [templates.desanuncio, slot]);
+  const previewAnuncio = useMemo(() => applyTemplate(templates.anuncio, slot, effectiveNow()), [templates.anuncio, slot, simulating, simDay, simHour]);
+  const previewDesanuncio = useMemo(() => applyTemplate(templates.desanuncio, slot, effectiveNow()), [templates.desanuncio, slot, simulating, simDay, simHour]);
 
   // Prévia em tempo real da linha do bloco com LOC/LOC_END nas posições escolhidas
   const blockPreview = useMemo(() => {
