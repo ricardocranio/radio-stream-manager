@@ -68,6 +68,7 @@ interface SortableSequenceItemProps {
   catPrograms: boolean; setCatPrograms: React.Dispatch<React.SetStateAction<boolean>>;
   catSpecials: boolean; setCatSpecials: React.Dispatch<React.SetStateAction<boolean>>;
   catStations: boolean; setCatStations: React.Dispatch<React.SetStateAction<boolean>>;
+  catLocucao: boolean; setCatLocucao: React.Dispatch<React.SetStateAction<boolean>>;
   genreOptions: Array<{ value: string; label: string }>;
   yearOptions: Array<{ value: string; label: string }>;
   genreYearOptions: Array<{ value: string; label: string }>;
@@ -135,6 +136,14 @@ function SortableSequenceItem({ item, isFixoItem, isEditing, ...props }: Sortabl
               <SelectItem value="top50">🏆 TOP25 (Curadoria)</SelectItem>
               {props.fixedContentOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
             </>)}
+            <div className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); props.setCatLocucao(v => !v); }}>
+              <span>🎙️ Locução</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${props.catLocucao ? 'rotate-180' : ''}`} />
+            </div>
+            {props.catLocucao && (<>
+              <SelectItem value="LOC">🎙️ LOC — Abertura de locução</SelectItem>
+              <SelectItem value="LOC_END">🎙️ LOC_END — Fechamento de locução</SelectItem>
+            </>)}
             <div className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); props.setCatStations(v => !v); }}>
               <span>📻 Emissoras</span>
               <ChevronDown className={`w-3 h-3 transition-transform ${props.catStations ? 'rotate-180' : ''}`} />
@@ -187,6 +196,7 @@ export function SequenceView() {
   const [catPrograms, setCatPrograms] = useState(false);
   const [catSpecials, setCatSpecials] = useState(false);
   const [catStations, setCatStations] = useState(true);
+  const [catLocucao, setCatLocucao] = useState(false);
   const { 
     sequence, 
     setSequence, 
@@ -651,6 +661,9 @@ export function SequenceView() {
     if (source.startsWith('year_')) {
       return 'bg-teal-500/20 text-teal-400 border-teal-500/30';
     }
+    if (source === 'LOC' || source === 'LOC_END') {
+      return 'bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30';
+    }
     
     const colors: Record<string, string> = {
       bh: 'bg-primary/20 text-primary border-primary/30',
@@ -751,6 +764,8 @@ export function SequenceView() {
     if (source.startsWith('genreyear_')) return '🎵📅';
     if (source.startsWith('genre_')) return '🎵';
     if (source.startsWith('year_')) return '📅';
+    if (source === 'LOC') return '🎙️ LOC';
+    if (source === 'LOC_END') return '🎙️ END';
     if (source === 'random_pop') return 'ALEAT';
     if (source === 'top50') return 'TOP25';
     const station = stations.find(s => s.id === source);
@@ -993,6 +1008,7 @@ export function SequenceView() {
                             catPrograms={catPrograms} setCatPrograms={setCatPrograms}
                             catSpecials={catSpecials} setCatSpecials={setCatSpecials}
                             catStations={catStations} setCatStations={setCatStations}
+                            catLocucao={catLocucao} setCatLocucao={setCatLocucao}
                             genreOptions={genreOptions}
                             yearOptions={yearOptions}
                             genreYearOptions={genreYearOptions}
@@ -1027,6 +1043,7 @@ export function SequenceView() {
                             catPrograms={catPrograms} setCatPrograms={setCatPrograms}
                             catSpecials={catSpecials} setCatSpecials={setCatSpecials}
                             catStations={catStations} setCatStations={setCatStations}
+                            catLocucao={catLocucao} setCatLocucao={setCatLocucao}
                             genreOptions={genreOptions}
                             yearOptions={yearOptions}
                             genreYearOptions={genreYearOptions}
@@ -1459,6 +1476,9 @@ export function SequenceView() {
                                 {option.label}
                               </SelectItem>
                             ))}
+                            <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">🎙️ Locução</div>
+                            <SelectItem value="LOC">🎙️ LOC — Abertura de locução</SelectItem>
+                            <SelectItem value="LOC_END">🎙️ LOC_END — Fechamento de locução</SelectItem>
                             <div className="px-2 py-1 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Emissoras</div>
                             {stationOptions.map((option) => (
                               <SelectItem key={option.value} value={option.value}>
