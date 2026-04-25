@@ -198,7 +198,6 @@ export function SequenceView() {
   const [defaultOpen, setDefaultOpen] = useState(true);
   const [fixedOpen, setFixedOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(true);
-  const [grade24Open, setGrade24Open] = useState(true);
 
   // Collapsible category states for source picker
   const [catGenres, setCatGenres] = useState(true);
