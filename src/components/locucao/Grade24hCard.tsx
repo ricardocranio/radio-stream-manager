@@ -146,6 +146,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     opts.push({ value: 'grade_vht', label: '🔔 Vinheta (vht)', group: 'Tokens da Grade' });
     opts.push({ value: 'grade_vhtn', label: '📰 Vinheta Notícia (VHTN)', group: 'Tokens da Grade' });
     opts.push({ value: 'grade_fun', label: '🎛️ Funk (fun)', group: 'Tokens da Grade' });
+    opts.push({ value: 'grade_rom', label: '💕 Romântica (rom)', group: 'Tokens da Grade' });
     stations.filter((s) => s.enabled).forEach((s) => opts.push({ value: s.id, label: `📻 ${s.name}`, group: 'Emissoras' }));
     fixedContent.filter((c) => c.enabled).forEach((c) => opts.push({ value: `fixo_${c.id}`, label: `📌 ${c.name}`, group: 'Conteúdo Fixo' }));
     [
@@ -528,9 +529,11 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                             ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
                             : kind === 'fun'
                               ? 'bg-pink-500/15 text-pink-300 border-pink-500/40'
-                              : kind === 'fixed'
-                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                                : getStationColor(it.radioSource);
+                              : kind === 'rom'
+                                ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                                : kind === 'fixed'
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                  : getStationColor(it.radioSource);
                       const display = it.gradeLabel || getSourceDisplayName(it.radioSource);
                       const short = kind === 'fixed' ? display : display.toUpperCase().slice(0, 8);
                       return (

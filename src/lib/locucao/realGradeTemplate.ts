@@ -19,7 +19,7 @@ export interface GradePosition {
   /** Token bruto do template (ex: 'mus', 'vht', 'VHTN', '"SHAKE_MIX_BLOCO01_FINAL_DE_SEMANA.MP3"'). */
   token: string;
   /** Tipo derivado pra estilização e legenda. */
-  kind: 'mus' | 'vht' | 'vhtn' | 'fun' | 'fixed';
+  kind: 'mus' | 'vht' | 'vhtn' | 'fun' | 'rom' | 'fixed';
   /** Nome amigável pra exibição (ex: "SHAKE_MIX 01" ou "música"). */
   label: string;
 }
@@ -43,6 +43,7 @@ function classifyToken(token: string): { kind: GradePosition['kind']; label: str
   if (lower === 'vht') return { kind: 'vht', label: 'vinheta' };
   if (lower === 'vhtn') return { kind: 'vhtn', label: 'vinheta N' };
   if (lower === 'fun') return { kind: 'fun', label: 'funk' };
+  if (lower === 'rom') return { kind: 'rom', label: 'romântica' };
   // Arquivo fixo
   const clean = unquote(t).replace(/\.MP3$/i, '');
   // Encurta nome bonito
@@ -155,8 +156,106 @@ function buildRawSequence({ day, hour, minute = 0 }: BuildArgs): string | null {
     return null;
   }
 
-  // ===================== DOMINGO / SEMANA — fallback genérico =====================
-  // Bloco musical livre por padrão (estrutura comum nos templates).
+  // ===================== SEMANA (SEG–SEX) =====================
+  const isWeekday = day === 'seg' || day === 'ter' || day === 'qua' || day === 'qui' || day === 'sex';
+  if (isWeekday) {
+    const dayName = day === 'seg' ? 'SEGUNDA'
+      : day === 'ter' ? 'TERCA'
+      : day === 'qua' ? 'QUARTA'
+      : day === 'qui' ? 'QUINTA'
+      : 'SEXTA';
+
+    // 09:00 — Sintonia Total bloco 01
+    if (hour === 9 && minute === 0) {
+      return `vht,"NOTICIA_DA_HORA_09HORAS_${dayName}.mp3","Sintonia Total _ bloco 01.mp3","HOROSCOPO_DO_DIA_EDICAO01_${dayName}.mp3",vht,"Sintonia Total _ bloco 02.mp3",vht,mus,vht,mus,vht`;
+    }
+    if (hour === 9 && minute === 30) {
+      return `vht,"FIQUE_SABENDO_EDICAO01_${dayName}.mp3","Sintonia Total _ bloco 03.mp3","HOROSCOPO_DO_DIA_EDICAO02_${dayName}.mp3",vht,"Sintonia Total _ bloco 04.mp3",vht,mus,vht,mus,vht`;
+    }
+    if (hour === 10 && minute === 0) {
+      return `vht,"NOTICIA_DA_HORA_10HORAS_${dayName}.mp3","Sintonia Total _ bloco 05.mp3","HOROSCOPO_DO_DIA_EDICAO03_${dayName}.mp3",vht,"Sintonia Total _ bloco 06.mp3",vht,mus,vht,mus,vht`;
+    }
+    if (hour === 10 && minute === 30) {
+      return `vht,"FIQUE_SABENDO_EDICAO02_${dayName}.mp3","Sintonia Total _ bloco 07.mp3","HOROSCOPO_DO_DIA_EDICAO04_${dayName}.mp3",vht,"Sintonia Total _ bloco 08.mp3",vht,mus,vht,mus,vht`;
+    }
+
+    // 12:00–12:30 — Painel Flashback
+    if (hour === 12 && minute === 0) {
+      return `vht,"NOTICIA_DA_HORA_12HORAS_${dayName}.mp3","painel flashback _ bloco 01.mp3",vht,"AS_ULTIMAS_DO_ESPORTE_EDICAO01_${dayName}.mp3","painel flashback _ bloco 02.mp3",vht`;
+    }
+    if (hour === 12 && minute === 30) {
+      return `vht,"AS_ULTIMAS_DO_ESPORTE_EDICAO02_${dayName}.mp3","painel flashback _ bloco 03.mp3",vht,"FATOS_E_BOATOS_EDICAO01_${dayName}.mp3",vht,"painel flashback _ bloco 04.mp3",vht`;
+    }
+
+    // 13:00–13:30 — Top 10 / Papo Sério
+    if (hour === 13 && minute === 0) {
+      return `vht,"NOTICIA_DA_HORA_13HORAS_${dayName}.mp3","Top 10 _ bloco 01.mp3",vht,"PAPO_SERIO_${dayName}.mp3","Top 10 _ bloco 02.mp3"`;
+    }
+    if (hour === 13 && minute === 30) {
+      return `vht,"Top 10 _ bloco 03.mp3",vht,"CURIOSIDADES_${dayName}.mp3",mus,vht,mus,vht`;
+    }
+
+    // 17:00–17:30 — Intensidade / Notícia em Foco
+    if (hour === 17 && minute === 0) {
+      return `vht,"NOTICIA_DA_HORA_17HORAS_${dayName}.mp3","intensidade _ bloco 01.mp3","noticia em foco _ bloco 01.mp3",vht,"intensidade _ bloco 02.mp3",vht,"noticia em foco _ bloco 02.mp3"`;
+    }
+    if (hour === 17 && minute === 30) {
+      return `vht,"noticia em foco _ bloco 03.mp3",vht,"intensidade _ bloco 03.mp3",vht,"noticia em foco _ bloco 04.mp3"`;
+    }
+
+    // 18:00 — Radar de Notícias
+    if (hour === 18 && minute === 0) {
+      return `vht,"Radar De Noticias _ bloco 01.mp3",mus,vht,"Radar De Noticias _ bloco 02.mp3",mus,vht,"Radar De Noticias _ bloco 03.mp3",vht,mus,vht,"Radar De Noticias _ bloco 04.mp3",vht,mus`;
+    }
+    // 18:30 — TOP 10 MIX + Esporte
+    if (hour === 18 && minute === 30) {
+      return `vht,"NOTICIA_DA_HORA_18HORAS_${dayName}.mp3","TOP_10_MIX_BLOCO01_${dayName}.mp3",vht,"AS_ULTIMAS_DO_ESPORTE_EDICAO01_${dayName}.mp3",vht,"TOP_10_MIX_BLOCO02_${dayName}.mp3","AS_ULTIMAS_DO_ESPORTE_EDICAO02_${dayName}.mp3"`;
+    }
+
+    // 19:00–19:30 — Rádio Revista
+    if (hour === 19 && minute === 0) {
+      return `vht,"NOTICIA_DA_HORA_16HORAS_${dayName}.mp3","radio revista _ bloco 01.mp3","radio revista _ bloco 02.mp3"`;
+    }
+    if (hour === 19 && minute === 30) {
+      return `vht,"radio revista _ bloco 03.mp3","radio revista _ bloco 04.mp3"`;
+    }
+
+    // 20:00–20:30 — Misturadão V2
+    if (hour === 20 && minute === 0) {
+      return `vht,"NOTICIA_DA_HORA_15HORAS_${dayName}.mp3",vht,"MISTURADAO_BLOCO01_${dayName}.mp3","FIQUE_SABENDO_EDICAO01_${dayName}.mp3",vht,"MISTURADAO_BLOCO02_${dayName}.mp3"`;
+    }
+    if (hour === 20 && minute === 30) {
+      return `vht,"MISTURADAO_BLOCO03_${dayName}.mp3","FIQUE_SABENDO_EDICAO02_${dayName}.mp3","MISTURADAO_BLOCO04_${dayName}.mp3",mus,vht,mus`;
+    }
+
+    // 21:00 — Voz do Brasil (60 min, ocupa 21:30 também)
+    if (hour === 21 && minute === 0) {
+      return `vht,"vozbrasil.mp3"`;
+    }
+    if (hour === 21 && minute === 30) {
+      // Bloco absorvido pela Voz do Brasil — sem conteúdo próprio
+      return null;
+    }
+
+    // 22:00–23:30 — Songs of Love
+    if (hour === 22 && minute === 0) {
+      return `vht,"songs of love _ bloco 01.mp3",rom,vht,rom`;
+    }
+    if (hour === 22 && minute === 30) {
+      return `vht,"songs of love _ bloco 02.mp3",rom,vht,rom`;
+    }
+    if (hour === 23 && minute === 0) {
+      return `vht,"songs of love _ bloco 03.mp3",vht,"songs of love _ bloco 04.mp3",rom`;
+    }
+    if (hour === 23 && minute === 30) {
+      return `vht,"songs of love _ bloco 05.mp3",vht,"songs of love _ bloco 06.mp3",rom`;
+    }
+
+    // Demais horários — bloco musical livre
+    return 'mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus';
+  }
+
+  // ===================== DOMINGO — fallback genérico =====================
   return 'mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus,vht,mus';
 }
 
