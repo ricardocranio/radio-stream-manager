@@ -295,6 +295,16 @@ export function LocucaoIAView() {
       if (autoSave) {
         await persistAudio(kind, data.audioBase64, url, true);
       }
+      if (autoInsertInGrade && lastBlock?.time && isElectron) {
+        // Mark only the relevant side: anúncio = início, desanúncio = fim
+        const pos: LocPosition = kind === 'anuncio' ? 'inicio' : 'fim';
+        const r = await injectLocucaoInGrade({
+          gradeFolder: config.gradeFolder,
+          targetTime: lastBlock.time,
+          position: pos,
+        });
+        if (r.success) toast.success(`📌 Marcador "${pos === 'inicio' ? 'LOC' : 'LOC_END'}" inserido em ${lastBlock.time}`);
+      }
     } catch (err: any) {
       console.error('[LOCUCAO]', err);
       toast.error(`Falha ao gerar: ${err?.message || 'erro desconhecido'}`);
