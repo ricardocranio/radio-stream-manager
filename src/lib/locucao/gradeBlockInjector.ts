@@ -149,9 +149,12 @@ export function injectLocucaoInLine(
     closePos?: number | null;
     position?: LocPosition;
     policy?: LocucaoSchedulePolicy;
+    /** Data do bloco — usada para checar `allowedDays` da política. */
+    date?: Date;
   },
 ): InjectLineResult {
   const policy = opts.policy ?? loadPolicy();
+  const date = opts.date ?? new Date();
   const lines = content.split('\n');
   let updated = false;
   let resultLine: string | undefined;
@@ -171,7 +174,7 @@ export function injectLocucaoInLine(
     const tokens = m[3].split(',').map((t) => t.trim()).filter(Boolean);
 
     // 1) Aplica whitelist/blacklist da política
-    const eligibility = checkBlockEligibility(time, programLabel, policy);
+    const eligibility = checkBlockEligibility(time, programLabel, policy, date);
     if (!eligibility.allowed) {
       skipped = true;
       skipReason = eligibility.detail;
@@ -251,6 +254,7 @@ export async function injectLocucaoInGrade(
       closePos: opts.closePos,
       position: opts.position,
       policy: opts.policy,
+      date,
     });
     if (result.skipped) {
       return {
