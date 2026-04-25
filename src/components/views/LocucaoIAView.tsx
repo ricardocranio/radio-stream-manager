@@ -939,6 +939,46 @@ export function LocucaoIAView() {
                     );
                   })}
                 </div>
+
+                {/* Vozes por dia da semana — prioridade sobre os presets de período */}
+                <div className="space-y-2 pt-2 border-t border-border/40">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">📆 Voz por dia da semana</Label>
+                    <span className="text-[10px] text-muted-foreground">tem prioridade sobre os presets de período</span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {DAY_KEYS.map((dk) => {
+                      const isToday = dayKeyFromIndex(effectiveNow().getDay()) === dk;
+                      return (
+                        <div
+                          key={dk}
+                          className={`rounded-md border p-2 space-y-1 ${isToday ? 'border-primary bg-primary/10' : 'border-border/50 bg-background'}`}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xs font-medium">{DAY_PRESETS[dk].emoji} {DAY_PRESETS[dk].label}</span>
+                            {isToday && <span className="text-[9px] opacity-80">HOJE</span>}
+                          </div>
+                          <Select
+                            value={dayVoices[dk] || '__global__'}
+                            onValueChange={(v) =>
+                              setDayVoices((prev) => ({ ...prev, [dk]: v === '__global__' ? '' : v }))
+                            }
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Voz" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__global__">— Usar voz do período —</SelectItem>
+                              {VOICES.map((vo) => (
+                                <SelectItem key={vo.id} value={vo.id}>{vo.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">
