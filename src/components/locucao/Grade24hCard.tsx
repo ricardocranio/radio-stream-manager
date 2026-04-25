@@ -795,9 +795,9 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                   <Button
                     variant="outline"
                     className="gap-1"
-                    onClick={() => { clearOverride(row.hour); closeEditor(); }}
+                    onClick={() => { clearOverride(row.hour, row.minute); closeEditor(); }}
                     disabled={!hasOverride}
-                    title="Remove TODOS os overrides desta hora"
+                    title="Remove TODOS os overrides deste bloco"
                   >
                     <RotateCcw className="w-4 h-4" /> Resetar
                   </Button>
