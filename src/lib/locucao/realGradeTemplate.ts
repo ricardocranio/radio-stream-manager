@@ -43,6 +43,7 @@ function classifyToken(token: string): { kind: GradePosition['kind']; label: str
   if (lower === 'vht') return { kind: 'vht', label: 'vinheta' };
   if (lower === 'vhtn') return { kind: 'vhtn', label: 'vinheta N' };
   if (lower === 'fun') return { kind: 'fun', label: 'funk' };
+  if (lower === 'rom') return { kind: 'rom', label: 'romântica' };
   // Arquivo fixo
   const clean = unquote(t).replace(/\.MP3$/i, '');
   // Encurta nome bonito
