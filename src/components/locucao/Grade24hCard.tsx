@@ -38,6 +38,7 @@ import {
   type HourOverridePosition,
 } from '@/lib/locucao/locucaoSchedulePolicy';
 import { getFixedScheduleForDay, type FixedSlot } from '@/lib/locucao/fixedScheduleMap';
+import { getRealGradePositions, gradePosToRadioSource, type GradePosition } from '@/lib/locucao/realGradeTemplate';
 import { useRadioStore } from '@/store/radioStore';
 import type { SequenceConfig, ProgramSchedule } from '@/types/radio';
 import { useToast } from '@/hooks/use-toast';
@@ -56,7 +57,8 @@ interface HourRow {
   locStatus: 'allowed' | 'after-news' | 'blocked-program' | 'blocked-time' | 'blocked-day' | 'forced-allow' | 'forced-block';
   reason: string;
   override?: { locked?: boolean; programName?: string; sequence?: HourOverridePosition[] };
-  effectiveSequence: Array<{ position: number; radioSource: string; customFileName?: string }>;
+  /** Posições EXATAS que vão pra grade .txt (mus/vht/VHTN/fun/fixed). */
+  effectiveSequence: Array<{ position: number; radioSource: string; customFileName?: string; gradeKind?: GradePosition['kind']; gradeLabel?: string }>;
   hasCustomSeq: boolean;
   /** True quando a base vem de uma ScheduledSequence (não da sequência global). */
   fromScheduled?: boolean;
@@ -204,10 +206,15 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   // ---------- Draft helpers (popover de edição) ----------
   /**
    * Sequência base "como vai pra grade .txt" para um horário específico:
-   * leva em conta as ScheduledSequences ativas naquele dia/hora (prioridade)
-   * e cai pra `sequence` global como fallback. IDÊNTICO ao que o gerador grava.
+   * usa as posições REAIS do template do dia (mus/vht/VHTN/fun/arquivos
+   * fixos como SHAKE_MIX_BLOCO01). Cai pra sequência global apenas se o
+   * template não definir nada.
    */
   const baseSeqFor = (hour: number): HourOverridePosition[] => {
+    const real = getRealGradePositions({ day: selectedDay, hour });
+    if (real.length > 0) {
+      return real.map((p) => ({ position: p.position, radioSource: gradePosToRadioSource(p) }));
+    }
     const resolved = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
     return resolved.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
   };
@@ -327,11 +334,21 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
         }
       }
 
+      const realPositions = getRealGradePositions({ day: selectedDay, hour });
       const resolvedBase = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
       const fromScheduled = resolvedBase !== sequence;
-      const effectiveSequence = override?.sequence || resolvedBase.map((s) => ({
-        position: s.position, radioSource: s.radioSource, customFileName: s.customFileName,
-      }));
+
+      // Posições EXATAS do .txt — prioridade: override custom > template real do dia > sequência configurada
+      const effectiveSequence = override?.sequence
+        ? override.sequence.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }))
+        : realPositions.length > 0
+          ? realPositions.map((p) => ({
+              position: p.position,
+              radioSource: gradePosToRadioSource(p),
+              gradeKind: p.kind,
+              gradeLabel: p.label,
+            }))
+          : resolvedBase.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
 
       return {
         hour, programName, fixedSlot: slot, locStatus, reason, override,
@@ -472,17 +489,34 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                     )}
                   </div>
                   <div className="flex gap-0.5 mt-1 flex-wrap">
-                    {row.effectiveSequence.map((it) => (
-                      <span
-                        key={it.position}
-                        className={`text-[9px] px-1.5 py-0.5 rounded font-mono border ${getStationColor(it.radioSource)} ${
-                          showSeq ? '' : 'opacity-50 line-through decoration-rose-400/60'
-                        }`}
-                        title={`Posição ${it.position} — ${getSourceDisplayName(it.radioSource)}${showSeq ? '' : ' (LOC bloqueada — sequência mostrada apenas para referência)'}`}
-                      >
-                        {it.position.toString().padStart(2, '0')}·{getSourceDisplayName(it.radioSource).slice(0, 6)}
-                      </span>
-                    ))}
+                    {row.effectiveSequence.map((it: any) => {
+                      // Cores por TIPO de token da grade real
+                      const kind = it.gradeKind as GradePosition['kind'] | undefined;
+                      const cls = kind === 'mus'
+                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                        : kind === 'vht'
+                          ? 'bg-sky-500/15 text-sky-300 border-sky-500/40'
+                          : kind === 'vhtn'
+                            ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                            : kind === 'fun'
+                              ? 'bg-pink-500/15 text-pink-300 border-pink-500/40'
+                              : kind === 'fixed'
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                : getStationColor(it.radioSource);
+                      const display = it.gradeLabel || getSourceDisplayName(it.radioSource);
+                      const short = kind === 'fixed' ? display : display.toUpperCase().slice(0, 8);
+                      return (
+                        <span
+                          key={it.position}
+                          className={`text-[9px] px-1.5 py-0.5 rounded font-mono border ${cls} ${
+                            showSeq ? '' : 'opacity-50 line-through decoration-rose-400/60'
+                          }`}
+                          title={`Posição ${it.position} — ${display}${kind ? ` (${kind})` : ''}${showSeq ? '' : ' (LOC bloqueada — referência)'}`}
+                        >
+                          {it.position.toString().padStart(2, '0')}·{short}
+                        </span>
+                      );
+                    })}
                     {!showSeq && (
                       <span className="text-[9px] text-muted-foreground italic ml-1">
                         ⛔ {row.reason}
