@@ -131,7 +131,7 @@ export async function buildBlockFromOverride(args: OverrideBlockArgs): Promise<B
     // 5) Estação / gênero / random — usa seletor padrão
     const seqEntry: SequenceConfig = { position: pos.position, radioSource: rs } as any;
     try {
-      const songStr = await selectSongForSlot(seqEntry, selCtx, ctx);
+      const songStr = await selectSongForSlot(seqEntry, selCtx as unknown as Parameters<typeof selectSongForSlot>[1], ctx);
       if (songStr && songStr.length > 0) {
         items.push(songStr);
       } else {
