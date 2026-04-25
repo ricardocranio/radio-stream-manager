@@ -50,8 +50,9 @@ interface Grade24hCardProps {
   getSourceDisplayName: (source: string) => string;
 }
 
-interface HourRow {
+interface BlockRow {
   hour: number;
+  minute: number; // 0 ou 30
   programName: string;
   fixedSlot?: FixedSlot;
   locStatus: 'allowed' | 'after-news' | 'blocked-program' | 'blocked-time' | 'blocked-day' | 'forced-allow' | 'forced-block';
@@ -62,6 +63,8 @@ interface HourRow {
   hasCustomSeq: boolean;
   /** True quando a base vem de uma ScheduledSequence (não da sequência global). */
   fromScheduled?: boolean;
+  /** Bloco absorvido por programa de 60min (ex: Voz do Brasil ocupa 21:30). */
+  absorbed?: boolean;
 }
 
 function findFixedSlotForHour(slots: FixedSlot[], hour: number): FixedSlot | undefined {
@@ -122,7 +125,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   const today = useMemo(() => dayKeyFromDate(new Date()), []);
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
   const [policy, setPolicy] = useState<LocucaoSchedulePolicy>(() => loadPolicy());
-  const [editingHour, setEditingHour] = useState<number | null>(null);
+  const [editingBlock, setEditingBlock] = useState<{ hour: number; minute: number } | null>(null);
 
   // Draft buffer — só persiste no localStorage quando o usuário clica "Salvar".
   interface Draft {
@@ -199,8 +202,8 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     savePolicy(next);
   };
 
-  const patchOverride = (hour: number, patch: Partial<{ locked: boolean | null; programName: string | null; sequence: HourOverridePosition[] | null }>) => {
-    const key = overrideKey(selectedDay, hour);
+  const patchOverride = (hour: number, minute: number, patch: Partial<{ locked: boolean | null; programName: string | null; sequence: HourOverridePosition[] | null }>) => {
+    const key = overrideKey(selectedDay, hour, minute);
     const prev = policy.hourOverrides?.[key] || {};
     const next: { locked?: boolean; programName?: string; sequence?: HourOverridePosition[] } = { ...prev };
 
@@ -223,24 +226,22 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     persist({ ...policy, hourOverrides: overrides });
   };
 
-  const clearOverride = (hour: number) => {
-    const key = overrideKey(selectedDay, hour);
+  const clearOverride = (hour: number, minute: number) => {
+    const key = overrideKey(selectedDay, hour, minute);
     if (!policy.hourOverrides?.[key]) return;
     const overrides = { ...policy.hourOverrides };
     delete overrides[key];
     persist({ ...policy, hourOverrides: overrides });
-    toast({ title: 'Override removido', description: `${hour.toString().padStart(2, '0')}:00 voltou ao padrão.` });
+    toast({ title: 'Override removido', description: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} voltou ao padrão.` });
   };
 
   // ---------- Draft helpers (popover de edição) ----------
   /**
-   * Sequência base "como vai pra grade .txt" para um horário específico:
-   * usa as posições REAIS do template do dia (mus/vht/VHTN/fun/arquivos
-   * fixos como SHAKE_MIX_BLOCO01). Cai pra sequência global apenas se o
-   * template não definir nada.
+   * Sequência base "como vai pra grade .txt" para um bloco específico
+   * (hora + minuto): usa as posições REAIS do template do dia.
    */
-  const baseSeqFor = (hour: number): HourOverridePosition[] => {
-    const real = getRealGradePositions({ day: selectedDay, hour });
+  const baseSeqFor = (hour: number, minute: number): HourOverridePosition[] => {
+    const real = getRealGradePositions({ day: selectedDay, hour, minute });
     if (real.length > 0) {
       return real.map((p) => ({ position: p.position, radioSource: gradePosToRadioSource(p) }));
     }
@@ -248,19 +249,19 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     return resolved.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
   };
 
-  const openEditor = (hour: number) => {
-    const ovr = policy.hourOverrides?.[overrideKey(selectedDay, hour)];
+  const openEditor = (hour: number, minute: number) => {
+    const ovr = policy.hourOverrides?.[overrideKey(selectedDay, hour, minute)];
     setDraft({
       locked: ovr?.locked,
       programName: ovr?.programName ?? '',
-      sequence: ovr?.sequence ? [...ovr.sequence] : baseSeqFor(hour),
+      sequence: ovr?.sequence ? [...ovr.sequence] : baseSeqFor(hour, minute),
       seqDirty: !!ovr?.sequence,
     });
-    setEditingHour(hour);
+    setEditingBlock({ hour, minute });
   };
 
   const closeEditor = () => {
-    setEditingHour(null);
+    setEditingBlock(null);
     setDraft(null);
   };
 
@@ -297,11 +298,11 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     updateDraft({ sequence: cur, seqDirty: true });
   };
   const draftResetSeq = () => {
-    if (!draft || editingHour === null) return;
-    updateDraft({ sequence: baseSeqFor(editingHour), seqDirty: false });
+    if (!draft || !editingBlock) return;
+    updateDraft({ sequence: baseSeqFor(editingBlock.hour, editingBlock.minute), seqDirty: false });
   };
 
-  const commitDraft = (hour: number) => {
+  const commitDraft = (hour: number, minute: number) => {
     if (!draft) return;
     const next: { locked?: boolean; programName?: string; sequence?: HourOverridePosition[] } = {};
     if (draft.locked === true || draft.locked === false) next.locked = draft.locked;
@@ -309,16 +310,16 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     if (trimmedName) next.programName = trimmedName;
     if (draft.seqDirty) next.sequence = draft.sequence.map((it, i) => ({ ...it, position: i + 1 }));
 
-    const key = overrideKey(selectedDay, hour);
+    const key = overrideKey(selectedDay, hour, minute);
     const overrides = { ...(policy.hourOverrides || {}) };
     if (Object.keys(next).length === 0) delete overrides[key];
     else overrides[key] = next;
     persist({ ...policy, hourOverrides: overrides });
-    toast({ title: 'Salvo!', description: `Horário ${hour.toString().padStart(2, '0')}:00 atualizado.` });
+    toast({ title: 'Salvo!', description: `Bloco ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} atualizado.` });
     closeEditor();
   };
 
-  const rows: HourRow[] = useMemo(() => {
+  const rows: BlockRow[] = useMemo(() => {
     const now = new Date();
     const todayIdx = now.getDay();
     const targetIdx = DAY_KEYS.indexOf(selectedDay);
@@ -328,65 +329,79 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
 
     const dayOk = isDayAllowed(dayDate, policy);
 
-    return Array.from({ length: 24 }, (_, hour) => {
-      const slot = findFixedSlotForHour(fixedSlots, hour);
-      const scheduled = findScheduledProgram(programs, hour);
-      const override = policy.hourOverrides?.[overrideKey(selectedDay, hour)];
-      const programName = override?.programName || slot?.program || scheduled || 'Música livre';
+    // Gera 48 blocos: 24 horas × 2 (HH:00 e HH:30)
+    const out: BlockRow[] = [];
+    for (let hour = 0; hour < 24; hour++) {
+      for (const minute of [0, 30] as const) {
+        const slot = findFixedSlotForHour(fixedSlots, hour);
+        const scheduled = findScheduledProgram(programs, hour);
+        const override = policy.hourOverrides?.[overrideKey(selectedDay, hour, minute)];
+        const programName = override?.programName || slot?.program || scheduled || 'Música livre';
 
-      let locStatus: HourRow['locStatus'] = 'allowed';
-      let reason = 'Bloco aberto para LOC';
+        let locStatus: BlockRow['locStatus'] = 'allowed';
+        let reason = 'Bloco aberto para LOC';
 
-      if (override?.locked === true) {
-        locStatus = 'forced-block';
-        reason = 'Bloqueado manualmente pelo usuário';
-      } else if (override?.locked === false) {
-        locStatus = 'forced-allow';
-        reason = 'Liberado manualmente pelo usuário';
-      } else if (!dayOk) {
-        locStatus = 'blocked-day';
-        reason = `${DAY_LABELS[selectedDay]} não habilitado na política de Locução`;
-      } else if (slot && !slot.locFriendly) {
-        locStatus = 'blocked-program';
-        reason = `Programa fixo: ${slot.program}`;
-      } else if (isProgramBlocked(programName, policy)) {
-        locStatus = 'blocked-program';
-        reason = `Programa "${programName}" na blacklist`;
-      } else {
-        const hh = `${hour.toString().padStart(2, '0')}:00`;
-        if (!isTimeAllowed(hh, policy)) {
-          locStatus = 'blocked-time';
-          reason = `Horário ${hh} fora da whitelist`;
-        } else if (slot?.note?.toLowerCase().includes('noticias') || slot?.note?.toLowerCase().includes('notícias')) {
-          locStatus = 'after-news';
-          reason = 'LOC entra após NOTICIAS';
+        if (override?.locked === true) {
+          locStatus = 'forced-block';
+          reason = 'Bloqueado manualmente pelo usuário';
+        } else if (override?.locked === false) {
+          locStatus = 'forced-allow';
+          reason = 'Liberado manualmente pelo usuário';
+        } else if (!dayOk) {
+          locStatus = 'blocked-day';
+          reason = `${DAY_LABELS[selectedDay]} não habilitado na política de Locução`;
+        } else if (slot && !slot.locFriendly) {
+          locStatus = 'blocked-program';
+          reason = `Programa fixo: ${slot.program}`;
+        } else if (isProgramBlocked(programName, policy)) {
+          locStatus = 'blocked-program';
+          reason = `Programa "${programName}" na blacklist`;
+        } else {
+          const hh = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+          if (!isTimeAllowed(hh, policy)) {
+            locStatus = 'blocked-time';
+            reason = `Horário ${hh} fora da whitelist`;
+          } else if (slot?.note?.toLowerCase().includes('noticias') || slot?.note?.toLowerCase().includes('notícias')) {
+            locStatus = 'after-news';
+            reason = 'LOC entra após NOTICIAS';
+          }
         }
+
+        const realPositions = getRealGradePositions({ day: selectedDay, hour, minute });
+        const resolvedBase = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
+        const fromScheduled = resolvedBase !== sequence;
+
+        // Bloco absorvido: o template retornou vazio explicitamente
+        // (ex.: 21:30 seg-sex absorvido pela Voz do Brasil das 21:00).
+        // Detectamos via raw: se realPositions é vazio E o template do dia
+        // cobre outros blocos próximos (heurística: hora 21:30 dia útil).
+        const isWeekday = ['seg','ter','qua','qui','sex'].includes(selectedDay);
+        const absorbed = isWeekday && hour === 21 && minute === 30 && realPositions.length === 0;
+
+        // Posições EXATAS do .txt — prioridade: override custom > template real do dia > sequência configurada
+        const effectiveSequence = absorbed
+          ? []
+          : override?.sequence
+            ? override.sequence.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }))
+            : realPositions.length > 0
+              ? realPositions.map((p) => ({
+                  position: p.position,
+                  radioSource: gradePosToRadioSource(p),
+                  gradeKind: p.kind,
+                  gradeLabel: p.label,
+                }))
+              : resolvedBase.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
+
+        out.push({
+          hour, minute, programName, fixedSlot: slot, locStatus, reason, override,
+          effectiveSequence, hasCustomSeq: !!override?.sequence, fromScheduled, absorbed,
+        });
       }
-
-      const realPositions = getRealGradePositions({ day: selectedDay, hour });
-      const resolvedBase = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
-      const fromScheduled = resolvedBase !== sequence;
-
-      // Posições EXATAS do .txt — prioridade: override custom > template real do dia > sequência configurada
-      const effectiveSequence = override?.sequence
-        ? override.sequence.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }))
-        : realPositions.length > 0
-          ? realPositions.map((p) => ({
-              position: p.position,
-              radioSource: gradePosToRadioSource(p),
-              gradeKind: p.kind,
-              gradeLabel: p.label,
-            }))
-          : resolvedBase.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
-
-      return {
-        hour, programName, fixedSlot: slot, locStatus, reason, override,
-        effectiveSequence, hasCustomSeq: !!override?.sequence, fromScheduled,
-      };
-    });
+    }
+    return out;
   }, [selectedDay, policy, fixedSlots, programs, sequence, scheduledSequences]);
 
-  const statusBadge = (row: HourRow) => {
+  const statusBadge = (row: BlockRow) => {
     switch (row.locStatus) {
       case 'allowed':
       case 'forced-allow':
@@ -475,28 +490,36 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
       <CardContent className="p-0">
         <div className="divide-y divide-border">
           {rows.map((row) => {
-            const isLive = row.hour === new Date().getHours() && selectedDay === today;
+            const nowDate = new Date();
+            const isLive = selectedDay === today
+              && row.hour === nowDate.getHours()
+              && ((row.minute === 0 && nowDate.getMinutes() < 30) || (row.minute === 30 && nowDate.getMinutes() >= 30));
             const hasOverride = !!row.override && (
               row.override.locked !== undefined ||
               row.override.programName !== undefined ||
               row.override.sequence !== undefined
             );
-            const showSeq = row.locStatus !== 'blocked-program' && row.locStatus !== 'forced-block' && row.locStatus !== 'blocked-day' && row.locStatus !== 'blocked-time';
+            const showSeq = !row.absorbed && row.locStatus !== 'blocked-program' && row.locStatus !== 'forced-block' && row.locStatus !== 'blocked-day' && row.locStatus !== 'blocked-time';
+            // Marca visual de início de hora cheia (HH:00) — separa pares de blocos.
+            const isHourStart = row.minute === 0;
             return (
               <div
-                key={row.hour}
+                key={`${row.hour}-${row.minute}`}
                 className={`grid grid-cols-[60px_1fr_auto_auto] gap-3 items-center px-4 py-2 hover:bg-secondary/30 transition-colors ${
                   isLive ? 'bg-primary/10 border-l-2 border-l-primary' : ''
-                } ${hasOverride ? 'border-l-2 border-l-amber-400/60' : ''}`}
+                } ${hasOverride ? 'border-l-2 border-l-amber-400/60' : ''} ${
+                  isHourStart ? 'border-t-2 border-t-border/60' : 'bg-secondary/10'
+                } ${row.absorbed ? 'opacity-60' : ''}`}
                 title={row.reason}
               >
-                {/* Hora */}
+                {/* Hora:Minuto */}
                 <div className="flex flex-col">
-                  <span className={`font-mono text-base font-bold ${isLive ? 'text-primary' : 'text-foreground'}`}>
-                    {row.hour.toString().padStart(2, '0')}:00
+                  <span className={`font-mono text-base font-bold ${isLive ? 'text-primary' : isHourStart ? 'text-foreground' : 'text-muted-foreground'}`}>
+                    {row.hour.toString().padStart(2, '0')}:{row.minute.toString().padStart(2, '0')}
                   </span>
                   {isLive && <span className="text-[9px] text-primary uppercase tracking-wide">agora</span>}
                   {hasOverride && !isLive && <span className="text-[9px] text-amber-400 uppercase tracking-wide">editado</span>}
+                  {!isHourStart && !isLive && !hasOverride && <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">2º bloco</span>}
                 </div>
 
                 {/* Programa + posições da sequência */}
@@ -506,19 +529,29 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                     {row.fixedSlot?.note && (
                       <span className="text-[10px] text-muted-foreground italic">({row.fixedSlot.note})</span>
                     )}
+                    {row.absorbed && (
+                      <Badge variant="outline" className="text-[9px] bg-muted text-muted-foreground border-border">
+                        absorvido (60min)
+                      </Badge>
+                    )}
                     {row.hasCustomSeq && (
                       <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30">
                         seq. custom ({row.effectiveSequence.length})
                       </Badge>
                     )}
-                    {!row.hasCustomSeq && row.fromScheduled && (
+                    {!row.hasCustomSeq && row.fromScheduled && !row.absorbed && (
                       <Badge variant="outline" className="text-[9px] bg-violet-500/10 text-violet-400 border-violet-500/30" title="Sequência programada para esta hora (Sequence Scheduler)">
                         seq. agendada
                       </Badge>
                     )}
                   </div>
                   <div className="flex gap-0.5 mt-1 flex-wrap">
-                    {row.effectiveSequence.map((it: any) => {
+                    {row.absorbed && (
+                      <span className="text-[10px] text-muted-foreground italic">
+                        ⏱️ Bloco ocupado pelo programa anterior (60min) — sem conteúdo próprio
+                      </span>
+                    )}
+                    {!row.absorbed && row.effectiveSequence.map((it: any) => {
                       // Cores por TIPO de token da grade real
                       const kind = it.gradeKind as GradePosition['kind'] | undefined;
                       const cls = kind === 'mus'
@@ -548,7 +581,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                         </span>
                       );
                     })}
-                    {!showSeq && (
+                    {!showSeq && !row.absorbed && (
                       <span className="text-[9px] text-muted-foreground italic ml-1">
                         ⛔ {row.reason}
                       </span>
@@ -564,8 +597,9 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-muted-foreground hover:text-primary"
-                  title="Editar este horário"
-                  onClick={() => openEditor(row.hour)}
+                  title="Editar este bloco"
+                  disabled={row.absorbed}
+                  onClick={() => openEditor(row.hour, row.minute)}
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </Button>
@@ -577,13 +611,13 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
 
       {/* ===== Dialog de edição (janela grande) ===== */}
       <Dialog
-        open={editingHour !== null}
+        open={editingBlock !== null}
         onOpenChange={(o) => { if (!o) closeEditor(); }}
       >
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
           {(() => {
-            if (editingHour === null || !draft) return null;
-            const row = rows.find((r) => r.hour === editingHour);
+            if (!editingBlock || !draft) return null;
+            const row = rows.find((r) => r.hour === editingBlock.hour && r.minute === editingBlock.minute);
             if (!row) return null;
             const hasOverride = !!row.override && (
               row.override.locked !== undefined ||
@@ -595,7 +629,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                 <DialogHeader>
                   <DialogTitle className="flex items-center justify-between gap-2">
                     <span>
-                      Editar {row.hour.toString().padStart(2, '0')}:00 — {DAY_LABELS[selectedDay]}
+                      Editar bloco {row.hour.toString().padStart(2, '0')}:{row.minute.toString().padStart(2, '0')} — {DAY_LABELS[selectedDay]}
                     </span>
                     <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-400 border-amber-500/30">
                       rascunho
@@ -761,9 +795,9 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                   <Button
                     variant="outline"
                     className="gap-1"
-                    onClick={() => { clearOverride(row.hour); closeEditor(); }}
+                    onClick={() => { clearOverride(row.hour, row.minute); closeEditor(); }}
                     disabled={!hasOverride}
-                    title="Remove TODOS os overrides desta hora"
+                    title="Remove TODOS os overrides deste bloco"
                   >
                     <RotateCcw className="w-4 h-4" /> Resetar
                   </Button>
@@ -777,7 +811,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                   <Button
                     variant="default"
                     className="flex-1 gap-1 bg-primary hover:bg-primary/90"
-                    onClick={() => commitDraft(row.hour)}
+                    onClick={() => commitDraft(row.hour, row.minute)}
                   >
                     <Save className="w-4 h-4" /> Salvar alterações
                   </Button>
