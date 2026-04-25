@@ -419,21 +419,24 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                       </Badge>
                     )}
                   </div>
-                  {showSeq ? (
-                    <div className="flex gap-0.5 mt-1 flex-wrap">
-                      {row.effectiveSequence.map((it) => (
-                        <span
-                          key={it.position}
-                          className={`text-[9px] px-1.5 py-0.5 rounded font-mono border ${getStationColor(it.radioSource)}`}
-                          title={`Posição ${it.position} — ${getSourceDisplayName(it.radioSource)}`}
-                        >
-                          {it.position.toString().padStart(2, '0')}·{getSourceDisplayName(it.radioSource).slice(0, 6)}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-[10px] text-muted-foreground mt-1">{row.reason}</div>
-                  )}
+                  <div className="flex gap-0.5 mt-1 flex-wrap">
+                    {row.effectiveSequence.map((it) => (
+                      <span
+                        key={it.position}
+                        className={`text-[9px] px-1.5 py-0.5 rounded font-mono border ${getStationColor(it.radioSource)} ${
+                          showSeq ? '' : 'opacity-50 line-through decoration-rose-400/60'
+                        }`}
+                        title={`Posição ${it.position} — ${getSourceDisplayName(it.radioSource)}${showSeq ? '' : ' (LOC bloqueada — sequência mostrada apenas para referência)'}`}
+                      >
+                        {it.position.toString().padStart(2, '0')}·{getSourceDisplayName(it.radioSource).slice(0, 6)}
+                      </span>
+                    ))}
+                    {!showSeq && (
+                      <span className="text-[9px] text-muted-foreground italic ml-1">
+                        ⛔ {row.reason}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Status LOC */}
