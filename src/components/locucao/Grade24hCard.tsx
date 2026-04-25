@@ -325,16 +325,18 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
         }
       }
 
-      const effectiveSequence = override?.sequence || sequence.map((s) => ({
+      const resolvedBase = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
+      const fromScheduled = resolvedBase !== sequence;
+      const effectiveSequence = override?.sequence || resolvedBase.map((s) => ({
         position: s.position, radioSource: s.radioSource, customFileName: s.customFileName,
       }));
 
       return {
         hour, programName, fixedSlot: slot, locStatus, reason, override,
-        effectiveSequence, hasCustomSeq: !!override?.sequence,
+        effectiveSequence, hasCustomSeq: !!override?.sequence, fromScheduled,
       };
     });
-  }, [selectedDay, policy, fixedSlots, programs, sequence]);
+  }, [selectedDay, policy, fixedSlots, programs, sequence, scheduledSequences]);
 
   const statusBadge = (row: HourRow) => {
     switch (row.locStatus) {
