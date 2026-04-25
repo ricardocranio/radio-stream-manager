@@ -811,7 +811,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                   <Button
                     variant="default"
                     className="flex-1 gap-1 bg-primary hover:bg-primary/90"
-                    onClick={() => commitDraft(row.hour)}
+                    onClick={() => commitDraft(row.hour, row.minute)}
                   >
                     <Save className="w-4 h-4" /> Salvar alterações
                   </Button>
