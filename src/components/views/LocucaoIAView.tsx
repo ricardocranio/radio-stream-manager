@@ -411,6 +411,7 @@ export function LocucaoIAView() {
         textToUse = applyTemplate(
           kind === 'anuncio' ? templates.anuncio : templates.desanuncio,
           refreshedSlot,
+          effectiveNow(),
         );
       }
     }
@@ -421,7 +422,7 @@ export function LocucaoIAView() {
     }
     setGenerating(kind);
     // Resolve voz: se usePresetVoice e o preset ativo tem voz definida, usa-a; senão usa a global.
-    const activePreset = detectActivePreset();
+    const activePreset = detectActivePreset(effectiveNow());
     const presetVoice = usePresetVoice ? presetVoices[activePreset] : '';
     const effectiveVoiceId = presetVoice || voiceId;
     try {
