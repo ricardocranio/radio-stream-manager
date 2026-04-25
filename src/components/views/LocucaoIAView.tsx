@@ -12,9 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Mic, Play, Save, Loader2, Volume2, Sparkles } from 'lucide-react';
+import { Mic, Play, Save, Loader2, Volume2, Sparkles, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useRadioStore } from '@/store/radioStore';
+import { extractNextBlockFromGrade, type BlockExtraction } from '@/lib/locucao/gradeBlockReader';
 
 const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
 
