@@ -319,7 +319,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     closeEditor();
   };
 
-  const rows: HourRow[] = useMemo(() => {
+  const rows: BlockRow[] = useMemo(() => {
     const now = new Date();
     const todayIdx = now.getDay();
     const targetIdx = DAY_KEYS.indexOf(selectedDay);
@@ -329,65 +329,79 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
 
     const dayOk = isDayAllowed(dayDate, policy);
 
-    return Array.from({ length: 24 }, (_, hour) => {
-      const slot = findFixedSlotForHour(fixedSlots, hour);
-      const scheduled = findScheduledProgram(programs, hour);
-      const override = policy.hourOverrides?.[overrideKey(selectedDay, hour)];
-      const programName = override?.programName || slot?.program || scheduled || 'Música livre';
+    // Gera 48 blocos: 24 horas × 2 (HH:00 e HH:30)
+    const out: BlockRow[] = [];
+    for (let hour = 0; hour < 24; hour++) {
+      for (const minute of [0, 30] as const) {
+        const slot = findFixedSlotForHour(fixedSlots, hour);
+        const scheduled = findScheduledProgram(programs, hour);
+        const override = policy.hourOverrides?.[overrideKey(selectedDay, hour, minute)];
+        const programName = override?.programName || slot?.program || scheduled || 'Música livre';
 
-      let locStatus: HourRow['locStatus'] = 'allowed';
-      let reason = 'Bloco aberto para LOC';
+        let locStatus: BlockRow['locStatus'] = 'allowed';
+        let reason = 'Bloco aberto para LOC';
 
-      if (override?.locked === true) {
-        locStatus = 'forced-block';
-        reason = 'Bloqueado manualmente pelo usuário';
-      } else if (override?.locked === false) {
-        locStatus = 'forced-allow';
-        reason = 'Liberado manualmente pelo usuário';
-      } else if (!dayOk) {
-        locStatus = 'blocked-day';
-        reason = `${DAY_LABELS[selectedDay]} não habilitado na política de Locução`;
-      } else if (slot && !slot.locFriendly) {
-        locStatus = 'blocked-program';
-        reason = `Programa fixo: ${slot.program}`;
-      } else if (isProgramBlocked(programName, policy)) {
-        locStatus = 'blocked-program';
-        reason = `Programa "${programName}" na blacklist`;
-      } else {
-        const hh = `${hour.toString().padStart(2, '0')}:00`;
-        if (!isTimeAllowed(hh, policy)) {
-          locStatus = 'blocked-time';
-          reason = `Horário ${hh} fora da whitelist`;
-        } else if (slot?.note?.toLowerCase().includes('noticias') || slot?.note?.toLowerCase().includes('notícias')) {
-          locStatus = 'after-news';
-          reason = 'LOC entra após NOTICIAS';
+        if (override?.locked === true) {
+          locStatus = 'forced-block';
+          reason = 'Bloqueado manualmente pelo usuário';
+        } else if (override?.locked === false) {
+          locStatus = 'forced-allow';
+          reason = 'Liberado manualmente pelo usuário';
+        } else if (!dayOk) {
+          locStatus = 'blocked-day';
+          reason = `${DAY_LABELS[selectedDay]} não habilitado na política de Locução`;
+        } else if (slot && !slot.locFriendly) {
+          locStatus = 'blocked-program';
+          reason = `Programa fixo: ${slot.program}`;
+        } else if (isProgramBlocked(programName, policy)) {
+          locStatus = 'blocked-program';
+          reason = `Programa "${programName}" na blacklist`;
+        } else {
+          const hh = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+          if (!isTimeAllowed(hh, policy)) {
+            locStatus = 'blocked-time';
+            reason = `Horário ${hh} fora da whitelist`;
+          } else if (slot?.note?.toLowerCase().includes('noticias') || slot?.note?.toLowerCase().includes('notícias')) {
+            locStatus = 'after-news';
+            reason = 'LOC entra após NOTICIAS';
+          }
         }
+
+        const realPositions = getRealGradePositions({ day: selectedDay, hour, minute });
+        const resolvedBase = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
+        const fromScheduled = resolvedBase !== sequence;
+
+        // Bloco absorvido: o template retornou vazio explicitamente
+        // (ex.: 21:30 seg-sex absorvido pela Voz do Brasil das 21:00).
+        // Detectamos via raw: se realPositions é vazio E o template do dia
+        // cobre outros blocos próximos (heurística: hora 21:30 dia útil).
+        const isWeekday = ['seg','ter','qua','qui','sex'].includes(selectedDay);
+        const absorbed = isWeekday && hour === 21 && minute === 30 && realPositions.length === 0;
+
+        // Posições EXATAS do .txt — prioridade: override custom > template real do dia > sequência configurada
+        const effectiveSequence = absorbed
+          ? []
+          : override?.sequence
+            ? override.sequence.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }))
+            : realPositions.length > 0
+              ? realPositions.map((p) => ({
+                  position: p.position,
+                  radioSource: gradePosToRadioSource(p),
+                  gradeKind: p.kind,
+                  gradeLabel: p.label,
+                }))
+              : resolvedBase.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
+
+        out.push({
+          hour, minute, programName, fixedSlot: slot, locStatus, reason, override,
+          effectiveSequence, hasCustomSeq: !!override?.sequence, fromScheduled, absorbed,
+        });
       }
-
-      const realPositions = getRealGradePositions({ day: selectedDay, hour });
-      const resolvedBase = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
-      const fromScheduled = resolvedBase !== sequence;
-
-      // Posições EXATAS do .txt — prioridade: override custom > template real do dia > sequência configurada
-      const effectiveSequence = override?.sequence
-        ? override.sequence.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }))
-        : realPositions.length > 0
-          ? realPositions.map((p) => ({
-              position: p.position,
-              radioSource: gradePosToRadioSource(p),
-              gradeKind: p.kind,
-              gradeLabel: p.label,
-            }))
-          : resolvedBase.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
-
-      return {
-        hour, programName, fixedSlot: slot, locStatus, reason, override,
-        effectiveSequence, hasCustomSeq: !!override?.sequence, fromScheduled,
-      };
-    });
+    }
+    return out;
   }, [selectedDay, policy, fixedSlots, programs, sequence, scheduledSequences]);
 
-  const statusBadge = (row: HourRow) => {
+  const statusBadge = (row: BlockRow) => {
     switch (row.locStatus) {
       case 'allowed':
       case 'forced-allow':
