@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Mic, Play, Save, Loader2, Volume2, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -58,6 +59,7 @@ const STORAGE_KEY_TEMPLATES = 'locucaoIA_templates';
 const STORAGE_KEY_VOICE = 'locucaoIA_voiceId';
 const STORAGE_KEY_SETTINGS = 'locucaoIA_settings';
 const STORAGE_KEY_FOLDER = 'locucaoIA_folder';
+const STORAGE_KEY_AUTOSAVE = 'locucaoIA_autoSave';
 
 function applyTemplate(tpl: string, slot: Slot): string {
   return tpl
@@ -87,6 +89,10 @@ export function LocucaoIAView() {
     return { stability: 0.5, similarityBoost: 0.75, style: 0.4, speed: 1.0 };
   });
   const [folder, setFolder] = useState<string>(() => localStorage.getItem(STORAGE_KEY_FOLDER) || 'C:\\Playlist\\Locucoes');
+  const [autoSave, setAutoSave] = useState<boolean>(() => {
+    const v = localStorage.getItem(STORAGE_KEY_AUTOSAVE);
+    return v === null ? true : v === 'true';
+  });
 
   const [slot, setSlot] = useState<Slot>({
     musica1: '',
@@ -105,9 +111,38 @@ export function LocucaoIAView() {
   useEffect(() => { localStorage.setItem(STORAGE_KEY_VOICE, voiceId); }, [voiceId]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_FOLDER, folder); }, [folder]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEY_AUTOSAVE, String(autoSave)); }, [autoSave]);
 
   const previewAnuncio = useMemo(() => applyTemplate(templates.anuncio, slot), [templates.anuncio, slot]);
   const previewDesanuncio = useMemo(() => applyTemplate(templates.desanuncio, slot), [templates.desanuncio, slot]);
+
+  const buildFilename = (kind: 'anuncio' | 'desanuncio') => {
+    const ts = new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-');
+    const tag = kind === 'anuncio' ? 'ANUNCIO' : 'DESANUNCIO';
+    return `${tag}_${slot.radio}_${ts}.mp3`;
+  };
+
+  const persistAudio = async (kind: 'anuncio' | 'desanuncio', base64: string, dataUrl: string, silent = false) => {
+    if (!isElectron || !(window as any).electronAPI?.saveLocucao) {
+      if (silent) return; // don't auto-trigger browser download
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = buildFilename(kind);
+      link.click();
+      return;
+    }
+    try {
+      const result = await (window as any).electronAPI.saveLocucao({
+        folder,
+        filename: buildFilename(kind),
+        audioBase64: base64,
+      });
+      if (result?.success) toast.success(`💾 Salvo: ${result.path}`);
+      else toast.error(`Erro ao salvar: ${result?.error || 'desconhecido'}`);
+    } catch (err: any) {
+      toast.error(`Erro: ${err?.message}`);
+    }
+  };
 
   const generate = async (kind: 'anuncio' | 'desanuncio') => {
     const text = kind === 'anuncio' ? previewAnuncio : previewDesanuncio;
@@ -126,6 +161,10 @@ export function LocucaoIAView() {
       const url = `data:audio/mpeg;base64,${data.audioBase64}`;
       setAudioUrls(prev => ({ ...prev, [kind]: { url, base64: data.audioBase64 } }));
       toast.success(`${kind === 'anuncio' ? 'Anúncio' : 'Desanúncio'} gerado (${Math.round((data.sizeBytes || 0) / 1024)} KB)`);
+
+      if (autoSave) {
+        await persistAudio(kind, data.audioBase64, url, true);
+      }
     } catch (err: any) {
       console.error('[LOCUCAO]', err);
       toast.error(`Falha ao gerar: ${err?.message || 'erro desconhecido'}`);
@@ -140,32 +179,9 @@ export function LocucaoIAView() {
       toast.error('Gere o áudio primeiro.');
       return;
     }
-    if (!isElectron || !(window as any).electronAPI?.saveLocucao) {
-      // Browser fallback: trigger download
-      const link = document.createElement('a');
-      link.href = audio.url;
-      link.download = buildFilename(kind);
-      link.click();
-      return;
-    }
-    try {
-      const result = await (window as any).electronAPI.saveLocucao({
-        folder,
-        filename: buildFilename(kind),
-        audioBase64: audio.base64,
-      });
-      if (result?.success) toast.success(`Salvo em ${result.path}`);
-      else toast.error(`Erro ao salvar: ${result?.error || 'desconhecido'}`);
-    } catch (err: any) {
-      toast.error(`Erro: ${err?.message}`);
-    }
+    await persistAudio(kind, audio.base64, audio.url, false);
   };
 
-  const buildFilename = (kind: 'anuncio' | 'desanuncio') => {
-    const ts = new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-');
-    const tag = kind === 'anuncio' ? 'ANUNCIO' : 'DESANUNCIO';
-    return `${tag}_${slot.radio}_${ts}.mp3`;
-  };
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
@@ -364,6 +380,22 @@ export function LocucaoIAView() {
               <div className="space-y-2">
                 <Label>Pasta para salvar (Electron)</Label>
                 <Input value={folder} onChange={e => setFolder(e.target.value)} placeholder="C:\Playlist\Locucoes" />
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-border/50 p-3 bg-muted/20">
+                <div className="space-y-0.5 pr-4">
+                  <Label htmlFor="autosave-switch" className="text-sm font-medium">
+                    Salvar automaticamente no disco
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Ao gerar uma locução, o MP3 é gravado imediatamente na pasta acima usando o nome padrão.
+                  </p>
+                </div>
+                <Switch
+                  id="autosave-switch"
+                  checked={autoSave}
+                  onCheckedChange={setAutoSave}
+                />
               </div>
             </CardContent>
           </Card>
