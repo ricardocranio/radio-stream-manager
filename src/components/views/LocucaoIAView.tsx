@@ -385,6 +385,52 @@ export function LocucaoIAView() {
                   )}
                 </div>
               )}
+
+              {/* LOCUÇÃO POSITION CONFIG */}
+              <div className="mt-3 rounded-md border border-border/50 bg-muted/10 p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Posição da locução no bloco</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-end">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Onde inserir o marcador</Label>
+                    <Select value={locPosition} onValueChange={(v) => setLocPosition(v as LocPosition)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="inicio">Início do bloco (LOC) — anúncio</SelectItem>
+                        <SelectItem value="fim">Final do bloco (LOC_END) — desanúncio</SelectItem>
+                        <SelectItem value="inicio_fim">Início e Final (anúncio + desanúncio)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-border/50 bg-background">
+                    <Switch
+                      id="auto-insert-grade"
+                      checked={autoInsertInGrade}
+                      onCheckedChange={setAutoInsertInGrade}
+                    />
+                    <Label htmlFor="auto-insert-grade" className="text-xs cursor-pointer whitespace-nowrap">
+                      Inserir auto. ao gerar
+                    </Label>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => insertLocucaoInGrade(false)}
+                    disabled={injectingGrade || !lastBlock}
+                  >
+                    {injectingGrade ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Sparkles className="h-3.5 w-3.5 mr-1.5" />}
+                    Inserir na grade agora
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Marcadores gravados na linha do bloco no <code className="px-1 bg-muted rounded">.txt</code> da grade:
+                  {' '}<code className="px-1 bg-muted rounded">LOC</code> (início) e
+                  {' '}<code className="px-1 bg-muted rounded">LOC_END</code> (fim).
+                  O player de automação reproduzirá o MP3 salvo nessas posições.
+                </p>
+              </div>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
