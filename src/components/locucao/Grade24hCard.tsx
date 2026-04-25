@@ -299,7 +299,18 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   const draftChangeSource = (idx: number, value: string) => {
     if (!draft) return;
     const cur = [...draft.sequence];
-    cur[idx] = { ...cur[idx], radioSource: value };
+    // Mantém rawToken só se o novo radioSource ainda for um token "grade_*"
+    // que case com o token original (ex: trocar grade_mus por outra coisa invalida o rawToken).
+    const prev = cur[idx];
+    const keepRaw = !!prev.rawToken && value.startsWith('grade_') && (
+      (value === 'grade_mus' && prev.rawToken.toLowerCase() === 'mus') ||
+      (value === 'grade_vht' && prev.rawToken.toLowerCase() === 'vht') ||
+      (value === 'grade_vhtn' && prev.rawToken.toLowerCase() === 'vhtn') ||
+      (value === 'grade_fun' && prev.rawToken.toLowerCase() === 'fun') ||
+      (value === 'grade_rom' && prev.rawToken.toLowerCase() === 'rom') ||
+      (value.startsWith('grade_fixed:'))
+    );
+    cur[idx] = { ...prev, radioSource: value, rawToken: keepRaw ? prev.rawToken : undefined };
     updateDraft({ sequence: cur, seqDirty: true });
   };
   const draftResetSeq = () => {
