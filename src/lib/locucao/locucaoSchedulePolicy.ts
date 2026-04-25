@@ -173,16 +173,23 @@ export function findOpenPosAfterNews(
   return musicCount + 1;
 }
 
-/** Chave do override por hora+dia. */
-export function overrideKey(day: DayKey, hour: number): string {
-  return `${day}-${hour.toString().padStart(2, '0')}`;
+/**
+ * Chave do override por bloco (dia + hora + minuto).
+ * Mantém compatibilidade: se `minute` for 0 (ou omitido), a chave continua
+ * sendo `day-HH` (formato legado). Para minuto 30 vira `day-HH:30`.
+ */
+export function overrideKey(day: DayKey, hour: number, minute: number = 0): string {
+  const hh = hour.toString().padStart(2, '0');
+  if (minute === 0) return `${day}-${hh}`;
+  return `${day}-${hh}:${minute.toString().padStart(2, '0')}`;
 }
 
-/** Retorna o override (se existir) para um par dia/hora. */
+/** Retorna o override (se existir) para um par dia/hora/minuto. */
 export function getHourOverride(
   policy: LocucaoSchedulePolicy,
   day: DayKey,
   hour: number,
+  minute: number = 0,
 ): HourOverride | undefined {
-  return policy.hourOverrides?.[overrideKey(day, hour)];
+  return policy.hourOverrides?.[overrideKey(day, hour, minute)];
 }
