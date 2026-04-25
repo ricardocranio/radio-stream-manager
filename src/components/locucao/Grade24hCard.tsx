@@ -529,9 +529,11 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                             ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
                             : kind === 'fun'
                               ? 'bg-pink-500/15 text-pink-300 border-pink-500/40'
-                              : kind === 'fixed'
-                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                                : getStationColor(it.radioSource);
+                              : kind === 'rom'
+                                ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                                : kind === 'fixed'
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                  : getStationColor(it.radioSource);
                       const display = it.gradeLabel || getSourceDisplayName(it.radioSource);
                       const short = kind === 'fixed' ? display : display.toUpperCase().slice(0, 8);
                       return (
