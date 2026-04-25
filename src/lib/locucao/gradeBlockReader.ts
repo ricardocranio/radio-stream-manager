@@ -61,6 +61,8 @@ export interface BlockExtraction {
   filename: string;
   first2: ResolvedSong[];
   last2: ResolvedSong[];
+  /** Todos os tokens da linha original do bloco (preserva VHT/VHTN/LOC/LOC_END). */
+  rawTokens: string[];
 }
 
 function parseTokenAsFilename(token: string): { artist: string; title: string } | null {
