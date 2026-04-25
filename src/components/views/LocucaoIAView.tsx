@@ -115,6 +115,34 @@ export function LocucaoIAView() {
   const previewAnuncio = useMemo(() => applyTemplate(templates.anuncio, slot), [templates.anuncio, slot]);
   const previewDesanuncio = useMemo(() => applyTemplate(templates.desanuncio, slot), [templates.desanuncio, slot]);
 
+  const buildFilename = (kind: 'anuncio' | 'desanuncio') => {
+    const ts = new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-');
+    const tag = kind === 'anuncio' ? 'ANUNCIO' : 'DESANUNCIO';
+    return `${tag}_${slot.radio}_${ts}.mp3`;
+  };
+
+  const persistAudio = async (kind: 'anuncio' | 'desanuncio', base64: string, dataUrl: string, silent = false) => {
+    if (!isElectron || !(window as any).electronAPI?.saveLocucao) {
+      if (silent) return; // don't auto-trigger browser download
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = buildFilename(kind);
+      link.click();
+      return;
+    }
+    try {
+      const result = await (window as any).electronAPI.saveLocucao({
+        folder,
+        filename: buildFilename(kind),
+        audioBase64: base64,
+      });
+      if (result?.success) toast.success(`💾 Salvo: ${result.path}`);
+      else toast.error(`Erro ao salvar: ${result?.error || 'desconhecido'}`);
+    } catch (err: any) {
+      toast.error(`Erro: ${err?.message}`);
+    }
+  };
+
   const generate = async (kind: 'anuncio' | 'desanuncio') => {
     const text = kind === 'anuncio' ? previewAnuncio : previewDesanuncio;
     if (!text.trim()) {
@@ -132,6 +160,10 @@ export function LocucaoIAView() {
       const url = `data:audio/mpeg;base64,${data.audioBase64}`;
       setAudioUrls(prev => ({ ...prev, [kind]: { url, base64: data.audioBase64 } }));
       toast.success(`${kind === 'anuncio' ? 'Anúncio' : 'Desanúncio'} gerado (${Math.round((data.sizeBytes || 0) / 1024)} KB)`);
+
+      if (autoSave) {
+        await persistAudio(kind, data.audioBase64, url, true);
+      }
     } catch (err: any) {
       console.error('[LOCUCAO]', err);
       toast.error(`Falha ao gerar: ${err?.message || 'erro desconhecido'}`);
@@ -146,32 +178,9 @@ export function LocucaoIAView() {
       toast.error('Gere o áudio primeiro.');
       return;
     }
-    if (!isElectron || !(window as any).electronAPI?.saveLocucao) {
-      // Browser fallback: trigger download
-      const link = document.createElement('a');
-      link.href = audio.url;
-      link.download = buildFilename(kind);
-      link.click();
-      return;
-    }
-    try {
-      const result = await (window as any).electronAPI.saveLocucao({
-        folder,
-        filename: buildFilename(kind),
-        audioBase64: audio.base64,
-      });
-      if (result?.success) toast.success(`Salvo em ${result.path}`);
-      else toast.error(`Erro ao salvar: ${result?.error || 'desconhecido'}`);
-    } catch (err: any) {
-      toast.error(`Erro: ${err?.message}`);
-    }
+    await persistAudio(kind, audio.base64, audio.url, false);
   };
 
-  const buildFilename = (kind: 'anuncio' | 'desanuncio') => {
-    const ts = new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-');
-    const tag = kind === 'anuncio' ? 'ANUNCIO' : 'DESANUNCIO';
-    return `${tag}_${slot.radio}_${ts}.mp3`;
-  };
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
