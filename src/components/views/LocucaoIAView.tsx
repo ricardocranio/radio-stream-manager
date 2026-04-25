@@ -183,6 +183,19 @@ export function LocucaoIAView() {
     return v === null ? true : v === 'true';
   });
 
+  // Simulação de data/hora (apenas pré-visualização — não afeta geração real, a menos que o usuário aplique).
+  const [simulating, setSimulating] = useState(false);
+  const [simDay, setSimDay] = useState<number>(new Date().getDay()); // 0..6
+  const [simHour, setSimHour] = useState<number>(new Date().getHours()); // 0..23
+  const effectiveNow = (): Date => {
+    if (!simulating) return new Date();
+    const d = new Date();
+    // Ajusta para o dia da semana escolhido
+    d.setDate(d.getDate() + (simDay - d.getDay()));
+    d.setHours(simHour, 0, 0, 0);
+    return d;
+  };
+
   const { config } = useRadioStore();
 
   const [slot, setSlot] = useState<Slot>({
