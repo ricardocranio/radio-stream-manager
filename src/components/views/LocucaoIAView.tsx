@@ -101,6 +101,18 @@ const STORAGE_KEY_VOICE = 'locucaoIA_voiceId';
 const STORAGE_KEY_SETTINGS = 'locucaoIA_settings';
 const STORAGE_KEY_FOLDER = 'locucaoIA_folder';
 const STORAGE_KEY_AUTOSAVE = 'locucaoIA_autoSave';
+const STORAGE_KEY_PRESET_VOICES = 'locucaoIA_presetVoices';
+const STORAGE_KEY_USE_PRESET_VOICE = 'locucaoIA_usePresetVoice';
+
+/** Detecta qual preset corresponde ao momento atual. FDS tem prioridade. */
+function detectActivePreset(now: Date = new Date()): PresetKey {
+  const d = now.getDay();
+  if (d === 0 || d === 6) return 'fim_de_semana';
+  const h = now.getHours();
+  if (h >= 5 && h < 12) return 'manha';
+  if (h >= 12 && h < 18) return 'tarde';
+  return 'noite';
+}
 
 // ===== Variáveis dinâmicas de data/hora =====
 const DAY_NAMES = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
