@@ -20,6 +20,7 @@ const SettingsView = lazy(() => import('@/components/views/SettingsView').then(m
 const FixedContentView = lazy(() => import('@/components/views/FixedContentView').then(m => ({ default: m.FixedContentView })));
 const BlockEditorView = lazy(() => import('@/components/views/BlockEditorView').then(m => ({ default: m.BlockEditorView })));
 const VozBrasilView = lazy(() => import('@/components/views/VozBrasilView').then(m => ({ default: m.VozBrasilView })));
+const LocucaoIAView = lazy(() => import('@/components/views/LocucaoIAView').then(m => ({ default: m.LocucaoIAView })));
 const SpecialMonitoringView = lazy(() => import('@/components/views/SpecialMonitoringView').then(m => ({ default: m.SpecialMonitoringView })));
 const RankingView = lazy(() => import('@/components/views/RankingView').then(m => ({ default: m.RankingView })));
 const LogsView = lazy(() => import('@/components/views/LogsView').then(m => ({ default: m.LogsView })));
@@ -46,6 +47,7 @@ const PREFETCH_MAP: Record<string, () => void> = {
   competitor: () => import('@/components/views/CompetitorView'),
   mapas: () => import('@/components/views/MapasView'),
   vozbrasil: () => import('@/components/views/VozBrasilView'),
+  locucaoia: () => import('@/components/views/LocucaoIAView'),
   specialmonitoring: () => import('@/components/views/SpecialMonitoringView'),
   logs: () => import('@/components/views/LogsView'),
   export: () => import('@/components/views/ExportView'),
@@ -80,6 +82,7 @@ const TAB_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentTy
   analytics: AnalyticsView,
   competitor: CompetitorView,
   vozbrasil: VozBrasilView,
+  locucaoia: LocucaoIAView,
   mapas: MapasView,
   logs: LogsView,
   export: ExportView,
