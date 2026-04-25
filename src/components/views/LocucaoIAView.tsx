@@ -294,10 +294,16 @@ export function LocucaoIAView() {
       });
       if (r.success) {
         const parts: string[] = [];
-        if (openPos) parts.push(`LOC@${openPos}`);
-        if (closePos) parts.push(`LOC_END@${closePos}`);
+        const effOpen = r.effectiveOpenPos ?? openPos;
+        const effClose = r.effectiveClosePos ?? closePos;
+        if (effOpen) parts.push(`LOC@${effOpen}${r.openPosFromNews ? ' (após NOTÍCIAS)' : ''}`);
+        if (effClose) parts.push(`LOC_END@${effClose}`);
         if (!silent) toast.success(`📌 Locução marcada no bloco ${lastBlock.time} (${parts.join(' + ') || 'sem marcadores'})`);
         return true;
+      }
+      if (r.skipped) {
+        if (!silent) toast.warning(`⚠️ Bloco ${lastBlock.time} pulado: ${r.skipReason}`);
+        return false;
       }
       if (!silent) toast.error(r.error || 'Falha ao inserir na grade.');
       return false;
