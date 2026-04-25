@@ -68,6 +68,7 @@ interface SortableSequenceItemProps {
   catPrograms: boolean; setCatPrograms: React.Dispatch<React.SetStateAction<boolean>>;
   catSpecials: boolean; setCatSpecials: React.Dispatch<React.SetStateAction<boolean>>;
   catStations: boolean; setCatStations: React.Dispatch<React.SetStateAction<boolean>>;
+  catLocucao: boolean; setCatLocucao: React.Dispatch<React.SetStateAction<boolean>>;
   genreOptions: Array<{ value: string; label: string }>;
   yearOptions: Array<{ value: string; label: string }>;
   genreYearOptions: Array<{ value: string; label: string }>;
