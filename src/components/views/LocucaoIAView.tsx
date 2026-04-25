@@ -708,15 +708,49 @@ export function LocucaoIAView() {
             <CardHeader>
               <CardTitle className="text-base">Templates de texto</CardTitle>
               <CardDescription>
-                Variáveis disponíveis: <code className="px-1 bg-muted rounded">{'{musica1}'}</code>{' '}
-                <code className="px-1 bg-muted rounded">{'{artista1}'}</code>{' '}
-                <code className="px-1 bg-muted rounded">{'{musica2}'}</code>{' '}
-                <code className="px-1 bg-muted rounded">{'{artista2}'}</code>{' '}
-                <code className="px-1 bg-muted rounded">{'{radio}'}</code>{' '}
-                <code className="px-1 bg-muted rounded">{'{hora}'}</code>
+                <div className="space-y-1">
+                  <div>
+                    <strong className="text-foreground">Músicas/rádio:</strong>{' '}
+                    <code className="px-1 bg-muted rounded">{'{musica1}'}</code>{' '}
+                    <code className="px-1 bg-muted rounded">{'{artista1}'}</code>{' '}
+                    <code className="px-1 bg-muted rounded">{'{musica2}'}</code>{' '}
+                    <code className="px-1 bg-muted rounded">{'{artista2}'}</code>{' '}
+                    <code className="px-1 bg-muted rounded">{'{radio}'}</code>{' '}
+                    <code className="px-1 bg-muted rounded">{'{hora}'}</code>
+                  </div>
+                  <div>
+                    <strong className="text-foreground">🆕 Dia/período (automáticas):</strong>{' '}
+                    <code className="px-1 bg-muted rounded">{'{dia}'}</code> (ex: <em>sábado</em>){' '}
+                    <code className="px-1 bg-muted rounded">{'{periodo}'}</code> (ex: <em>tarde</em>){' '}
+                    <code className="px-1 bg-muted rounded">{'{saudacao}'}</code> (ex: <em>Boa tarde</em>)
+                  </div>
+                </div>
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* PRESETS */}
+              <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
+                <Label className="text-xs font-semibold text-primary">⚡ Presets de prompt</Label>
+                <p className="text-xs text-muted-foreground">
+                  Clique para substituir os textos abaixo por templates prontos para cada período do dia.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(PRESETS) as PresetKey[]).map((k) => (
+                    <Button
+                      key={k}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setTemplates(PRESETS[k].templates);
+                        toast.success(`Preset "${PRESETS[k].label}" aplicado`);
+                      }}
+                    >
+                      {PRESETS[k].emoji} {PRESETS[k].label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label>Anúncio</Label>
                 <Textarea
