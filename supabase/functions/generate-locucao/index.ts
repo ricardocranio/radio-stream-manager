@@ -1,7 +1,7 @@
 // Edge function: gera locução TTS com ElevenLabs
 // Recebe { text, voiceId, modelId? } e retorna { audioBase64, mimeType }
 
-import { encode as base64Encode } from "https://deno.land/std@0.224.0/encoding/base64.ts";
+import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
     }
 
     const audioBuffer = await elRes.arrayBuffer();
-    const audioBase64 = base64Encode(new Uint8Array(audioBuffer));
+    const audioBase64 = encodeBase64(new Uint8Array(audioBuffer));
 
     return new Response(
       JSON.stringify({
