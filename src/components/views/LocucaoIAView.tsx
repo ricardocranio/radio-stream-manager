@@ -876,14 +876,18 @@ export function LocucaoIAView() {
                       {(() => {
                         const sim = effectiveNow();
                         const preset = detectActivePreset(sim);
+                        const dayKey = dayKeyFromIndex(sim.getDay());
                         const vars = getDynamicVars(sim);
-                        const vId = usePresetVoice ? (presetVoices[preset] || voiceId) : voiceId;
+                        const dayV = usePresetVoice ? dayVoices[dayKey] : '';
+                        const presetV = usePresetVoice ? presetVoices[preset] : '';
+                        const vId = dayV || presetV || voiceId;
                         const vLabel = VOICES.find((v) => v.id === vId)?.label || 'voz desconhecida';
+                        const source = dayV ? `dia (${DAY_PRESETS[dayKey].label})` : presetV ? `período (${PRESETS[preset].label})` : 'global';
                         return (
                           <div className="rounded border border-border/40 bg-background p-2 text-xs space-y-1">
                             <div>📅 <strong>{vars.dia}</strong> · {String(simHour).padStart(2, '0')}h00 · período <strong>{vars.periodo}</strong> · <em>{vars.saudacao}</em></div>
-                            <div>⚡ Preset ativo: <strong>{PRESETS[preset].emoji} {PRESETS[preset].label}</strong></div>
-                            <div>🎤 Voz a ser usada: <strong>{vLabel.split(' —')[0]}</strong> {!presetVoices[preset] && usePresetVoice && <span className="text-muted-foreground">(fallback global — defina uma voz no preset)</span>}</div>
+                            <div>⚡ Preset ativo: <strong>{PRESETS[preset].emoji} {PRESETS[preset].label}</strong> · 📆 Dia: <strong>{DAY_PRESETS[dayKey].emoji} {DAY_PRESETS[dayKey].label}</strong></div>
+                            <div>🎤 Voz a ser usada: <strong>{vLabel.split(' —')[0]}</strong> <span className="text-muted-foreground">(origem: {source})</span></div>
                           </div>
                         );
                       })()}
