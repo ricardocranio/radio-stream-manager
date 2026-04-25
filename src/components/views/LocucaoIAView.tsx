@@ -17,7 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useRadioStore } from '@/store/radioStore';
 import { extractNextBlockFromGrade, type BlockExtraction } from '@/lib/locucao/gradeBlockReader';
-import { injectLocucaoInGrade } from '@/lib/locucao/gradeBlockInjector';
+import { injectLocucaoInGrade, injectMarkersIntoTokens } from '@/lib/locucao/gradeBlockInjector';
 
 const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
 
@@ -232,6 +232,33 @@ export function LocucaoIAView() {
 
   const previewAnuncio = useMemo(() => applyTemplate(templates.anuncio, slot), [templates.anuncio, slot]);
   const previewDesanuncio = useMemo(() => applyTemplate(templates.desanuncio, slot), [templates.desanuncio, slot]);
+
+  // Prévia em tempo real da linha do bloco com LOC/LOC_END nas posições escolhidas
+  const blockPreview = useMemo(() => {
+    if (!lastBlock) return null;
+    const original = lastBlock.rawTokens;
+    const withMarkers = injectMarkersIntoTokens(original, openPos, closePos);
+    return { original, withMarkers };
+  }, [lastBlock, openPos, closePos]);
+
+  const SEPARATOR_TOKENS = new Set(['VHT', 'VHTN', 'LOC', 'LOC_END']);
+  const isMarker = (t: string) => {
+    const u = t.toUpperCase();
+    return u === 'LOC' || u === 'LOC_END';
+  };
+  const isVinheta = (t: string) => {
+    const u = t.toUpperCase();
+    return u === 'VHT' || u === 'VHTN';
+  };
+  // Computa o índice musical (1-based) de cada token na lista final
+  const computeMusicIndices = (tokens: string[]): (number | null)[] => {
+    let n = 0;
+    return tokens.map((t) => {
+      if (SEPARATOR_TOKENS.has(t.toUpperCase())) return null;
+      n++;
+      return n;
+    });
+  };
 
   const buildFilename = (kind: 'anuncio' | 'desanuncio') => {
     const ts = new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-');
@@ -469,6 +496,68 @@ export function LocucaoIAView() {
                   Deixe vazio para não inserir aquele marcador.
                   Você também pode editar manualmente esses tokens na <strong>Sequência Padrão</strong>.
                 </p>
+
+                {/* PRÉVIA EM TEMPO REAL DA LINHA DO BLOCO */}
+                {blockPreview && (
+                  <div className="mt-3 rounded-md border border-primary/30 bg-background p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-primary">
+                        🎬 Prévia da linha {lastBlock?.time} ({lastBlock?.programLabel})
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        Atualiza ao mudar abertura/fechamento
+                      </span>
+                    </div>
+                    <div className="font-mono text-xs leading-relaxed flex flex-wrap gap-1">
+                      <span className="text-muted-foreground">{lastBlock?.time} ({lastBlock?.programLabel})</span>
+                      {(() => {
+                        const indices = computeMusicIndices(blockPreview.withMarkers);
+                        return blockPreview.withMarkers.map((tok, i) => {
+                          const musicIdx = indices[i];
+                          if (isMarker(tok)) {
+                            return (
+                              <span
+                                key={i}
+                                className="px-1.5 py-0.5 rounded bg-primary text-primary-foreground font-bold"
+                                title={tok === 'LOC' ? 'Abertura da locução' : 'Fechamento da locução'}
+                              >
+                                {tok}
+                              </span>
+                            );
+                          }
+                          if (isVinheta(tok)) {
+                            return (
+                              <span key={i} className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                {tok}
+                              </span>
+                            );
+                          }
+                          return (
+                            <span
+                              key={i}
+                              className="px-1.5 py-0.5 rounded bg-accent/40 text-foreground"
+                              title={`Música #${musicIdx}`}
+                            >
+                              <span className="text-[9px] text-primary mr-1 font-bold">{musicIdx}</span>
+                              {tok.length > 30 ? tok.slice(0, 30) + '…' : tok}
+                            </span>
+                          );
+                        });
+                      })()}
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] text-muted-foreground pt-1 border-t border-border/30">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-sm bg-primary inline-block"></span> Marcador
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-sm bg-accent/40 inline-block"></span> Música (numerada)
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-sm bg-muted inline-block"></span> Vinheta (não conta)
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">

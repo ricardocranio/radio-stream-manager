@@ -37,7 +37,7 @@ function isMusicToken(t: string): boolean {
  * - openMusicPos: 1-based music index BEFORE which to place LOC.
  * - closeMusicPos: 1-based music index AFTER which to place LOC_END.
  */
-function injectMarkersIntoTokens(
+export function injectMarkersIntoTokens(
   tokens: string[],
   openMusicPos: number | null,
   closeMusicPos: number | null,
