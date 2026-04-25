@@ -33,6 +33,13 @@ export interface LocucaoSchedulePolicy {
   newsTokens: string[];
   /** Liga/desliga toda a política sem perder as listas. */
   enabled: boolean;
+  /**
+   * Overrides por hora e dia da semana (editáveis pela Grade 24h):
+   *   key = `${day}-${HH}` (ex.: "seg-07")
+   *   value.locked = força bloqueio (true) / força liberação (false) / undefined = usa regra normal
+   *   value.programName = sobrescreve o nome do programa exibido
+   */
+  hourOverrides?: Record<string, { locked?: boolean; programName?: string }>;
 }
 
 export const DEFAULT_POLICY: LocucaoSchedulePolicy = {
@@ -150,4 +157,18 @@ export function findOpenPosAfterNews(
     if (!SEPARATORS.has(tokens[i].toUpperCase())) musicCount++;
   }
   return musicCount + 1;
+}
+
+/** Chave do override por hora+dia. */
+export function overrideKey(day: DayKey, hour: number): string {
+  return `${day}-${hour.toString().padStart(2, '0')}`;
+}
+
+/** Retorna o override (se existir) para um par dia/hora. */
+export function getHourOverride(
+  policy: LocucaoSchedulePolicy,
+  day: DayKey,
+  hour: number,
+): { locked?: boolean; programName?: string } | undefined {
+  return policy.hourOverrides?.[overrideKey(day, hour)];
 }
