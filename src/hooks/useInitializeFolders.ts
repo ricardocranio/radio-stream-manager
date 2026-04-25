@@ -29,6 +29,7 @@ export function useInitializeFolders() {
         ...(config.extraVinhetasFolders || []),
         deezerConfig.downloadFolder,
         ...config.musicFolders,
+        localStorage.getItem('locucaoIA_folder') || 'C:\\Playlist\\Locucoes-IA',
       ].filter(Boolean);
 
       // Remove duplicates

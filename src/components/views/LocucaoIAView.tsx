@@ -88,7 +88,12 @@ export function LocucaoIAView() {
     } catch {}
     return { stability: 0.5, similarityBoost: 0.75, style: 0.4, speed: 1.0 };
   });
-  const [folder, setFolder] = useState<string>(() => localStorage.getItem(STORAGE_KEY_FOLDER) || 'C:\\Playlist\\Locucoes');
+  const [folder, setFolder] = useState<string>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_FOLDER);
+    // Migrate old default to new default
+    if (!saved || saved === 'C:\\Playlist\\Locucoes') return 'C:\\Playlist\\Locucoes-IA';
+    return saved;
+  });
   const [autoSave, setAutoSave] = useState<boolean>(() => {
     const v = localStorage.getItem(STORAGE_KEY_AUTOSAVE);
     return v === null ? true : v === 'true';
@@ -379,7 +384,7 @@ export function LocucaoIAView() {
 
               <div className="space-y-2">
                 <Label>Pasta para salvar (Electron)</Label>
-                <Input value={folder} onChange={e => setFolder(e.target.value)} placeholder="C:\Playlist\Locucoes" />
+                <Input value={folder} onChange={e => setFolder(e.target.value)} placeholder="C:\Playlist\Locucoes-IA" />
               </div>
 
               <div className="flex items-center justify-between rounded-lg border border-border/50 p-3 bg-muted/20">
