@@ -9,6 +9,11 @@
  * o MESMO texto + voz que serão executados na geração real.
  */
 import { extractNextBlockFromGrade, type BlockExtraction } from './gradeBlockReader';
+import {
+  loadPolicy,
+  checkBlockEligibility,
+  findOpenPosAfterNews,
+} from './locucaoSchedulePolicy';
 
 export interface ResolvedLocucao {
   text: string;
@@ -22,6 +27,13 @@ export interface ResolvedLocucao {
   /** Bloco-fonte (quando disponível). */
   blockTime?: string;
   blockProgram?: string;
+  /** Diagnóstico da política de agendamento. */
+  policyStatus?: {
+    allowed: boolean;
+    reason?: string;
+    /** Posição automática (1-based) APÓS NOTICIAS quando aplicável. */
+    autoOpenPosFromNews?: number | null;
+  };
 }
 
 const STORAGE_KEY_TEMPLATES = 'locucaoIA_templates';
