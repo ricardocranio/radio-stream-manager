@@ -101,6 +101,8 @@ export function LocucaoIAView() {
     return v === null ? true : v === 'true';
   });
 
+  const { config } = useRadioStore();
+
   const [slot, setSlot] = useState<Slot>({
     musica1: '',
     artista1: '',
@@ -109,6 +111,13 @@ export function LocucaoIAView() {
     radio: 'BH FM',
     hora: '',
   });
+
+  const [autoFromGrade, setAutoFromGrade] = useState<boolean>(() => {
+    const v = localStorage.getItem('locucaoIA_autoFromGrade');
+    return v === null ? true : v === 'true';
+  });
+  const [lastBlock, setLastBlock] = useState<BlockExtraction | null>(null);
+  const [loadingGrade, setLoadingGrade] = useState(false);
 
   const [generating, setGenerating] = useState<'anuncio' | 'desanuncio' | null>(null);
   const [audioUrls, setAudioUrls] = useState<{ anuncio?: { url: string; base64: string }; desanuncio?: { url: string; base64: string } }>({});
