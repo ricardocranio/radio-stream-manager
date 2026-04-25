@@ -357,6 +357,41 @@ export function LocucaoIAView() {
   const previewAnuncio = useMemo(() => applyTemplate(templates.anuncio, slot, effectiveNow()), [templates.anuncio, slot, simulating, simDay, simHour]);
   const previewDesanuncio = useMemo(() => applyTemplate(templates.desanuncio, slot, effectiveNow()), [templates.desanuncio, slot, simulating, simDay, simHour]);
 
+  // Preview dedicado do EDITOR LOC/LOC_END — usa first2 para LOC e last2 para LOC_END
+  // garantindo paridade total com o que será gerado em runtime.
+  const editorSlotLoc = useMemo<Slot>(() => {
+    const a = lastBlock?.first2?.[0];
+    const b = lastBlock?.first2?.[1];
+    return {
+      musica1: a?.title || slot.musica1 || '«1ª música»',
+      artista1: a?.artist || slot.artista1 || '«1º artista»',
+      musica2: b?.title || slot.musica2 || '«2ª música»',
+      artista2: b?.artist || slot.artista2 || '«2º artista»',
+      radio: slot.radio,
+      hora: lastBlock?.time || slot.hora || '',
+    };
+  }, [lastBlock, slot]);
+  const editorSlotLocEnd = useMemo<Slot>(() => {
+    const a = lastBlock?.last2?.[0];
+    const b = lastBlock?.last2?.[1];
+    return {
+      musica1: a?.title || slot.musica1 || '«penúltima música»',
+      artista1: a?.artist || slot.artista1 || '«penúltimo artista»',
+      musica2: b?.title || slot.musica2 || '«última música»',
+      artista2: b?.artist || slot.artista2 || '«último artista»',
+      radio: slot.radio,
+      hora: lastBlock?.time || slot.hora || '',
+    };
+  }, [lastBlock, slot]);
+  const editorPreviewAnuncio = useMemo(
+    () => applyTemplate(templates.anuncio, editorSlotLoc, effectiveNow()),
+    [templates.anuncio, editorSlotLoc, simulating, simDay, simHour],
+  );
+  const editorPreviewDesanuncio = useMemo(
+    () => applyTemplate(templates.desanuncio, editorSlotLocEnd, effectiveNow()),
+    [templates.desanuncio, editorSlotLocEnd, simulating, simDay, simHour],
+  );
+
   // Prévia em tempo real da linha do bloco com LOC/LOC_END nas posições escolhidas
   const blockPreview = useMemo(() => {
     if (!lastBlock) return null;
