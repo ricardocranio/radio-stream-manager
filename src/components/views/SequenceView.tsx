@@ -151,7 +151,15 @@ function SortableSequenceItem({ item, isFixoItem, isEditing, ...props }: Sortabl
             {props.catStations && props.stationOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Badge variant="outline" className={`${props.getStationColor(item.radioSource)} text-[9px] px-1`}>{props.getSourceBadgeLabel(item.radioSource)}</Badge>
+        {(item.radioSource === 'LOC' || item.radioSource === 'LOC_END') ? (
+          <LocucaoBadgePopover
+            source={item.radioSource as 'LOC' | 'LOC_END'}
+            className={`${props.getStationColor(item.radioSource)} text-[9px] px-1`}
+            label={props.getSourceBadgeLabel(item.radioSource)}
+          />
+        ) : (
+          <Badge variant="outline" className={`${props.getStationColor(item.radioSource)} text-[9px] px-1`}>{props.getSourceBadgeLabel(item.radioSource)}</Badge>
+        )}
         <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10" onClick={() => props.openComboDialog('default', item.position)} title="Combo Manual"><Edit2 className="w-3 h-3" /></Button>
         {window.electronAPI?.selectFile && (
           <Button variant="ghost" size="icon" className="h-6 w-6 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10" onClick={() => props.handleSelectFile('default', item.position)} title="Selecionar arquivo local"><FolderOpen className="w-3 h-3" /></Button>
