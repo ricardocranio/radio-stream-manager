@@ -334,11 +334,21 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
         }
       }
 
+      const realPositions = getRealGradePositions({ day: selectedDay, hour });
       const resolvedBase = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
       const fromScheduled = resolvedBase !== sequence;
-      const effectiveSequence = override?.sequence || resolvedBase.map((s) => ({
-        position: s.position, radioSource: s.radioSource, customFileName: s.customFileName,
-      }));
+
+      // Posições EXATAS do .txt — prioridade: override custom > template real do dia > sequência configurada
+      const effectiveSequence = override?.sequence
+        ? override.sequence.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }))
+        : realPositions.length > 0
+          ? realPositions.map((p) => ({
+              position: p.position,
+              radioSource: gradePosToRadioSource(p),
+              gradeKind: p.kind,
+              gradeLabel: p.label,
+            }))
+          : resolvedBase.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
 
       return {
         hour, programName, fixedSlot: slot, locStatus, reason, override,
