@@ -384,7 +384,7 @@ export function LocucaoIAView() {
 
               <div className="space-y-2">
                 <Label>Pasta para salvar (Electron)</Label>
-                <Input value={folder} onChange={e => setFolder(e.target.value)} placeholder="C:\Playlist\Locucoes" />
+                <Input value={folder} onChange={e => setFolder(e.target.value)} placeholder="C:\Playlist\Locucoes-IA" />
               </div>
 
               <div className="flex items-center justify-between rounded-lg border border-border/50 p-3 bg-muted/20">
