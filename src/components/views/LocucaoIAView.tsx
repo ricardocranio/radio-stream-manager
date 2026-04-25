@@ -128,6 +128,56 @@ export function LocucaoIAView() {
   useEffect(() => { localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_FOLDER, folder); }, [folder]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_AUTOSAVE, String(autoSave)); }, [autoSave]);
+  useEffect(() => { localStorage.setItem('locucaoIA_autoFromGrade', String(autoFromGrade)); }, [autoFromGrade]);
+
+  /** Reads next block from grade .txt and applies first2 (anúncio) + last2 (desanúncio) into slot. */
+  const fillFromGrade = async (kind: 'anuncio' | 'desanuncio' | 'both' = 'both', silent = false): Promise<BlockExtraction | null> => {
+    if (!isElectron) {
+      if (!silent) toast.error('Auto-preenchimento só funciona no app Desktop (Electron).');
+      return null;
+    }
+    setLoadingGrade(true);
+    try {
+      const block = await extractNextBlockFromGrade({
+        gradeFolder: config.gradeFolder,
+        musicFolders: config.musicFolders || [],
+        coringaCode: config.coringaCode || 'mus',
+        allowCurrent: true,
+      });
+      if (!block) {
+        if (!silent) toast.error('Nenhum bloco resolvido encontrado na grade do dia.');
+        return null;
+      }
+      setLastBlock(block);
+      setSlot(prev => {
+        const next = { ...prev, hora: block.time };
+        if (kind === 'anuncio' || kind === 'both') {
+          if (block.first2[0]) { next.musica1 = block.first2[0].title; next.artista1 = block.first2[0].artist; }
+          if (block.first2[1]) { next.musica2 = block.first2[1].title; next.artista2 = block.first2[1].artist; }
+        }
+        if (kind === 'desanuncio') {
+          if (block.last2[0]) { next.musica1 = block.last2[0].title; next.artista1 = block.last2[0].artist; }
+          if (block.last2[1]) { next.musica2 = block.last2[1].title; next.artista2 = block.last2[1].artist; }
+        }
+        return next;
+      });
+      if (!silent) toast.success(`Bloco ${block.time} (${block.programLabel}) carregado da grade`);
+      return block;
+    } catch (err: any) {
+      if (!silent) toast.error(`Erro ao ler grade: ${err?.message}`);
+      return null;
+    } finally {
+      setLoadingGrade(false);
+    }
+  };
+
+  // Auto-fill on mount when option is enabled
+  useEffect(() => {
+    if (autoFromGrade && isElectron) {
+      fillFromGrade('both', true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const previewAnuncio = useMemo(() => applyTemplate(templates.anuncio, slot), [templates.anuncio, slot]);
   const previewDesanuncio = useMemo(() => applyTemplate(templates.desanuncio, slot), [templates.desanuncio, slot]);
