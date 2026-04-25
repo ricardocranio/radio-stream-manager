@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Calendar, Clock, Mic, Ban, Newspaper, Pencil, RotateCcw, X,
-  Plus, Trash2, ArrowUp, ArrowDown, Save,
+  Plus, Trash2, ArrowUp, ArrowDown, Save, ChevronDown,
 } from 'lucide-react';
 import {
   DAY_KEYS,
