@@ -183,6 +183,6 @@ export function getHourOverride(
   policy: LocucaoSchedulePolicy,
   day: DayKey,
   hour: number,
-): { locked?: boolean; programName?: string } | undefined {
+): HourOverride | undefined {
   return policy.hourOverrides?.[overrideKey(day, hour)];
 }
