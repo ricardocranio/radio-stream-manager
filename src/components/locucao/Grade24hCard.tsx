@@ -57,7 +57,8 @@ interface HourRow {
   locStatus: 'allowed' | 'after-news' | 'blocked-program' | 'blocked-time' | 'blocked-day' | 'forced-allow' | 'forced-block';
   reason: string;
   override?: { locked?: boolean; programName?: string; sequence?: HourOverridePosition[] };
-  effectiveSequence: Array<{ position: number; radioSource: string; customFileName?: string }>;
+  /** Posições EXATAS que vão pra grade .txt (mus/vht/VHTN/fun/fixed). */
+  effectiveSequence: Array<{ position: number; radioSource: string; customFileName?: string; gradeKind?: GradePosition['kind']; gradeLabel?: string }>;
   hasCustomSeq: boolean;
   /** True quando a base vem de uma ScheduledSequence (não da sequência global). */
   fromScheduled?: boolean;
