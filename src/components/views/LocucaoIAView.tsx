@@ -59,7 +59,22 @@ const DEFAULT_TEMPLATES: Templates = {
 };
 
 // ===== Presets por período do dia =====
-type PresetKey = 'manha' | 'tarde' | 'noite' | 'fim_de_semana';
+type PeriodPresetKey = 'manha' | 'tarde' | 'noite' | 'fim_de_semana';
+type DayPresetKey = 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab';
+type PresetKey = PeriodPresetKey;
+
+const DAY_PRESETS: Record<DayPresetKey, { label: string; emoji: string; dayIndex: number }> = {
+  dom: { label: 'Domingo', emoji: '🛋️', dayIndex: 0 },
+  seg: { label: 'Segunda', emoji: '☕', dayIndex: 1 },
+  ter: { label: 'Terça', emoji: '📻', dayIndex: 2 },
+  qua: { label: 'Quarta', emoji: '🎧', dayIndex: 3 },
+  qui: { label: 'Quinta', emoji: '🎶', dayIndex: 4 },
+  sex: { label: 'Sexta', emoji: '🎤', dayIndex: 5 },
+  sab: { label: 'Sábado', emoji: '🎉', dayIndex: 6 },
+};
+
+const DAY_KEYS: DayPresetKey[] = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+function dayKeyFromIndex(i: number): DayPresetKey { return DAY_KEYS[i]; }
 
 const PRESETS: Record<PresetKey, { label: string; emoji: string; templates: Templates }> = {
   manha: {
@@ -102,6 +117,7 @@ const STORAGE_KEY_SETTINGS = 'locucaoIA_settings';
 const STORAGE_KEY_FOLDER = 'locucaoIA_folder';
 const STORAGE_KEY_AUTOSAVE = 'locucaoIA_autoSave';
 const STORAGE_KEY_PRESET_VOICES = 'locucaoIA_presetVoices';
+const STORAGE_KEY_DAY_VOICES = 'locucaoIA_dayVoices';
 const STORAGE_KEY_USE_PRESET_VOICE = 'locucaoIA_usePresetVoice';
 
 /** Detecta qual preset corresponde ao momento atual. FDS tem prioridade. */
@@ -182,6 +198,15 @@ export function LocucaoIAView() {
     const v = localStorage.getItem(STORAGE_KEY_USE_PRESET_VOICE);
     return v === null ? true : v === 'true';
   });
+  // Mapa: dia da semana → voiceId. Tem prioridade sobre o preset de período.
+  const [dayVoices, setDayVoices] = useState<Record<DayPresetKey, string>>(() => {
+    const empty: Record<DayPresetKey, string> = { dom: '', seg: '', ter: '', qua: '', qui: '', sex: '', sab: '' };
+    try {
+      const s = localStorage.getItem(STORAGE_KEY_DAY_VOICES);
+      if (s) return { ...empty, ...JSON.parse(s) };
+    } catch {}
+    return empty;
+  });
 
   // Simulação de data/hora (apenas pré-visualização — não afeta geração real, a menos que o usuário aplique).
   const [simulating, setSimulating] = useState(false);
@@ -243,6 +268,7 @@ export function LocucaoIAView() {
   useEffect(() => { localStorage.setItem(STORAGE_KEY_FOLDER, folder); }, [folder]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_AUTOSAVE, String(autoSave)); }, [autoSave]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_PRESET_VOICES, JSON.stringify(presetVoices)); }, [presetVoices]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEY_DAY_VOICES, JSON.stringify(dayVoices)); }, [dayVoices]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_USE_PRESET_VOICE, String(usePresetVoice)); }, [usePresetVoice]);
   useEffect(() => { localStorage.setItem('locucaoIA_autoFromGrade', String(autoFromGrade)); }, [autoFromGrade]);
   useEffect(() => { localStorage.setItem('locucaoIA_openPos', openPos === null ? '' : String(openPos)); }, [openPos]);
@@ -421,10 +447,13 @@ export function LocucaoIAView() {
       return;
     }
     setGenerating(kind);
-    // Resolve voz: se usePresetVoice e o preset ativo tem voz definida, usa-a; senão usa a global.
-    const activePreset = detectActivePreset(effectiveNow());
+    // Resolve voz: prioridade dia da semana > preset de período > voz global.
+    const nowEff = effectiveNow();
+    const activePreset = detectActivePreset(nowEff);
+    const dayKey = dayKeyFromIndex(nowEff.getDay());
+    const dayVoice = usePresetVoice ? dayVoices[dayKey] : '';
     const presetVoice = usePresetVoice ? presetVoices[activePreset] : '';
-    const effectiveVoiceId = presetVoice || voiceId;
+    const effectiveVoiceId = dayVoice || presetVoice || voiceId;
     try {
       const { data, error } = await supabase.functions.invoke('generate-locucao', {
         body: { text: textToUse, voiceId: effectiveVoiceId, ...settings },
@@ -847,14 +876,18 @@ export function LocucaoIAView() {
                       {(() => {
                         const sim = effectiveNow();
                         const preset = detectActivePreset(sim);
+                        const dayKey = dayKeyFromIndex(sim.getDay());
                         const vars = getDynamicVars(sim);
-                        const vId = usePresetVoice ? (presetVoices[preset] || voiceId) : voiceId;
+                        const dayV = usePresetVoice ? dayVoices[dayKey] : '';
+                        const presetV = usePresetVoice ? presetVoices[preset] : '';
+                        const vId = dayV || presetV || voiceId;
                         const vLabel = VOICES.find((v) => v.id === vId)?.label || 'voz desconhecida';
+                        const source = dayV ? `dia (${DAY_PRESETS[dayKey].label})` : presetV ? `período (${PRESETS[preset].label})` : 'global';
                         return (
                           <div className="rounded border border-border/40 bg-background p-2 text-xs space-y-1">
                             <div>📅 <strong>{vars.dia}</strong> · {String(simHour).padStart(2, '0')}h00 · período <strong>{vars.periodo}</strong> · <em>{vars.saudacao}</em></div>
-                            <div>⚡ Preset ativo: <strong>{PRESETS[preset].emoji} {PRESETS[preset].label}</strong></div>
-                            <div>🎤 Voz a ser usada: <strong>{vLabel.split(' —')[0]}</strong> {!presetVoices[preset] && usePresetVoice && <span className="text-muted-foreground">(fallback global — defina uma voz no preset)</span>}</div>
+                            <div>⚡ Preset ativo: <strong>{PRESETS[preset].emoji} {PRESETS[preset].label}</strong> · 📆 Dia: <strong>{DAY_PRESETS[dayKey].emoji} {DAY_PRESETS[dayKey].label}</strong></div>
+                            <div>🎤 Voz a ser usada: <strong>{vLabel.split(' —')[0]}</strong> <span className="text-muted-foreground">(origem: {source})</span></div>
                           </div>
                         );
                       })()}
@@ -905,6 +938,46 @@ export function LocucaoIAView() {
                       </div>
                     );
                   })}
+                </div>
+
+                {/* Vozes por dia da semana — prioridade sobre os presets de período */}
+                <div className="space-y-2 pt-2 border-t border-border/40">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">📆 Voz por dia da semana</Label>
+                    <span className="text-[10px] text-muted-foreground">tem prioridade sobre os presets de período</span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {DAY_KEYS.map((dk) => {
+                      const isToday = dayKeyFromIndex(effectiveNow().getDay()) === dk;
+                      return (
+                        <div
+                          key={dk}
+                          className={`rounded-md border p-2 space-y-1 ${isToday ? 'border-primary bg-primary/10' : 'border-border/50 bg-background'}`}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xs font-medium">{DAY_PRESETS[dk].emoji} {DAY_PRESETS[dk].label}</span>
+                            {isToday && <span className="text-[9px] opacity-80">HOJE</span>}
+                          </div>
+                          <Select
+                            value={dayVoices[dk] || '__global__'}
+                            onValueChange={(v) =>
+                              setDayVoices((prev) => ({ ...prev, [dk]: v === '__global__' ? '' : v }))
+                            }
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Voz" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__global__">— Usar voz do período —</SelectItem>
+                              {VOICES.map((vo) => (
+                                <SelectItem key={vo.id} value={vo.id}>{vo.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
