@@ -119,6 +119,14 @@ export function LocucaoIAView() {
   });
   const [lastBlock, setLastBlock] = useState<BlockExtraction | null>(null);
   const [loadingGrade, setLoadingGrade] = useState(false);
+  const [locPosition, setLocPosition] = useState<LocPosition>(() => {
+    return (localStorage.getItem('locucaoIA_position') as LocPosition) || 'inicio_fim';
+  });
+  const [autoInsertInGrade, setAutoInsertInGrade] = useState<boolean>(() => {
+    const v = localStorage.getItem('locucaoIA_autoInsertInGrade');
+    return v === null ? true : v === 'true';
+  });
+  const [injectingGrade, setInjectingGrade] = useState(false);
 
   const [generating, setGenerating] = useState<'anuncio' | 'desanuncio' | null>(null);
   const [audioUrls, setAudioUrls] = useState<{ anuncio?: { url: string; base64: string }; desanuncio?: { url: string; base64: string } }>({});
