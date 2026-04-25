@@ -183,6 +183,19 @@ export function LocucaoIAView() {
     return v === null ? true : v === 'true';
   });
 
+  // Simulação de data/hora (apenas pré-visualização — não afeta geração real, a menos que o usuário aplique).
+  const [simulating, setSimulating] = useState(false);
+  const [simDay, setSimDay] = useState<number>(new Date().getDay()); // 0..6
+  const [simHour, setSimHour] = useState<number>(new Date().getHours()); // 0..23
+  const effectiveNow = (): Date => {
+    if (!simulating) return new Date();
+    const d = new Date();
+    // Ajusta para o dia da semana escolhido
+    d.setDate(d.getDate() + (simDay - d.getDay()));
+    d.setHours(simHour, 0, 0, 0);
+    return d;
+  };
+
   const { config } = useRadioStore();
 
   const [slot, setSlot] = useState<Slot>({
@@ -313,8 +326,8 @@ export function LocucaoIAView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const previewAnuncio = useMemo(() => applyTemplate(templates.anuncio, slot), [templates.anuncio, slot]);
-  const previewDesanuncio = useMemo(() => applyTemplate(templates.desanuncio, slot), [templates.desanuncio, slot]);
+  const previewAnuncio = useMemo(() => applyTemplate(templates.anuncio, slot, effectiveNow()), [templates.anuncio, slot, simulating, simDay, simHour]);
+  const previewDesanuncio = useMemo(() => applyTemplate(templates.desanuncio, slot, effectiveNow()), [templates.desanuncio, slot, simulating, simDay, simHour]);
 
   // Prévia em tempo real da linha do bloco com LOC/LOC_END nas posições escolhidas
   const blockPreview = useMemo(() => {
@@ -398,6 +411,7 @@ export function LocucaoIAView() {
         textToUse = applyTemplate(
           kind === 'anuncio' ? templates.anuncio : templates.desanuncio,
           refreshedSlot,
+          effectiveNow(),
         );
       }
     }
@@ -408,7 +422,7 @@ export function LocucaoIAView() {
     }
     setGenerating(kind);
     // Resolve voz: se usePresetVoice e o preset ativo tem voz definida, usa-a; senão usa a global.
-    const activePreset = detectActivePreset();
+    const activePreset = detectActivePreset(effectiveNow());
     const presetVoice = usePresetVoice ? presetVoices[activePreset] : '';
     const effectiveVoiceId = presetVoice || voiceId;
     try {
@@ -766,8 +780,9 @@ export function LocucaoIAView() {
                     <Label className="text-xs font-semibold text-primary">⚡ Presets de prompt + voz por período</Label>
                     <p className="text-xs text-muted-foreground mt-1">
                       Clique no preset para aplicar o texto. Escolha uma <strong>voz para cada período</strong> —
-                      ao gerar, o sistema usará automaticamente a voz do período atual{' '}
-                      (<em>agora: {PRESETS[detectActivePreset()].emoji} {PRESETS[detectActivePreset()].label}</em>).
+                      ao gerar, o sistema usará automaticamente a voz do período{' '}
+                      {simulating ? <strong className="text-primary">simulado</strong> : 'atual'}{' '}
+                      (<em>{PRESETS[detectActivePreset(effectiveNow())].emoji} {PRESETS[detectActivePreset(effectiveNow())].label}</em>).
                     </p>
                   </div>
                   <div className="flex items-center gap-2 px-2 py-1.5 rounded border border-border/50 bg-background">
@@ -782,9 +797,74 @@ export function LocucaoIAView() {
                   </div>
                 </div>
 
+                {/* SIMULADOR DE DATA/HORA */}
+                <div className={`rounded-md border p-2.5 space-y-2 ${simulating ? 'border-amber-500/50 bg-amber-500/10' : 'border-border/40 bg-background'}`}>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <Label className="text-xs font-semibold flex items-center gap-1.5">
+                      🧪 Simular dia/hora
+                      {simulating && <span className="text-[10px] font-normal text-amber-600 dark:text-amber-400">(modo simulação ativo)</span>}
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="sim-toggle"
+                        checked={simulating}
+                        onCheckedChange={(v) => {
+                          setSimulating(v);
+                          if (v) {
+                            setSimDay(new Date().getDay());
+                            setSimHour(new Date().getHours());
+                          }
+                        }}
+                      />
+                      <Label htmlFor="sim-toggle" className="text-xs cursor-pointer">Ativar</Label>
+                    </div>
+                  </div>
+                  {simulating && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Dia da semana</Label>
+                          <Select value={String(simDay)} onValueChange={(v) => setSimDay(Number(v))}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {DAY_NAMES.map((name, idx) => (
+                                <SelectItem key={idx} value={String(idx)}>{name.charAt(0).toUpperCase() + name.slice(1)}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Hora ({simHour.toString().padStart(2, '0')}:00)</Label>
+                          <Slider
+                            value={[simHour]}
+                            min={0}
+                            max={23}
+                            step={1}
+                            onValueChange={([v]) => setSimHour(v)}
+                          />
+                        </div>
+                      </div>
+                      {(() => {
+                        const sim = effectiveNow();
+                        const preset = detectActivePreset(sim);
+                        const vars = getDynamicVars(sim);
+                        const vId = usePresetVoice ? (presetVoices[preset] || voiceId) : voiceId;
+                        const vLabel = VOICES.find((v) => v.id === vId)?.label || 'voz desconhecida';
+                        return (
+                          <div className="rounded border border-border/40 bg-background p-2 text-xs space-y-1">
+                            <div>📅 <strong>{vars.dia}</strong> · {String(simHour).padStart(2, '0')}h00 · período <strong>{vars.periodo}</strong> · <em>{vars.saudacao}</em></div>
+                            <div>⚡ Preset ativo: <strong>{PRESETS[preset].emoji} {PRESETS[preset].label}</strong></div>
+                            <div>🎤 Voz a ser usada: <strong>{vLabel.split(' —')[0]}</strong> {!presetVoices[preset] && usePresetVoice && <span className="text-muted-foreground">(fallback global — defina uma voz no preset)</span>}</div>
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {(Object.keys(PRESETS) as PresetKey[]).map((k) => {
-                    const isActive = detectActivePreset() === k;
+                    const isActive = detectActivePreset(effectiveNow()) === k;
                     return (
                       <div
                         key={k}
