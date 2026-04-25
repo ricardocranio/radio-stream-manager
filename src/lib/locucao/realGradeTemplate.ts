@@ -19,7 +19,7 @@ export interface GradePosition {
   /** Token bruto do template (ex: 'mus', 'vht', 'VHTN', '"SHAKE_MIX_BLOCO01_FINAL_DE_SEMANA.MP3"'). */
   token: string;
   /** Tipo derivado pra estilização e legenda. */
-  kind: 'mus' | 'vht' | 'vhtn' | 'fun' | 'fixed';
+  kind: 'mus' | 'vht' | 'vhtn' | 'fun' | 'rom' | 'fixed';
   /** Nome amigável pra exibição (ex: "SHAKE_MIX 01" ou "música"). */
   label: string;
 }
