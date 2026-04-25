@@ -2,12 +2,12 @@
  * Card "Grade 24h" da aba Sequência.
  *
  * Mostra TODAS as 24 horas do dia selecionado, com:
- *  - Programa fixo daquele bloco (se houver) — editável
+ *  - Programa fixo daquele bloco (editável)
  *  - Status da Locução (✓ aceita | ⛔ bloqueada | 📰 após NOTÍCIAS) — editável
- *  - Pré-visualização da sequência ativa (compacta) por hora
+ *  - Posições da sequência ativa NAQUELA hora (editáveis: add/remove/reorder/trocar fonte)
  *
- * Edição inline por hora: o usuário pode forçar bloqueio/liberação da LOC e
- * renomear o programa exibido — persistido em `policy.hourOverrides`.
+ * Edição inline: o usuário pode bloquear/liberar LOC, renomear o programa e
+ * sobrescrever a sequência inteira para uma hora específica.
  */
 
 import { useMemo, useState } from 'react';
@@ -17,7 +17,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar, Clock, Mic, Ban, Newspaper, Pencil, RotateCcw, Check, X } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Calendar, Clock, Mic, Ban, Newspaper, Pencil, RotateCcw, Check, X,
+  Plus, Trash2, ArrowUp, ArrowDown,
+} from 'lucide-react';
 import {
   DAY_KEYS,
   DAY_LABELS,
@@ -30,8 +35,10 @@ import {
   overrideKey,
   type DayKey,
   type LocucaoSchedulePolicy,
+  type HourOverridePosition,
 } from '@/lib/locucao/locucaoSchedulePolicy';
 import { getFixedScheduleForDay, type FixedSlot } from '@/lib/locucao/fixedScheduleMap';
+import { useRadioStore } from '@/store/radioStore';
 import type { SequenceConfig, ProgramSchedule } from '@/types/radio';
 import { useToast } from '@/hooks/use-toast';
 
@@ -48,7 +55,9 @@ interface HourRow {
   fixedSlot?: FixedSlot;
   locStatus: 'allowed' | 'after-news' | 'blocked-program' | 'blocked-time' | 'blocked-day' | 'forced-allow' | 'forced-block';
   reason: string;
-  override?: { locked?: boolean; programName?: string };
+  override?: { locked?: boolean; programName?: string; sequence?: HourOverridePosition[] };
+  effectiveSequence: Array<{ position: number; radioSource: string; customFileName?: string }>;
+  hasCustomSeq: boolean;
 }
 
 function findFixedSlotForHour(slots: FixedSlot[], hour: number): FixedSlot | undefined {
@@ -77,21 +86,59 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   const [editProgramName, setEditProgramName] = useState('');
   const { toast } = useToast();
 
+  const { stations, fixedContent } = useRadioStore();
+
   const fixedSlots = useMemo(() => getFixedScheduleForDay(selectedDay), [selectedDay]);
+
+  // Opções para o select de fonte
+  const sourceOptions = useMemo(() => {
+    const opts: Array<{ value: string; label: string; group: string }> = [];
+    stations.filter((s) => s.enabled).forEach((s) => opts.push({ value: s.id, label: `📻 ${s.name}`, group: 'Emissoras' }));
+    fixedContent.filter((c) => c.enabled).forEach((c) => opts.push({ value: `fixo_${c.id}`, label: `📌 ${c.name}`, group: 'Conteúdo Fixo' }));
+    [
+      ['genre_SERTANEJO', '🎸 Sertanejo'],
+      ['genre_PAGODE', '🥁 Pagode'],
+      ['genre_FUNK', '🎵 Funk'],
+      ['genre_POP', '🎤 Pop'],
+      ['genre_ROCK,METAL', '🤘 Rock & Metal'],
+      ['genre_ROMANTICO', '💕 Romântico'],
+      ['genre_DANCE,ELETRONICA', '🎧 Dance'],
+    ].forEach(([v, l]) => opts.push({ value: v, label: l, group: 'Gêneros' }));
+    opts.push({ value: 'random_pop', label: '🎲 Aleatório', group: 'Especiais' });
+    opts.push({ value: 'top50', label: '🏆 TOP25', group: 'Especiais' });
+    opts.push({ value: 'LOC', label: '🎙️ LOC — Abertura', group: 'Locução' });
+    opts.push({ value: 'LOC_END', label: '🎙️ LOC_END — Fechamento', group: 'Locução' });
+    return opts;
+  }, [stations, fixedContent]);
+
+  const groupedSources = useMemo(() => {
+    const g: Record<string, typeof sourceOptions> = {};
+    sourceOptions.forEach((o) => { (g[o.group] ||= []).push(o); });
+    return g;
+  }, [sourceOptions]);
 
   const persist = (next: LocucaoSchedulePolicy) => {
     setPolicy(next);
     savePolicy(next);
   };
 
-  const setOverride = (hour: number, patch: { locked?: boolean | null; programName?: string | null }) => {
+  const patchOverride = (hour: number, patch: Partial<{ locked: boolean | null; programName: string | null; sequence: HourOverridePosition[] | null }>) => {
     const key = overrideKey(selectedDay, hour);
     const prev = policy.hourOverrides?.[key] || {};
-    const next: { locked?: boolean; programName?: string } = { ...prev };
-    if (patch.locked === null) delete next.locked;
-    else if (patch.locked !== undefined) next.locked = patch.locked;
-    if (patch.programName === null) delete next.programName;
-    else if (patch.programName !== undefined) next.programName = patch.programName;
+    const next: { locked?: boolean; programName?: string; sequence?: HourOverridePosition[] } = { ...prev };
+
+    if ('locked' in patch) {
+      if (patch.locked === null) delete next.locked;
+      else if (patch.locked !== undefined) next.locked = patch.locked;
+    }
+    if ('programName' in patch) {
+      if (patch.programName === null) delete next.programName;
+      else if (patch.programName !== undefined) next.programName = patch.programName;
+    }
+    if ('sequence' in patch) {
+      if (patch.sequence === null) delete next.sequence;
+      else if (patch.sequence !== undefined) next.sequence = patch.sequence;
+    }
 
     const overrides = { ...(policy.hourOverrides || {}) };
     if (Object.keys(next).length === 0) delete overrides[key];
@@ -106,6 +153,51 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     delete overrides[key];
     persist({ ...policy, hourOverrides: overrides });
     toast({ title: 'Override removido', description: `${hour.toString().padStart(2, '0')}:00 voltou ao padrão.` });
+  };
+
+  // Manipulação da sequência customizada por hora
+  const getCurrentSeq = (hour: number): HourOverridePosition[] => {
+    const ovr = policy.hourOverrides?.[overrideKey(selectedDay, hour)];
+    if (ovr?.sequence) return ovr.sequence;
+    return sequence.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
+  };
+
+  const setSeq = (hour: number, items: HourOverridePosition[]) => {
+    const renumbered = items.map((it, i) => ({ ...it, position: i + 1 }));
+    patchOverride(hour, { sequence: renumbered });
+  };
+
+  const addPos = (hour: number) => {
+    const cur = getCurrentSeq(hour);
+    setSeq(hour, [...cur, { position: cur.length + 1, radioSource: stations[0]?.id || 'random_pop' }]);
+  };
+
+  const removePos = (hour: number, idx: number) => {
+    const cur = getCurrentSeq(hour);
+    if (cur.length <= 1) {
+      toast({ title: 'Mínimo 1 posição', variant: 'destructive' });
+      return;
+    }
+    setSeq(hour, cur.filter((_, i) => i !== idx));
+  };
+
+  const movePos = (hour: number, idx: number, dir: -1 | 1) => {
+    const cur = [...getCurrentSeq(hour)];
+    const target = idx + dir;
+    if (target < 0 || target >= cur.length) return;
+    [cur[idx], cur[target]] = [cur[target], cur[idx]];
+    setSeq(hour, cur);
+  };
+
+  const changeSource = (hour: number, idx: number, value: string) => {
+    const cur = [...getCurrentSeq(hour)];
+    cur[idx] = { ...cur[idx], radioSource: value };
+    setSeq(hour, cur);
+  };
+
+  const resetSeq = (hour: number) => {
+    patchOverride(hour, { sequence: null });
+    toast({ title: 'Sequência restaurada', description: `${hour.toString().padStart(2, '0')}:00 voltou à sequência padrão.` });
   };
 
   const rows: HourRow[] = useMemo(() => {
@@ -127,7 +219,6 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
       let locStatus: HourRow['locStatus'] = 'allowed';
       let reason = 'Bloco aberto para LOC';
 
-      // Override manual vence
       if (override?.locked === true) {
         locStatus = 'forced-block';
         reason = 'Bloqueado manualmente pelo usuário';
@@ -154,9 +245,16 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
         }
       }
 
-      return { hour, programName, fixedSlot: slot, locStatus, reason, override };
+      const effectiveSequence = override?.sequence || sequence.map((s) => ({
+        position: s.position, radioSource: s.radioSource, customFileName: s.customFileName,
+      }));
+
+      return {
+        hour, programName, fixedSlot: slot, locStatus, reason, override,
+        effectiveSequence, hasCustomSeq: !!override?.sequence,
+      };
     });
-  }, [selectedDay, policy, fixedSlots, programs]);
+  }, [selectedDay, policy, fixedSlots, programs, sequence]);
 
   const statusBadge = (row: HourRow) => {
     switch (row.locStatus) {
@@ -194,8 +292,6 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
         );
     }
   };
-
-  const seqPreview = sequence.slice(0, 6);
 
   const counts = useMemo(() => {
     const c = { allowed: 0, news: 0, blocked: 0 };
@@ -242,7 +338,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
             </Button>
           ))}
           <span className="text-[10px] text-muted-foreground ml-2">
-            💡 Clique no <Pencil className="w-3 h-3 inline" /> para editar uma hora
+            💡 Clique no <Pencil className="w-3 h-3 inline" /> para editar posições, programa e LOC
           </span>
         </div>
       </CardHeader>
@@ -250,7 +346,12 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
         <div className="divide-y divide-border">
           {rows.map((row) => {
             const isLive = row.hour === new Date().getHours() && selectedDay === today;
-            const hasOverride = !!row.override && (row.override.locked !== undefined || row.override.programName !== undefined);
+            const hasOverride = !!row.override && (
+              row.override.locked !== undefined ||
+              row.override.programName !== undefined ||
+              row.override.sequence !== undefined
+            );
+            const showSeq = row.locStatus !== 'blocked-program' && row.locStatus !== 'forced-block' && row.locStatus !== 'blocked-day' && row.locStatus !== 'blocked-time';
             return (
               <div
                 key={row.hour}
@@ -268,30 +369,30 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                   {hasOverride && !isLive && <span className="text-[9px] text-amber-400 uppercase tracking-wide">editado</span>}
                 </div>
 
-                {/* Programa + sequência preview */}
+                {/* Programa + posições da sequência */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium text-foreground truncate">{row.programName}</span>
                     {row.fixedSlot?.note && (
                       <span className="text-[10px] text-muted-foreground italic">({row.fixedSlot.note})</span>
                     )}
+                    {row.hasCustomSeq && (
+                      <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30">
+                        seq. custom ({row.effectiveSequence.length})
+                      </Badge>
+                    )}
                   </div>
-                  {row.locStatus === 'allowed' || row.locStatus === 'after-news' || row.locStatus === 'forced-allow' ? (
+                  {showSeq ? (
                     <div className="flex gap-0.5 mt-1 flex-wrap">
-                      {seqPreview.map((it) => (
+                      {row.effectiveSequence.map((it) => (
                         <span
                           key={it.position}
                           className={`text-[9px] px-1.5 py-0.5 rounded font-mono border ${getStationColor(it.radioSource)}`}
-                          title={getSourceDisplayName(it.radioSource)}
+                          title={`Posição ${it.position} — ${getSourceDisplayName(it.radioSource)}`}
                         >
-                          {it.position}
+                          {it.position.toString().padStart(2, '0')}·{getSourceDisplayName(it.radioSource).slice(0, 6)}
                         </span>
                       ))}
-                      {sequence.length > 6 && (
-                        <span className="text-[9px] px-1 text-muted-foreground self-center">
-                          +{sequence.length - 6}
-                        </span>
-                      )}
                     </div>
                   ) : (
                     <div className="text-[10px] text-muted-foreground mt-1">{row.reason}</div>
@@ -323,7 +424,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-72" align="end">
+                  <PopoverContent className="w-[420px] p-3" align="end">
                     <div className="space-y-3">
                       <div className="border-b border-border pb-2">
                         <div className="text-sm font-semibold">
@@ -342,7 +443,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                             size="sm"
                             variant={row.override?.locked === false ? 'default' : 'outline'}
                             className="flex-1 h-7 text-[11px] gap-1"
-                            onClick={() => setOverride(row.hour, { locked: false })}
+                            onClick={() => patchOverride(row.hour, { locked: false })}
                           >
                             <Mic className="w-3 h-3" /> Liberar
                           </Button>
@@ -350,7 +451,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                             size="sm"
                             variant={row.override?.locked === true ? 'destructive' : 'outline'}
                             className="flex-1 h-7 text-[11px] gap-1"
-                            onClick={() => setOverride(row.hour, { locked: true })}
+                            onClick={() => patchOverride(row.hour, { locked: true })}
                           >
                             <Ban className="w-3 h-3" /> Bloquear
                           </Button>
@@ -358,7 +459,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                             size="sm"
                             variant="ghost"
                             className="h-7 px-2 text-[11px]"
-                            onClick={() => setOverride(row.hour, { locked: null })}
+                            onClick={() => patchOverride(row.hour, { locked: null })}
                             title="Voltar ao automático"
                           >
                             Auto
@@ -381,13 +482,128 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                             variant="default"
                             className="h-7 w-7"
                             onClick={() => {
-                              setOverride(row.hour, { programName: editProgramName.trim() || null });
-                              toast({ title: 'Programa atualizado', description: `${row.hour.toString().padStart(2, '0')}:00` });
+                              patchOverride(row.hour, { programName: editProgramName.trim() || null });
+                              toast({ title: 'Programa atualizado' });
                             }}
                             title="Salvar"
                           >
                             <Check className="w-3.5 h-3.5" />
                           </Button>
+                        </div>
+                      </div>
+
+                      {/* Sequência de posições */}
+                      <div className="space-y-1.5 border-t border-border pt-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">
+                            Posições da sequência {row.hasCustomSeq && <span className="text-amber-400">(custom)</span>}
+                          </Label>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-[10px] gap-1"
+                              onClick={() => addPos(row.hour)}
+                            >
+                              <Plus className="w-3 h-3" /> Posição
+                            </Button>
+                            {row.hasCustomSeq && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-2 text-[10px] gap-1 text-amber-400"
+                                onClick={() => resetSeq(row.hour)}
+                                title="Voltar à sequência padrão"
+                              >
+                                <RotateCcw className="w-3 h-3" /> Padrão
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        <ScrollArea className="h-[200px] rounded border border-border p-1">
+                          <div className="space-y-1">
+                            {row.effectiveSequence.map((it, idx) => (
+                              <div
+                                key={`${row.hour}-${idx}`}
+                                className="flex items-center gap-1 p-1 rounded bg-secondary/40 border border-border"
+                              >
+                                <span className="font-mono text-[10px] font-bold text-foreground w-5 text-center">
+                                  {(idx + 1).toString().padStart(2, '0')}
+                                </span>
+                                <Select
+                                  value={it.radioSource}
+                                  onValueChange={(v) => {
+                                    if (!row.hasCustomSeq) {
+                                      // Materializa a sequência atual antes da edição
+                                      patchOverride(row.hour, { sequence: row.effectiveSequence });
+                                      setTimeout(() => changeSource(row.hour, idx, v), 0);
+                                    } else {
+                                      changeSource(row.hour, idx, v);
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="flex-1 h-7 text-[11px]">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-[280px]">
+                                    {Object.entries(groupedSources).map(([group, opts]) => (
+                                      <div key={group}>
+                                        <div className="px-2 py-1 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider border-t border-border first:border-t-0">
+                                          {group}
+                                        </div>
+                                        {opts.map((o) => (
+                                          <SelectItem key={o.value} value={o.value} className="text-xs">
+                                            {o.label}
+                                          </SelectItem>
+                                        ))}
+                                      </div>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => {
+                                    if (!row.hasCustomSeq) patchOverride(row.hour, { sequence: row.effectiveSequence });
+                                    setTimeout(() => movePos(row.hour, idx, -1), 0);
+                                  }}
+                                  disabled={idx === 0}
+                                  title="Subir"
+                                >
+                                  <ArrowUp className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => {
+                                    if (!row.hasCustomSeq) patchOverride(row.hour, { sequence: row.effectiveSequence });
+                                    setTimeout(() => movePos(row.hour, idx, 1), 0);
+                                  }}
+                                  disabled={idx === row.effectiveSequence.length - 1}
+                                  title="Descer"
+                                >
+                                  <ArrowDown className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                                  onClick={() => {
+                                    if (!row.hasCustomSeq) patchOverride(row.hour, { sequence: row.effectiveSequence });
+                                    setTimeout(() => removePos(row.hour, idx), 0);
+                                  }}
+                                  title="Remover"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                        <div className="text-[9px] text-muted-foreground italic">
+                          💡 Editar uma posição cria uma sequência customizada só desta hora. Use "Padrão" para voltar à sequência global.
                         </div>
                       </div>
 
@@ -399,8 +615,9 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                           className="flex-1 h-7 text-[11px] gap-1"
                           onClick={() => clearOverride(row.hour)}
                           disabled={!hasOverride}
+                          title="Remove TODOS os overrides desta hora"
                         >
-                          <RotateCcw className="w-3 h-3" /> Resetar
+                          <RotateCcw className="w-3 h-3" /> Resetar tudo
                         </Button>
                         <Button
                           size="sm"
