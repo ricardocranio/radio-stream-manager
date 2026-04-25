@@ -667,7 +667,10 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                           </div>
                           <ScrollArea className="h-[200px] rounded border border-border p-1">
                             <div className="space-y-1">
-                              {draft.sequence.map((it, idx) => (
+                              {draft.sequence.map((it, idx) => {
+                                const optsForThis = getOptionsForValue(it.radioSource);
+                                const grouped = groupOptions(optsForThis);
+                                return (
                                 <div
                                   key={`${row.hour}-${idx}`}
                                   className="flex items-center gap-1 p-1 rounded bg-secondary/40 border border-border"
@@ -683,7 +686,20 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent className="max-h-[280px]">
-                                      {Object.entries(groupedSources).map(([group, opts]) => (
+                                      {Object.entries(grouped).map(([group, opts]) => (
+                                        <div key={group}>
+                                          <div className="px-2 py-1 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider border-t border-border first:border-t-0">
+                                            {group}
+                                          </div>
+                                          {opts.map((o) => (
+                                            <SelectItem key={o.value} value={o.value} className="text-xs">
+                                              {o.label}
+                                            </SelectItem>
+                                          ))}
+                                        </div>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
                                         <div key={group}>
                                           <div className="px-2 py-1 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider border-t border-border first:border-t-0">
                                             {group}
