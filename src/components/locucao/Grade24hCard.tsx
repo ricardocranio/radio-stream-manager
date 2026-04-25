@@ -700,19 +700,6 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                                       ))}
                                     </SelectContent>
                                   </Select>
-                                        <div key={group}>
-                                          <div className="px-2 py-1 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider border-t border-border first:border-t-0">
-                                            {group}
-                                          </div>
-                                          {opts.map((o) => (
-                                            <SelectItem key={o.value} value={o.value} className="text-xs">
-                                              {o.label}
-                                            </SelectItem>
-                                          ))}
-                                        </div>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
                                   <Button
                                     variant="ghost" size="icon" className="h-6 w-6"
                                     onClick={() => draftMovePos(idx, -1)}
