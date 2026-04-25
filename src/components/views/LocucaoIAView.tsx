@@ -197,6 +197,7 @@ export function LocucaoIAView() {
   const [usePresetVoice, setUsePresetVoice] = useState<boolean>(() => {
     const v = localStorage.getItem(STORAGE_KEY_USE_PRESET_VOICE);
     return v === null ? true : v === 'true';
+  });
   // Mapa: dia da semana → voiceId. Tem prioridade sobre o preset de período.
   const [dayVoices, setDayVoices] = useState<Record<DayPresetKey, string>>(() => {
     const empty: Record<DayPresetKey, string> = { dom: '', seg: '', ter: '', qua: '', qui: '', sex: '', sab: '' };
