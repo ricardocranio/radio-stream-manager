@@ -14,7 +14,17 @@
  *   3. Sem posição manual + sem Notícias → comportamento padrão (1ª posição musical).
  */
 
+export type DayKey = 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab';
+export const DAY_KEYS: DayKey[] = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+export const DAY_LABELS: Record<DayKey, string> = {
+  dom: 'Domingo', seg: 'Segunda', ter: 'Terça', qua: 'Quarta',
+  qui: 'Quinta', sex: 'Sexta', sab: 'Sábado',
+};
+export function dayKeyFromDate(d: Date): DayKey { return DAY_KEYS[d.getDay()]; }
+
 export interface LocucaoSchedulePolicy {
+  /** Dias da semana onde a locução PODE entrar. Vazio = todos. */
+  allowedDays: DayKey[];
   /** Horários HH:MM permitidos. Lista vazia = TODOS os horários permitidos. */
   allowedTimes: string[];
   /** Substrings (case-insensitive) que, se aparecerem no programLabel, bloqueiam o bloco. */
@@ -26,8 +36,21 @@ export interface LocucaoSchedulePolicy {
 }
 
 export const DEFAULT_POLICY: LocucaoSchedulePolicy = {
-  allowedTimes: [], // [] = sem restrição
-  blockedPrograms: ['Rádio Revista', 'Sintonia Total', 'Voz do Brasil', 'Painel Flashback'],
+  // Sábado fora por padrão (programação fixa o dia inteiro: Shake Mix → Conexão Mix →
+  // Mega Mix → Sem Parar → Mega Funk → Gas Total → Amnesia). Domingo permitido (livre).
+  allowedDays: ['dom', 'seg', 'ter', 'qua', 'qui', 'sex'],
+  allowedTimes: [],
+  blockedPrograms: [
+    'Sintonia Total',     // 09:00-10:30 seg-sex
+    'Painel Flashback',   // 12:00-12:30 seg-sex
+    'Rádio Revista',      // 19:00-19:30 seg-sex
+    'Voz do Brasil',      // 21:00 seg-sex (obrigatório legal)
+    'Misturadão',         // 20:00-20:30 seg-sex
+    'Songs of Love',      // 22:00+ seg-sex
+    // FDS (caso allowedDays inclua sábado)
+    'Shake Mix', 'Conexão Mix', 'Mega Mix', 'Sem Parar',
+    'Mega Funk', 'Gas Total', 'Amnesia',
+  ],
   newsTokens: ['NOTICIAS'],
   enabled: true,
 };
@@ -51,6 +74,13 @@ export function savePolicy(p: LocucaoSchedulePolicy) {
   } catch { /* ignore */ }
 }
 
+/** Verifica se o dia da semana está permitido. */
+export function isDayAllowed(date: Date, policy: LocucaoSchedulePolicy): boolean {
+  if (!policy.enabled) return true;
+  if (!policy.allowedDays || policy.allowedDays.length === 0) return true;
+  return policy.allowedDays.includes(dayKeyFromDate(date));
+}
+
 /** Verifica se o horário está na whitelist (lista vazia = qualquer horário). */
 export function isTimeAllowed(time: string, policy: LocucaoSchedulePolicy): boolean {
   if (!policy.enabled) return true;
@@ -68,7 +98,7 @@ export function isProgramBlocked(programLabel: string, policy: LocucaoSchedulePo
 
 export interface BlockEligibility {
   allowed: boolean;
-  reason?: 'time-not-whitelisted' | 'program-blocked';
+  reason?: 'day-not-allowed' | 'time-not-whitelisted' | 'program-blocked';
   detail?: string;
 }
 
@@ -76,7 +106,11 @@ export function checkBlockEligibility(
   time: string,
   programLabel: string,
   policy: LocucaoSchedulePolicy,
+  date: Date = new Date(),
 ): BlockEligibility {
+  if (!isDayAllowed(date, policy)) {
+    return { allowed: false, reason: 'day-not-allowed', detail: `${DAY_LABELS[dayKeyFromDate(date)]} não está na lista de dias permitidos.` };
+  }
   if (!isTimeAllowed(time, policy)) {
     return { allowed: false, reason: 'time-not-whitelisted', detail: `Horário ${time} fora da whitelist.` };
   }
