@@ -211,15 +211,44 @@ export function LocucaoIAView() {
   };
 
   const generate = async (kind: 'anuncio' | 'desanuncio') => {
-    const text = kind === 'anuncio' ? previewAnuncio : previewDesanuncio;
-    if (!text.trim()) {
+    // If auto-from-grade is enabled, refresh the slot with the latest block data
+    // (anúncio = first 2 songs of next block; desanúncio = last 2 songs of next block)
+    let textToUse = kind === 'anuncio' ? previewAnuncio : previewDesanuncio;
+    if (autoFromGrade && isElectron) {
+      const block = await fillFromGrade(kind, true);
+      if (block) {
+        const refreshedSlot: Slot = {
+          ...slot,
+          hora: block.time,
+          ...(kind === 'anuncio'
+            ? {
+                musica1: block.first2[0]?.title || '',
+                artista1: block.first2[0]?.artist || '',
+                musica2: block.first2[1]?.title || '',
+                artista2: block.first2[1]?.artist || '',
+              }
+            : {
+                musica1: block.last2[0]?.title || '',
+                artista1: block.last2[0]?.artist || '',
+                musica2: block.last2[1]?.title || '',
+                artista2: block.last2[1]?.artist || '',
+              }),
+        };
+        textToUse = applyTemplate(
+          kind === 'anuncio' ? templates.anuncio : templates.desanuncio,
+          refreshedSlot,
+        );
+      }
+    }
+
+    if (!textToUse.trim()) {
       toast.error('Texto vazio — preencha as músicas/artistas primeiro.');
       return;
     }
     setGenerating(kind);
     try {
       const { data, error } = await supabase.functions.invoke('generate-locucao', {
-        body: { text, voiceId, ...settings },
+        body: { text: textToUse, voiceId, ...settings },
       });
       if (error) throw error;
       if (!data?.audioBase64) throw new Error('Resposta sem áudio');
