@@ -141,6 +141,11 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   // Opções para o select de fonte
   const sourceOptions = useMemo(() => {
     const opts: Array<{ value: string; label: string; group: string }> = [];
+    // Tokens REAIS da grade (mesmos que vão pro .txt)
+    opts.push({ value: 'grade_mus', label: '🎵 Música (mus)', group: 'Tokens da Grade' });
+    opts.push({ value: 'grade_vht', label: '🔔 Vinheta (vht)', group: 'Tokens da Grade' });
+    opts.push({ value: 'grade_vhtn', label: '📰 Vinheta Notícia (VHTN)', group: 'Tokens da Grade' });
+    opts.push({ value: 'grade_fun', label: '🎛️ Funk (fun)', group: 'Tokens da Grade' });
     stations.filter((s) => s.enabled).forEach((s) => opts.push({ value: s.id, label: `📻 ${s.name}`, group: 'Emissoras' }));
     fixedContent.filter((c) => c.enabled).forEach((c) => opts.push({ value: `fixo_${c.id}`, label: `📌 ${c.name}`, group: 'Conteúdo Fixo' }));
     [
@@ -159,11 +164,34 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     return opts;
   }, [stations, fixedContent]);
 
-  const groupedSources = useMemo(() => {
-    const g: Record<string, typeof sourceOptions> = {};
-    sourceOptions.forEach((o) => { (g[o.group] ||= []).push(o); });
+  /**
+   * Constrói as opções do select para UMA posição específica, garantindo que
+   * o valor atual (ex: `grade_fixed:SHAKE_MIX_BLOCO01`) sempre apareça como
+   * opção — caso contrário o Select ficaria visualmente vazio.
+   */
+  const getOptionsForValue = (currentValue: string) => {
+    const base = sourceOptions;
+    if (currentValue?.startsWith('grade_fixed:')) {
+      const label = currentValue.slice('grade_fixed:'.length);
+      return [
+        { value: currentValue, label: `📦 ${label} (arquivo fixo)`, group: 'Arquivo Fixo da Grade' },
+        ...base,
+      ];
+    }
+    if (currentValue && !base.find((o) => o.value === currentValue)) {
+      return [
+        { value: currentValue, label: `❓ ${currentValue}`, group: 'Atual' },
+        ...base,
+      ];
+    }
+    return base;
+  };
+
+  const groupOptions = (opts: Array<{ value: string; label: string; group: string }>) => {
+    const g: Record<string, typeof opts> = {};
+    opts.forEach((o) => { (g[o.group] ||= []).push(o); });
     return g;
-  }, [sourceOptions]);
+  };
 
   const persist = (next: LocucaoSchedulePolicy) => {
     setPolicy(next);
