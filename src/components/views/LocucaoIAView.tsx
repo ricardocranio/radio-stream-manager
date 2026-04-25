@@ -312,14 +312,17 @@ export function LocucaoIAView() {
         await persistAudio(kind, data.audioBase64, url, true);
       }
       if (autoInsertInGrade && lastBlock?.time && isElectron) {
-        // Mark only the relevant side: anúncio = início, desanúncio = fim
-        const pos: LocPosition = kind === 'anuncio' ? 'inicio' : 'fim';
+        // Anúncio insere apenas LOC (openPos); desanúncio insere apenas LOC_END (closePos)
         const r = await injectLocucaoInGrade({
           gradeFolder: config.gradeFolder,
           targetTime: lastBlock.time,
-          position: pos,
+          openPos: kind === 'anuncio' ? openPos : null,
+          closePos: kind === 'desanuncio' ? closePos : null,
         });
-        if (r.success) toast.success(`📌 Marcador "${pos === 'inicio' ? 'LOC' : 'LOC_END'}" inserido em ${lastBlock.time}`);
+        if (r.success) {
+          const marker = kind === 'anuncio' ? `LOC@${openPos}` : `LOC_END@${closePos}`;
+          toast.success(`📌 Marcador "${marker}" inserido em ${lastBlock.time}`);
+        }
       }
     } catch (err: any) {
       console.error('[LOCUCAO]', err);
