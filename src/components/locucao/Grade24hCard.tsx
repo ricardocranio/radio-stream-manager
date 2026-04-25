@@ -146,6 +146,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     opts.push({ value: 'grade_vht', label: '🔔 Vinheta (vht)', group: 'Tokens da Grade' });
     opts.push({ value: 'grade_vhtn', label: '📰 Vinheta Notícia (VHTN)', group: 'Tokens da Grade' });
     opts.push({ value: 'grade_fun', label: '🎛️ Funk (fun)', group: 'Tokens da Grade' });
+    opts.push({ value: 'grade_rom', label: '💕 Romântica (rom)', group: 'Tokens da Grade' });
     stations.filter((s) => s.enabled).forEach((s) => opts.push({ value: s.id, label: `📻 ${s.name}`, group: 'Emissoras' }));
     fixedContent.filter((c) => c.enabled).forEach((c) => opts.push({ value: `fixo_${c.id}`, label: `📌 ${c.name}`, group: 'Conteúdo Fixo' }));
     [
