@@ -33,6 +33,13 @@ export interface LocucaoSchedulePolicy {
   newsTokens: string[];
   /** Liga/desliga toda a política sem perder as listas. */
   enabled: boolean;
+  /**
+   * Overrides por hora e dia da semana (editáveis pela Grade 24h):
+   *   key = `${day}-${HH}` (ex.: "seg-07")
+   *   value.locked = força bloqueio (true) / força liberação (false) / undefined = usa regra normal
+   *   value.programName = sobrescreve o nome do programa exibido
+   */
+  hourOverrides?: Record<string, { locked?: boolean; programName?: string }>;
 }
 
 export const DEFAULT_POLICY: LocucaoSchedulePolicy = {
