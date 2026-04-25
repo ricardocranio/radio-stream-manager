@@ -38,6 +38,7 @@ import {
   type HourOverridePosition,
 } from '@/lib/locucao/locucaoSchedulePolicy';
 import { getFixedScheduleForDay, type FixedSlot } from '@/lib/locucao/fixedScheduleMap';
+import { getRealGradePositions, gradePosToRadioSource, type GradePosition } from '@/lib/locucao/realGradeTemplate';
 import { useRadioStore } from '@/store/radioStore';
 import type { SequenceConfig, ProgramSchedule } from '@/types/radio';
 import { useToast } from '@/hooks/use-toast';
