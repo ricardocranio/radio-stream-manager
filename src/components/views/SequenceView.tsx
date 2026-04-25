@@ -136,6 +136,14 @@ function SortableSequenceItem({ item, isFixoItem, isEditing, ...props }: Sortabl
               <SelectItem value="top50">🏆 TOP25 (Curadoria)</SelectItem>
               {props.fixedContentOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
             </>)}
+            <div className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); props.setCatLocucao(v => !v); }}>
+              <span>🎙️ Locução</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${props.catLocucao ? 'rotate-180' : ''}`} />
+            </div>
+            {props.catLocucao && (<>
+              <SelectItem value="LOC">🎙️ LOC — Abertura de locução</SelectItem>
+              <SelectItem value="LOC_END">🎙️ LOC_END — Fechamento de locução</SelectItem>
+            </>)}
             <div className="px-2 py-1.5 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between cursor-pointer hover:bg-secondary/50 rounded select-none" onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); props.setCatStations(v => !v); }}>
               <span>📻 Emissoras</span>
               <ChevronDown className={`w-3 h-3 transition-transform ${props.catStations ? 'rotate-180' : ''}`} />
