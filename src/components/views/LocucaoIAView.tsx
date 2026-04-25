@@ -17,7 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useRadioStore } from '@/store/radioStore';
 import { extractNextBlockFromGrade, type BlockExtraction } from '@/lib/locucao/gradeBlockReader';
-import { injectLocucaoInGrade, type LocPosition } from '@/lib/locucao/gradeBlockInjector';
+import { injectLocucaoInGrade } from '@/lib/locucao/gradeBlockInjector';
 
 const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
 
@@ -119,8 +119,19 @@ export function LocucaoIAView() {
   });
   const [lastBlock, setLastBlock] = useState<BlockExtraction | null>(null);
   const [loadingGrade, setLoadingGrade] = useState(false);
-  const [locPosition, setLocPosition] = useState<LocPosition>(() => {
-    return (localStorage.getItem('locucaoIA_position') as LocPosition) || 'inicio_fim';
+  // Numeric positions (1-based, counting only music tokens; ignores VHT/VHTN)
+  // openPos: posição da música ANTES da qual o LOC (abertura) é inserido
+  // closePos: posição da música APÓS a qual o LOC_END (fechamento) é inserido
+  // null = não inserir esse marcador
+  const [openPos, setOpenPos] = useState<number | null>(() => {
+    const v = localStorage.getItem('locucaoIA_openPos');
+    if (v === null) return 1;
+    return v === '' ? null : Number(v);
+  });
+  const [closePos, setClosePos] = useState<number | null>(() => {
+    const v = localStorage.getItem('locucaoIA_closePos');
+    if (v === null) return 7;
+    return v === '' ? null : Number(v);
   });
   const [autoInsertInGrade, setAutoInsertInGrade] = useState<boolean>(() => {
     const v = localStorage.getItem('locucaoIA_autoInsertInGrade');
@@ -138,7 +149,8 @@ export function LocucaoIAView() {
   useEffect(() => { localStorage.setItem(STORAGE_KEY_FOLDER, folder); }, [folder]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_AUTOSAVE, String(autoSave)); }, [autoSave]);
   useEffect(() => { localStorage.setItem('locucaoIA_autoFromGrade', String(autoFromGrade)); }, [autoFromGrade]);
-  useEffect(() => { localStorage.setItem('locucaoIA_position', locPosition); }, [locPosition]);
+  useEffect(() => { localStorage.setItem('locucaoIA_openPos', openPos === null ? '' : String(openPos)); }, [openPos]);
+  useEffect(() => { localStorage.setItem('locucaoIA_closePos', closePos === null ? '' : String(closePos)); }, [closePos]);
   useEffect(() => { localStorage.setItem('locucaoIA_autoInsertInGrade', String(autoInsertInGrade)); }, [autoInsertInGrade]);
 
   /** Inject LOC/LOC_END markers in the day's grade .txt at the targeted block time. */
@@ -152,10 +164,14 @@ export function LocucaoIAView() {
       const r = await injectLocucaoInGrade({
         gradeFolder: config.gradeFolder,
         targetTime: lastBlock.time,
-        position: locPosition,
+        openPos,
+        closePos,
       });
       if (r.success) {
-        if (!silent) toast.success(`📌 Locução marcada no bloco ${lastBlock.time} (${locPosition})`);
+        const parts: string[] = [];
+        if (openPos) parts.push(`LOC@${openPos}`);
+        if (closePos) parts.push(`LOC_END@${closePos}`);
+        if (!silent) toast.success(`📌 Locução marcada no bloco ${lastBlock.time} (${parts.join(' + ') || 'sem marcadores'})`);
         return true;
       }
       if (!silent) toast.error(r.error || 'Falha ao inserir na grade.');
@@ -296,14 +312,17 @@ export function LocucaoIAView() {
         await persistAudio(kind, data.audioBase64, url, true);
       }
       if (autoInsertInGrade && lastBlock?.time && isElectron) {
-        // Mark only the relevant side: anúncio = início, desanúncio = fim
-        const pos: LocPosition = kind === 'anuncio' ? 'inicio' : 'fim';
+        // Anúncio insere apenas LOC (openPos); desanúncio insere apenas LOC_END (closePos)
         const r = await injectLocucaoInGrade({
           gradeFolder: config.gradeFolder,
           targetTime: lastBlock.time,
-          position: pos,
+          openPos: kind === 'anuncio' ? openPos : null,
+          closePos: kind === 'desanuncio' ? closePos : null,
         });
-        if (r.success) toast.success(`📌 Marcador "${pos === 'inicio' ? 'LOC' : 'LOC_END'}" inserido em ${lastBlock.time}`);
+        if (r.success) {
+          const marker = kind === 'anuncio' ? `LOC@${openPos}` : `LOC_END@${closePos}`;
+          toast.success(`📌 Marcador "${marker}" inserido em ${lastBlock.time}`);
+        }
       }
     } catch (err: any) {
       console.error('[LOCUCAO]', err);
@@ -392,17 +411,34 @@ export function LocucaoIAView() {
                   <Sparkles className="h-4 w-4 text-primary" />
                   <span className="text-sm font-medium">Posição da locução no bloco</span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-end">
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto] gap-3 items-end">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Onde inserir o marcador</Label>
-                    <Select value={locPosition} onValueChange={(v) => setLocPosition(v as LocPosition)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="inicio">Início do bloco (LOC) — anúncio</SelectItem>
-                        <SelectItem value="fim">Final do bloco (LOC_END) — desanúncio</SelectItem>
-                        <SelectItem value="inicio_fim">Início e Final (anúncio + desanúncio)</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs">Posição abertura (LOC) — antes da música nº</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={20}
+                      value={openPos ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setOpenPos(v === '' || Number(v) <= 0 ? null : Number(v));
+                      }}
+                      placeholder="vazio = não inserir"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Posição fechamento (LOC_END) — após música nº</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={20}
+                      value={closePos ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setClosePos(v === '' || Number(v) <= 0 ? null : Number(v));
+                      }}
+                      placeholder="vazio = não inserir"
+                    />
                   </div>
                   <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-border/50 bg-background">
                     <Switch
@@ -425,10 +461,13 @@ export function LocucaoIAView() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Marcadores gravados na linha do bloco no <code className="px-1 bg-muted rounded">.txt</code> da grade:
-                  {' '}<code className="px-1 bg-muted rounded">LOC</code> (início) e
-                  {' '}<code className="px-1 bg-muted rounded">LOC_END</code> (fim).
-                  O player de automação reproduzirá o MP3 salvo nessas posições.
+                  Posições contam <strong>apenas músicas</strong> (VHT/VHTN são ignorados).
+                  Ex.: <code className="px-1 bg-muted rounded">abertura=1</code> insere{' '}
+                  <code className="px-1 bg-muted rounded">LOC</code> antes da 1ª música;{' '}
+                  <code className="px-1 bg-muted rounded">fechamento=7</code> insere{' '}
+                  <code className="px-1 bg-muted rounded">LOC_END</code> depois da 7ª música.
+                  Deixe vazio para não inserir aquele marcador.
+                  Você também pode editar manualmente esses tokens na <strong>Sequência Padrão</strong>.
                 </p>
               </div>
             </CardHeader>

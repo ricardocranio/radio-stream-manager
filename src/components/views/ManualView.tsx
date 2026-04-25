@@ -237,14 +237,19 @@ Com o interruptor **"Auto-ler grade"** ligado (padrão), o sistema lê o \`.txt\
 - **Desanúncio** → 2 **últimas** músicas do bloco.
 Use o botão **"Carregar próximo bloco"** para forçar a releitura. Os nomes são resolvidos lendo a tag ID3 dos arquivos da biblioteca.
 
-**🆕 Posição da locução no bloco:**
-Configure onde o marcador será inserido na linha do bloco:
-- **Início (LOC)** → anúncio (entrada do bloco).
-- **Final (LOC_END)** → desanúncio (saída do bloco).
-- **Início e Final** → ambos.
+**🆕 Posição da locução no bloco (controlada pelo usuário):**
+Configure dois campos numéricos em **Locuções IA → Gerar**:
+- **Posição abertura (LOC)** → o marcador \`LOC\` é inserido **antes** da música nº indicada (ex: \`1\` = abertura do bloco).
+- **Posição fechamento (LOC_END)** → o marcador \`LOC_END\` é inserido **depois** da música nº indicada (ex: \`7\` = fim do bloco).
+- Deixe vazio para **não** inserir aquele marcador.
+- A contagem considera **apenas músicas** — vinhetas (\`VHT\`/\`VHTN\`) são ignoradas.
 
-Com **"Inserir auto. ao gerar"** ligado (padrão), ao gerar o áudio o sistema escreve o marcador correspondente (\`LOC\` ou \`LOC_END\`) diretamente na linha do bloco no \`.txt\` da grade — assim a automação sabe exatamente onde reproduzir o MP3.
-Para inserir manualmente, use o botão **"Inserir na grade agora"**.
+Exemplo (abertura=1, fechamento=7) numa linha com VHT,M1,M2,VHTN,M3,M4,M5,M6,VHTN,M7:
+\`14:00 (PGM01) LOC,VHT,M1,M2,VHTN,M3,M4,M5,M6,VHTN,M7,LOC_END\`
+
+Você também pode editar manualmente os tokens \`LOC\` e \`LOC_END\` direto na **Sequência Padrão** (eles são tratados como separadores, igual a \`VHT\`).
+
+Com **"Inserir auto. ao gerar"** ligado (padrão), ao gerar o áudio do **Anúncio** o sistema escreve apenas o \`LOC\` na posição configurada; ao gerar o **Desanúncio**, escreve apenas o \`LOC_END\`. Use o botão **"Inserir na grade agora"** para aplicar ambos manualmente.
 
 **Quando usar:**
 - Anúncio: entrada do bloco — apresenta as 2 próximas músicas.
