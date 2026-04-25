@@ -446,12 +446,8 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                 <Popover
                   open={editingHour === row.hour}
                   onOpenChange={(o) => {
-                    if (o) {
-                      setEditingHour(row.hour);
-                      setEditProgramName(row.override?.programName || '');
-                    } else {
-                      setEditingHour(null);
-                    }
+                    if (o) openEditor(row.hour);
+                    else closeEditor();
                   }}
                 >
                   <PopoverTrigger asChild>
@@ -464,211 +460,188 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[420px] p-3" align="end">
-                    <div className="space-y-3">
-                      <div className="border-b border-border pb-2">
-                        <div className="text-sm font-semibold">
-                          Editar {row.hour.toString().padStart(2, '0')}:00 — {DAY_LABELS[selectedDay]}
+                  <PopoverContent className="w-[440px] p-3" align="end">
+                    {draft && editingHour === row.hour && (
+                      <div className="space-y-3">
+                        <div className="border-b border-border pb-2 flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-semibold">
+                              Editar {row.hour.toString().padStart(2, '0')}:00 — {DAY_LABELS[selectedDay]}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              Padrão: {row.fixedSlot?.program || 'Música livre'}
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30">
+                            rascunho
+                          </Badge>
                         </div>
-                        <div className="text-[10px] text-muted-foreground">
-                          Padrão: {row.fixedSlot?.program || 'Música livre'}
-                        </div>
-                      </div>
 
-                      {/* Locução */}
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Locução nesta hora</Label>
-                        <div className="flex gap-1">
+                        {/* Locução */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Locução nesta hora</Label>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant={draft.locked === false ? 'default' : 'outline'}
+                              className="flex-1 h-7 text-[11px] gap-1"
+                              onClick={() => updateDraft({ locked: false })}
+                            >
+                              <Mic className="w-3 h-3" /> Liberar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={draft.locked === true ? 'destructive' : 'outline'}
+                              className="flex-1 h-7 text-[11px] gap-1"
+                              onClick={() => updateDraft({ locked: true })}
+                            >
+                              <Ban className="w-3 h-3" /> Bloquear
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={draft.locked === undefined ? 'secondary' : 'ghost'}
+                              className="h-7 px-2 text-[11px]"
+                              onClick={() => updateDraft({ locked: undefined })}
+                              title="Voltar ao automático"
+                            >
+                              Auto
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Nome do programa */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Nome do programa</Label>
+                          <Input
+                            value={draft.programName}
+                            onChange={(e) => updateDraft({ programName: e.target.value })}
+                            placeholder={row.fixedSlot?.program || 'Música livre'}
+                            className="h-7 text-xs"
+                          />
+                        </div>
+
+                        {/* Sequência de posições */}
+                        <div className="space-y-1.5 border-t border-border pt-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs">
+                              Posições da sequência {draft.seqDirty && <span className="text-amber-400">(custom)</span>}
+                            </Label>
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 text-[10px] gap-1"
+                                onClick={draftAddPos}
+                              >
+                                <Plus className="w-3 h-3" /> Posição
+                              </Button>
+                              {draft.seqDirty && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-[10px] gap-1 text-amber-400"
+                                  onClick={draftResetSeq}
+                                  title="Voltar à sequência padrão"
+                                >
+                                  <RotateCcw className="w-3 h-3" /> Padrão
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          <ScrollArea className="h-[200px] rounded border border-border p-1">
+                            <div className="space-y-1">
+                              {draft.sequence.map((it, idx) => (
+                                <div
+                                  key={`${row.hour}-${idx}`}
+                                  className="flex items-center gap-1 p-1 rounded bg-secondary/40 border border-border"
+                                >
+                                  <span className="font-mono text-[10px] font-bold text-foreground w-5 text-center">
+                                    {(idx + 1).toString().padStart(2, '0')}
+                                  </span>
+                                  <Select
+                                    value={it.radioSource}
+                                    onValueChange={(v) => draftChangeSource(idx, v)}
+                                  >
+                                    <SelectTrigger className="flex-1 h-7 text-[11px]">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="max-h-[280px]">
+                                      {Object.entries(groupedSources).map(([group, opts]) => (
+                                        <div key={group}>
+                                          <div className="px-2 py-1 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider border-t border-border first:border-t-0">
+                                            {group}
+                                          </div>
+                                          {opts.map((o) => (
+                                            <SelectItem key={o.value} value={o.value} className="text-xs">
+                                              {o.label}
+                                            </SelectItem>
+                                          ))}
+                                        </div>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Button
+                                    variant="ghost" size="icon" className="h-6 w-6"
+                                    onClick={() => draftMovePos(idx, -1)}
+                                    disabled={idx === 0} title="Subir"
+                                  >
+                                    <ArrowUp className="w-3 h-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost" size="icon" className="h-6 w-6"
+                                    onClick={() => draftMovePos(idx, 1)}
+                                    disabled={idx === draft.sequence.length - 1} title="Descer"
+                                  >
+                                    <ArrowDown className="w-3 h-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost" size="icon"
+                                    className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                                    onClick={() => draftRemovePos(idx)}
+                                    title="Remover"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                          <div className="text-[9px] text-muted-foreground italic">
+                            💡 Mudanças só são aplicadas após clicar em <b>Salvar</b>.
+                          </div>
+                        </div>
+
+                        {/* Salvar / Cancelar / Resetar */}
+                        <div className="flex gap-1 pt-2 border-t border-border">
                           <Button
                             size="sm"
-                            variant={row.override?.locked === false ? 'default' : 'outline'}
-                            className="flex-1 h-7 text-[11px] gap-1"
-                            onClick={() => patchOverride(row.hour, { locked: false })}
+                            variant="outline"
+                            className="h-8 px-2 text-[11px] gap-1"
+                            onClick={() => { clearOverride(row.hour); closeEditor(); }}
+                            disabled={!hasOverride}
+                            title="Remove TODOS os overrides desta hora"
                           >
-                            <Mic className="w-3 h-3" /> Liberar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={row.override?.locked === true ? 'destructive' : 'outline'}
-                            className="flex-1 h-7 text-[11px] gap-1"
-                            onClick={() => patchOverride(row.hour, { locked: true })}
-                          >
-                            <Ban className="w-3 h-3" /> Bloquear
+                            <RotateCcw className="w-3 h-3" /> Resetar
                           </Button>
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-7 px-2 text-[11px]"
-                            onClick={() => patchOverride(row.hour, { locked: null })}
-                            title="Voltar ao automático"
+                            className="h-8 px-2 text-[11px] gap-1"
+                            onClick={closeEditor}
                           >
-                            Auto
+                            <X className="w-3 h-3" /> Cancelar
                           </Button>
-                        </div>
-                      </div>
-
-                      {/* Nome do programa */}
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Nome do programa</Label>
-                        <div className="flex gap-1">
-                          <Input
-                            value={editProgramName}
-                            onChange={(e) => setEditProgramName(e.target.value)}
-                            placeholder={row.fixedSlot?.program || 'Música livre'}
-                            className="h-7 text-xs"
-                          />
                           <Button
-                            size="icon"
+                            size="sm"
                             variant="default"
-                            className="h-7 w-7"
-                            onClick={() => {
-                              patchOverride(row.hour, { programName: editProgramName.trim() || null });
-                              toast({ title: 'Programa atualizado' });
-                            }}
-                            title="Salvar"
+                            className="flex-1 h-8 text-[11px] gap-1 bg-primary hover:bg-primary/90"
+                            onClick={() => commitDraft(row.hour)}
                           >
-                            <Check className="w-3.5 h-3.5" />
+                            <Save className="w-3.5 h-3.5" /> Salvar alterações
                           </Button>
                         </div>
                       </div>
-
-                      {/* Sequência de posições */}
-                      <div className="space-y-1.5 border-t border-border pt-2">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs">
-                            Posições da sequência {row.hasCustomSeq && <span className="text-amber-400">(custom)</span>}
-                          </Label>
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 px-2 text-[10px] gap-1"
-                              onClick={() => addPos(row.hour)}
-                            >
-                              <Plus className="w-3 h-3" /> Posição
-                            </Button>
-                            {row.hasCustomSeq && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 px-2 text-[10px] gap-1 text-amber-400"
-                                onClick={() => resetSeq(row.hour)}
-                                title="Voltar à sequência padrão"
-                              >
-                                <RotateCcw className="w-3 h-3" /> Padrão
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        <ScrollArea className="h-[200px] rounded border border-border p-1">
-                          <div className="space-y-1">
-                            {row.effectiveSequence.map((it, idx) => (
-                              <div
-                                key={`${row.hour}-${idx}`}
-                                className="flex items-center gap-1 p-1 rounded bg-secondary/40 border border-border"
-                              >
-                                <span className="font-mono text-[10px] font-bold text-foreground w-5 text-center">
-                                  {(idx + 1).toString().padStart(2, '0')}
-                                </span>
-                                <Select
-                                  value={it.radioSource}
-                                  onValueChange={(v) => {
-                                    if (!row.hasCustomSeq) {
-                                      // Materializa a sequência atual antes da edição
-                                      patchOverride(row.hour, { sequence: row.effectiveSequence });
-                                      setTimeout(() => changeSource(row.hour, idx, v), 0);
-                                    } else {
-                                      changeSource(row.hour, idx, v);
-                                    }
-                                  }}
-                                >
-                                  <SelectTrigger className="flex-1 h-7 text-[11px]">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent className="max-h-[280px]">
-                                    {Object.entries(groupedSources).map(([group, opts]) => (
-                                      <div key={group}>
-                                        <div className="px-2 py-1 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider border-t border-border first:border-t-0">
-                                          {group}
-                                        </div>
-                                        {opts.map((o) => (
-                                          <SelectItem key={o.value} value={o.value} className="text-xs">
-                                            {o.label}
-                                          </SelectItem>
-                                        ))}
-                                      </div>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6"
-                                  onClick={() => {
-                                    if (!row.hasCustomSeq) patchOverride(row.hour, { sequence: row.effectiveSequence });
-                                    setTimeout(() => movePos(row.hour, idx, -1), 0);
-                                  }}
-                                  disabled={idx === 0}
-                                  title="Subir"
-                                >
-                                  <ArrowUp className="w-3 h-3" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6"
-                                  onClick={() => {
-                                    if (!row.hasCustomSeq) patchOverride(row.hour, { sequence: row.effectiveSequence });
-                                    setTimeout(() => movePos(row.hour, idx, 1), 0);
-                                  }}
-                                  disabled={idx === row.effectiveSequence.length - 1}
-                                  title="Descer"
-                                >
-                                  <ArrowDown className="w-3 h-3" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 text-destructive hover:bg-destructive/10"
-                                  onClick={() => {
-                                    if (!row.hasCustomSeq) patchOverride(row.hour, { sequence: row.effectiveSequence });
-                                    setTimeout(() => removePos(row.hour, idx), 0);
-                                  }}
-                                  title="Remover"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        </ScrollArea>
-                        <div className="text-[9px] text-muted-foreground italic">
-                          💡 Editar uma posição cria uma sequência customizada só desta hora. Use "Padrão" para voltar à sequência global.
-                        </div>
-                      </div>
-
-                      {/* Reset / Fechar */}
-                      <div className="flex gap-1 pt-2 border-t border-border">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 h-7 text-[11px] gap-1"
-                          onClick={() => clearOverride(row.hour)}
-                          disabled={!hasOverride}
-                          title="Remove TODOS os overrides desta hora"
-                        >
-                          <RotateCcw className="w-3 h-3" /> Resetar tudo
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-[11px] gap-1"
-                          onClick={() => setEditingHour(null)}
-                        >
-                          <X className="w-3 h-3" /> Fechar
-                        </Button>
-                      </div>
-                    </div>
+                    )}
                   </PopoverContent>
                 </Popover>
               </div>
