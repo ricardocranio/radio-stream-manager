@@ -48,6 +48,13 @@ export interface HourOverridePosition {
   /** Source: id de rádio, "genre_XXX", "fixo_xxx", "LOC", "LOC_END", "file_...", etc. */
   radioSource: string;
   customFileName?: string;
+  /**
+   * Token bruto da grade (.txt) preservado quando a posição vem do template real
+   * (ex: 'mus', 'vht', 'VHTN', 'fun', 'rom', '"FIQUE_SABENDO_EDICAO01_SEGUNDA.mp3"').
+   * Usado pelo gerador de grade para reescrever a linha do bloco no .txt
+   * respeitando 1:1 a sequência editada pelo usuário no Grade 24h.
+   */
+  rawToken?: string;
 }
 
 export interface HourOverride {

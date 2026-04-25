@@ -42,6 +42,8 @@ import { saveOfflineSongCache, loadOfflineSongCache } from '@/lib/offlineSongCac
 import { saveCrossDayBuffer, loadCrossDayBuffer } from '@/lib/crossDayRepetition';
 import { loadBpmCacheFromDisk, enrichSongsWithBpmCache } from '@/lib/bpmCacheBridge';
 import { reportServiceHeartbeat } from '@/hooks/useServiceWatchdog';
+import { loadPolicy as loadLocucaoPolicy, getHourOverride, type DayKey } from '@/lib/locucao/locucaoSchedulePolicy';
+import { buildBlockFromOverride } from '@/lib/gradeBuilder/overrideBlockBuilder';
 
 // === MODULE-LEVEL VHT DURATION CACHE ===
 let _cachedAvgVhtDurationSec: number | null = null;
@@ -1115,6 +1117,35 @@ export function useAutoGradeBuilder() {
       console.log(`[GRADE] 🇧🇷 Voz do Brasil às ${timeStr} — OBRIGATÓRIO, ignora sequência agendada`);
       return generateVozDoBrasil(timeStr);
     }
+
+    // === GRADE 24h OVERRIDE: sequência editada pelo usuário tem prioridade ===
+    // Reescreve o bloco inteiro a partir das posições salvas em hourOverrides.
+    // (Voz do Brasil acima permanece intocável por obrigação legal.)
+    try {
+      const dayMap2: DayKey[] = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+      const todayKey: DayKey = (targetDay as DayKey) || dayMap2[new Date().getDay()];
+      const locPolicy = loadLocucaoPolicy();
+      const ovr = getHourOverride(locPolicy, todayKey, hour, minute);
+      if (ovr?.sequence && ovr.sequence.length > 0) {
+        const overrideProgramName = ovr.programName?.trim() || programName;
+        const overrideResult = await buildBlockFromOverride({
+          hour, minute,
+          programName: overrideProgramName,
+          override: ovr,
+          songsByStation,
+          ctx,
+          filterChars,
+          isFullDay,
+        });
+        if (overrideResult) {
+          console.log(`[GRADE] ✏️  Override Grade 24h aplicado em ${timeStr} (${ovr.sequence.length} posições)`);
+          return overrideResult;
+        }
+      }
+    } catch (e) {
+      console.warn(`[GRADE] Falha ao aplicar override Grade 24h em ${timeStr}:`, e);
+    }
+
 
     // === SEQUÊNCIA AGENDADA TEM PRIORIDADE SOBRE DEMAIS PROGRAMAS ===
     // Quando há sequência agendada ativa, pula programas especiais,
