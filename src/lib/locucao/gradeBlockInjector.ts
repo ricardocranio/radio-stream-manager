@@ -14,6 +14,13 @@
  * Idempotent: same marker isn't duplicated at the same target slot.
  */
 
+import {
+  loadPolicy,
+  checkBlockEligibility,
+  findOpenPosAfterNews,
+  type LocucaoSchedulePolicy,
+} from './locucaoSchedulePolicy';
+
 const isElectron =
   typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
 
