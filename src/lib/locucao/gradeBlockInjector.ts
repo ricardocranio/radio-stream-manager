@@ -223,7 +223,17 @@ export function injectLocucaoInLine(
 /** Read the day's grade .txt, inject markers, and write it back. */
 export async function injectLocucaoInGrade(
   opts: InjectOptions,
-): Promise<{ success: boolean; updated: boolean; line?: string; error?: string }> {
+): Promise<{
+  success: boolean;
+  updated: boolean;
+  line?: string;
+  error?: string;
+  skipped?: boolean;
+  skipReason?: string;
+  openPosFromNews?: boolean;
+  effectiveOpenPos?: number | null;
+  effectiveClosePos?: number | null;
+}> {
   if (!isElectron || !(window as any).electronAPI?.readGradeFile) {
     return { success: false, updated: false, error: 'Disponível apenas no app Desktop.' };
   }
@@ -240,7 +250,17 @@ export async function injectLocucaoInGrade(
       openPos: opts.openPos,
       closePos: opts.closePos,
       position: opts.position,
+      policy: opts.policy,
     });
+    if (result.skipped) {
+      return {
+        success: false,
+        updated: false,
+        skipped: true,
+        skipReason: result.skipReason,
+        error: result.skipReason || 'Bloco bloqueado pela política de agendamento.',
+      };
+    }
     if (!result.updated) {
       return {
         success: false,
@@ -256,7 +276,14 @@ export async function injectLocucaoInGrade(
     if (!w?.success) {
       return { success: false, updated: false, error: w?.error || 'Falha ao salvar grade.' };
     }
-    return { success: true, updated: true, line: result.line };
+    return {
+      success: true,
+      updated: true,
+      line: result.line,
+      openPosFromNews: result.openPosFromNews,
+      effectiveOpenPos: result.effectiveOpenPos,
+      effectiveClosePos: result.effectiveClosePos,
+    };
   } catch (err: any) {
     return { success: false, updated: false, error: err?.message || 'Erro inesperado.' };
   }
