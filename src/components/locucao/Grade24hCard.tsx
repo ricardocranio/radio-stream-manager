@@ -20,7 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  Calendar, Clock, Mic, Ban, Newspaper, Pencil, RotateCcw, Check, X,
+  Calendar, Clock, Mic, Ban, Newspaper, Pencil, RotateCcw, X,
   Plus, Trash2, ArrowUp, ArrowDown, Save,
 } from 'lucide-react';
 import {
