@@ -206,10 +206,15 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   // ---------- Draft helpers (popover de edição) ----------
   /**
    * Sequência base "como vai pra grade .txt" para um horário específico:
-   * leva em conta as ScheduledSequences ativas naquele dia/hora (prioridade)
-   * e cai pra `sequence` global como fallback. IDÊNTICO ao que o gerador grava.
+   * usa as posições REAIS do template do dia (mus/vht/VHTN/fun/arquivos
+   * fixos como SHAKE_MIX_BLOCO01). Cai pra sequência global apenas se o
+   * template não definir nada.
    */
   const baseSeqFor = (hour: number): HourOverridePosition[] => {
+    const real = getRealGradePositions({ day: selectedDay, hour });
+    if (real.length > 0) {
+      return real.map((p) => ({ position: p.position, radioSource: gradePosToRadioSource(p) }));
+    }
     const resolved = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
     return resolved.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
   };
