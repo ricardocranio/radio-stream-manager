@@ -1005,6 +1005,140 @@ export function LocucaoIAView() {
           </Card>
         </TabsContent>
 
+        {/* EDITOR DEDICADO LOC / LOC_END */}
+        <TabsContent value="loc-editor" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-fuchsia-500/20 text-fuchsia-400">🎙️</span>
+                Editor dedicado LOC / LOC_END
+              </CardTitle>
+              <CardDescription>
+                Personalize o conteúdo dos tokens <code className="px-1 bg-muted rounded text-fuchsia-400">LOC</code> (abertura) e{' '}
+                <code className="px-1 bg-muted rounded text-fuchsia-400">LOC_END</code> (fechamento) sem precisar editar arquivos.
+                Clique em uma variável para inseri-la na posição do cursor.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* Variáveis disponíveis */}
+              <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Variáveis disponíveis</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { v: '{musica1}', d: '1ª música do bloco (LOC) / penúltima (LOC_END)' },
+                    { v: '{artista1}', d: 'Artista correspondente a musica1' },
+                    { v: '{musica2}', d: '2ª música (LOC) / última (LOC_END)' },
+                    { v: '{artista2}', d: 'Artista correspondente a musica2' },
+                    { v: '{radio}', d: 'Nome da rádio (ex.: BH FM)' },
+                    { v: '{hora}', d: 'Hora do bloco (HH:MM)' },
+                    { v: '{dia}', d: 'Dia da semana (segunda-feira, sábado…)' },
+                    { v: '{periodo}', d: 'manhã / tarde / noite' },
+                    { v: '{saudacao}', d: 'Bom dia / Boa tarde / Boa noite' },
+                  ].map(({ v, d }) => (
+                    <button
+                      key={v}
+                      type="button"
+                      title={d}
+                      onClick={() => {
+                        // We don't know which textarea is focused; we append to both editors via a simple convention:
+                        // insert into whichever was focused last (tracked below) — fallback: append to anuncio.
+                        const target = (document.activeElement as HTMLTextAreaElement | null);
+                        if (target && (target.id === 'loc-anuncio-editor' || target.id === 'loc-end-editor')) {
+                          const start = target.selectionStart || target.value.length;
+                          const end = target.selectionEnd || target.value.length;
+                          const next = target.value.slice(0, start) + v + target.value.slice(end);
+                          if (target.id === 'loc-anuncio-editor') {
+                            setTemplates(t => ({ ...t, anuncio: next }));
+                          } else {
+                            setTemplates(t => ({ ...t, desanuncio: next }));
+                          }
+                          // restore caret after React re-render
+                          requestAnimationFrame(() => {
+                            target.focus();
+                            target.setSelectionRange(start + v.length, start + v.length);
+                          });
+                        } else {
+                          setTemplates(t => ({ ...t, anuncio: t.anuncio + ' ' + v }));
+                          toast.info(`${v} adicionado ao texto da abertura (LOC).`);
+                        }
+                      }}
+                      className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-fuchsia-500/15 text-fuchsia-300 hover:bg-fuchsia-500/30 border border-fuchsia-500/30 transition-colors"
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Foque um dos editores abaixo e clique numa variável para inseri-la na posição do cursor.
+                </p>
+              </div>
+
+              {/* LOC — Abertura */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold flex items-center gap-2">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-fuchsia-500/20 text-fuchsia-400 font-mono">LOC</span>
+                    Abertura — texto que toca <em>antes</em> das músicas
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground">
+                    {templates.anuncio.length} caracteres
+                  </span>
+                </div>
+                <Textarea
+                  id="loc-anuncio-editor"
+                  rows={4}
+                  value={templates.anuncio}
+                  onChange={e => setTemplates(t => ({ ...t, anuncio: e.target.value }))}
+                  className="font-mono text-sm"
+                  placeholder="Ex.: A seguir, {artista1} com {musica1}…"
+                />
+                <div className="rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 p-2">
+                  <div className="text-[10px] uppercase tracking-wider text-fuchsia-400/80 mb-1">Pré-visualização ao vivo</div>
+                  <div className="text-sm text-foreground leading-relaxed">
+                    {previewAnuncio || <span className="italic text-muted-foreground">Preencha os dados do bloco na aba Gerar para ver o preview com músicas reais.</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* LOC_END — Fechamento */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold flex items-center gap-2">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-fuchsia-500/20 text-fuchsia-400 font-mono">LOC_END</span>
+                    Fechamento — texto que toca <em>depois</em> das músicas
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground">
+                    {templates.desanuncio.length} caracteres
+                  </span>
+                </div>
+                <Textarea
+                  id="loc-end-editor"
+                  rows={4}
+                  value={templates.desanuncio}
+                  onChange={e => setTemplates(t => ({ ...t, desanuncio: e.target.value }))}
+                  className="font-mono text-sm"
+                  placeholder="Ex.: Você acabou de ouvir {artista2} com {musica2}…"
+                />
+                <div className="rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 p-2">
+                  <div className="text-[10px] uppercase tracking-wider text-fuchsia-400/80 mb-1">Pré-visualização ao vivo</div>
+                  <div className="text-sm text-foreground leading-relaxed">
+                    {previewDesanuncio || <span className="italic text-muted-foreground">Preencha os dados do bloco na aba Gerar para ver o preview com músicas reais.</span>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
+                <div className="text-[11px] text-muted-foreground">
+                  As alterações são salvas automaticamente e usadas tanto pela geração quanto pelo preview de hover na aba Sequência.
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setTemplates(DEFAULT_TEMPLATES)}>
+                  <RefreshCw className="w-3 h-3 mr-1" /> Restaurar padrões
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* VOZ */}
         <TabsContent value="voice" className="space-y-4">
           <Card>
