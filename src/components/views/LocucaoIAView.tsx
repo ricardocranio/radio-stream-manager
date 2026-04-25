@@ -1062,15 +1062,16 @@ export function LocucaoIAView() {
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Variáveis disponíveis</Label>
                 <div className="flex flex-wrap gap-1.5">
                   {[
-                    { v: '{musica1}', d: '1ª música do bloco (LOC) / penúltima (LOC_END)' },
-                    { v: '{artista1}', d: 'Artista correspondente a musica1' },
-                    { v: '{musica2}', d: '2ª música (LOC) / última (LOC_END)' },
-                    { v: '{artista2}', d: 'Artista correspondente a musica2' },
-                    { v: '{radio}', d: 'Nome da rádio (ex.: BH FM)' },
-                    { v: '{hora}', d: 'Hora do bloco (HH:MM)' },
-                    { v: '{dia}', d: 'Dia da semana (segunda-feira, sábado…)' },
+                    { v: '{musica1}', d: 'LOC: 1ª música do bloco · LOC_END: penúltima música' },
+                    { v: '{artista1}', d: 'Artista correspondente a {musica1}' },
+                    { v: '{musica2}', d: 'LOC: 2ª música do bloco · LOC_END: última música' },
+                    { v: '{artista2}', d: 'Artista correspondente a {musica2}' },
+                    { v: '{radio}', d: 'Nome da rádio (ex.: BH FM) — campo "Rádio" da aba Gerar' },
+                    { v: '{hora}', d: 'Hora do bloco (HH:MM) lida da grade' },
+                    { v: '{dia}', d: 'Dia da semana por extenso (segunda-feira, sábado…)' },
                     { v: '{periodo}', d: 'manhã / tarde / noite' },
                     { v: '{saudacao}', d: 'Bom dia / Boa tarde / Boa noite' },
+                    { v: '{fim_de_semana}', d: 'sim / não' },
                   ].map(({ v, d }) => (
                     <button
                       key={v}
