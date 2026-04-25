@@ -303,8 +303,43 @@ export function LocucaoIAView() {
         <TabsContent value="generate" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Dados do bloco (2 primeiras músicas)</CardTitle>
-              <CardDescription>Preencha as informações que serão inseridas no template.</CardDescription>
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <CardTitle className="text-base">Dados do bloco</CardTitle>
+                  <CardDescription>
+                    Anúncio usa as 2 <strong>primeiras</strong> músicas do próximo bloco; desanúncio usa as 2 <strong>últimas</strong>.
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border/50 bg-muted/20">
+                    <Switch
+                      id="auto-grade"
+                      checked={autoFromGrade}
+                      onCheckedChange={setAutoFromGrade}
+                    />
+                    <Label htmlFor="auto-grade" className="text-xs cursor-pointer">Auto-ler grade</Label>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => fillFromGrade('both')} disabled={loadingGrade}>
+                    {loadingGrade ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+                    Carregar próximo bloco
+                  </Button>
+                </div>
+              </div>
+              {lastBlock && (
+                <div className="mt-3 text-xs text-muted-foreground rounded-md border border-primary/20 bg-primary/5 p-2">
+                  📻 Bloco <strong>{lastBlock.time}</strong> — {lastBlock.programLabel} ({lastBlock.filename})
+                  {lastBlock.first2.length > 0 && (
+                    <div className="mt-1">
+                      <span className="text-foreground">Primeiras:</span> {lastBlock.first2.map(s => `${s.artist} - ${s.title}`).join(' · ')}
+                    </div>
+                  )}
+                  {lastBlock.last2.length > 0 && (
+                    <div>
+                      <span className="text-foreground">Últimas:</span> {lastBlock.last2.map(s => `${s.artist} - ${s.title}`).join(' · ')}
+                    </div>
+                  )}
+                </div>
+              )}
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
