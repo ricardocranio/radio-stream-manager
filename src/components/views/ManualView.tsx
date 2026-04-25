@@ -1,4 +1,4 @@
-import { BookOpen, Radio, FileCode, Music, Download, Clock, Database, Layers, TrendingUp, Mic, Settings, Terminal, Swords, MapIcon, Calendar, BarChart3, AlertTriangle, FolderOpen, Newspaper, ListMusic, Monitor, Wifi } from 'lucide-react';
+import { BookOpen, Radio, FileCode, Music, Download, Clock, Database, Layers, TrendingUp, Mic, Settings, Terminal, Swords, MapIcon, Calendar, BarChart3, AlertTriangle, FolderOpen, Newspaper, ListMusic, Monitor, Wifi, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
