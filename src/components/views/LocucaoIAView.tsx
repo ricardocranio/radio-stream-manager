@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { useRadioStore } from '@/store/radioStore';
 import { extractNextBlockFromGrade, type BlockExtraction } from '@/lib/locucao/gradeBlockReader';
 import { injectLocucaoInGrade, injectMarkersIntoTokens } from '@/lib/locucao/gradeBlockInjector';
+import { LocucaoSchedulePolicyEditor } from '@/components/locucao/LocucaoSchedulePolicyEditor';
 
 const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
 
@@ -294,10 +295,16 @@ export function LocucaoIAView() {
       });
       if (r.success) {
         const parts: string[] = [];
-        if (openPos) parts.push(`LOC@${openPos}`);
-        if (closePos) parts.push(`LOC_END@${closePos}`);
+        const effOpen = r.effectiveOpenPos ?? openPos;
+        const effClose = r.effectiveClosePos ?? closePos;
+        if (effOpen) parts.push(`LOC@${effOpen}${r.openPosFromNews ? ' (após NOTÍCIAS)' : ''}`);
+        if (effClose) parts.push(`LOC_END@${effClose}`);
         if (!silent) toast.success(`📌 Locução marcada no bloco ${lastBlock.time} (${parts.join(' + ') || 'sem marcadores'})`);
         return true;
+      }
+      if (r.skipped) {
+        if (!silent) toast.warning(`⚠️ Bloco ${lastBlock.time} pulado: ${r.skipReason}`);
+        return false;
       }
       if (!silent) toast.error(r.error || 'Falha ao inserir na grade.');
       return false;
@@ -557,6 +564,7 @@ export function LocucaoIAView() {
           <TabsTrigger value="generate">Gerar Locuções</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="loc-editor">🎙️ Editor LOC / LOC_END</TabsTrigger>
+          <TabsTrigger value="schedule">🎯 Agendamento</TabsTrigger>
           <TabsTrigger value="voice">Voz & Configurações</TabsTrigger>
         </TabsList>
 
@@ -1192,6 +1200,11 @@ export function LocucaoIAView() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* AGENDAMENTO (whitelist horários, blacklist programas, tokens de notícias) */}
+        <TabsContent value="schedule" className="space-y-4">
+          <LocucaoSchedulePolicyEditor />
         </TabsContent>
 
         {/* VOZ */}

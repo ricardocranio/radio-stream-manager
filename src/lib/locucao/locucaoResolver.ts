@@ -9,6 +9,11 @@
  * o MESMO texto + voz que serão executados na geração real.
  */
 import { extractNextBlockFromGrade, type BlockExtraction } from './gradeBlockReader';
+import {
+  loadPolicy,
+  checkBlockEligibility,
+  findOpenPosAfterNews,
+} from './locucaoSchedulePolicy';
 
 export interface ResolvedLocucao {
   text: string;
@@ -22,6 +27,13 @@ export interface ResolvedLocucao {
   /** Bloco-fonte (quando disponível). */
   blockTime?: string;
   blockProgram?: string;
+  /** Diagnóstico da política de agendamento. */
+  policyStatus?: {
+    allowed: boolean;
+    reason?: string;
+    /** Posição automática (1-based) APÓS NOTICIAS quando aplicável. */
+    autoOpenPosFromNews?: number | null;
+  };
 }
 
 const STORAGE_KEY_TEMPLATES = 'locucaoIA_templates';
@@ -206,6 +218,19 @@ export function resolveLocucao(
   const vars = buildVars(kind, now, block, radioName);
   const text = applyVars(templateRaw, vars);
 
+  // Diagnóstico da política (whitelist horários, blacklist programas, NOTICIAS)
+  let policyStatus: ResolvedLocucao['policyStatus'];
+  if (block) {
+    const policy = loadPolicy();
+    const eligibility = checkBlockEligibility(block.time, block.programLabel, policy);
+    const autoOpenPosFromNews = findOpenPosAfterNews(block.rawTokens, policy);
+    policyStatus = {
+      allowed: eligibility.allowed,
+      reason: eligibility.detail,
+      autoOpenPosFromNews,
+    };
+  }
+
   return {
     text,
     voiceId: voice.voiceId,
@@ -216,6 +241,7 @@ export function resolveLocucao(
     vars,
     blockTime: block?.time,
     blockProgram: block?.programLabel,
+    policyStatus,
   };
 }
 
