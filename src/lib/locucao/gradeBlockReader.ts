@@ -179,5 +179,6 @@ export async function extractNextBlockFromGrade(opts: {
     filename,
     first2,
     last2,
+    rawTokens: chosen.tokens,
   };
 }
