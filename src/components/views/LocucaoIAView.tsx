@@ -58,20 +58,77 @@ const DEFAULT_TEMPLATES: Templates = {
   desanuncio: 'Você acabou de ouvir {artista2} com {musica2}, e antes {artista1} com {musica1}, aqui na {radio}.',
 };
 
+// ===== Presets por período do dia =====
+type PresetKey = 'manha' | 'tarde' | 'noite' | 'fim_de_semana';
+
+const PRESETS: Record<PresetKey, { label: string; emoji: string; templates: Templates }> = {
+  manha: {
+    label: 'Manhã',
+    emoji: '🌅',
+    templates: {
+      anuncio: 'Bom dia! Nesta manhã de {dia} na {radio}, a seguir {artista1} com {musica1}, e na sequência {artista2} apresentando {musica2}. Vamos juntos!',
+      desanuncio: 'Você acabou de ouvir {artista2} com {musica2}, antes {artista1} com {musica1}. Continue ligado na {radio} nesta manhã de {dia}.',
+    },
+  },
+  tarde: {
+    label: 'Tarde',
+    emoji: '☀️',
+    templates: {
+      anuncio: 'Boa tarde! Aqui na {radio}, agora é hora de {artista1} com {musica1}, e logo depois {artista2} com {musica2}. Sua tarde de {dia} é aqui!',
+      desanuncio: 'Foram {artista1} com {musica1} e {artista2} com {musica2}, embalando a sua tarde de {dia} na {radio}.',
+    },
+  },
+  noite: {
+    label: 'Noite',
+    emoji: '🌙',
+    templates: {
+      anuncio: 'Boa noite! Para a sua noite de {dia} na {radio}, a seguir {artista1} interpretando {musica1}, e na sequência {artista2} com {musica2}.',
+      desanuncio: 'Acabamos de ouvir {artista2} com {musica2}, e antes {artista1} com {musica1}. Sua noite de {dia} continua aqui na {radio}.',
+    },
+  },
+  fim_de_semana: {
+    label: 'Final de semana',
+    emoji: '🎉',
+    templates: {
+      anuncio: 'É {dia} na {radio}! Bora curtir o final de semana com {artista1} e {musica1}, e logo depois {artista2} com {musica2}!',
+      desanuncio: 'Foram {artista1} com {musica1} e {artista2} com {musica2}, agitando o seu {dia} aqui na {radio}. O final de semana é nosso!',
+    },
+  },
+};
+
 const STORAGE_KEY_TEMPLATES = 'locucaoIA_templates';
 const STORAGE_KEY_VOICE = 'locucaoIA_voiceId';
 const STORAGE_KEY_SETTINGS = 'locucaoIA_settings';
 const STORAGE_KEY_FOLDER = 'locucaoIA_folder';
 const STORAGE_KEY_AUTOSAVE = 'locucaoIA_autoSave';
 
-function applyTemplate(tpl: string, slot: Slot): string {
+// ===== Variáveis dinâmicas de data/hora =====
+const DAY_NAMES = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+
+function getDynamicVars(now: Date = new Date()): { dia: string; periodo: string; saudacao: string; fimDeSemana: string } {
+  const dia = DAY_NAMES[now.getDay()];
+  const h = now.getHours();
+  let periodo: string;
+  let saudacao: string;
+  if (h >= 5 && h < 12) { periodo = 'manhã'; saudacao = 'Bom dia'; }
+  else if (h >= 12 && h < 18) { periodo = 'tarde'; saudacao = 'Boa tarde'; }
+  else { periodo = 'noite'; saudacao = 'Boa noite'; }
+  const isFds = now.getDay() === 0 || now.getDay() === 6;
+  return { dia, periodo, saudacao, fimDeSemana: isFds ? 'sim' : 'não' };
+}
+
+function applyTemplate(tpl: string, slot: Slot, now: Date = new Date()): string {
+  const v = getDynamicVars(now);
   return tpl
     .replace(/\{musica1\}/gi, slot.musica1 || '')
     .replace(/\{artista1\}/gi, slot.artista1 || '')
     .replace(/\{musica2\}/gi, slot.musica2 || '')
     .replace(/\{artista2\}/gi, slot.artista2 || '')
     .replace(/\{radio\}/gi, slot.radio || '')
-    .replace(/\{hora\}/gi, slot.hora || '');
+    .replace(/\{hora\}/gi, slot.hora || '')
+    .replace(/\{dia\}/gi, v.dia)
+    .replace(/\{periodo\}/gi, v.periodo)
+    .replace(/\{saudacao\}/gi, v.saudacao);
 }
 
 export function LocucaoIAView() {
