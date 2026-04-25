@@ -83,7 +83,15 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
   const [policy, setPolicy] = useState<LocucaoSchedulePolicy>(() => loadPolicy());
   const [editingHour, setEditingHour] = useState<number | null>(null);
-  const [editProgramName, setEditProgramName] = useState('');
+
+  // Draft buffer — só persiste no localStorage quando o usuário clica "Salvar".
+  interface Draft {
+    locked: boolean | null | undefined; // undefined = "auto" (sem override)
+    programName: string;
+    sequence: HourOverridePosition[];
+    seqDirty: boolean; // true se o usuário editou explicitamente a sequência
+  }
+  const [draft, setDraft] = useState<Draft | null>(null);
   const { toast } = useToast();
 
   const { stations, fixedContent } = useRadioStore();
