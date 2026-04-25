@@ -50,8 +50,9 @@ interface Grade24hCardProps {
   getSourceDisplayName: (source: string) => string;
 }
 
-interface HourRow {
+interface BlockRow {
   hour: number;
+  minute: number; // 0 ou 30
   programName: string;
   fixedSlot?: FixedSlot;
   locStatus: 'allowed' | 'after-news' | 'blocked-program' | 'blocked-time' | 'blocked-day' | 'forced-allow' | 'forced-block';
@@ -62,6 +63,8 @@ interface HourRow {
   hasCustomSeq: boolean;
   /** True quando a base vem de uma ScheduledSequence (não da sequência global). */
   fromScheduled?: boolean;
+  /** Bloco absorvido por programa de 60min (ex: Voz do Brasil ocupa 21:30). */
+  absorbed?: boolean;
 }
 
 function findFixedSlotForHour(slots: FixedSlot[], hour: number): FixedSlot | undefined {
