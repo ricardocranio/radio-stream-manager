@@ -307,6 +307,7 @@ interface ElectronAPI {
   listFolderFiles: (params: FolderListParams) => Promise<FolderListResult>;
   renameMusicFile: (params: RenameMusicFileParams) => Promise<RenameMusicFileResult>;
   scanFixLibrary: (params: { musicFolders: string[] }) => Promise<{ scanned: number; renamed: number; skipped: number; errors: number; details: Array<{ old: string; new: string; status: string; error?: string }> }>;
+  saveLocucao: (params: { folder: string; filename: string; audioBase64: string }) => Promise<{ success: boolean; path?: string; sizeBytes?: number; error?: string }>;
   scanQuarantineLibrary: (params: { musicFolders: string[] }) => Promise<{
     success: boolean;
     scanned: number;
