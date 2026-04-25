@@ -1154,6 +1154,14 @@ export function SequenceView() {
         </Card>
         </Collapsible>
 
+        {/* Grade 24h — visão completa hora a hora (com collapse próprio no header) */}
+        <Grade24hCard
+          sequence={activeScheduled ? activeSequence : localSequence}
+          programs={programs}
+          getStationColor={getStationColor}
+          getSourceDisplayName={getSourceDisplayName}
+        />
+
         {/* Fixed Content Panel - Sidebar */}
         <Collapsible open={fixedOpen} onOpenChange={setFixedOpen}>
         <Card className="glass-card border-emerald-500/30">
@@ -1220,13 +1228,6 @@ export function SequenceView() {
 
         {/* Preview */}
         <Collapsible open={previewOpen} onOpenChange={setPreviewOpen}>
-        {/* Grade 24h — visão completa hora a hora */}
-        <Grade24hCard
-          sequence={activeScheduled ? activeSequence : localSequence}
-          programs={programs}
-          getStationColor={getStationColor}
-          getSourceDisplayName={getSourceDisplayName}
-        />
 
         <Card className="glass-card">
           <CardHeader className="border-b border-border p-0">
