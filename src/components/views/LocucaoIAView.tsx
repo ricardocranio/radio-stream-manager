@@ -760,25 +760,71 @@ export function LocucaoIAView() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* PRESETS */}
-              <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
-                <Label className="text-xs font-semibold text-primary">⚡ Presets de prompt</Label>
-                <p className="text-xs text-muted-foreground">
-                  Clique para substituir os textos abaixo por templates prontos para cada período do dia.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {(Object.keys(PRESETS) as PresetKey[]).map((k) => (
-                    <Button
-                      key={k}
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setTemplates(PRESETS[k].templates);
-                        toast.success(`Preset "${PRESETS[k].label}" aplicado`);
-                      }}
-                    >
-                      {PRESETS[k].emoji} {PRESETS[k].label}
-                    </Button>
-                  ))}
+              <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <Label className="text-xs font-semibold text-primary">⚡ Presets de prompt + voz por período</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Clique no preset para aplicar o texto. Escolha uma <strong>voz para cada período</strong> —
+                      ao gerar, o sistema usará automaticamente a voz do período atual{' '}
+                      (<em>agora: {PRESETS[detectActivePreset()].emoji} {PRESETS[detectActivePreset()].label}</em>).
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 px-2 py-1.5 rounded border border-border/50 bg-background">
+                    <Switch
+                      id="use-preset-voice"
+                      checked={usePresetVoice}
+                      onCheckedChange={setUsePresetVoice}
+                    />
+                    <Label htmlFor="use-preset-voice" className="text-xs cursor-pointer whitespace-nowrap">
+                      Usar voz do preset
+                    </Label>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {(Object.keys(PRESETS) as PresetKey[]).map((k) => {
+                    const isActive = detectActivePreset() === k;
+                    return (
+                      <div
+                        key={k}
+                        className={`rounded-md border p-2 space-y-2 ${isActive ? 'border-primary bg-primary/10' : 'border-border/50 bg-background'}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <Button
+                            size="sm"
+                            variant={isActive ? 'default' : 'outline'}
+                            className="flex-1 justify-start"
+                            onClick={() => {
+                              setTemplates(PRESETS[k].templates);
+                              toast.success(`Preset "${PRESETS[k].label}" aplicado`);
+                            }}
+                          >
+                            {PRESETS[k].emoji} {PRESETS[k].label}
+                            {isActive && <span className="ml-auto text-[10px] opacity-80">ATIVO</span>}
+                          </Button>
+                        </div>
+                        <Select
+                          value={presetVoices[k] || '__global__'}
+                          onValueChange={(v) =>
+                            setPresetVoices((prev) => ({ ...prev, [k]: v === '__global__' ? '' : v }))
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Voz" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__global__">
+                              🎙️ Usar voz global (padrão)
+                            </SelectItem>
+                            {VOICES.map((vo) => (
+                              <SelectItem key={vo.id} value={vo.id}>{vo.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
