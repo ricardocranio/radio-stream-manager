@@ -723,7 +723,8 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                                     <Trash2 className="w-3 h-3" />
                                   </Button>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </ScrollArea>
                           <div className="text-[9px] text-muted-foreground italic">
