@@ -995,6 +995,7 @@ export function SequenceView() {
                             catPrograms={catPrograms} setCatPrograms={setCatPrograms}
                             catSpecials={catSpecials} setCatSpecials={setCatSpecials}
                             catStations={catStations} setCatStations={setCatStations}
+                            catLocucao={catLocucao} setCatLocucao={setCatLocucao}
                             genreOptions={genreOptions}
                             yearOptions={yearOptions}
                             genreYearOptions={genreYearOptions}
@@ -1029,6 +1030,7 @@ export function SequenceView() {
                             catPrograms={catPrograms} setCatPrograms={setCatPrograms}
                             catSpecials={catSpecials} setCatSpecials={setCatSpecials}
                             catStations={catStations} setCatStations={setCatStations}
+                            catLocucao={catLocucao} setCatLocucao={setCatLocucao}
                             genreOptions={genreOptions}
                             yearOptions={yearOptions}
                             genreYearOptions={genreYearOptions}
