@@ -490,28 +490,36 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
       <CardContent className="p-0">
         <div className="divide-y divide-border">
           {rows.map((row) => {
-            const isLive = row.hour === new Date().getHours() && selectedDay === today;
+            const nowDate = new Date();
+            const isLive = selectedDay === today
+              && row.hour === nowDate.getHours()
+              && ((row.minute === 0 && nowDate.getMinutes() < 30) || (row.minute === 30 && nowDate.getMinutes() >= 30));
             const hasOverride = !!row.override && (
               row.override.locked !== undefined ||
               row.override.programName !== undefined ||
               row.override.sequence !== undefined
             );
-            const showSeq = row.locStatus !== 'blocked-program' && row.locStatus !== 'forced-block' && row.locStatus !== 'blocked-day' && row.locStatus !== 'blocked-time';
+            const showSeq = !row.absorbed && row.locStatus !== 'blocked-program' && row.locStatus !== 'forced-block' && row.locStatus !== 'blocked-day' && row.locStatus !== 'blocked-time';
+            // Marca visual de início de hora cheia (HH:00) — separa pares de blocos.
+            const isHourStart = row.minute === 0;
             return (
               <div
-                key={row.hour}
+                key={`${row.hour}-${row.minute}`}
                 className={`grid grid-cols-[60px_1fr_auto_auto] gap-3 items-center px-4 py-2 hover:bg-secondary/30 transition-colors ${
                   isLive ? 'bg-primary/10 border-l-2 border-l-primary' : ''
-                } ${hasOverride ? 'border-l-2 border-l-amber-400/60' : ''}`}
+                } ${hasOverride ? 'border-l-2 border-l-amber-400/60' : ''} ${
+                  isHourStart ? 'border-t-2 border-t-border/60' : 'bg-secondary/10'
+                } ${row.absorbed ? 'opacity-60' : ''}`}
                 title={row.reason}
               >
-                {/* Hora */}
+                {/* Hora:Minuto */}
                 <div className="flex flex-col">
-                  <span className={`font-mono text-base font-bold ${isLive ? 'text-primary' : 'text-foreground'}`}>
-                    {row.hour.toString().padStart(2, '0')}:00
+                  <span className={`font-mono text-base font-bold ${isLive ? 'text-primary' : isHourStart ? 'text-foreground' : 'text-muted-foreground'}`}>
+                    {row.hour.toString().padStart(2, '0')}:{row.minute.toString().padStart(2, '0')}
                   </span>
                   {isLive && <span className="text-[9px] text-primary uppercase tracking-wide">agora</span>}
                   {hasOverride && !isLive && <span className="text-[9px] text-amber-400 uppercase tracking-wide">editado</span>}
+                  {!isHourStart && !isLive && !hasOverride && <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">2º bloco</span>}
                 </div>
 
                 {/* Programa + posições da sequência */}
@@ -521,19 +529,29 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                     {row.fixedSlot?.note && (
                       <span className="text-[10px] text-muted-foreground italic">({row.fixedSlot.note})</span>
                     )}
+                    {row.absorbed && (
+                      <Badge variant="outline" className="text-[9px] bg-muted text-muted-foreground border-border">
+                        absorvido (60min)
+                      </Badge>
+                    )}
                     {row.hasCustomSeq && (
                       <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30">
                         seq. custom ({row.effectiveSequence.length})
                       </Badge>
                     )}
-                    {!row.hasCustomSeq && row.fromScheduled && (
+                    {!row.hasCustomSeq && row.fromScheduled && !row.absorbed && (
                       <Badge variant="outline" className="text-[9px] bg-violet-500/10 text-violet-400 border-violet-500/30" title="Sequência programada para esta hora (Sequence Scheduler)">
                         seq. agendada
                       </Badge>
                     )}
                   </div>
                   <div className="flex gap-0.5 mt-1 flex-wrap">
-                    {row.effectiveSequence.map((it: any) => {
+                    {row.absorbed && (
+                      <span className="text-[10px] text-muted-foreground italic">
+                        ⏱️ Bloco ocupado pelo programa anterior (60min) — sem conteúdo próprio
+                      </span>
+                    )}
+                    {!row.absorbed && row.effectiveSequence.map((it: any) => {
                       // Cores por TIPO de token da grade real
                       const kind = it.gradeKind as GradePosition['kind'] | undefined;
                       const cls = kind === 'mus'
@@ -563,7 +581,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                         </span>
                       );
                     })}
-                    {!showSeq && (
+                    {!showSeq && !row.absorbed && (
                       <span className="text-[9px] text-muted-foreground italic ml-1">
                         ⛔ {row.reason}
                       </span>
@@ -579,8 +597,9 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-muted-foreground hover:text-primary"
-                  title="Editar este horário"
-                  onClick={() => openEditor(row.hour)}
+                  title="Editar este bloco"
+                  disabled={row.absorbed}
+                  onClick={() => openEditor(row.hour, row.minute)}
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </Button>
