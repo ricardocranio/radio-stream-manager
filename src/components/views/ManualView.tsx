@@ -207,6 +207,37 @@ As capturas são armazenadas no banco de dados com deduplicação automática.`,
 - Recuperação de arquivos temporários em caso de falha`,
   },
   {
+    id: 'locucaoia',
+    icon: Sparkles,
+    title: 'Locuções IA (NOVO)',
+    content: `Geração de anúncios e desanúncios com voz de inteligência artificial (ElevenLabs).
+
+**Como usar:**
+1. Acesse a aba **Locuções IA** no menu lateral (grupo Biblioteca).
+2. Em **Gerar Locuções**, preencha as 2 músicas, artistas, rádio e (opcional) hora.
+3. Clique em **Gerar Anúncio** ou **Gerar Desanúncio** — o áudio aparece com player embutido.
+4. Use **Salvar em disco** para gravar manualmente um MP3 na pasta configurada.
+
+**Templates personalizáveis:**
+Na aba **Templates**, edite os textos usando variáveis: \`{musica1}\`, \`{artista1}\`, \`{musica2}\`, \`{artista2}\`, \`{radio}\`, \`{hora}\`. As alterações ficam salvas no navegador.
+
+**Voz & Configurações:**
+- 14 vozes PT-BR pré-selecionadas (masculinas graves recomendadas para FM).
+- Sliders de **Estabilidade**, **Similaridade**, **Estilo** e **Velocidade**.
+- Pasta de destino configurável (padrão: \`C:\\Playlist\\Locucoes\`).
+
+**🆕 Auto-save no disco:**
+Há um interruptor **"Salvar automaticamente no disco"** (aba Voz & Configurações), **ativado por padrão**.
+Quando ligado, cada locução gerada é gravada imediatamente como MP3 na pasta configurada, com nome padrão:
+\`ANUNCIO_<rádio>_<data-hora>.mp3\` ou \`DESANUNCIO_<rádio>_<data-hora>.mp3\`.
+Você ainda pode regravar manualmente via botão "Salvar em disco". Para desativar (e salvar só sob demanda), desligue o interruptor — a preferência fica memorizada.
+
+**Quando usar:**
+- Anúncio: entrada do bloco — apresenta as 2 próximas músicas.
+- Desanúncio: saída do bloco — recapitula as 2 músicas que acabaram de tocar.
+- Use sob demanda antes de montar a grade ou gerar pacotes especiais.`,
+  },
+  {
     id: 'missing',
     icon: AlertTriangle,
     title: 'Músicas Faltando',
