@@ -101,6 +101,18 @@ const STORAGE_KEY_VOICE = 'locucaoIA_voiceId';
 const STORAGE_KEY_SETTINGS = 'locucaoIA_settings';
 const STORAGE_KEY_FOLDER = 'locucaoIA_folder';
 const STORAGE_KEY_AUTOSAVE = 'locucaoIA_autoSave';
+const STORAGE_KEY_PRESET_VOICES = 'locucaoIA_presetVoices';
+const STORAGE_KEY_USE_PRESET_VOICE = 'locucaoIA_usePresetVoice';
+
+/** Detecta qual preset corresponde ao momento atual. FDS tem prioridade. */
+function detectActivePreset(now: Date = new Date()): PresetKey {
+  const d = now.getDay();
+  if (d === 0 || d === 6) return 'fim_de_semana';
+  const h = now.getHours();
+  if (h >= 5 && h < 12) return 'manha';
+  if (h >= 12 && h < 18) return 'tarde';
+  return 'noite';
+}
 
 // ===== Variáveis dinâmicas de data/hora =====
 const DAY_NAMES = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
@@ -158,6 +170,18 @@ export function LocucaoIAView() {
     const v = localStorage.getItem(STORAGE_KEY_AUTOSAVE);
     return v === null ? true : v === 'true';
   });
+  // Mapa: preset → voiceId. Se vazio, cai na voz global (voiceId).
+  const [presetVoices, setPresetVoices] = useState<Record<PresetKey, string>>(() => {
+    try {
+      const s = localStorage.getItem(STORAGE_KEY_PRESET_VOICES);
+      if (s) return { manha: '', tarde: '', noite: '', fim_de_semana: '', ...JSON.parse(s) };
+    } catch {}
+    return { manha: '', tarde: '', noite: '', fim_de_semana: '' };
+  });
+  const [usePresetVoice, setUsePresetVoice] = useState<boolean>(() => {
+    const v = localStorage.getItem(STORAGE_KEY_USE_PRESET_VOICE);
+    return v === null ? true : v === 'true';
+  });
 
   const { config } = useRadioStore();
 
@@ -205,6 +229,8 @@ export function LocucaoIAView() {
   useEffect(() => { localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_FOLDER, folder); }, [folder]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_AUTOSAVE, String(autoSave)); }, [autoSave]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEY_PRESET_VOICES, JSON.stringify(presetVoices)); }, [presetVoices]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEY_USE_PRESET_VOICE, String(usePresetVoice)); }, [usePresetVoice]);
   useEffect(() => { localStorage.setItem('locucaoIA_autoFromGrade', String(autoFromGrade)); }, [autoFromGrade]);
   useEffect(() => { localStorage.setItem('locucaoIA_openPos', openPos === null ? '' : String(openPos)); }, [openPos]);
   useEffect(() => { localStorage.setItem('locucaoIA_closePos', closePos === null ? '' : String(closePos)); }, [closePos]);
@@ -381,16 +407,21 @@ export function LocucaoIAView() {
       return;
     }
     setGenerating(kind);
+    // Resolve voz: se usePresetVoice e o preset ativo tem voz definida, usa-a; senão usa a global.
+    const activePreset = detectActivePreset();
+    const presetVoice = usePresetVoice ? presetVoices[activePreset] : '';
+    const effectiveVoiceId = presetVoice || voiceId;
     try {
       const { data, error } = await supabase.functions.invoke('generate-locucao', {
-        body: { text: textToUse, voiceId, ...settings },
+        body: { text: textToUse, voiceId: effectiveVoiceId, ...settings },
       });
       if (error) throw error;
       if (!data?.audioBase64) throw new Error('Resposta sem áudio');
 
       const url = `data:audio/mpeg;base64,${data.audioBase64}`;
       setAudioUrls(prev => ({ ...prev, [kind]: { url, base64: data.audioBase64 } }));
-      toast.success(`${kind === 'anuncio' ? 'Anúncio' : 'Desanúncio'} gerado (${Math.round((data.sizeBytes || 0) / 1024)} KB)`);
+      const voiceLabel = VOICES.find(v => v.id === effectiveVoiceId)?.label.split(' —')[0] || 'voz';
+      toast.success(`${kind === 'anuncio' ? 'Anúncio' : 'Desanúncio'} gerado com ${voiceLabel} (${Math.round((data.sizeBytes || 0) / 1024)} KB)`);
 
       if (autoSave) {
         await persistAudio(kind, data.audioBase64, url, true);
@@ -729,25 +760,71 @@ export function LocucaoIAView() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* PRESETS */}
-              <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
-                <Label className="text-xs font-semibold text-primary">⚡ Presets de prompt</Label>
-                <p className="text-xs text-muted-foreground">
-                  Clique para substituir os textos abaixo por templates prontos para cada período do dia.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {(Object.keys(PRESETS) as PresetKey[]).map((k) => (
-                    <Button
-                      key={k}
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setTemplates(PRESETS[k].templates);
-                        toast.success(`Preset "${PRESETS[k].label}" aplicado`);
-                      }}
-                    >
-                      {PRESETS[k].emoji} {PRESETS[k].label}
-                    </Button>
-                  ))}
+              <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <Label className="text-xs font-semibold text-primary">⚡ Presets de prompt + voz por período</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Clique no preset para aplicar o texto. Escolha uma <strong>voz para cada período</strong> —
+                      ao gerar, o sistema usará automaticamente a voz do período atual{' '}
+                      (<em>agora: {PRESETS[detectActivePreset()].emoji} {PRESETS[detectActivePreset()].label}</em>).
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 px-2 py-1.5 rounded border border-border/50 bg-background">
+                    <Switch
+                      id="use-preset-voice"
+                      checked={usePresetVoice}
+                      onCheckedChange={setUsePresetVoice}
+                    />
+                    <Label htmlFor="use-preset-voice" className="text-xs cursor-pointer whitespace-nowrap">
+                      Usar voz do preset
+                    </Label>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {(Object.keys(PRESETS) as PresetKey[]).map((k) => {
+                    const isActive = detectActivePreset() === k;
+                    return (
+                      <div
+                        key={k}
+                        className={`rounded-md border p-2 space-y-2 ${isActive ? 'border-primary bg-primary/10' : 'border-border/50 bg-background'}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <Button
+                            size="sm"
+                            variant={isActive ? 'default' : 'outline'}
+                            className="flex-1 justify-start"
+                            onClick={() => {
+                              setTemplates(PRESETS[k].templates);
+                              toast.success(`Preset "${PRESETS[k].label}" aplicado`);
+                            }}
+                          >
+                            {PRESETS[k].emoji} {PRESETS[k].label}
+                            {isActive && <span className="ml-auto text-[10px] opacity-80">ATIVO</span>}
+                          </Button>
+                        </div>
+                        <Select
+                          value={presetVoices[k] || '__global__'}
+                          onValueChange={(v) =>
+                            setPresetVoices((prev) => ({ ...prev, [k]: v === '__global__' ? '' : v }))
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Voz" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__global__">
+                              🎙️ Usar voz global (padrão)
+                            </SelectItem>
+                            {VOICES.map((vo) => (
+                              <SelectItem key={vo.id} value={vo.id}>{vo.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
