@@ -200,15 +200,22 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   };
 
   // ---------- Draft helpers (popover de edição) ----------
-  const baseSeqFor = (): HourOverridePosition[] =>
-    sequence.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
+  /**
+   * Sequência base "como vai pra grade .txt" para um horário específico:
+   * leva em conta as ScheduledSequences ativas naquele dia/hora (prioridade)
+   * e cai pra `sequence` global como fallback. IDÊNTICO ao que o gerador grava.
+   */
+  const baseSeqFor = (hour: number): HourOverridePosition[] => {
+    const resolved = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
+    return resolved.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
+  };
 
   const openEditor = (hour: number) => {
     const ovr = policy.hourOverrides?.[overrideKey(selectedDay, hour)];
     setDraft({
       locked: ovr?.locked,
       programName: ovr?.programName ?? '',
-      sequence: ovr?.sequence ? [...ovr.sequence] : baseSeqFor(),
+      sequence: ovr?.sequence ? [...ovr.sequence] : baseSeqFor(hour),
       seqDirty: !!ovr?.sequence,
     });
     setEditingHour(hour);
