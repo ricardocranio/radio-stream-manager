@@ -122,32 +122,85 @@ export interface InjectOptions {
   closePos?: number | null;
   /** …or a legacy preset (mapped to numeric on the fly). */
   position?: LocPosition;
+  /** Política opcional — se omitida, é carregada do localStorage. */
+  policy?: LocucaoSchedulePolicy;
+}
+
+export interface InjectLineResult {
+  content: string;
+  updated: boolean;
+  line?: string;
+  /** Bloco encontrado mas pulado pela política (whitelist/blacklist). */
+  skipped?: boolean;
+  skipReason?: string;
+  /** Posição efetiva aplicada (após a regra de Notícias). */
+  effectiveOpenPos?: number | null;
+  effectiveClosePos?: number | null;
+  /** True se openPos foi auto-ajustado pela regra de Notícias. */
+  openPosFromNews?: boolean;
 }
 
 /** Inject markers into the line whose time matches `targetTime`. */
 export function injectLocucaoInLine(
   content: string,
   targetTime: string,
-  opts: { openPos?: number | null; closePos?: number | null; position?: LocPosition },
-): { content: string; updated: boolean; line?: string } {
+  opts: {
+    openPos?: number | null;
+    closePos?: number | null;
+    position?: LocPosition;
+    policy?: LocucaoSchedulePolicy;
+  },
+): InjectLineResult {
+  const policy = opts.policy ?? loadPolicy();
   const lines = content.split('\n');
   let updated = false;
   let resultLine: string | undefined;
+  let skipped = false;
+  let skipReason: string | undefined;
+  let effectiveOpenPos: number | null = null;
+  let effectiveClosePos: number | null = null;
+  let openPosFromNews = false;
 
   const newLines = lines.map((rawLine) => {
     const m = rawLine.match(/^(\d{2}:\d{2})\s+\(([^)]+)\)\s*(.*)$/);
     if (!m || m[1] !== targetTime) return rawLine;
 
-    const header = `${m[1]} (${m[2]}) `;
+    const time = m[1];
+    const programLabel = m[2];
+    const header = `${time} (${programLabel}) `;
     const tokens = m[3].split(',').map((t) => t.trim()).filter(Boolean);
+
+    // 1) Aplica whitelist/blacklist da política
+    const eligibility = checkBlockEligibility(time, programLabel, policy);
+    if (!eligibility.allowed) {
+      skipped = true;
+      skipReason = eligibility.detail;
+      return rawLine; // não modifica o bloco
+    }
 
     let openPos = opts.openPos ?? null;
     let closePos = opts.closePos ?? null;
-    if (opts.position && openPos === null && closePos === null) {
-      const mapped = presetToNumeric(tokens, opts.position);
-      openPos = mapped.openPos;
-      closePos = mapped.closePos;
+
+    // 2) Posição manual SEMPRE vence; se NENHUMA estiver definida, considera regras automáticas.
+    if (openPos === null && closePos === null) {
+      if (opts.position) {
+        const mapped = presetToNumeric(tokens, opts.position);
+        openPos = mapped.openPos;
+        closePos = mapped.closePos;
+      } else {
+        // 3) Auto: se há Notícias, LOC entra logo APÓS; senão, posição 1 (default histórico).
+        const newsPos = findOpenPosAfterNews(tokens, policy);
+        if (newsPos !== null) {
+          openPos = newsPos;
+          openPosFromNews = true;
+        } else {
+          openPos = 1;
+        }
+      }
     }
+
+    effectiveOpenPos = openPos;
+    effectiveClosePos = closePos;
 
     const newTokens = injectMarkersIntoTokens(tokens, openPos, closePos);
     updated = true;
@@ -155,7 +208,16 @@ export function injectLocucaoInLine(
     return resultLine;
   });
 
-  return { content: newLines.join('\n'), updated, line: resultLine };
+  return {
+    content: newLines.join('\n'),
+    updated,
+    line: resultLine,
+    skipped,
+    skipReason,
+    effectiveOpenPos,
+    effectiveClosePos,
+    openPosFromNews,
+  };
 }
 
 /** Read the day's grade .txt, inject markers, and write it back. */
