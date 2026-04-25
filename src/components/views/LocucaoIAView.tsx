@@ -518,6 +518,7 @@ export function LocucaoIAView() {
         <TabsList>
           <TabsTrigger value="generate">Gerar Locuções</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="loc-editor">🎙️ Editor LOC / LOC_END</TabsTrigger>
           <TabsTrigger value="voice">Voz & Configurações</TabsTrigger>
         </TabsList>
 
