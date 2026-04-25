@@ -259,8 +259,8 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     updateDraft({ sequence: cur, seqDirty: true });
   };
   const draftResetSeq = () => {
-    if (!draft) return;
-    updateDraft({ sequence: baseSeqFor(), seqDirty: false });
+    if (!draft || editingHour === null) return;
+    updateDraft({ sequence: baseSeqFor(editingHour), seqDirty: false });
   };
 
   const commitDraft = (hour: number) => {
