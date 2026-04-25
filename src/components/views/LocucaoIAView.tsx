@@ -58,6 +58,7 @@ const STORAGE_KEY_TEMPLATES = 'locucaoIA_templates';
 const STORAGE_KEY_VOICE = 'locucaoIA_voiceId';
 const STORAGE_KEY_SETTINGS = 'locucaoIA_settings';
 const STORAGE_KEY_FOLDER = 'locucaoIA_folder';
+const STORAGE_KEY_AUTOSAVE = 'locucaoIA_autoSave';
 
 function applyTemplate(tpl: string, slot: Slot): string {
   return tpl
@@ -87,6 +88,10 @@ export function LocucaoIAView() {
     return { stability: 0.5, similarityBoost: 0.75, style: 0.4, speed: 1.0 };
   });
   const [folder, setFolder] = useState<string>(() => localStorage.getItem(STORAGE_KEY_FOLDER) || 'C:\\Playlist\\Locucoes');
+  const [autoSave, setAutoSave] = useState<boolean>(() => {
+    const v = localStorage.getItem(STORAGE_KEY_AUTOSAVE);
+    return v === null ? true : v === 'true';
+  });
 
   const [slot, setSlot] = useState<Slot>({
     musica1: '',
@@ -105,6 +110,7 @@ export function LocucaoIAView() {
   useEffect(() => { localStorage.setItem(STORAGE_KEY_VOICE, voiceId); }, [voiceId]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_FOLDER, folder); }, [folder]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEY_AUTOSAVE, String(autoSave)); }, [autoSave]);
 
   const previewAnuncio = useMemo(() => applyTemplate(templates.anuncio, slot), [templates.anuncio, slot]);
   const previewDesanuncio = useMemo(() => applyTemplate(templates.desanuncio, slot), [templates.desanuncio, slot]);
