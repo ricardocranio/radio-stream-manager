@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
-import { resolveLocucao, type ResolvedLocucao } from '@/lib/locucao/locucaoResolver';
+import { resolveLocucao, resolveLocucaoAsync, type ResolvedLocucao } from '@/lib/locucao/locucaoResolver';
 
 interface Props {
   source: 'LOC' | 'LOC_END';
@@ -11,15 +11,23 @@ interface Props {
 
 /**
  * Hover-preview badge for LOC / LOC_END tokens in the sequence editor.
- * Shows the resolved text + the voice/preset that will be used right now.
+ * Mostra o texto resolvido + a voz/preset ativa + as variáveis aplicadas
+ * (musica1/artista1/musica2/artista2/hora/...). Usa o MESMO pipeline da
+ * geração real, lendo o próximo bloco da grade do dia quando disponível.
  */
 export function LocucaoBadgePopover({ source, className, label }: Props) {
   const [open, setOpen] = useState(false);
+  // Render imediato com último cache; em paralelo busca dados frescos.
   const [info, setInfo] = useState<ResolvedLocucao | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Recompute on each open so it always reflects the latest config + time.
   useEffect(() => {
-    if (open) setInfo(resolveLocucao(source));
+    if (!open) return;
+    setInfo(resolveLocucao(source));
+    setRefreshing(true);
+    resolveLocucaoAsync(source)
+      .then(setInfo)
+      .finally(() => setRefreshing(false));
   }, [open, source]);
 
   const kindLabel = source === 'LOC' ? '🎙️ Abertura (LOC)' : '🎙️ Fechamento (LOC_END)';
@@ -39,17 +47,50 @@ export function LocucaoBadgePopover({ source, className, label }: Props) {
       <PopoverContent
         side="top"
         align="start"
-        className="w-96 text-xs space-y-2"
+        className="w-[28rem] text-xs space-y-2"
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
       >
-        <div className="font-semibold text-fuchsia-400">{kindLabel}</div>
+        <div className="flex items-center justify-between">
+          <div className="font-semibold text-fuchsia-400">{kindLabel}</div>
+          {refreshing && (
+            <span className="text-[10px] text-muted-foreground italic">atualizando…</span>
+          )}
+        </div>
+
         {info && (
           <>
+            {(info.blockTime || info.blockProgram) && (
+              <div className="text-[10px] text-muted-foreground">
+                Bloco fonte: <span className="text-foreground font-medium">{info.blockTime || '—'}</span>
+                {info.blockProgram && <> · <span>{info.blockProgram}</span></>}
+              </div>
+            )}
+
             <div className="space-y-1">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Texto que será falado</div>
-              <div className="bg-muted/40 rounded p-2 text-foreground leading-relaxed">{info.text}</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Texto que será falado
+              </div>
+              <div className="bg-muted/40 rounded p-2 text-foreground leading-relaxed whitespace-pre-wrap">
+                {info.text}
+              </div>
             </div>
+
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Variáveis aplicadas
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 bg-muted/20 rounded p-2 font-mono text-[10.5px]">
+                {Object.entries(info.vars).map(([k, v]) => (
+                  <div key={k} className="flex gap-1 truncate" title={`${k} = ${v}`}>
+                    <span className="text-fuchsia-400">{`{${k}}`}</span>
+                    <span className="text-muted-foreground">=</span>
+                    <span className="text-foreground truncate">{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border">
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Voz ativa</div>
@@ -63,8 +104,9 @@ export function LocucaoBadgePopover({ source, className, label }: Props) {
                 <div className="text-[10px] text-muted-foreground">{info.presetLabel}</div>
               </div>
             </div>
+
             <div className="pt-1 border-t border-border text-[10px] text-muted-foreground italic">
-              Edite o texto/variáveis em <span className="text-fuchsia-400">Locução IA → Editor LOC</span>.
+              Edite texto/variáveis em <span className="text-fuchsia-400">Locução IA → Editor LOC</span>.
             </div>
           </>
         )}

@@ -156,7 +156,8 @@ function applyTemplate(tpl: string, slot: Slot, now: Date = new Date()): string 
     .replace(/\{hora\}/gi, slot.hora || '')
     .replace(/\{dia\}/gi, v.dia)
     .replace(/\{periodo\}/gi, v.periodo)
-    .replace(/\{saudacao\}/gi, v.saudacao);
+    .replace(/\{saudacao\}/gi, v.saudacao)
+    .replace(/\{fim_de_semana\}/gi, v.fimDeSemana);
 }
 
 export function LocucaoIAView() {
@@ -274,6 +275,8 @@ export function LocucaoIAView() {
   useEffect(() => { localStorage.setItem('locucaoIA_openPos', openPos === null ? '' : String(openPos)); }, [openPos]);
   useEffect(() => { localStorage.setItem('locucaoIA_closePos', closePos === null ? '' : String(closePos)); }, [closePos]);
   useEffect(() => { localStorage.setItem('locucaoIA_autoInsertInGrade', String(autoInsertInGrade)); }, [autoInsertInGrade]);
+  // Persiste o nome da rádio para o resolver usado pelos tooltips/preview da Sequência.
+  useEffect(() => { localStorage.setItem('locucaoIA_radioName', slot.radio || ''); }, [slot.radio]);
 
   /** Inject LOC/LOC_END markers in the day's grade .txt at the targeted block time. */
   const insertLocucaoInGrade = async (silent = false): Promise<boolean> => {
@@ -354,6 +357,41 @@ export function LocucaoIAView() {
 
   const previewAnuncio = useMemo(() => applyTemplate(templates.anuncio, slot, effectiveNow()), [templates.anuncio, slot, simulating, simDay, simHour]);
   const previewDesanuncio = useMemo(() => applyTemplate(templates.desanuncio, slot, effectiveNow()), [templates.desanuncio, slot, simulating, simDay, simHour]);
+
+  // Preview dedicado do EDITOR LOC/LOC_END — usa first2 para LOC e last2 para LOC_END
+  // garantindo paridade total com o que será gerado em runtime.
+  const editorSlotLoc = useMemo<Slot>(() => {
+    const a = lastBlock?.first2?.[0];
+    const b = lastBlock?.first2?.[1];
+    return {
+      musica1: a?.title || slot.musica1 || '«1ª música»',
+      artista1: a?.artist || slot.artista1 || '«1º artista»',
+      musica2: b?.title || slot.musica2 || '«2ª música»',
+      artista2: b?.artist || slot.artista2 || '«2º artista»',
+      radio: slot.radio,
+      hora: lastBlock?.time || slot.hora || '',
+    };
+  }, [lastBlock, slot]);
+  const editorSlotLocEnd = useMemo<Slot>(() => {
+    const a = lastBlock?.last2?.[0];
+    const b = lastBlock?.last2?.[1];
+    return {
+      musica1: a?.title || slot.musica1 || '«penúltima música»',
+      artista1: a?.artist || slot.artista1 || '«penúltimo artista»',
+      musica2: b?.title || slot.musica2 || '«última música»',
+      artista2: b?.artist || slot.artista2 || '«último artista»',
+      radio: slot.radio,
+      hora: lastBlock?.time || slot.hora || '',
+    };
+  }, [lastBlock, slot]);
+  const editorPreviewAnuncio = useMemo(
+    () => applyTemplate(templates.anuncio, editorSlotLoc, effectiveNow()),
+    [templates.anuncio, editorSlotLoc, simulating, simDay, simHour],
+  );
+  const editorPreviewDesanuncio = useMemo(
+    () => applyTemplate(templates.desanuncio, editorSlotLocEnd, effectiveNow()),
+    [templates.desanuncio, editorSlotLocEnd, simulating, simDay, simHour],
+  );
 
   // Prévia em tempo real da linha do bloco com LOC/LOC_END nas posições escolhidas
   const blockPreview = useMemo(() => {
@@ -1025,15 +1063,16 @@ export function LocucaoIAView() {
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Variáveis disponíveis</Label>
                 <div className="flex flex-wrap gap-1.5">
                   {[
-                    { v: '{musica1}', d: '1ª música do bloco (LOC) / penúltima (LOC_END)' },
-                    { v: '{artista1}', d: 'Artista correspondente a musica1' },
-                    { v: '{musica2}', d: '2ª música (LOC) / última (LOC_END)' },
-                    { v: '{artista2}', d: 'Artista correspondente a musica2' },
-                    { v: '{radio}', d: 'Nome da rádio (ex.: BH FM)' },
-                    { v: '{hora}', d: 'Hora do bloco (HH:MM)' },
-                    { v: '{dia}', d: 'Dia da semana (segunda-feira, sábado…)' },
+                    { v: '{musica1}', d: 'LOC: 1ª música do bloco · LOC_END: penúltima música' },
+                    { v: '{artista1}', d: 'Artista correspondente a {musica1}' },
+                    { v: '{musica2}', d: 'LOC: 2ª música do bloco · LOC_END: última música' },
+                    { v: '{artista2}', d: 'Artista correspondente a {musica2}' },
+                    { v: '{radio}', d: 'Nome da rádio (ex.: BH FM) — campo "Rádio" da aba Gerar' },
+                    { v: '{hora}', d: 'Hora do bloco (HH:MM) lida da grade' },
+                    { v: '{dia}', d: 'Dia da semana por extenso (segunda-feira, sábado…)' },
                     { v: '{periodo}', d: 'manhã / tarde / noite' },
                     { v: '{saudacao}', d: 'Bom dia / Boa tarde / Boa noite' },
+                    { v: '{fim_de_semana}', d: 'sim / não' },
                   ].map(({ v, d }) => (
                     <button
                       key={v}
@@ -1092,11 +1131,19 @@ export function LocucaoIAView() {
                   className="font-mono text-sm"
                   placeholder="Ex.: A seguir, {artista1} com {musica1}…"
                 />
-                <div className="rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 p-2">
-                  <div className="text-[10px] uppercase tracking-wider text-fuchsia-400/80 mb-1">Pré-visualização ao vivo</div>
-                  <div className="text-sm text-foreground leading-relaxed">
-                    {previewAnuncio || <span className="italic text-muted-foreground">Preencha os dados do bloco na aba Gerar para ver o preview com músicas reais.</span>}
+                <div className="rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 p-2 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] uppercase tracking-wider text-fuchsia-400/80">Pré-visualização ao vivo (LOC)</div>
+                    {lastBlock && <div className="text-[10px] text-muted-foreground">bloco {lastBlock.time} · {lastBlock.programLabel}</div>}
                   </div>
+                  <div className="text-sm text-foreground leading-relaxed">
+                    {editorPreviewAnuncio}
+                  </div>
+                  {!lastBlock && (
+                    <div className="text-[10px] italic text-muted-foreground">
+                      Carregue o próximo bloco na aba <span className="text-fuchsia-400">Gerar</span> para ver músicas/artistas reais.
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1119,11 +1166,19 @@ export function LocucaoIAView() {
                   className="font-mono text-sm"
                   placeholder="Ex.: Você acabou de ouvir {artista2} com {musica2}…"
                 />
-                <div className="rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 p-2">
-                  <div className="text-[10px] uppercase tracking-wider text-fuchsia-400/80 mb-1">Pré-visualização ao vivo</div>
-                  <div className="text-sm text-foreground leading-relaxed">
-                    {previewDesanuncio || <span className="italic text-muted-foreground">Preencha os dados do bloco na aba Gerar para ver o preview com músicas reais.</span>}
+                <div className="rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 p-2 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] uppercase tracking-wider text-fuchsia-400/80">Pré-visualização ao vivo (LOC_END)</div>
+                    {lastBlock && <div className="text-[10px] text-muted-foreground">bloco {lastBlock.time} · {lastBlock.programLabel}</div>}
                   </div>
+                  <div className="text-sm text-foreground leading-relaxed">
+                    {editorPreviewDesanuncio}
+                  </div>
+                  {!lastBlock && (
+                    <div className="text-[10px] italic text-muted-foreground">
+                      Usa as 2 ÚLTIMAS músicas do bloco. Carregue o próximo bloco na aba <span className="text-fuchsia-400">Gerar</span>.
+                    </div>
+                  )}
                 </div>
               </div>
 
