@@ -1026,5 +1026,6 @@ function register({ getMainWindow, safeHandle }) {
       return { success: false, error: err.message };
     }
   });
+}
 
 module.exports = { register };
