@@ -149,9 +149,12 @@ export function injectLocucaoInLine(
     closePos?: number | null;
     position?: LocPosition;
     policy?: LocucaoSchedulePolicy;
+    /** Data do bloco — usada para checar `allowedDays` da política. */
+    date?: Date;
   },
 ): InjectLineResult {
   const policy = opts.policy ?? loadPolicy();
+  const date = opts.date ?? new Date();
   const lines = content.split('\n');
   let updated = false;
   let resultLine: string | undefined;
