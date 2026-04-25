@@ -244,7 +244,11 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   const baseSeqFor = (hour: number, minute: number): HourOverridePosition[] => {
     const real = getRealGradePositions({ day: selectedDay, hour, minute });
     if (real.length > 0) {
-      return real.map((p) => ({ position: p.position, radioSource: gradePosToRadioSource(p) }));
+      return real.map((p) => ({
+        position: p.position,
+        radioSource: gradePosToRadioSource(p),
+        rawToken: p.token,
+      }));
     }
     const resolved = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
     return resolved.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
