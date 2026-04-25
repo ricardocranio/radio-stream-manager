@@ -163,49 +163,78 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     toast({ title: 'Override removido', description: `${hour.toString().padStart(2, '0')}:00 voltou ao padrão.` });
   };
 
-  // Manipulação da sequência customizada por hora
-  const getCurrentSeq = (hour: number): HourOverridePosition[] => {
+  // ---------- Draft helpers (popover de edição) ----------
+  const baseSeqFor = (): HourOverridePosition[] =>
+    sequence.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
+
+  const openEditor = (hour: number) => {
     const ovr = policy.hourOverrides?.[overrideKey(selectedDay, hour)];
-    if (ovr?.sequence) return ovr.sequence;
-    return sequence.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
+    setDraft({
+      locked: ovr?.locked,
+      programName: ovr?.programName ?? '',
+      sequence: ovr?.sequence ? [...ovr.sequence] : baseSeqFor(),
+      seqDirty: !!ovr?.sequence,
+    });
+    setEditingHour(hour);
   };
 
-  const setSeq = (hour: number, items: HourOverridePosition[]) => {
-    const renumbered = items.map((it, i) => ({ ...it, position: i + 1 }));
-    patchOverride(hour, { sequence: renumbered });
+  const closeEditor = () => {
+    setEditingHour(null);
+    setDraft(null);
   };
 
-  const addPos = (hour: number) => {
-    const cur = getCurrentSeq(hour);
-    setSeq(hour, [...cur, { position: cur.length + 1, radioSource: stations[0]?.id || 'random_pop' }]);
-  };
+  const updateDraft = (patch: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...patch } : d));
 
-  const removePos = (hour: number, idx: number) => {
-    const cur = getCurrentSeq(hour);
-    if (cur.length <= 1) {
+  const draftAddPos = () => {
+    if (!draft) return;
+    updateDraft({
+      sequence: [...draft.sequence, { position: draft.sequence.length + 1, radioSource: stations[0]?.id || 'random_pop' }],
+      seqDirty: true,
+    });
+  };
+  const draftRemovePos = (idx: number) => {
+    if (!draft) return;
+    if (draft.sequence.length <= 1) {
       toast({ title: 'Mínimo 1 posição', variant: 'destructive' });
       return;
     }
-    setSeq(hour, cur.filter((_, i) => i !== idx));
+    const next = draft.sequence.filter((_, i) => i !== idx).map((it, i) => ({ ...it, position: i + 1 }));
+    updateDraft({ sequence: next, seqDirty: true });
   };
-
-  const movePos = (hour: number, idx: number, dir: -1 | 1) => {
-    const cur = [...getCurrentSeq(hour)];
+  const draftMovePos = (idx: number, dir: -1 | 1) => {
+    if (!draft) return;
+    const cur = [...draft.sequence];
     const target = idx + dir;
     if (target < 0 || target >= cur.length) return;
     [cur[idx], cur[target]] = [cur[target], cur[idx]];
-    setSeq(hour, cur);
+    updateDraft({ sequence: cur.map((it, i) => ({ ...it, position: i + 1 })), seqDirty: true });
   };
-
-  const changeSource = (hour: number, idx: number, value: string) => {
-    const cur = [...getCurrentSeq(hour)];
+  const draftChangeSource = (idx: number, value: string) => {
+    if (!draft) return;
+    const cur = [...draft.sequence];
     cur[idx] = { ...cur[idx], radioSource: value };
-    setSeq(hour, cur);
+    updateDraft({ sequence: cur, seqDirty: true });
+  };
+  const draftResetSeq = () => {
+    if (!draft) return;
+    updateDraft({ sequence: baseSeqFor(), seqDirty: false });
   };
 
-  const resetSeq = (hour: number) => {
-    patchOverride(hour, { sequence: null });
-    toast({ title: 'Sequência restaurada', description: `${hour.toString().padStart(2, '0')}:00 voltou à sequência padrão.` });
+  const commitDraft = (hour: number) => {
+    if (!draft) return;
+    const next: { locked?: boolean; programName?: string; sequence?: HourOverridePosition[] } = {};
+    if (draft.locked === true || draft.locked === false) next.locked = draft.locked;
+    const trimmedName = draft.programName.trim();
+    if (trimmedName) next.programName = trimmedName;
+    if (draft.seqDirty) next.sequence = draft.sequence.map((it, i) => ({ ...it, position: i + 1 }));
+
+    const key = overrideKey(selectedDay, hour);
+    const overrides = { ...(policy.hourOverrides || {}) };
+    if (Object.keys(next).length === 0) delete overrides[key];
+    else overrides[key] = next;
+    persist({ ...policy, hourOverrides: overrides });
+    toast({ title: 'Salvo!', description: `Horário ${hour.toString().padStart(2, '0')}:00 atualizado.` });
+    closeEditor();
   };
 
   const rows: HourRow[] = useMemo(() => {
