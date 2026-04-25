@@ -78,6 +78,42 @@ function findScheduledProgram(programs: ProgramSchedule[], hour: number): string
   return p?.programName;
 }
 
+/**
+ * Resolve a sequência base que será efetivamente usada por aquele
+ * dia/hora — replica a lógica de `getActiveSequence` da store, mas
+ * para um par (DayKey, hour) arbitrário, considerando:
+ *   1. ScheduledSequences habilitadas que cubram a hora no dia (maior prioridade vence)
+ *   2. Fallback: sequência global (`sequence`)
+ * Assim o que é mostrado na Grade24h é IDÊNTICO ao que vai pra grade .txt.
+ */
+function resolveSequenceForHour(
+  day: DayKey,
+  hour: number,
+  scheduledSequences: Array<{
+    enabled: boolean;
+    weekDays: string[];
+    startHour: number; startMinute: number;
+    endHour: number; endMinute: number;
+    priority: number;
+    sequence: SequenceConfig[];
+  }>,
+  defaultSequence: SequenceConfig[],
+): SequenceConfig[] {
+  const targetMinutes = hour * 60; // checa o início da hora (HH:00)
+  const active = scheduledSequences
+    .filter((s) => s.enabled)
+    .filter((s) => s.weekDays.length === 0 || s.weekDays.includes(day))
+    .filter((s) => {
+      const start = s.startHour * 60 + s.startMinute;
+      const end = s.endHour * 60 + s.endMinute;
+      if (end <= start) return targetMinutes >= start || targetMinutes < end;
+      return targetMinutes >= start && targetMinutes < end;
+    })
+    .sort((a, b) => b.priority - a.priority);
+  if (active.length > 0) return active[0].sequence;
+  return defaultSequence;
+}
+
 export function Grade24hCard({ sequence, programs, getStationColor, getSourceDisplayName }: Grade24hCardProps) {
   const today = useMemo(() => dayKeyFromDate(new Date()), []);
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
