@@ -117,6 +117,7 @@ const STORAGE_KEY_SETTINGS = 'locucaoIA_settings';
 const STORAGE_KEY_FOLDER = 'locucaoIA_folder';
 const STORAGE_KEY_AUTOSAVE = 'locucaoIA_autoSave';
 const STORAGE_KEY_PRESET_VOICES = 'locucaoIA_presetVoices';
+const STORAGE_KEY_DAY_VOICES = 'locucaoIA_dayVoices';
 const STORAGE_KEY_USE_PRESET_VOICE = 'locucaoIA_usePresetVoice';
 
 /** Detecta qual preset corresponde ao momento atual. FDS tem prioridade. */
