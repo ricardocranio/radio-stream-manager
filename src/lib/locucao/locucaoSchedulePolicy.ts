@@ -38,8 +38,22 @@ export interface LocucaoSchedulePolicy {
    *   key = `${day}-${HH}` (ex.: "seg-07")
    *   value.locked = força bloqueio (true) / força liberação (false) / undefined = usa regra normal
    *   value.programName = sobrescreve o nome do programa exibido
+   *   value.sequence = sequência customizada de posições para esta hora (opcional)
    */
-  hourOverrides?: Record<string, { locked?: boolean; programName?: string }>;
+  hourOverrides?: Record<string, HourOverride>;
+}
+
+export interface HourOverridePosition {
+  position: number;
+  /** Source: id de rádio, "genre_XXX", "fixo_xxx", "LOC", "LOC_END", "file_...", etc. */
+  radioSource: string;
+  customFileName?: string;
+}
+
+export interface HourOverride {
+  locked?: boolean;
+  programName?: string;
+  sequence?: HourOverridePosition[];
 }
 
 export const DEFAULT_POLICY: LocucaoSchedulePolicy = {
