@@ -611,13 +611,13 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
 
       {/* ===== Dialog de edição (janela grande) ===== */}
       <Dialog
-        open={editingHour !== null}
+        open={editingBlock !== null}
         onOpenChange={(o) => { if (!o) closeEditor(); }}
       >
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
           {(() => {
-            if (editingHour === null || !draft) return null;
-            const row = rows.find((r) => r.hour === editingHour);
+            if (!editingBlock || !draft) return null;
+            const row = rows.find((r) => r.hour === editingBlock.hour && r.minute === editingBlock.minute);
             if (!row) return null;
             const hasOverride = !!row.override && (
               row.override.locked !== undefined ||
@@ -629,7 +629,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                 <DialogHeader>
                   <DialogTitle className="flex items-center justify-between gap-2">
                     <span>
-                      Editar {row.hour.toString().padStart(2, '0')}:00 — {DAY_LABELS[selectedDay]}
+                      Editar bloco {row.hour.toString().padStart(2, '0')}:{row.minute.toString().padStart(2, '0')} — {DAY_LABELS[selectedDay]}
                     </span>
                     <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-400 border-amber-500/30">
                       rascunho
