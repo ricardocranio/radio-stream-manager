@@ -22,10 +22,10 @@ function isFallbackToken(token: string, coringaCode?: string): boolean {
   return getFallbackCodes(coringaCode).has(normalized);
 }
 
-/** VHT/VHTN are separators, not song slots */
+/** VHT/VHTN are separators, not song slots. LOC/LOC_END mark AI voice-over insertion points. */
 function isVhtToken(token: string): boolean {
   const n = normalizeToken(token);
-  return n === 'VHT' || n === 'VHTN';
+  return n === 'VHT' || n === 'VHTN' || n === 'LOC' || n === 'LOC_END';
 }
 
 /** Count only song slots (not VHT separators) */

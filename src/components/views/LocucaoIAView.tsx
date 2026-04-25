@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useRadioStore } from '@/store/radioStore';
 import { extractNextBlockFromGrade, type BlockExtraction } from '@/lib/locucao/gradeBlockReader';
+import { injectLocucaoInGrade, type LocPosition } from '@/lib/locucao/gradeBlockInjector';
 
 const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
 
@@ -118,6 +119,14 @@ export function LocucaoIAView() {
   });
   const [lastBlock, setLastBlock] = useState<BlockExtraction | null>(null);
   const [loadingGrade, setLoadingGrade] = useState(false);
+  const [locPosition, setLocPosition] = useState<LocPosition>(() => {
+    return (localStorage.getItem('locucaoIA_position') as LocPosition) || 'inicio_fim';
+  });
+  const [autoInsertInGrade, setAutoInsertInGrade] = useState<boolean>(() => {
+    const v = localStorage.getItem('locucaoIA_autoInsertInGrade');
+    return v === null ? true : v === 'true';
+  });
+  const [injectingGrade, setInjectingGrade] = useState(false);
 
   const [generating, setGenerating] = useState<'anuncio' | 'desanuncio' | null>(null);
   const [audioUrls, setAudioUrls] = useState<{ anuncio?: { url: string; base64: string }; desanuncio?: { url: string; base64: string } }>({});
@@ -129,6 +138,32 @@ export function LocucaoIAView() {
   useEffect(() => { localStorage.setItem(STORAGE_KEY_FOLDER, folder); }, [folder]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_AUTOSAVE, String(autoSave)); }, [autoSave]);
   useEffect(() => { localStorage.setItem('locucaoIA_autoFromGrade', String(autoFromGrade)); }, [autoFromGrade]);
+  useEffect(() => { localStorage.setItem('locucaoIA_position', locPosition); }, [locPosition]);
+  useEffect(() => { localStorage.setItem('locucaoIA_autoInsertInGrade', String(autoInsertInGrade)); }, [autoInsertInGrade]);
+
+  /** Inject LOC/LOC_END markers in the day's grade .txt at the targeted block time. */
+  const insertLocucaoInGrade = async (silent = false): Promise<boolean> => {
+    if (!lastBlock?.time) {
+      if (!silent) toast.error('Carregue o próximo bloco da grade primeiro.');
+      return false;
+    }
+    setInjectingGrade(true);
+    try {
+      const r = await injectLocucaoInGrade({
+        gradeFolder: config.gradeFolder,
+        targetTime: lastBlock.time,
+        position: locPosition,
+      });
+      if (r.success) {
+        if (!silent) toast.success(`📌 Locução marcada no bloco ${lastBlock.time} (${locPosition})`);
+        return true;
+      }
+      if (!silent) toast.error(r.error || 'Falha ao inserir na grade.');
+      return false;
+    } finally {
+      setInjectingGrade(false);
+    }
+  };
 
   /** Reads next block from grade .txt and applies first2 (anúncio) + last2 (desanúncio) into slot. */
   const fillFromGrade = async (kind: 'anuncio' | 'desanuncio' | 'both' = 'both', silent = false): Promise<BlockExtraction | null> => {
@@ -260,6 +295,16 @@ export function LocucaoIAView() {
       if (autoSave) {
         await persistAudio(kind, data.audioBase64, url, true);
       }
+      if (autoInsertInGrade && lastBlock?.time && isElectron) {
+        // Mark only the relevant side: anúncio = início, desanúncio = fim
+        const pos: LocPosition = kind === 'anuncio' ? 'inicio' : 'fim';
+        const r = await injectLocucaoInGrade({
+          gradeFolder: config.gradeFolder,
+          targetTime: lastBlock.time,
+          position: pos,
+        });
+        if (r.success) toast.success(`📌 Marcador "${pos === 'inicio' ? 'LOC' : 'LOC_END'}" inserido em ${lastBlock.time}`);
+      }
     } catch (err: any) {
       console.error('[LOCUCAO]', err);
       toast.error(`Falha ao gerar: ${err?.message || 'erro desconhecido'}`);
@@ -340,6 +385,52 @@ export function LocucaoIAView() {
                   )}
                 </div>
               )}
+
+              {/* LOCUÇÃO POSITION CONFIG */}
+              <div className="mt-3 rounded-md border border-border/50 bg-muted/10 p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Posição da locução no bloco</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-end">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Onde inserir o marcador</Label>
+                    <Select value={locPosition} onValueChange={(v) => setLocPosition(v as LocPosition)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="inicio">Início do bloco (LOC) — anúncio</SelectItem>
+                        <SelectItem value="fim">Final do bloco (LOC_END) — desanúncio</SelectItem>
+                        <SelectItem value="inicio_fim">Início e Final (anúncio + desanúncio)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-border/50 bg-background">
+                    <Switch
+                      id="auto-insert-grade"
+                      checked={autoInsertInGrade}
+                      onCheckedChange={setAutoInsertInGrade}
+                    />
+                    <Label htmlFor="auto-insert-grade" className="text-xs cursor-pointer whitespace-nowrap">
+                      Inserir auto. ao gerar
+                    </Label>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => insertLocucaoInGrade(false)}
+                    disabled={injectingGrade || !lastBlock}
+                  >
+                    {injectingGrade ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Sparkles className="h-3.5 w-3.5 mr-1.5" />}
+                    Inserir na grade agora
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Marcadores gravados na linha do bloco no <code className="px-1 bg-muted rounded">.txt</code> da grade:
+                  {' '}<code className="px-1 bg-muted rounded">LOC</code> (início) e
+                  {' '}<code className="px-1 bg-muted rounded">LOC_END</code> (fim).
+                  O player de automação reproduzirá o MP3 salvo nessas posições.
+                </p>
+              </div>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">

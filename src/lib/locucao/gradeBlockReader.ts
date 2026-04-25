@@ -12,7 +12,7 @@ const isElectron =
   typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
 
 const FALLBACK_BASE = ['MUS', 'ROM', 'CLAS', 'JOV', 'FUN'];
-const VHT_TOKENS = new Set(['VHT', 'VHTN']);
+const VHT_TOKENS = new Set(['VHT', 'VHTN', 'LOC', 'LOC_END']);
 
 function dayCodeForDate(d: Date): string {
   // Matches grade filenames: DOM/SEG/TER/QUA/QUI/SEX/SAB
