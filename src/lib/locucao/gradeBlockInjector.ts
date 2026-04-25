@@ -174,7 +174,7 @@ export function injectLocucaoInLine(
     const tokens = m[3].split(',').map((t) => t.trim()).filter(Boolean);
 
     // 1) Aplica whitelist/blacklist da política
-    const eligibility = checkBlockEligibility(time, programLabel, policy);
+    const eligibility = checkBlockEligibility(time, programLabel, policy, date);
     if (!eligibility.allowed) {
       skipped = true;
       skipReason = eligibility.detail;
