@@ -16,13 +16,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
+    // Prioridade: chave do utilizador (header) > chave do servidor (fallback de demo)
+    const userKey = req.headers.get("x-elevenlabs-key")?.trim();
+    const apiKey = userKey || Deno.env.get("ELEVENLABS_API_KEY");
     if (!apiKey) {
       return new Response(
-        JSON.stringify({ error: "ELEVENLABS_API_KEY not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Nenhuma chave ElevenLabs configurada. Configure em 'Voz & Configurações'." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    const keySource = userKey ? "user" : "server";
 
     const body = await req.json();
     const text: string = (body?.text ?? "").toString().trim();
