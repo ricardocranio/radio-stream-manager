@@ -120,6 +120,7 @@ const STORAGE_KEY_AUTOSAVE = 'locucaoIA_autoSave';
 const STORAGE_KEY_PRESET_VOICES = 'locucaoIA_presetVoices';
 const STORAGE_KEY_DAY_VOICES = 'locucaoIA_dayVoices';
 const STORAGE_KEY_USE_PRESET_VOICE = 'locucaoIA_usePresetVoice';
+const STORAGE_KEY_API_KEY = 'locucaoIA_elevenLabsApiKey';
 
 /** Detecta qual preset corresponde ao momento atual. FDS tem prioridade. */
 function detectActivePreset(now: Date = new Date()): PresetKey {
