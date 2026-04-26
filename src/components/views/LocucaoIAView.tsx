@@ -1255,6 +1255,41 @@ export function LocucaoIAView() {
                 </div>
               </div>
 
+              <div className="space-y-2 rounded-lg border border-primary/30 p-3 bg-primary/5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">🔑 Chave ElevenLabs (sua conta)</Label>
+                  {apiKey.trim() ? (
+                    <span className="text-xs text-emerald-500 font-medium">✓ Configurada</span>
+                  ) : (
+                    <span className="text-xs text-amber-500 font-medium">Modo demo (servidor)</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
+                    placeholder="sk_..."
+                    className="font-mono text-xs"
+                    autoComplete="off"
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={() => setShowApiKey(s => !s)}>
+                    {showApiKey ? '🙈' : '👁️'}
+                  </Button>
+                  {apiKey.trim() && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setApiKey('')}>
+                      Limpar
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Cole a sua chave ElevenLabs para usar o seu próprio crédito de TTS.
+                  Obtenha em <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noreferrer" className="text-primary hover:underline">elevenlabs.io → API Keys</a>.
+                  A chave fica guardada apenas neste computador (localStorage) — nunca é enviada para o nosso servidor.
+                  Se deixar vazio, será usado o crédito de demonstração (limitado).
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <Label>Pasta para salvar (Electron)</Label>
                 <Input value={folder} onChange={e => setFolder(e.target.value)} placeholder="C:\Playlist\Locucoes-IA" />
