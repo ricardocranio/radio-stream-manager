@@ -506,6 +506,7 @@ export function LocucaoIAView() {
     try {
       const { data, error } = await supabase.functions.invoke('generate-locucao', {
         body: { text: textToUse, voiceId: effectiveVoiceId, ...settings },
+        headers: apiKey.trim() ? { 'x-elevenlabs-key': apiKey.trim() } : undefined,
       });
       if (error) throw error;
       if (!data?.audioBase64) throw new Error('Resposta sem áudio');
