@@ -210,7 +210,9 @@ export function LocucaoIAView() {
     } catch {}
     return empty;
   });
-
+  // Chave ElevenLabs do utilizador (opcional). Se vazia, usa a chave do servidor (modo demo).
+  const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem(STORAGE_KEY_API_KEY) || '');
+  const [showApiKey, setShowApiKey] = useState(false);
   // Simulação de data/hora (apenas pré-visualização — não afeta geração real, a menos que o usuário aplique).
   const [simulating, setSimulating] = useState(false);
   const [simDay, setSimDay] = useState<number>(new Date().getDay()); // 0..6
