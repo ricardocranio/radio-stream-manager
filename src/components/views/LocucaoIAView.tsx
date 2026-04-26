@@ -120,6 +120,7 @@ const STORAGE_KEY_AUTOSAVE = 'locucaoIA_autoSave';
 const STORAGE_KEY_PRESET_VOICES = 'locucaoIA_presetVoices';
 const STORAGE_KEY_DAY_VOICES = 'locucaoIA_dayVoices';
 const STORAGE_KEY_USE_PRESET_VOICE = 'locucaoIA_usePresetVoice';
+const STORAGE_KEY_API_KEY = 'locucaoIA_elevenLabsApiKey';
 
 /** Detecta qual preset corresponde ao momento atual. FDS tem prioridade. */
 function detectActivePreset(now: Date = new Date()): PresetKey {
@@ -209,7 +210,9 @@ export function LocucaoIAView() {
     } catch {}
     return empty;
   });
-
+  // Chave ElevenLabs do utilizador (opcional). Se vazia, usa a chave do servidor (modo demo).
+  const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem(STORAGE_KEY_API_KEY) || '');
+  const [showApiKey, setShowApiKey] = useState(false);
   // Simulação de data/hora (apenas pré-visualização — não afeta geração real, a menos que o usuário aplique).
   const [simulating, setSimulating] = useState(false);
   const [simDay, setSimDay] = useState<number>(new Date().getDay()); // 0..6
@@ -272,6 +275,7 @@ export function LocucaoIAView() {
   useEffect(() => { localStorage.setItem(STORAGE_KEY_PRESET_VOICES, JSON.stringify(presetVoices)); }, [presetVoices]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_DAY_VOICES, JSON.stringify(dayVoices)); }, [dayVoices]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_USE_PRESET_VOICE, String(usePresetVoice)); }, [usePresetVoice]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEY_API_KEY, apiKey); }, [apiKey]);
   useEffect(() => { localStorage.setItem('locucaoIA_autoFromGrade', String(autoFromGrade)); }, [autoFromGrade]);
   useEffect(() => { localStorage.setItem('locucaoIA_openPos', openPos === null ? '' : String(openPos)); }, [openPos]);
   useEffect(() => { localStorage.setItem('locucaoIA_closePos', closePos === null ? '' : String(closePos)); }, [closePos]);
@@ -502,6 +506,7 @@ export function LocucaoIAView() {
     try {
       const { data, error } = await supabase.functions.invoke('generate-locucao', {
         body: { text: textToUse, voiceId: effectiveVoiceId, ...settings },
+        headers: apiKey.trim() ? { 'x-elevenlabs-key': apiKey.trim() } : undefined,
       });
       if (error) throw error;
       if (!data?.audioBase64) throw new Error('Resposta sem áudio');
@@ -1248,6 +1253,41 @@ export function LocucaoIAView() {
                   <Slider value={[settings.speed]} min={0.7} max={1.2} step={0.05}
                     onValueChange={([v]) => setSettings((s: any) => ({ ...s, speed: v }))} />
                 </div>
+              </div>
+
+              <div className="space-y-2 rounded-lg border border-primary/30 p-3 bg-primary/5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">🔑 Chave ElevenLabs (sua conta)</Label>
+                  {apiKey.trim() ? (
+                    <span className="text-xs text-emerald-500 font-medium">✓ Configurada</span>
+                  ) : (
+                    <span className="text-xs text-amber-500 font-medium">Modo demo (servidor)</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
+                    placeholder="sk_..."
+                    className="font-mono text-xs"
+                    autoComplete="off"
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={() => setShowApiKey(s => !s)}>
+                    {showApiKey ? '🙈' : '👁️'}
+                  </Button>
+                  {apiKey.trim() && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setApiKey('')}>
+                      Limpar
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Cole a sua chave ElevenLabs para usar o seu próprio crédito de TTS.
+                  Obtenha em <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noreferrer" className="text-primary hover:underline">elevenlabs.io → API Keys</a>.
+                  A chave fica guardada apenas neste computador (localStorage) — nunca é enviada para o nosso servidor.
+                  Se deixar vazio, será usado o crédito de demonstração (limitado).
+                </p>
               </div>
 
               <div className="space-y-2">
