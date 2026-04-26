@@ -244,14 +244,34 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   const baseSeqFor = (hour: number, minute: number): HourOverridePosition[] => {
     const real = getRealGradePositions({ day: selectedDay, hour, minute });
     if (real.length > 0) {
-      return real.map((p) => ({
-        position: p.position,
-        radioSource: gradePosToRadioSource(p),
-        rawToken: p.token,
-      }));
+      // Posições `mus` viram as rádios da SEQUÊNCIA PADRÃO (cyclando), garantindo
+      // frescor das emissoras escolhidas pelo usuário. Demais tokens (vht/vhtn/
+      // fun/rom/fixos) permanecem como estão para preservar o template real.
+      const userStations = (sequence || [])
+        .map((s) => s.radioSource)
+        .filter((rs) => !!rs && rs !== 'LOC' && rs !== 'LOC_END');
+      let cycle = 0;
+      return real.map((p) => {
+        if (p.kind === 'mus' && userStations.length > 0) {
+          const radioSource = userStations[cycle % userStations.length];
+          cycle++;
+          return { position: p.position, radioSource, rawToken: undefined };
+        }
+        return {
+          position: p.position,
+          radioSource: gradePosToRadioSource(p),
+          rawToken: p.token,
+        };
+      });
     }
-    const resolved = resolveSequenceForHour(selectedDay, hour, scheduledSequences as any, sequence);
-    return resolved.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
+    // Sem template real para este bloco — usa direto a sequência padrão (com frescor).
+    const userStations = (sequence || [])
+      .map((s) => s.radioSource)
+      .filter((rs) => !!rs);
+    if (userStations.length > 0) {
+      return userStations.map((rs, i) => ({ position: i + 1, radioSource: rs }));
+    }
+    return [{ position: 1, radioSource: 'random_pop' }];
   };
 
   const openEditor = (hour: number, minute: number) => {
