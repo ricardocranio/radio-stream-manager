@@ -897,7 +897,7 @@ export async function selectSongForSlot(
             artist: candidate.artist,
             station: candidate.station,
             style: candidate.style,
-            reason: `[P1.5] DNA match (${matchType} → ${stationStyle}, de ${otherStation}) [batch]`,
+            reason: `[RELAXED] DNA match (${matchType} → ${stationStyle}, de ${otherStation}) [batch]`,
             substituteFor: stationName || 'UNKNOWN',
           });
           break;
