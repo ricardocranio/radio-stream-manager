@@ -692,7 +692,7 @@ export async function selectSongForSlot(
   // ============================================================
   if (!selectedSong && stationSongs.length > 0) {
     const now_ext = Date.now();
-    const P1_GRADUATED_MAX_MS = 120 * 60 * 1000; // Match last graduated tier (2h)
+    const P1_GRADUATED_MAX_MS = 60 * 60 * 1000; // Match P1-EXT max (1h)
 
     // Get songs that were TOO OLD for graduated tiers but still belong to the correct station
     const olderStationSongs = [...stationSongs]
