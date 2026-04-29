@@ -184,22 +184,23 @@ export function SpecialMonitoringView() {
 
       if (error) throw error;
 
-      // Deduplicate songs by station + artist + title
+      // Deduplicate songs by station + artist + title - only consecutive ones for the same station
       const uniqueSongs: CapturedSongFromDB[] = [];
-      const seenFingerprints = new Set<string>();
+      const lastFingerprintByStation = new Map<string, string>();
 
       if (songs) {
         for (const song of songs) {
           const fingerprint = getSongFingerprint(song);
-          // Only add if we haven't seen this song for this station recently
-          // Or if it's the same song but at a significantly different time (though here we just want unique sequence)
-          if (!seenFingerprints.has(fingerprint)) {
+          const lastFingerprint = lastFingerprintByStation.get(song.station_name);
+          
+          if (fingerprint !== lastFingerprint) {
             uniqueSongs.push(song);
-            seenFingerprints.add(fingerprint);
+            lastFingerprintByStation.set(song.station_name, fingerprint);
           }
           if (uniqueSongs.length >= 100) break;
         }
       }
+
 
       setCapturedSongs(uniqueSongs);
       setLastRefresh(new Date());
