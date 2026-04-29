@@ -5,19 +5,20 @@
  * specifies a radio station, and songs MUST come from that station's captures.
  * Randomness is only acceptable as the absolute last resort.
  * 
- * Order: P1 → P1-EXT → P1-OLDER → P1-DEEP → P0-SAME → P0 → P1.5 → P0.75 → P4 → P5 → P6
+ * Order: P1-FRESH → P1-EXT (≤60m) → P1.5-DNA-FRESH (≤60m) → P1-OLDER → P1-DEEP → P0-SAME → P0 → P1.5 → P0.75 → P4 → P5 → P6
  * 
- * P1:       FRESCOR — songs ≤15min from the configured radio station (what's playing NOW)
- * P1-EXT:   Graduated tiers — ≤15min(anti-rep retry) → ≤30min → ≤1h → ≤2h from SAME station
- * P1-OLDER: Same station, songs >2h (preserves station identity)
- * P1-DEEP:  Most-played from station via radio_historico_stats
- * P0-SAME:  Carry-over — songs from previous blocks, SAME station
- * P0:       Carry-over — songs from previous blocks, any station
- * P1.5:     DNA/Style match — songs from other stations with same style (4 JIT attempts)
- * P0.75:    TOP25 — songs from the ranking TOP25
- * P4:       General Pool — STYLE-FILTERED first, then any (3 JIT for same style)
- * P5:       Curadoria — random ranking song
- * P6:       Coringa — wildcard fallback code (mus/rom/jov)
+ * P1-FRESH:   songs ≤15min from the configured radio station
+ * P1-EXT:     ≤30min → ≤60min from SAME station (Strictly ≤60m)
+ * P1.5-FRESH: ≤60min from OTHER stations with same style (DNA Match)
+ * P1-OLDER:   Same station, songs >60min (preserves station identity)
+ * P1-DEEP:    Most-played from station via radio_historico_stats (no timestamp)
+ * P0-SAME:    Carry-over — songs from previous blocks, SAME station
+ * P0:         Carry-over — songs from previous blocks, any station
+ * P1.5:       General Style match — songs from other stations with same style (no age filter)
+ * P0.75:      TOP25 — songs from the ranking TOP25
+ * P4:         General Pool — STYLE-FILTERED first, then any
+ * P5:         Curadoria — random ranking song
+ * P6:         Coringa — wildcard fallback code (mus/rom/jov)
  */
 
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
@@ -474,11 +475,12 @@ export async function selectSongForSlot(
           }
         }
 
-        // 5) Se NENHUMA fresca existe localmente, tentar JIT AGRESSIVO antes de cair para EXT
+        // 5) Se NENHUMA fresca existe localmente, tentar JIT EXTREMAMENTE AGRESSIVO
         if (!selectedSong) {
-          console.log(`[SONG-SELECT] ⚠️ [P1-FRESH] Todas as ${sortedP1.length} músicas frescas ausentes no disco. Tentando JIT...`);
-          const maxJitP1 = 10;
+          console.log(`[SONG-SELECT] 🔥 [P1-FRESH] Nenhuma música fresca no disco. Forçando JIT para manter espelhamento...`);
+          const maxJitP1 = 25; // Increase budget significantly
           let jitCount = 0;
+
           for (const candidate of sortedP1) {
             if (jitCount >= maxJitP1) break;
             jitCount++;
@@ -518,12 +520,12 @@ export async function selectSongForSlot(
   if (!selectedSong && stationSongs.length > 0) {
     const now = Date.now();
     const P1_EXT_TIERS_MS = [
-      15 * 60 * 1000,   // Tier 1: ≤15min (may have been filtered by anti-rep in P1)
+      15 * 60 * 1000,   // Tier 1: ≤15min (retry with anti-rep)
       30 * 60 * 1000,   // Tier 2: ≤30min
-      60 * 60 * 1000,   // Tier 3: ≤1h
-      120 * 60 * 1000,  // Tier 4: ≤2h
+      45 * 60 * 1000,   // Tier 3: ≤45min
+      60 * 60 * 1000,   // Tier 4: ≤60min
     ];
-    const P1_EXT_LABELS = ['≤15min', '≤30min', '≤1h', '≤2h'];
+    const P1_EXT_LABELS = ['≤15min', '≤30min', '≤45min', '≤60min'];
 
     const freshnessSorted = [...stationSongs].sort((a, b) => {
       if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
@@ -587,9 +589,10 @@ export async function selectSongForSlot(
       // JIT for this tier
       if (!selectedSong && missingFromTier.length > 0) {
         let jitAttempts = 0;
-        const jitBudgetByTier = [10, 8, 6, 4];
-        const maxJit = jitBudgetByTier[tierIdx] || 4;
+        const jitBudgetByTier = [20, 15, 10, 8]; // Increased budget
+        const maxJit = jitBudgetByTier[tierIdx] || 8;
         let missingMarks = 0;
+
 
         for (const candidate of missingFromTier) {
           if (jitAttempts >= maxJit) break;
@@ -631,148 +634,60 @@ export async function selectSongForSlot(
     } // end tier loop
   }
 
+
   // ============================================================
-  // PRIORITY P1-OLDER: Same station, songs older than 2h
-  // When ALL graduated tiers found no songs, try ALL remaining songs
-  // from the SAME station regardless of age. This preserves station
-  // identity and is MUCH more assertive than jumping to other stations.
+  // PRIORITY P1.5-DNA-FRESH: Fresh songs (≤60m) from OTHER stations
+  // same style. This ensures "freshness" (seal) is prioritized 
+  // over older songs from the same station.
   // ============================================================
-  if (!selectedSong && stationSongs.length > 0) {
-    const now_ext = Date.now();
-    const P1_GRADUATED_MAX_MS = 120 * 60 * 1000; // Match last graduated tier (2h)
-
-    // Get songs that were TOO OLD for graduated tiers but still belong to the correct station
-    const olderStationSongs = [...stationSongs]
-      .filter(c => {
-        if (!c.scrapedAt) return true; // no timestamp = include (could be from historico)
-        return (now_ext - new Date(c.scrapedAt).getTime()) > P1_GRADUATED_MAX_MS;
-      })
-      .sort((a, b) => {
-        if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
-        return 0;
-      })
-      .filter(c => isValidCandidate(c.title, c.artist));
-
-    if (olderStationSongs.length > 0) {
-      console.log(`[SONG-SELECT] 🕐 [P1-EXT] Tentando ${olderStationSongs.length} músicas MAIS ANTIGAS (>2h) de "${stationName}" (mantendo identidade da rádio)`);
-
-      const extBatchEntries = olderStationSongs.flatMap(c => {
-        const entries = [{ artist: c.artist, title: c.title }];
-        const corrected = aliasEngine.resolve(c.artist, c.title);
-        if (corrected.artist !== c.artist || corrected.title !== c.title) {
-          entries.push({ artist: corrected.artist, title: corrected.title });
-        }
-        return entries;
+  if (!selectedSong) {
+    const now_dna = Date.now();
+    const MAX_FRESH_DNA_MS = 60 * 60 * 1000;
+    
+    // Find stations with same style
+    const similarStations = Object.entries(songsByStation)
+      .filter(([name]) => name !== stationName)
+      .filter(([name]) => {
+        const style = ctx.stations.find(s => s.name === name)?.styles?.[0];
+        return style === stationStyle;
       });
-      const extMap = extBatchEntries.length
-        ? await ctx.batchFindSongsInLibrary(extBatchEntries)
-        : new Map();
 
-      for (const candidate of olderStationSongs) {
-        const libraryResult = await findWithAliasFallback(candidate.artist, candidate.title, extMap as Map<string, any>);
-        if (libraryResult?.exists) {
-          const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-          const ageMin = candidate.scrapedAt ? Math.round((now_ext - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
-          selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-          selCtx.previousEnergy = (candidate as any).ai_energy || null;
-          selCtx.previousBpm = (candidate as any).bpm || null;
-          logs.push({
-            blockTime: timeStr,
-            type: 'used',
-            title: candidate.title,
-            artist: candidate.artist,
-            station: candidate.station,
-            style: candidate.style,
-            reason: `[P1-EXT] "${stationName}" (frescor: ${ageMin}min, mantendo identidade)`,
-          });
-          console.log(`[SONG-SELECT] ✅ [P1-EXT] Selecionada: "${candidate.artist} - ${candidate.title}" (${ageMin}min, da mesma rádio)`);
-          break;
-        }
-      }
+    for (const [otherName, otherSongs] of similarStations) {
+      const freshDnaCandidates = otherSongs
+        .filter(c => {
+          if (!c.scrapedAt) return false;
+          return (now_dna - new Date(c.scrapedAt).getTime()) <= MAX_FRESH_DNA_MS;
+        })
+        .filter(c => isValidCandidate(c.title, c.artist))
+        .sort((a, b) => new Date(b.scrapedAt!).getTime() - new Date(a.scrapedAt!).getTime());
 
-      // JIT for older station songs — AGGRESSIVE: up to 8 attempts to respect sequence
-      if (!selectedSong) {
-        let jitExtAttempts = 0;
-        const maxJitExt = 12;
-        console.log(`[SONG-SELECT] ⚠️ [P1-EXT] Nenhuma música antiga de "${stationName}" na biblioteca. Tentando JIT agressivo (${maxJitExt} tentativas)...`);
-        for (const candidate of olderStationSongs) {
-          if (jitExtAttempts >= maxJitExt) break;
-          jitExtAttempts++;
-          const jitAlias = aliasEngine.resolve(candidate.artist, candidate.title);
-          const downloaded = await tryDownloadAndWait(candidate.artist, candidate.title, ctx, downloadTimeoutMs, jitAlias.artist, jitAlias.title);
-          if (downloaded) {
-            const recheck = await findWithAliasFallback(candidate.artist, candidate.title);
-            if (recheck.exists) {
-              const correctFilename = recheck.filename || sanitizeFilename(`${jitAlias.artist} - ${jitAlias.title}.mp3`);
-              const ageMin = candidate.scrapedAt ? Math.round((now_ext - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
-              selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
-              logs.push({
-                blockTime: timeStr,
-                type: 'used',
-                title: candidate.title,
-                artist: candidate.artist,
-                station: candidate.station,
-                style: candidate.style,
-                reason: `[P1-EXT] JIT da mesma rádio "${stationName}" (${ageMin}min, tentativa ${jitExtAttempts})`,
-              });
-              break;
-            }
+      if (freshDnaCandidates.length > 0) {
+        const dnaBatch = freshDnaCandidates.map(c => ({ artist: c.artist, title: c.title }));
+        const dnaMap = await ctx.batchFindSongsInLibrary(dnaBatch);
+
+        for (const candidate of freshDnaCandidates) {
+          const libResult = await findWithAliasFallback(candidate.artist, candidate.title, dnaMap as Map<string, any>);
+          if (libResult?.exists) {
+            const correctFilename = libResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+            const ageMin = Math.round((now_dna - new Date(candidate.scrapedAt!).getTime()) / 60000);
+            
+            selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+            stats.substituted++;
+            logs.push({
+              blockTime: timeStr, type: 'substituted',
+              title: candidate.title, artist: candidate.artist,
+              station: candidate.station, style: candidate.style,
+              reason: `[P1.5-DNA-FRESH] Freshness prior over identity (${ageMin}min, de ${otherName})`,
+              substituteFor: stationName || 'UNKNOWN',
+            });
+            break;
           }
         }
       }
+      if (selectedSong) break;
     }
   }
 
-  // ============================================================
-  // PRIORITY P1-DEEP: Query radio_historico_stats for most-played
-  // songs from the target station (most-played = most likely downloaded).
-  // This catches songs that were downloaded in previous sessions but
-  // aren't in the current scraped_songs/radio_historico pool.
-  // ============================================================
-  if (!selectedSong && stationName) {
-    try {
-      const { supabase } = await import('@/integrations/supabase/client');
-      const { data: statsData } = await supabase
-        .from('radio_historico_stats')
-        .select('title, artist, station_name, play_count')
-        .eq('station_name', stationName)
-        .order('play_count', { ascending: false })
-        .limit(80);
-
-      if (statsData && statsData.length > 0) {
-        const deepCandidates = statsData
-          .filter(s => isValidCandidate(s.title, s.artist))
-          .map(s => ({ artist: s.artist, title: s.title }));
-
-        if (deepCandidates.length > 0) {
-          console.log(`[SONG-SELECT] 🔎 [P1-DEEP] Tentando ${deepCandidates.length} músicas mais tocadas de "${stationName}" (historico_stats)`);
-          const deepMap = await ctx.batchFindSongsInLibrary(deepCandidates);
-
-          for (const candidate of deepCandidates) {
-            const r = (deepMap as Map<string, any>).get(toLibKey(candidate.artist, candidate.title)) as { exists: boolean; filename?: string } | undefined;
-            if (r?.exists) {
-              const correctFilename = r.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
-              selectedSong = {
-                title: candidate.title, artist: candidate.artist,
-                station: stationName, style: stationStyle,
-                filename: correctFilename, existsInLibrary: true,
-              };
-              logs.push({
-                blockTime: timeStr, type: 'used',
-                title: candidate.title, artist: candidate.artist,
-                station: stationName, style: stationStyle,
-                reason: `[P1-DEEP] Mais tocada de "${stationName}" (historico_stats, na biblioteca)`,
-              });
-              console.log(`[SONG-SELECT] ✅ [P1-DEEP] Selecionada: "${candidate.artist} - ${candidate.title}" (mais tocada de ${stationName})`);
-              break;
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('[SONG-SELECT] ⚠️ P1-DEEP falhou:', e);
-    }
-  }
 
   // ============================================================
   // PRIORITY P0-SAME: Carry-over from the SAME station first
@@ -988,7 +903,98 @@ export async function selectSongForSlot(
   }
 
   // ============================================================
-  // PRIORITY P4: General Pool — STYLE-FILTERED FIRST (chunked batch)
+  // FALLBACK EXTREMO P1-OLDER: Same station, songs older than 1h
+  // This is now treated as a LAST RESORT for identity, 
+  // after trying carry-over and TOP25.
+  // ============================================================
+  if (!selectedSong && stationSongs.length > 0) {
+    const now_ext = Date.now();
+    const P1_GRADUATED_MAX_MS = 60 * 60 * 1000;
+
+    const olderStationSongs = [...stationSongs]
+      .filter(c => {
+        if (!c.scrapedAt) return true;
+        return (now_ext - new Date(c.scrapedAt).getTime()) > P1_GRADUATED_MAX_MS;
+      })
+      .sort((a, b) => {
+        if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
+        return 0;
+      })
+      .filter(c => isValidCandidate(c.title, c.artist));
+
+    if (olderStationSongs.length > 0) {
+      console.log(`[SONG-SELECT] 🕐 [FALLBACK-EXTREMO] Tentando ${olderStationSongs.length} músicas antigas (>60min) de "${stationName}"`);
+
+      const extBatchEntries = olderStationSongs.flatMap(c => {
+        const entries = [{ artist: c.artist, title: c.title }];
+        const corrected = aliasEngine.resolve(c.artist, c.title);
+        if (corrected.artist !== c.artist || corrected.title !== c.title) {
+          entries.push({ artist: corrected.artist, title: corrected.title });
+        }
+        return entries;
+      });
+      const extMap = extBatchEntries.length ? await ctx.batchFindSongsInLibrary(extBatchEntries) : new Map();
+
+      for (const candidate of olderStationSongs) {
+        const libraryResult = await findWithAliasFallback(candidate.artist, candidate.title, extMap as Map<string, any>);
+        if (libraryResult?.exists) {
+          const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+          const ageMin = candidate.scrapedAt ? Math.round((now_ext - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
+          selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+          logs.push({
+            blockTime: timeStr, type: 'used',
+            title: candidate.title, artist: candidate.artist,
+            station: candidate.station, style: candidate.style,
+            reason: `[FALLBACK-EXTREMO] "${stationName}" (Idade alta: ${ageMin}min)`,
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  // ============================================================
+  // FALLBACK EXTREMO P1-DEEP: Most played (no timestamp)
+  // ============================================================
+  if (!selectedSong && stationName) {
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data: statsData } = await supabase
+        .from('radio_historico_stats')
+        .select('title, artist, station_name, play_count')
+        .eq('station_name', stationName)
+        .order('play_count', { ascending: false })
+        .limit(50);
+
+      if (statsData && statsData.length > 0) {
+        const deepCandidates = statsData.filter(s => isValidCandidate(s.title, s.artist));
+        if (deepCandidates.length > 0) {
+          const deepMap = await ctx.batchFindSongsInLibrary(deepCandidates.map(s => ({ artist: s.artist, title: s.title })));
+          for (const candidate of deepCandidates) {
+            const r = (deepMap as Map<string, any>).get(toLibKey(candidate.artist, candidate.title));
+            if (r?.exists) {
+              const correctFilename = r.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              selectedSong = {
+                title: candidate.title, artist: candidate.artist,
+                station: stationName, style: stationStyle,
+                filename: correctFilename, existsInLibrary: true,
+              };
+              logs.push({
+                blockTime: timeStr, type: 'used',
+                title: candidate.title, artist: candidate.artist,
+                station: stationName, style: stationStyle,
+                reason: `[FALLBACK-EXTREMO] P1-DEEP de "${stationName}" (sem frescor)`,
+              });
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[SONG-SELECT] ⚠️ P1-DEEP falhou:', e);
+    }
+  }
+
   // ============================================================
   if (!selectedSong) {
     let jitAttemptsP4 = 0;
