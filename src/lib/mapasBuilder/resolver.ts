@@ -191,6 +191,10 @@ async function loadMonitoredSongs(
  * Load songs from DB (ai_genre) + library check, with genre/decade filters.
  * This uses REAL monitored data from scraped_songs, not just local ID3.
  */
+/**
+ * Load songs filtered by genre from library metadata.
+ * PRIORITY: P1-FRESH (<=15min) + Genre
+ */
 async function loadMonitoredGenreSongs(
   genreFilter: string[],
   musicFolders: string[],
@@ -201,66 +205,49 @@ async function loadMonitoredGenreSongs(
   
   try {
     const { supabase } = await import('@/integrations/supabase/client');
+    const now = new Date();
+    const FRESCOR_MAX_MS = 15 * 60 * 1000;
     
-    // PRIMARY: scraped_songs with ai_genre
-    let query = supabase
+    // 1) P1-FRESH with Genre: scraped_songs within last 15min
+    let queryFresh = supabase
       .from('scraped_songs')
-      .select('artist, title, ai_genre, year')
+      .select('artist, title, ai_genre, year, scraped_at')
       .order('scraped_at', { ascending: false })
       .limit(500);
-    if (stationName) query = query.eq('station_name', stationName);
-    const { data: recentData } = await query;
+    if (stationName) queryFresh = queryFresh.eq('station_name', stationName);
+    const { data: recentData } = await queryFresh;
 
-    // SECONDARY: radio_historico (no genre field, but adds catalog depth)
-    let histQuery = supabase
-      .from('radio_historico')
-      .select('artist, title')
-      .order('captured_at', { ascending: false })
-      .limit(800);
-    if (stationName) histQuery = histQuery.eq('station_name', stationName);
-    const { data: histData } = await histQuery;
-
-    // TERTIARY: radio_historico_stats (all-time popular)
-    let statsQuery = supabase
-      .from('radio_historico_stats')
-      .select('artist, title')
-      .order('play_count', { ascending: false })
-      .limit(500);
-    if (stationName) statsQuery = statsQuery.eq('station_name', stationName);
-    const { data: statsData } = await statsQuery;
-    
-    // Parse decade range
-    let yearStart = 0, yearEnd = 9999;
-    if (decadeFilter) {
-      const decadeMap: Record<string, [number, number]> = {
-        '80s': [1980, 1989], '90s': [1990, 1999], '2000s': [2000, 2009],
-        '2010s': [2010, 2019], '2020s': [2020, 2029],
-      };
-      const range = decadeMap[decadeFilter];
-      if (range) { yearStart = range[0]; yearEnd = range[1]; }
-    }
-    
     const genreUpper = genreFilter.map(g => g.toUpperCase());
     
-    // Filter scraped_songs by genre and decade
-    const genreFiltered = (recentData || []).filter(s => {
+    const freshGenreSongs = (recentData || []).filter(s => {
+      // Frescor check
+      if (!s.scraped_at) return false;
+      const ageMs = now.getTime() - new Date(s.scraped_at).getTime();
+      if (ageMs > FRESCOR_MAX_MS) return false;
+      
+      // Genre check
       if (genreUpper.length > 0) {
         if (!s.ai_genre) return false;
         const songGenre = s.ai_genre.toUpperCase();
         if (!genreUpper.some(g => songGenre.includes(g))) return false;
       }
-      if (decadeFilter && s.year) {
-        const y = parseInt(s.year, 10);
-        if (isNaN(y) || y < yearStart || y > yearEnd) return false;
-      }
       return true;
     });
 
-    // Merge genre-filtered scraped + historico + stats (historico/stats have no genre, used as fallback depth)
-    const allSongs: { artist: string; title: string }[] = [
-      ...genreFiltered,
+    // 2) FALLBACK: All other monitored songs
+    let histQuery = supabase
+      .from('radio_historico')
+      .select('artist, title')
+      .order('captured_at', { ascending: false })
+      .limit(500);
+    if (stationName) histQuery = histQuery.eq('station_name', stationName);
+    const { data: histData } = await histQuery;
+
+    // Merge: Fresh Genre first, then everything else
+    const allSongs = [
+      ...freshGenreSongs,
+      ...(recentData || []).filter(s => !freshGenreSongs.includes(s)),
       ...(histData || []),
-      ...(statsData || []),
     ];
     
     // Deduplicate
@@ -288,7 +275,7 @@ async function loadMonitoredGenreSongs(
       if (found.length >= 200) break;
     }
     
-    console.log(`[MAPAS] 🎵📡 ${found.length} músicas reais gênero ${genreUpper.join(',')}${decadeFilter ? ` (${decadeFilter})` : ''} [genre:${genreFiltered.length} hist:${histData?.length||0} stats:${statsData?.length||0}]`);
+    console.log(`[MAPAS] 🎵📡 ${found.length} músicas monitoradas. P1-FRESH (Genre): ${freshGenreSongs.length}`);
     return found;
   } catch (err) {
     console.warn(`[MAPAS] Erro ao carregar gênero monitorado:`, err);
