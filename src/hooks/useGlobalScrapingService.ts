@@ -314,7 +314,8 @@ export function useGlobalScrapingService(
   const start = useCallback(() => {
     const scrapeAllRef = { current: scrapeAllStations };
 
-    // Scraping every 12 minutes (matches Python monitor cycle)
+    // Scraping every 3 minutes (aggressive for P1-FRESH policy)
+    // Decreased from 12min to ensure we always have songs ≤10min available.
     scrapeIntervalRef.current = setInterval(() => {
       const currentState = useRadioStore.getState();
       if (!currentState.isRunning) return;
@@ -322,7 +323,7 @@ export function useGlobalScrapingService(
       if (hasStations) {
         scrapeAllRef.current();
       }
-    }, 12 * 60 * 1000);
+    }, 3 * 60 * 1000);
 
     // Initial scrape
     const state = useRadioStore.getState();
