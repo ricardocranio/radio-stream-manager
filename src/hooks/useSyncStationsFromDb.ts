@@ -29,13 +29,15 @@ export function useSyncStationsFromDb() {
           return;
         }
 
-        // Start with ALL local stations (preserving user order, enabled, styles, etc.)
-        const mergedStations: RadioStation[] = stations.map(localStation => {
+        // Use current state to merge
+        const currentStations = useRadioStore.getState().stations;
+
+        // 1. Map local stations to potentially updated URLs from DB
+        const mergedStations: RadioStation[] = currentStations.map(localStation => {
           const normalizedName = localStation.name.trim().toLowerCase();
           const dbStation = dbStations.find(db => db.name.trim().toLowerCase() === normalizedName);
           
           if (dbStation) {
-            // Local station exists in DB — only update scrapeUrl/streamUrl from DB
             return {
               ...localStation,
               scrapeUrl: dbStation.scrape_url || localStation.scrapeUrl,
@@ -45,13 +47,15 @@ export function useSyncStationsFromDb() {
           return localStation;
         });
 
-        const seenNames = new Set(stations.map(s => s.name.trim().toLowerCase()));
+        const localNames = new Set(currentStations.map(s => s.name.trim().toLowerCase()));
+        let hasNewFromDb = false;
 
-        // Add DB-only stations that don't exist locally (genuinely new)
+        // 2. Add DB-only stations that don't exist locally
         for (const dbStation of dbStations) {
           const normalizedName = dbStation.name.trim().toLowerCase();
-          if (!seenNames.has(normalizedName)) {
-            seenNames.add(normalizedName);
+          if (!localNames.has(normalizedName)) {
+            hasNewFromDb = true;
+            localNames.add(normalizedName);
             mergedStations.push({
               id: dbStation.id,
               name: dbStation.name.trim(),
@@ -64,10 +68,8 @@ export function useSyncStationsFromDb() {
           }
         }
 
-        // Only update if there are changes
-        if (mergedStations.length !== stations.length || 
-            mergedStations.some((s, i) => s.id !== stations[i]?.id || s.name !== stations[i]?.name)) {
-          console.log('[SYNC-FROM-DB] Updating stations from DB:', mergedStations.length);
+        if (hasNewFromDb) {
+          console.log('[SYNC-FROM-DB] New stations found in DB, merging...');
           setStations(mergedStations);
         }
       } catch (err) {
