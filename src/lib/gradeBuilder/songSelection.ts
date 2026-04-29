@@ -920,7 +920,7 @@ export async function selectSongForSlot(
                 artist: candidate.artist,
                 station: candidate.station,
                 style: candidate.style,
-                reason: `[P1.5] DNA similar JIT ${jitAttemptsDNA}: ${stationStyle} (de ${otherStation})`,
+                reason: `[RELAXED] DNA similar JIT ${jitAttemptsDNA}: ${stationStyle} (de ${otherStation})`,
                 substituteFor: stationName || 'UNKNOWN',
               });
               break;
