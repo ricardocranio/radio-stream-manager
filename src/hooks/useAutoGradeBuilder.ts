@@ -225,6 +225,11 @@ export function useAutoGradeBuilder() {
   }, [fixedContent]);
 
   const getActiveSequenceForBlock = useCallback((hour: number, minute: number, targetDay?: WeekDay): SequenceConfig[] => {
+    // If Mode Padrão is active, always use default sequence
+    if (config.gradeMode === 'standard') {
+      return defaultSequence;
+    }
+
     const timeMinutes = hour * 60 + minute;
     const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
     const currentDay = targetDay || dayMap[new Date().getDay()];
@@ -243,7 +248,7 @@ export function useAutoGradeBuilder() {
       return activeScheduled[0].sequence;
     }
     return defaultSequence;
-  }, [scheduledSequences, defaultSequence]);
+  }, [scheduledSequences, defaultSequence, config.gradeMode]);
 
   /**
    * Derive unique station names from the active sequence for a given block.
@@ -2132,9 +2137,9 @@ export function useAutoGradeBuilder() {
           });
       };
 
-      const currentCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.current.hour, blocks.current.minute);
-      const nextCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.next.hour, blocks.next.minute);
-      const thirdCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.third.hour, blocks.third.minute);
+      const currentCoveredBySchedule = config.gradeMode !== 'standard' && isBlockCoveredByScheduledSequence(blocks.current.hour, blocks.current.minute);
+      const nextCoveredBySchedule = config.gradeMode !== 'standard' && isBlockCoveredByScheduledSequence(blocks.next.hour, blocks.next.minute);
+      const thirdCoveredBySchedule = config.gradeMode !== 'standard' && isBlockCoveredByScheduledSequence(blocks.third.hour, blocks.third.minute);
 
       if (currentCoveredBySchedule) {
         builtBlocksRef.current.delete(currentTimeKey);
