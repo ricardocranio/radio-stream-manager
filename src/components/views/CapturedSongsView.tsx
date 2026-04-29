@@ -102,7 +102,9 @@ function matchesSongSearch(song: Pick<ScrapedSong, 'title' | 'artist' | 'station
 function buildCappedSongList(inputSongs: ScrapedSong[]): ScrapedSong[] {
   const stationCounts = new Map<string, number>();
   const seenSongIds = new Set<string>();
-  const lastFingerprintByStation = new Map<string, string>();
+  // Use a map of sets to track all unique songs seen recently per station
+  // This prevents non-consecutive duplicates (e.g. Song A, Song B, Song A)
+  const fingerprintsByStation = new Map<string, Set<string>>();
   const cappedSongs: ScrapedSong[] = [];
 
   for (const song of inputSongs) {
@@ -113,32 +115,52 @@ function buildCappedSongList(inputSongs: ScrapedSong[]): ScrapedSong[] {
     if (currentCount >= MAX_SONGS_PER_STATION) continue;
 
     const fingerprint = getSongFingerprint(song);
-    if (lastFingerprintByStation.get(song.station_name) === fingerprint) continue;
+    let stationSeen = fingerprintsByStation.get(song.station_name);
+    if (!stationSeen) {
+      stationSeen = new Set<string>();
+      fingerprintsByStation.set(song.station_name, stationSeen);
+    }
+
+    if (stationSeen.has(fingerprint)) continue;
 
     cappedSongs.push(song);
     stationCounts.set(song.station_name, currentCount + 1);
-    lastFingerprintByStation.set(song.station_name, fingerprint);
+    stationSeen.add(fingerprint);
   }
 
   return cappedSongs;
 }
 
 function mergeRealtimeSong(currentSongs: ScrapedSong[], incomingSong: ScrapedSong): ScrapedSong[] {
+  // 1. Basic ID check
   if (currentSongs.some((song) => song.id === incomingSong.id)) {
     return currentSongs;
   }
 
-  const latestSongFromStationIndex = currentSongs.findIndex(
-    (song) => song.station_name === incomingSong.station_name
-  );
-
-  if (latestSongFromStationIndex >= 0) {
-    const latestSongFromStation = currentSongs[latestSongFromStationIndex];
-    if (getSongFingerprint(latestSongFromStation) === getSongFingerprint(incomingSong)) {
+  // 2. Strict fingerprint check (prevents same song appearing twice even if not consecutive)
+  // We check only the last 5 songs for that station to avoid blocking genuine repeats much later
+  const stationSongs = currentSongs.filter(s => s.station_name === incomingSong.station_name);
+  const incomingFingerprint = getSongFingerprint(incomingSong);
+  
+  const isDuplicate = stationSongs.slice(0, 5).some(s => getSongFingerprint(s) === incomingFingerprint);
+  
+  if (isDuplicate) {
+    // If it's a duplicate but has a newer timestamp/now_playing status, update the existing one
+    const duplicateIndex = currentSongs.findIndex(s => 
+      s.station_name === incomingSong.station_name && getSongFingerprint(s) === incomingFingerprint
+    );
+    
+    if (duplicateIndex >= 0) {
       const nextSongs = [...currentSongs];
-      nextSongs[latestSongFromStationIndex] = incomingSong;
+      nextSongs[duplicateIndex] = {
+        ...nextSongs[duplicateIndex],
+        ...incomingSong,
+        // Preserve the older ID if we are just updating metadata
+        id: nextSongs[duplicateIndex].id 
+      };
       return nextSongs;
     }
+    return currentSongs;
   }
 
   return buildCappedSongList([incomingSong, ...currentSongs]);
