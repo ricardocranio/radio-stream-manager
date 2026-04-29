@@ -872,6 +872,13 @@ export function GradePreviewCard() {
     }
   }, [isBlockShort, isLoading, nextBlockTime, blockDuration, gradeBuilder]);
 
+  // Trigger rebuild when mode changes
+  useEffect(() => {
+    if (!isLoading && nextBlockTime !== '--:--') {
+      gradeBuilder.buildGrade(false, true);
+    }
+  }, [config.gradeMode]);
+
   return (
     <Card className={`glass-card ${isBlockShort ? 'border-red-500/40' : isBlockOk ? 'border-green-500/20' : 'border-amber-500/20'}`}>
       <CardHeader className="pb-3 border-b border-border">
