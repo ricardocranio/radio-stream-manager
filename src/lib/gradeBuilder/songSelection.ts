@@ -1033,7 +1033,7 @@ export async function selectSongForSlot(
             artist: candidate.artist,
             station: candidate.station,
             style: candidate.style,
-            reason: `[P4] Pool geral (${styleInfo}, de ${candidate.station}) [batch]`,
+            reason: `[RELAXED] Pool geral (${styleInfo}, de ${candidate.station}) [batch]`,
           });
           break;
         }
