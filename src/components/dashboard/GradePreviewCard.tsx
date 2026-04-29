@@ -906,22 +906,30 @@ export function GradePreviewCard() {
             )}
           </CardTitle>
           <div className="flex items-center gap-2">
-            <div className="flex bg-muted/50 p-0.5 rounded-md mr-1">
+            <div className="flex bg-background/50 border border-border p-1 rounded-lg gap-1">
               <Button
-                variant={config.gradeMode === 'custom' ? 'secondary' : 'ghost'}
+                variant={config.gradeMode === 'custom' ? 'default' : 'ghost'}
                 size="sm"
-                className={`h-7 text-[10px] px-2 font-semibold ${config.gradeMode === 'custom' ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border-amber-500/30' : ''}`}
+                className={`h-7 text-[10px] px-3 rounded-md transition-all font-bold ${
+                  config.gradeMode === 'custom' 
+                    ? 'bg-amber-600 text-white hover:bg-amber-700 shadow-sm' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
                 onClick={() => setConfig({ gradeMode: 'custom' })}
               >
-                Modo Personalizado
+                MODO PERSONALIZADO
               </Button>
               <Button
-                variant={config.gradeMode !== 'custom' ? 'secondary' : 'ghost'}
+                variant={config.gradeMode !== 'custom' ? 'default' : 'ghost'}
                 size="sm"
-                className={`h-7 text-[10px] px-2 font-semibold ${config.gradeMode !== 'custom' ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border-blue-500/30' : ''}`}
+                className={`h-7 text-[10px] px-3 rounded-md transition-all font-bold ${
+                  config.gradeMode !== 'custom' 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
                 onClick={() => setConfig({ gradeMode: 'standard' })}
               >
-                Modo Padrão
+                MODO PADRÃO
               </Button>
             </div>
             {isCheckingLibrary && (
