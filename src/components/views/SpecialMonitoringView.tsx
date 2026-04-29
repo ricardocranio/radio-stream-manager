@@ -254,20 +254,21 @@ export function SpecialMonitoringView() {
           if (stationNames.includes(newSong.station_name)) {
             setCapturedSongs(prev => {
               const fingerprint = getSongFingerprint(newSong);
-              // Check if the most recent song for this station is the same
-              const isDuplicate = prev.some(s => s.station_name === newSong.station_name && getSongFingerprint(s) === fingerprint);
+              // Find the most recent song for this specific station
+              const lastSongForStation = prev.find(s => s.station_name === newSong.station_name);
+              const isStutterDuplicate = lastSongForStation && getSongFingerprint(lastSongForStation) === fingerprint;
               
-              if (isDuplicate) {
-                // Update the existing one with new timestamp but don't add duplicate
+              if (isStutterDuplicate) {
+                // If it's the same song metadata repeating consecutively for this station,
+                // just update the timestamp/metadata of the existing entry
                 return prev.map(s => 
-                  (s.station_name === newSong.station_name && getSongFingerprint(s) === fingerprint) 
-                  ? newSong 
-                  : s
+                  (s === lastSongForStation) ? newSong : s
                 );
               }
               
               return [newSong, ...prev].slice(0, 100);
             });
+
             setLastRefresh(new Date());
           }
         }
