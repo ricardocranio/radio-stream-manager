@@ -26,24 +26,13 @@ echo.
 
 echo [3/6] Instalando dependencias...
 call npm install
-call npm install --save-dev electron@latest electron-builder@latest
 echo OK!
 echo.
 
-echo [4/6] Gerando build do Vite...
-call npm run build
+echo [4/6] Gerando build do Vite e Electron...
+call npm run electron:build
 if errorlevel 1 (
-    echo ERRO: Falha no build do Vite!
-    pause
-    exit /b 1
-)
-echo OK!
-echo.
-
-echo [5/6] Empacotando com Electron Builder...
-call npx electron-builder --win --x64
-if errorlevel 1 (
-    echo ERRO: Falha no Electron Builder!
+    echo ERRO: Falha no build!
     pause
     exit /b 1
 )
