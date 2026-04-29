@@ -409,8 +409,8 @@ const defaultConfig: SystemConfig = {
     'DJ WL DO V.A - MTG - QUANDO O GRAVE BATE FORTE',
     'ZAPPING 2 - PALAEKSA E PVR',
     'KRISHNA YADAV - *',
-    gradeMode: 'standard',
   ],
+  gradeMode: 'standard',
 };
 
 const defaultDeezerConfig: DeezerConfig = {
