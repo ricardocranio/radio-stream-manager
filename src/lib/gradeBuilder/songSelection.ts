@@ -475,11 +475,12 @@ export async function selectSongForSlot(
           }
         }
 
-        // 5) Se NENHUMA fresca existe localmente, tentar JIT AGRESSIVO antes de cair para EXT
+        // 5) Se NENHUMA fresca existe localmente, tentar JIT EXTREMAMENTE AGRESSIVO
         if (!selectedSong) {
-          console.log(`[SONG-SELECT] ⚠️ [P1-FRESH] Todas as ${sortedP1.length} músicas frescas ausentes no disco. Tentando JIT...`);
-          const maxJitP1 = 10;
+          console.log(`[SONG-SELECT] 🔥 [P1-FRESH] Nenhuma música fresca no disco. Forçando JIT para manter espelhamento...`);
+          const maxJitP1 = 25; // Increase budget significantly
           let jitCount = 0;
+
           for (const candidate of sortedP1) {
             if (jitCount >= maxJitP1) break;
             jitCount++;
