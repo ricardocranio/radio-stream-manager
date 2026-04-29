@@ -108,6 +108,10 @@ async function loadFolderFiles(folder: string): Promise<string[]> {
  * Load songs from station captures (scraped_songs + radio_historico for depth).
  * If stationName is empty/undefined, loads from ALL stations.
  */
+/**
+ * Load songs from station captures (scraped_songs).
+ * PRIORITY: P1-FRESH (<=15min)
+ */
 async function loadMonitoredSongs(
   stationName: string | undefined,
   musicFolders: string[]
@@ -116,39 +120,39 @@ async function loadMonitoredSongs(
   
   try {
     const { supabase } = await import('@/integrations/supabase/client');
+    const now = new Date();
+    const FRESCOR_MAX_MS = 15 * 60 * 1000;
     
-    // PRIMARY: scraped_songs (recent)
-    let query = supabase
+    // 1) P1-FRESH: scraped_songs within last 15min
+    let queryFresh = supabase
       .from('scraped_songs')
-      .select('artist, title')
+      .select('artist, title, scraped_at')
       .order('scraped_at', { ascending: false })
-      .limit(500);
-    if (stationName) query = query.eq('station_name', stationName);
-    const { data: recentData } = await query;
+      .limit(200);
     
-    // SECONDARY: radio_historico (deeper catalog, last 3 days)
+    if (stationName) queryFresh = queryFresh.eq('station_name', stationName);
+    const { data: recentData } = await queryFresh;
+    
+    const freshSongs = (recentData || []).filter(s => {
+      if (!s.scraped_at) return false;
+      const ageMs = now.getTime() - new Date(s.scraped_at).getTime();
+      return ageMs <= FRESCOR_MAX_MS;
+    });
+
+    // 2) FALLBACK: Remaining recent songs and historico
     let histQuery = supabase
       .from('radio_historico')
       .select('artist, title')
       .order('captured_at', { ascending: false })
-      .limit(800);
+      .limit(500);
     if (stationName) histQuery = histQuery.eq('station_name', stationName);
     const { data: histData } = await histQuery;
 
-    // TERTIARY: radio_historico_stats (aggregated all-time top songs)
-    let statsQuery = supabase
-      .from('radio_historico_stats')
-      .select('artist, title')
-      .order('play_count', { ascending: false })
-      .limit(500);
-    if (stationName) statsQuery = statsQuery.eq('station_name', stationName);
-    const { data: statsData } = await statsQuery;
-
-    // Merge all sources, deduplicate
+    // Merge: Fresh first, then others
     const allSongs = [
-      ...(recentData || []),
+      ...freshSongs,
+      ...(recentData || []).filter(s => !freshSongs.includes(s)),
       ...(histData || []),
-      ...(statsData || []),
     ];
     
     const seen = new Set<string>();
@@ -175,7 +179,7 @@ async function loadMonitoredSongs(
       if (found.length >= 200) break;
     }
     
-    console.log(`[MAPAS] 📡 ${found.length}/${unique.length} músicas reais encontradas${stationName ? ` de ${stationName}` : ' (todas)'} [scraped:${recentData?.length||0} hist:${histData?.length||0} stats:${statsData?.length||0}]`);
+    console.log(`[MAPAS] 📡 ${found.length}/${unique.length} músicas encontradas. P1-FRESH: ${freshSongs.length}`);
     return found;
   } catch (err) {
     console.warn(`[MAPAS] Erro ao carregar monitoramento:`, err);
