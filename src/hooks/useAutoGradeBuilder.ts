@@ -2137,9 +2137,9 @@ export function useAutoGradeBuilder() {
           });
       };
 
-      const currentCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.current.hour, blocks.current.minute);
-      const nextCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.next.hour, blocks.next.minute);
-      const thirdCoveredBySchedule = isBlockCoveredByScheduledSequence(blocks.third.hour, blocks.third.minute);
+      const currentCoveredBySchedule = config.gradeMode !== 'standard' && isBlockCoveredByScheduledSequence(blocks.current.hour, blocks.current.minute);
+      const nextCoveredBySchedule = config.gradeMode !== 'standard' && isBlockCoveredByScheduledSequence(blocks.next.hour, blocks.next.minute);
+      const thirdCoveredBySchedule = config.gradeMode !== 'standard' && isBlockCoveredByScheduledSequence(blocks.third.hour, blocks.third.minute);
 
       if (currentCoveredBySchedule) {
         builtBlocksRef.current.delete(currentTimeKey);
