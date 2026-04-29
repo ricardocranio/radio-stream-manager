@@ -13,6 +13,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useSyncSpecialMonitoring, addSpecialMonitoringToCloud, deleteSpecialMonitoringFromCloud, updateSpecialMonitoringInCloud } from '@/hooks/useSyncSpecialMonitoring';
+import { normalizeStr } from '@/lib/songUtils';
+
 import {
   Dialog,
   DialogContent,
