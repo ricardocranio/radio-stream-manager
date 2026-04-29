@@ -589,9 +589,10 @@ export async function selectSongForSlot(
       // JIT for this tier
       if (!selectedSong && missingFromTier.length > 0) {
         let jitAttempts = 0;
-        const jitBudgetByTier = [10, 8, 6, 4];
-        const maxJit = jitBudgetByTier[tierIdx] || 4;
+        const jitBudgetByTier = [20, 15, 10, 8]; // Increased budget
+        const maxJit = jitBudgetByTier[tierIdx] || 8;
         let missingMarks = 0;
+
 
         for (const candidate of missingFromTier) {
           if (jitAttempts >= maxJit) break;
