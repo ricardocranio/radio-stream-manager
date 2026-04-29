@@ -180,11 +180,28 @@ export function SpecialMonitoringView() {
         .select('title, artist, station_name, scraped_at')
         .in('station_name', stationNames)
         .order('scraped_at', { ascending: false })
-        .limit(100);
+        .limit(200); // Fetch more to allow for deduplication
 
       if (error) throw error;
 
-      setCapturedSongs(songs || []);
+      // Deduplicate songs by station + artist + title
+      const uniqueSongs: CapturedSongFromDB[] = [];
+      const seenFingerprints = new Set<string>();
+
+      if (songs) {
+        for (const song of songs) {
+          const fingerprint = getSongFingerprint(song);
+          // Only add if we haven't seen this song for this station recently
+          // Or if it's the same song but at a significantly different time (though here we just want unique sequence)
+          if (!seenFingerprints.has(fingerprint)) {
+            uniqueSongs.push(song);
+            seenFingerprints.add(fingerprint);
+          }
+          if (uniqueSongs.length >= 100) break;
+        }
+      }
+
+      setCapturedSongs(uniqueSongs);
       setLastRefresh(new Date());
     } catch (error) {
       console.error('Error fetching songs:', error);
@@ -196,6 +213,7 @@ export function SpecialMonitoringView() {
     }
     setIsLoading(false);
   };
+
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
