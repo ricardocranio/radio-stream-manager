@@ -410,7 +410,6 @@ const defaultConfig: SystemConfig = {
     'ZAPPING 2 - PALAEKSA E PVR',
     'KRISHNA YADAV - *',
   ],
-  gradeMode: 'standard',
 };
 
 const defaultDeezerConfig: DeezerConfig = {

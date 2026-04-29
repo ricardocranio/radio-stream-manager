@@ -61,7 +61,7 @@ function parseGradeLine(line: string): PreviewSong[] {
 }
 
 export function GradePreviewCard() {
-  const { config, stations, scheduledSequences, setGradePreviewSongKeys, setConfig } = useRadioStore();
+  const { config, stations, scheduledSequences, setGradePreviewSongKeys } = useRadioStore();
   const { gradeBuilder } = useGlobalServices();
   const { getLogsByBlock, blockLogs } = useGradeLogStore();
   const [libraryStatus, setLibraryStatus] = useState<Record<string, LibraryStatus>>({});
@@ -872,13 +872,6 @@ export function GradePreviewCard() {
     }
   }, [isBlockShort, isLoading, nextBlockTime, blockDuration, gradeBuilder]);
 
-  // Trigger rebuild when mode changes
-  useEffect(() => {
-    if (!isLoading && nextBlockTime !== '--:--') {
-      gradeBuilder.buildGrade(false, true);
-    }
-  }, [config.gradeMode]);
-
   return (
     <Card className={`glass-card ${isBlockShort ? 'border-red-500/40' : isBlockOk ? 'border-green-500/20' : 'border-amber-500/20'}`}>
       <CardHeader className="pb-3 border-b border-border">
@@ -906,32 +899,6 @@ export function GradePreviewCard() {
             )}
           </CardTitle>
           <div className="flex items-center gap-2">
-            <div className="flex bg-background/50 border border-border p-1 rounded-lg gap-1">
-              <Button
-                variant={config.gradeMode === 'custom' ? 'default' : 'ghost'}
-                size="sm"
-                className={`h-7 text-[10px] px-3 rounded-md transition-all font-bold ${
-                  config.gradeMode === 'custom' 
-                    ? 'bg-amber-600 text-white hover:bg-amber-700 shadow-sm' 
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => setConfig({ gradeMode: 'custom' })}
-              >
-                MODO PERSONALIZADO
-              </Button>
-              <Button
-                variant={config.gradeMode !== 'custom' ? 'default' : 'ghost'}
-                size="sm"
-                className={`h-7 text-[10px] px-3 rounded-md transition-all font-bold ${
-                  config.gradeMode !== 'custom' 
-                    ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm' 
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => setConfig({ gradeMode: 'standard' })}
-              >
-                MODO PADRÃO
-              </Button>
-            </div>
             {isCheckingLibrary && (
               <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/30">
                 <Loader2 className="w-3 h-3 animate-spin mr-1" />
