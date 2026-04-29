@@ -160,17 +160,18 @@ export function P1FreshnessAlertCard() {
     if (p1Stations.length === 0) return;
 
     const checkFreshness = async () => {
-      const cutoff = new Date(Date.now() - FRESHNESS_THRESHOLD_MIN * 60 * 1000).toISOString();
       const status: Record<string, StationInfo> = {};
 
       for (const stationName of p1Stations) {
         try {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('scraped_songs')
             .select('title, artist, scraped_at')
             .eq('station_name', stationName)
             .order('scraped_at', { ascending: false })
             .limit(3);
+
+          if (error) throw error;
 
           if (data && data.length > 0) {
             const lastSeen = new Date(data[0].scraped_at);
@@ -184,9 +185,23 @@ export function P1FreshnessAlertCard() {
               recentSongs: data.map(d => ({ title: d.title, artist: d.artist, scraped_at: d.scraped_at })),
             };
           } else {
-            status[stationName] = { lastSeen: null, ageMinutes: null, fresh: false, level: 'unknown', recentSongs: [] };
+            // Check if station exists in radio_stations to provide better info
+            const { data: stationInfo } = await supabase
+              .from('radio_stations')
+              .select('enabled')
+              .eq('name', stationName)
+              .maybeSingle();
+
+            status[stationName] = { 
+              lastSeen: null, 
+              ageMinutes: null, 
+              fresh: false, 
+              level: stationInfo ? 'unknown' : 'stale', 
+              recentSongs: [] 
+            };
           }
-        } catch {
+        } catch (err) {
+          console.error(`[FRESHNESS] Error checking ${stationName}:`, err);
           status[stationName] = { lastSeen: null, ageMinutes: null, fresh: false, level: 'unknown', recentSongs: [] };
         }
       }
@@ -286,12 +301,14 @@ export function P1FreshnessAlertCard() {
                             {status.lastSeen ? (
                               <Badge variant="outline" className={`h-5 gap-1 px-1.5 text-[10px] font-medium ${freshnessStyle.badge}`}>
                                 <Clock className="w-3 h-3" />
-                                {status.ageMinutes} min atrás
+                                {status.ageMinutes && status.ageMinutes >= 60 
+                                  ? `${Math.floor(status.ageMinutes / 60)}h ${status.ageMinutes % 60}m` 
+                                  : `${status.ageMinutes} min`} atrás
                               </Badge>
                             ) : (
                               <Badge variant="outline" className={`h-5 gap-1 px-1.5 text-[10px] font-medium ${freshnessStyle.badge}`}>
-                                <Clock className="w-3 h-3" />
-                                Sem dados
+                                <AlertTriangle className="w-3 h-3" />
+                                {status.level === 'stale' ? 'Não monitorada' : 'Sem dados'}
                               </Badge>
                             )}
                           </div>
