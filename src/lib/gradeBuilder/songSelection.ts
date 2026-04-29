@@ -903,7 +903,98 @@ export async function selectSongForSlot(
   }
 
   // ============================================================
-  // PRIORITY P4: General Pool — STYLE-FILTERED FIRST (chunked batch)
+  // FALLBACK EXTREMO P1-OLDER: Same station, songs older than 1h
+  // This is now treated as a LAST RESORT for identity, 
+  // after trying carry-over and TOP25.
+  // ============================================================
+  if (!selectedSong && stationSongs.length > 0) {
+    const now_ext = Date.now();
+    const P1_GRADUATED_MAX_MS = 60 * 60 * 1000;
+
+    const olderStationSongs = [...stationSongs]
+      .filter(c => {
+        if (!c.scrapedAt) return true;
+        return (now_ext - new Date(c.scrapedAt).getTime()) > P1_GRADUATED_MAX_MS;
+      })
+      .sort((a, b) => {
+        if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
+        return 0;
+      })
+      .filter(c => isValidCandidate(c.title, c.artist));
+
+    if (olderStationSongs.length > 0) {
+      console.log(`[SONG-SELECT] 🕐 [FALLBACK-EXTREMO] Tentando ${olderStationSongs.length} músicas antigas (>60min) de "${stationName}"`);
+
+      const extBatchEntries = olderStationSongs.flatMap(c => {
+        const entries = [{ artist: c.artist, title: c.title }];
+        const corrected = aliasEngine.resolve(c.artist, c.title);
+        if (corrected.artist !== c.artist || corrected.title !== c.title) {
+          entries.push({ artist: corrected.artist, title: corrected.title });
+        }
+        return entries;
+      });
+      const extMap = extBatchEntries.length ? await ctx.batchFindSongsInLibrary(extBatchEntries) : new Map();
+
+      for (const candidate of olderStationSongs) {
+        const libraryResult = await findWithAliasFallback(candidate.artist, candidate.title, extMap as Map<string, any>);
+        if (libraryResult?.exists) {
+          const correctFilename = libraryResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+          const ageMin = candidate.scrapedAt ? Math.round((now_ext - new Date(candidate.scrapedAt).getTime()) / 60000) : '?';
+          selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+          logs.push({
+            blockTime: timeStr, type: 'used',
+            title: candidate.title, artist: candidate.artist,
+            station: candidate.station, style: candidate.style,
+            reason: `[FALLBACK-EXTREMO] "${stationName}" (Idade alta: ${ageMin}min)`,
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  // ============================================================
+  // FALLBACK EXTREMO P1-DEEP: Most played (no timestamp)
+  // ============================================================
+  if (!selectedSong && stationName) {
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data: statsData } = await supabase
+        .from('radio_historico_stats')
+        .select('title, artist, station_name, play_count')
+        .eq('station_name', stationName)
+        .order('play_count', { ascending: false })
+        .limit(50);
+
+      if (statsData && statsData.length > 0) {
+        const deepCandidates = statsData.filter(s => isValidCandidate(s.title, s.artist));
+        if (deepCandidates.length > 0) {
+          const deepMap = await ctx.batchFindSongsInLibrary(deepCandidates.map(s => ({ artist: s.artist, title: s.title })));
+          for (const candidate of deepCandidates) {
+            const r = (deepMap as Map<string, any>).get(toLibKey(candidate.artist, candidate.title));
+            if (r?.exists) {
+              const correctFilename = r.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+              selectedSong = {
+                title: candidate.title, artist: candidate.artist,
+                station: stationName, style: stationStyle,
+                filename: correctFilename, existsInLibrary: true,
+              };
+              logs.push({
+                blockTime: timeStr, type: 'used',
+                title: candidate.title, artist: candidate.artist,
+                station: stationName, style: stationStyle,
+                reason: `[FALLBACK-EXTREMO] P1-DEEP de "${stationName}" (sem frescor)`,
+              });
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[SONG-SELECT] ⚠️ P1-DEEP falhou:', e);
+    }
+  }
+
   // ============================================================
   if (!selectedSong) {
     let jitAttemptsP4 = 0;
