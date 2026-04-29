@@ -102,7 +102,9 @@ function matchesSongSearch(song: Pick<ScrapedSong, 'title' | 'artist' | 'station
 function buildCappedSongList(inputSongs: ScrapedSong[]): ScrapedSong[] {
   const stationCounts = new Map<string, number>();
   const seenSongIds = new Set<string>();
-  const lastFingerprintByStation = new Map<string, string>();
+  // Use a map of sets to track all unique songs seen recently per station
+  // This prevents non-consecutive duplicates (e.g. Song A, Song B, Song A)
+  const fingerprintsByStation = new Map<string, Set<string>>();
   const cappedSongs: ScrapedSong[] = [];
 
   for (const song of inputSongs) {
@@ -113,11 +115,17 @@ function buildCappedSongList(inputSongs: ScrapedSong[]): ScrapedSong[] {
     if (currentCount >= MAX_SONGS_PER_STATION) continue;
 
     const fingerprint = getSongFingerprint(song);
-    if (lastFingerprintByStation.get(song.station_name) === fingerprint) continue;
+    let stationSeen = fingerprintsByStation.get(song.station_name);
+    if (!stationSeen) {
+      stationSeen = new Set<string>();
+      fingerprintsByStation.set(song.station_name, stationSeen);
+    }
+
+    if (stationSeen.has(fingerprint)) continue;
 
     cappedSongs.push(song);
     stationCounts.set(song.station_name, currentCount + 1);
-    lastFingerprintByStation.set(song.station_name, fingerprint);
+    stationSeen.add(fingerprint);
   }
 
   return cappedSongs;
