@@ -496,7 +496,29 @@ Deno.serve(async (req) => {
 
     console.log(`Scraping: ${targetUrl} (for ${safeName})${streamUrl ? ` [stream: ${streamUrl.substring(0, 60)}]` : ''}`);
 
-    // === Source 1: OnlineRadioBox ===
+    // === REFINED LOGIC: PRIORITIZE LIVE SOURCES OVER SCRAPING ===
+    // This ensures we get the most accurate P1-FRESH timestamp possible.
+
+    // Priority 1: Triton API (Native Now-Playing)
+    if (streamUrl && streamUrl.includes('livestream-redirect')) {
+      console.log(`[${safeName}] Trying Priority 1: Triton API`);
+      const tritonResult = await fetchTritonNowPlaying(streamUrl, safeName);
+      if (tritonResult.success) {
+        return new Response(JSON.stringify(tritonResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
+    // Priority 2: ICY Metadata (Direct Stream Metadata)
+    if (streamUrl) {
+      console.log(`[${safeName}] Trying Priority 2: ICY Metadata`);
+      const icyResult = await fetchIcyMetadata(streamUrl, safeName);
+      if (icyResult.success) {
+        return new Response(JSON.stringify(icyResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
+    // Priority 3: OnlineRadioBox (HTML Scrape - fallback because of delay)
+    console.log(`[${safeName}] Trying Priority 3: OnlineRadioBox`);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
     let orbResult: RadioScrapeResult | null = null;
@@ -526,26 +548,8 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify(orbResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // === Source 2: Triton Digital API (with mount name variations) ===
-    if (streamUrl) {
-      console.log(`[${safeName}] ORB failed, trying Triton API`);
-      const tritonResult = await fetchTritonNowPlaying(streamUrl, safeName);
-      if (tritonResult.success) {
-        return new Response(JSON.stringify(tritonResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-    }
-
-    // === Source 3: ICY Metadata (with redirect resolution) ===
-    if (streamUrl) {
-      console.log(`[${safeName}] Triton failed, trying ICY metadata`);
-      const icyResult = await fetchIcyMetadata(streamUrl, safeName);
-      if (icyResult.success) {
-        return new Response(JSON.stringify(icyResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-    }
-
-    // === Source 4: Database Fallback (scraped_songs + radio_historico) ===
-    console.log(`[${safeName}] All live sources failed, trying DB fallback`);
+    // Final Fallback: Database Cache
+    console.log(`[${safeName}] All live sources failed, using DB Cache`);
     const dbResult = await fetchFromDatabase(safeName);
     if (dbResult.success) {
       return new Response(JSON.stringify(dbResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
