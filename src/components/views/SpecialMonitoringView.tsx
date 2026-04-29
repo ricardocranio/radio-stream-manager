@@ -251,7 +251,22 @@ export function SpecialMonitoringView() {
         (payload) => {
           const newSong = payload.new as CapturedSongFromDB;
           if (stationNames.includes(newSong.station_name)) {
-            setCapturedSongs(prev => [newSong, ...prev].slice(0, 100));
+            setCapturedSongs(prev => {
+              const fingerprint = getSongFingerprint(newSong);
+              // Check if the most recent song for this station is the same
+              const isDuplicate = prev.some(s => s.station_name === newSong.station_name && getSongFingerprint(s) === fingerprint);
+              
+              if (isDuplicate) {
+                // Update the existing one with new timestamp but don't add duplicate
+                return prev.map(s => 
+                  (s.station_name === newSong.station_name && getSongFingerprint(s) === fingerprint) 
+                  ? newSong 
+                  : s
+                );
+              }
+              
+              return [newSong, ...prev].slice(0, 100);
+            });
             setLastRefresh(new Date());
           }
         }
@@ -262,6 +277,7 @@ export function SpecialMonitoringView() {
       supabase.removeChannel(channel);
     };
   }, [cloudSchedules.length]);
+
 
   const handleAddSchedule = () => {
     if (!newSchedule.useCustomStation && !selectedStation) return;
