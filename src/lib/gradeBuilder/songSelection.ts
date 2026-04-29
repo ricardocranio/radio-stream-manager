@@ -519,12 +519,12 @@ export async function selectSongForSlot(
   if (!selectedSong && stationSongs.length > 0) {
     const now = Date.now();
     const P1_EXT_TIERS_MS = [
-      15 * 60 * 1000,   // Tier 1: ≤15min (may have been filtered by anti-rep in P1)
+      15 * 60 * 1000,   // Tier 1: ≤15min (retry with anti-rep)
       30 * 60 * 1000,   // Tier 2: ≤30min
-      60 * 60 * 1000,   // Tier 3: ≤1h
-      120 * 60 * 1000,  // Tier 4: ≤2h
+      45 * 60 * 1000,   // Tier 3: ≤45min
+      60 * 60 * 1000,   // Tier 4: ≤60min
     ];
-    const P1_EXT_LABELS = ['≤15min', '≤30min', '≤1h', '≤2h'];
+    const P1_EXT_LABELS = ['≤15min', '≤30min', '≤45min', '≤60min'];
 
     const freshnessSorted = [...stationSongs].sort((a, b) => {
       if (a.scrapedAt && b.scrapedAt) return new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
