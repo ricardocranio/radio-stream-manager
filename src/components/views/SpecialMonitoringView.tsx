@@ -13,6 +13,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useSyncSpecialMonitoring, addSpecialMonitoringToCloud, deleteSpecialMonitoringFromCloud, updateSpecialMonitoringInCloud } from '@/hooks/useSyncSpecialMonitoring';
+import { normalizeStr } from '@/lib/songUtils';
+
 import {
   Dialog,
   DialogContent,
@@ -67,7 +69,12 @@ interface CloudSchedule {
   enabled: boolean;
 }
 
+function getSongFingerprint(song: { station_name: string; artist: string; title: string }): string {
+  return `${song.station_name}|||${normalizeStr(song.artist)}|||${normalizeStr(song.title)}`;
+}
+
 export function SpecialMonitoringView() {
+
   const { stations, updateStation, setStations } = useRadioStore();
   const { toast } = useToast();
   const [selectedStation, setSelectedStation] = useState<string | null>(null);
@@ -173,11 +180,29 @@ export function SpecialMonitoringView() {
         .select('title, artist, station_name, scraped_at')
         .in('station_name', stationNames)
         .order('scraped_at', { ascending: false })
-        .limit(100);
+        .limit(200); // Fetch more to allow for deduplication
 
       if (error) throw error;
 
-      setCapturedSongs(songs || []);
+      // Deduplicate songs by station + artist + title - only consecutive ones for the same station
+      const uniqueSongs: CapturedSongFromDB[] = [];
+      const lastFingerprintByStation = new Map<string, string>();
+
+      if (songs) {
+        for (const song of songs) {
+          const fingerprint = getSongFingerprint(song);
+          const lastFingerprint = lastFingerprintByStation.get(song.station_name);
+          
+          if (fingerprint !== lastFingerprint) {
+            uniqueSongs.push(song);
+            lastFingerprintByStation.set(song.station_name, fingerprint);
+          }
+          if (uniqueSongs.length >= 100) break;
+        }
+      }
+
+
+      setCapturedSongs(uniqueSongs);
       setLastRefresh(new Date());
     } catch (error) {
       console.error('Error fetching songs:', error);
@@ -189,6 +214,7 @@ export function SpecialMonitoringView() {
     }
     setIsLoading(false);
   };
+
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -226,7 +252,23 @@ export function SpecialMonitoringView() {
         (payload) => {
           const newSong = payload.new as CapturedSongFromDB;
           if (stationNames.includes(newSong.station_name)) {
-            setCapturedSongs(prev => [newSong, ...prev].slice(0, 100));
+            setCapturedSongs(prev => {
+              const fingerprint = getSongFingerprint(newSong);
+              // Find the most recent song for this specific station
+              const lastSongForStation = prev.find(s => s.station_name === newSong.station_name);
+              const isStutterDuplicate = lastSongForStation && getSongFingerprint(lastSongForStation) === fingerprint;
+              
+              if (isStutterDuplicate) {
+                // If it's the same song metadata repeating consecutively for this station,
+                // just update the timestamp/metadata of the existing entry
+                return prev.map(s => 
+                  (s === lastSongForStation) ? newSong : s
+                );
+              }
+              
+              return [newSong, ...prev].slice(0, 100);
+            });
+
             setLastRefresh(new Date());
           }
         }
@@ -237,6 +279,7 @@ export function SpecialMonitoringView() {
       supabase.removeChannel(channel);
     };
   }, [cloudSchedules.length]);
+
 
   const handleAddSchedule = () => {
     if (!newSchedule.useCustomStation && !selectedStation) return;
