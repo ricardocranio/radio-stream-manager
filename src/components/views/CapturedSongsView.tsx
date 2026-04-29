@@ -142,28 +142,29 @@ function mergeRealtimeSong(currentSongs: ScrapedSong[], incomingSong: ScrapedSon
   const stationSongs = currentSongs.filter(s => s.station_name === incomingSong.station_name);
   const incomingFingerprint = getSongFingerprint(incomingSong);
   
-  const isDuplicate = stationSongs.slice(0, 5).some(s => getSongFingerprint(s) === incomingFingerprint);
+  // Find the most recent occurrence of this fingerprint for this station
+  const duplicateIndex = currentSongs.findIndex(s => 
+    s.station_name === incomingSong.station_name && getSongFingerprint(s) === incomingFingerprint
+  );
   
-  if (isDuplicate) {
-    // If it's a duplicate but has a newer timestamp/now_playing status, update the existing one
-    const duplicateIndex = currentSongs.findIndex(s => 
-      s.station_name === incomingSong.station_name && getSongFingerprint(s) === incomingFingerprint
-    );
+  if (duplicateIndex >= 0) {
+    // If it's a duplicate and it's within the last 5 captures for this station, update the existing one
+    const stationSpecificIndex = stationSongs.findIndex(s => getSongFingerprint(s) === incomingFingerprint);
     
-    if (duplicateIndex >= 0) {
+    if (stationSpecificIndex < 5) {
       const nextSongs = [...currentSongs];
       nextSongs[duplicateIndex] = {
         ...nextSongs[duplicateIndex],
         ...incomingSong,
-        // Preserve the older ID if we are just updating metadata
+        // Preserve the older ID if we are just updating metadata/timestamp
         id: nextSongs[duplicateIndex].id 
       };
       return nextSongs;
     }
-    return currentSongs;
   }
 
   return buildCappedSongList([incomingSong, ...currentSongs]);
+
 }
 
 export function CapturedSongsView() {
