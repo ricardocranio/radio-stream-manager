@@ -29,18 +29,11 @@ export function useSyncStationsFromDb() {
           return;
         }
 
-        // 1. Identify local stations that STILL exist in the DB (preserve them)
-        // 2. Local stations NOT in DB but present locally: if syncFromDb is running, 
-        //    it means we might have a conflict between "user deleted it" and "DB has it".
-        // CRITICAL: We only keep local stations that are also in the DB to allow deletion 
-        // to propagate if the user deleted it from the DB elsewhere, BUT here we want
-        // the LOCAL deletion to be the source of truth for the local UI.
-        
-        // Let's refine: We only add DB stations that are NEW.
-        // We do NOT remove local stations here because the user might have just deleted them
-        // and they haven't synced to DB yet (or they are local-only).
-        
-        const mergedStations: RadioStation[] = stations.map(localStation => {
+        // Use current state to merge
+        const currentStations = useRadioStore.getState().stations;
+
+        // 1. Map local stations to potentially updated URLs from DB
+        const mergedStations: RadioStation[] = currentStations.map(localStation => {
           const normalizedName = localStation.name.trim().toLowerCase();
           const dbStation = dbStations.find(db => db.name.trim().toLowerCase() === normalizedName);
           
@@ -54,10 +47,10 @@ export function useSyncStationsFromDb() {
           return localStation;
         });
 
-        const localNames = new Set(stations.map(s => s.name.trim().toLowerCase()));
+        const localNames = new Set(currentStations.map(s => s.name.trim().toLowerCase()));
         let hasNewFromDb = false;
 
-        // Add DB-only stations that don't exist locally (genuinely new from other clients/cloud)
+        // 2. Add DB-only stations that don't exist locally
         for (const dbStation of dbStations) {
           const normalizedName = dbStation.name.trim().toLowerCase();
           if (!localNames.has(normalizedName)) {
@@ -79,10 +72,6 @@ export function useSyncStationsFromDb() {
           console.log('[SYNC-FROM-DB] New stations found in DB, merging...');
           setStations(mergedStations);
         }
-      } catch (err) {
-        console.error('[SYNC-FROM-DB] Unexpected error:', err);
-      }
-    };
       } catch (err) {
         console.error('[SYNC-FROM-DB] Unexpected error:', err);
       }
