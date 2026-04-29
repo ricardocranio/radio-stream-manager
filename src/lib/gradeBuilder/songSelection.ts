@@ -632,8 +632,60 @@ export async function selectSongForSlot(
     } // end tier loop
   }
 
+
   // ============================================================
-  // PRIORITY P1-OLDER: Same station, songs older than 2h
+  // PRIORITY P1.5-DNA-FRESH: Fresh songs (≤60m) from OTHER stations
+  // same style. This ensures "freshness" (seal) is prioritized 
+  // over older songs from the same station.
+  // ============================================================
+  if (!selectedSong) {
+    const now_dna = Date.now();
+    const MAX_FRESH_DNA_MS = 60 * 60 * 1000;
+    
+    // Find stations with same style
+    const similarStations = Object.entries(songsByStation)
+      .filter(([name]) => name !== stationName)
+      .filter(([name]) => {
+        const style = ctx.stations.find(s => s.name === name)?.styles?.[0];
+        return style === stationStyle;
+      });
+
+    for (const [otherName, otherSongs] of similarStations) {
+      const freshDnaCandidates = otherSongs
+        .filter(c => {
+          if (!c.scrapedAt) return false;
+          return (now_dna - new Date(c.scrapedAt).getTime()) <= MAX_FRESH_DNA_MS;
+        })
+        .filter(c => isValidCandidate(c.title, c.artist))
+        .sort((a, b) => new Date(b.scrapedAt!).getTime() - new Date(a.scrapedAt!).getTime());
+
+      if (freshDnaCandidates.length > 0) {
+        const dnaBatch = freshDnaCandidates.map(c => ({ artist: c.artist, title: c.title }));
+        const dnaMap = await ctx.batchFindSongsInLibrary(dnaBatch);
+
+        for (const candidate of freshDnaCandidates) {
+          const libResult = await findWithAliasFallback(candidate.artist, candidate.title, dnaMap as Map<string, any>);
+          if (libResult?.exists) {
+            const correctFilename = libResult.filename || sanitizeFilename(`${candidate.artist} - ${candidate.title}.mp3`);
+            const ageMin = Math.round((now_dna - new Date(candidate.scrapedAt!).getTime()) / 60000);
+            
+            selectedSong = { ...candidate, filename: correctFilename, existsInLibrary: true };
+            stats.substituted++;
+            logs.push({
+              blockTime: timeStr, type: 'substituted',
+              title: candidate.title, artist: candidate.artist,
+              station: candidate.station, style: candidate.style,
+              reason: `[P1.5-DNA-FRESH] Freshness prior over identity (${ageMin}min, de ${otherName})`,
+              substituteFor: stationName || 'UNKNOWN',
+            });
+            break;
+          }
+        }
+      }
+      if (selectedSong) break;
+    }
+  }
+
   // When ALL graduated tiers found no songs, try ALL remaining songs
   // from the SAME station regardless of age. This preserves station
   // identity and is MUCH more assertive than jumping to other stations.
