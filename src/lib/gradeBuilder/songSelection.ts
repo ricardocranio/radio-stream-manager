@@ -1055,7 +1055,7 @@ export async function selectSongForSlot(
                 artist: candidate.artist,
                 station: candidate.station,
                 style: candidate.style,
-                reason: `[P4] Pool geral JIT ${jitAttemptsP4} (mesmo estilo, de ${candidate.station})`,
+                reason: `[RELAXED] Pool geral JIT ${jitAttemptsP4} (mesmo estilo, de ${candidate.station})`,
               });
               break;
             }
