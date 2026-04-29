@@ -69,7 +69,12 @@ interface CloudSchedule {
   enabled: boolean;
 }
 
+function getSongFingerprint(song: { station_name: string; artist: string; title: string }): string {
+  return `${song.station_name}|||${normalizeStr(song.artist)}|||${normalizeStr(song.title)}`;
+}
+
 export function SpecialMonitoringView() {
+
   const { stations, updateStation, setStations } = useRadioStore();
   const { toast } = useToast();
   const [selectedStation, setSelectedStation] = useState<string | null>(null);
