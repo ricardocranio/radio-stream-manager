@@ -683,7 +683,7 @@ export async function selectSongForSlot(
             artist: candidate.artist,
             station: candidate.station,
             style: candidate.style,
-            reason: `[P1-EXT] Pool estendido "${stationName}" (frescor: ${ageMin}min, mantendo identidade)`,
+            reason: `[P1-EXT] "${stationName}" (frescor: ${ageMin}min, mantendo identidade)`,
           });
           console.log(`[SONG-SELECT] ✅ [P1-EXT] Selecionada: "${candidate.artist} - ${candidate.title}" (${ageMin}min, da mesma rádio)`);
           break;
