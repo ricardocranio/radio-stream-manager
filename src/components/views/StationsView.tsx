@@ -227,13 +227,19 @@ export function StationsView() {
     setEditForm(null);
     setIsAddingNew(false);
     
-    // Also remove from Supabase
+    // Also remove from Supabase if it belongs to the user
     if (station?.name) {
       try {
-        await supabase
-          .from('radio_stations')
-          .delete()
-          .eq('name', station.name.trim());
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          // Only delete if it's the user's station (user_id matches)
+          // Global stations (user_id IS NULL) are NOT deleted
+          await supabase
+            .from('radio_stations')
+            .delete()
+            .eq('name', station.name.trim())
+            .eq('user_id', userData.user.id);
+        }
       } catch (e) {
         console.log('Local delete only:', e);
       }
@@ -312,10 +318,18 @@ export function StationsView() {
     const station = stations.find(s => s.id === stationId);
     if (station) {
       try {
-        await supabase
-          .from('radio_stations')
-          .update({ enabled })
-          .eq('name', station.name);
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          // Try to update user's own station
+          const { error } = await supabase
+            .from('radio_stations')
+            .update({ enabled })
+            .eq('name', station.name)
+            .eq('user_id', userData.user.id);
+          
+          // If no personal station found, we don't toggle the global one
+          // In a full SaaS, we'd have a user_preferences table
+        }
       } catch (e) {
         console.log('Local update only');
       }
