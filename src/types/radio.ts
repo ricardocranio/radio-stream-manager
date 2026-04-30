@@ -79,6 +79,8 @@ export interface SystemConfig {
   // Blackout: block specific artists during time ranges
   // Format: { artist: "Artist Name", startHour: 5, endHour: 8 }
   artistBlackouts?: Array<{ artist: string; startHour: number; endHour: number }>;
+  // Toggle for Grade 24h (hour-specific overrides)
+  useGrade24h?: boolean;
 }
 
 export interface SequenceConfig {
