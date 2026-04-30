@@ -235,7 +235,10 @@ export function GradeBuilderView() {
 
     // Madrugada (00:00-04:30) - Mix from all stations
     if (hour >= 0 && hour <= 4) {
-      const allPool = realSongs.filter(s => !usedSongs.has(`${s.title.toLowerCase()}-${s.artist.toLowerCase()}`));
+      // Filter by station flags
+      const poolStations = stations.filter(s => s.isMonitoring !== false && s.isSequence !== false && s.isCapture !== false);
+      const poolStationNames = new Set(poolStations.map(s => s.name));
+      const allPool = realSongs.filter(s => poolStationNames.has(s.station_name) && !usedSongs.has(`${s.title.toLowerCase()}-${s.artist.toLowerCase()}`));
       const shuffled = [...allPool].sort(() => Math.random() - 0.5);
       const picked: string[] = [];
       const localArtists = new Set<string>();
