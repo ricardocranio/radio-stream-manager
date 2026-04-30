@@ -1,0 +1,4 @@
+ALTER TABLE public.radio_stations 
+ADD COLUMN IF NOT EXISTS is_monitoring BOOLEAN DEFAULT true,
+ADD COLUMN IF NOT EXISTS is_sequence BOOLEAN DEFAULT true,
+ADD COLUMN IF NOT EXISTS is_capture BOOLEAN DEFAULT true;

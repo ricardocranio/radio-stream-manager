@@ -118,13 +118,20 @@ export function GradeBuilderView() {
 
   // Build songs by station
   const songsByStation = useCallback((): Record<string, SongPool[]> => {
+    // Filter stations that are selected for monitoring, sequence, and capture
+    const poolStations = stations.filter(s => s.isMonitoring !== false && s.isSequence !== false && s.isCapture !== false);
+    const poolStationNames = new Set(poolStations.map(s => s.name));
+    
     const map: Record<string, SongPool[]> = {};
     for (const song of realSongs) {
+      // Only include if station is in the filtered list
+      if (!poolStationNames.has(song.station_name)) continue;
+      
       if (!map[song.station_name]) map[song.station_name] = [];
       map[song.station_name].push(song);
     }
     return map;
-  }, [realSongs]);
+  }, [realSongs, stations]);
 
   // Get active sequence for a specific block
   const getActiveSequenceForBlock = useCallback((hour: number, minute: number): SequenceConfig[] => {
@@ -228,7 +235,10 @@ export function GradeBuilderView() {
 
     // Madrugada (00:00-04:30) - Mix from all stations
     if (hour >= 0 && hour <= 4) {
-      const allPool = realSongs.filter(s => !usedSongs.has(`${s.title.toLowerCase()}-${s.artist.toLowerCase()}`));
+      // Filter by station flags
+      const poolStations = stations.filter(s => s.isMonitoring !== false && s.isSequence !== false && s.isCapture !== false);
+      const poolStationNames = new Set(poolStations.map(s => s.name));
+      const allPool = realSongs.filter(s => poolStationNames.has(s.station_name) && !usedSongs.has(`${s.title.toLowerCase()}-${s.artist.toLowerCase()}`));
       const shuffled = [...allPool].sort(() => Math.random() - 0.5);
       const picked: string[] = [];
       const localArtists = new Set<string>();
@@ -253,7 +263,12 @@ export function GradeBuilderView() {
     // Sertanejo Nossa (05:00-07:30)
     if (hour >= 5 && hour <= 7) {
       const sertStations = ['Liberdade FM', 'Positiva FM', 'Positividade FM'];
+      // Filter by station flags
+      const poolStations = stations.filter(s => s.isMonitoring !== false && s.isSequence !== false && s.isCapture !== false);
+      const poolStationNames = new Set(poolStations.map(s => s.name));
+      
       const sertPool = realSongs.filter(s =>
+        poolStationNames.has(s.station_name) &&
         sertStations.some(st => s.station_name.toLowerCase().includes(st.toLowerCase().replace(' fm', ''))) &&
         !usedSongs.has(`${s.title.toLowerCase()}-${s.artist.toLowerCase()}`)
       );
@@ -271,7 +286,7 @@ export function GradeBuilderView() {
       }
       // Fill remaining with general pool
       if (picked.length < 10) {
-        const generalPool = realSongs.filter(s => !usedSongs.has(`${s.title.toLowerCase()}-${s.artist.toLowerCase()}`));
+        const generalPool = realSongs.filter(s => poolStationNames.has(s.station_name) && !usedSongs.has(`${s.title.toLowerCase()}-${s.artist.toLowerCase()}`));
         for (const s of generalPool) {
           if (picked.length >= 10) break;
           const artistKey = s.artist.toLowerCase().trim();

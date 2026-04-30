@@ -139,6 +139,9 @@ export function StationsView() {
             monitoring_end_hour: (s as any).monitoring_end_hour ?? null,
             monitoring_end_minute: (s as any).monitoring_end_minute ?? 0,
             monitoring_week_days: (s as any).monitoring_week_days || ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'],
+            is_monitoring: (s as any).is_monitoring ?? true,
+            is_sequence: (s as any).is_sequence ?? true,
+            is_capture: (s as any).is_capture ?? true,
           })));
         }
       } catch (error) {
@@ -264,7 +267,10 @@ export function StationsView() {
               name: editForm.name,
               scrape_url: editForm.scrapeUrl,
               enabled: editForm.enabled,
-              styles: editForm.styles
+              styles: editForm.styles,
+              is_monitoring: editForm.isMonitoring !== false,
+              is_sequence: editForm.isSequence !== false,
+              is_capture: editForm.isCapture !== false
             }, { onConflict: 'name' });
           
           if (!error) {
@@ -739,13 +745,61 @@ export function StationsView() {
                   </CollapsibleContent>
                 </Collapsible>
 
+                {/* Pool & Mode Toggles */}
+                <div className="grid grid-cols-3 gap-2 border-y border-border/50 py-2 my-2">
+                  <div className="flex flex-col items-center gap-1">
+                    <Label className="text-[10px] text-muted-foreground uppercase">Monit.</Label>
+                    <Switch
+                      checked={data.isMonitoring !== false}
+                      onCheckedChange={async (checked) => {
+                        if (isEditing) {
+                          setEditForm((prev) => prev && { ...prev, isMonitoring: checked });
+                        } else {
+                          updateStation(station.id, { isMonitoring: checked });
+                          await supabase.from('radio_stations').update({ is_monitoring: checked }).eq('name', station.name);
+                        }
+                      }}
+                      className="scale-75"
+                    />
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <Label className="text-[10px] text-muted-foreground uppercase">Seq.</Label>
+                    <Switch
+                      checked={data.isSequence !== false}
+                      onCheckedChange={async (checked) => {
+                        if (isEditing) {
+                          setEditForm((prev) => prev && { ...prev, isSequence: checked });
+                        } else {
+                          updateStation(station.id, { isSequence: checked });
+                          await supabase.from('radio_stations').update({ is_sequence: checked }).eq('name', station.name);
+                        }
+                      }}
+                      className="scale-75"
+                    />
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <Label className="text-[10px] text-muted-foreground uppercase">Capt.</Label>
+                    <Switch
+                      checked={data.isCapture !== false}
+                      onCheckedChange={async (checked) => {
+                        if (isEditing) {
+                          setEditForm((prev) => prev && { ...prev, isCapture: checked });
+                        } else {
+                          updateStation(station.id, { isCapture: checked });
+                          await supabase.from('radio_stations').update({ is_capture: checked }).eq('name', station.name);
+                        }
+                      }}
+                      className="scale-75"
+                    />
+                  </div>
+                </div>
+
                 {/* Auto Download Toggle */}
                 <div className="flex items-center justify-between py-1">
                   <div className="flex items-center gap-2">
                     <Download className="w-3.5 h-3.5 text-green-500" />
                     <div>
                       <span className="text-xs font-medium">Download Automático</span>
-                      <p className="text-[10px] text-muted-foreground">Baixar músicas desta emissora</p>
                     </div>
                   </div>
                   <Switch
@@ -757,6 +811,7 @@ export function StationsView() {
                         updateStation(station.id, { autoDownloadEnabled: checked });
                       }
                     }}
+                    className="scale-75"
                   />
                 </div>
 
@@ -777,6 +832,7 @@ export function StationsView() {
                         updateStation(station.id, { prioritizeDownloads: checked, ...(checked ? { autoDownloadEnabled: true } : {}) });
                       }
                     }}
+                    className="scale-75"
                   />
                 </div>
 

@@ -82,6 +82,9 @@ export type Database = {
           created_at: string
           enabled: boolean | null
           id: string
+          is_capture: boolean | null
+          is_monitoring: boolean | null
+          is_sequence: boolean | null
           monitoring_end_hour: number | null
           monitoring_end_minute: number | null
           monitoring_start_hour: number | null
@@ -98,6 +101,9 @@ export type Database = {
           created_at?: string
           enabled?: boolean | null
           id?: string
+          is_capture?: boolean | null
+          is_monitoring?: boolean | null
+          is_sequence?: boolean | null
           monitoring_end_hour?: number | null
           monitoring_end_minute?: number | null
           monitoring_start_hour?: number | null
@@ -114,6 +120,9 @@ export type Database = {
           created_at?: string
           enabled?: boolean | null
           id?: string
+          is_capture?: boolean | null
+          is_monitoring?: boolean | null
+          is_sequence?: boolean | null
           monitoring_end_hour?: number | null
           monitoring_end_minute?: number | null
           monitoring_start_hour?: number | null
