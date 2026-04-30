@@ -839,11 +839,16 @@ export function SequenceView() {
 
   const handleResetSystemProgramming = () => {
     resetProgramming();
+    // Também limpa a política de Grade 24h
+    clearAllOverrides();
+    
     setLocalSequence(useRadioStore.getState().sequence);
     toast({
       title: 'Programação zerada',
-      description: 'Programas, sequências e conteúdos fixos foram removidos.',
+      description: 'Programas, sequências, conteúdos fixos e a Grade 24h foram removidos.',
     });
+    // Força um reload para garantir que todos os componentes vejam as mudanças no localStorage
+    window.location.reload();
   };
 
   return (
