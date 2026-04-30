@@ -893,11 +893,11 @@ export const useRadioStore = create<RadioState>()(
           const nextPolicy = { ...state.policy, hourOverrides: {} };
           savePolicy(nextPolicy);
           return {
-            programs: defaultPrograms,
-            sequence: defaultSequence,
+            programs: [], // Limpa programas padrão
+            sequence: [], // Limpa sequência padrão (formatação)
             scheduledSequences: [],
-            fixedContent: defaultFixedContent,
-            config: { ...state.config, useDefaultFixedSchedules: true },
+            fixedContent: [], // Limpa conteúdos fixos
+            config: { ...state.config, useDefaultFixedSchedules: false },
             policy: nextPolicy,
           };
         }),

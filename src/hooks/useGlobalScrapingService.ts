@@ -73,7 +73,7 @@ export function useGlobalScrapingService(
   const scrapeAllStations = useCallback(async (_forceRefresh = false) => {
     const { reportServiceHeartbeat: rsh } = await import('@/hooks/useServiceWatchdog');
     rsh('scraping');
-    const { stations, addCapturedSong, addMissingSong, missingSongs, config } = useRadioStore.getState();
+    const { stations, addCapturedSong, addMissingSong, missingSongs, config, sequence, scheduledSequences } = useRadioStore.getState();
     const now = Date.now();
     
     // Auto-recovery: filter out paused stations and unpause expired ones
@@ -88,8 +88,18 @@ export function useGlobalScrapingService(
       }
     }
 
+    // Get all station IDs used in any sequence (standard or scheduled)
+    const stationsInSequences = new Set<string>();
+    sequence.forEach(s => { if (s.radioSource) stationsInSequences.add(s.radioSource); });
+    scheduledSequences.forEach(ss => {
+      ss.sequence.forEach(s => { if (s.radioSource) stationsInSequences.add(s.radioSource); });
+    });
+
     const enabledStations = stations.filter(s => 
-      s.enabled && s.scrapeUrl && !pausedStationNames.includes(s.name)
+      s.enabled && 
+      s.scrapeUrl && 
+      !pausedStationNames.includes(s.name) && 
+      stationsInSequences.has(s.id)
     );
     
     if (enabledStations.length === 0) {

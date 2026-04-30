@@ -264,17 +264,18 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     // 1. Limpa overrides manuais da grade 24h
     persist({ ...policy, hourOverrides: {} });
     
-    // 2. Executa o reset do pool (músicas capturadas, downloads, etc)
-    // Preservando as configurações principais conforme solicitado (emissoras, sequências, etc)
+    // 2. Executa o reset do pool e também limpa a SEQUÊNCIA PADRÃO
+    // para que o usuário possa montar a dele do zero (formatação completa).
     await executeFullSystemReset({
-      clearSupabase: false, // Não limpa o histórico remoto, apenas o pool local
+      clearSupabase: true, // Limpa o histórico para evitar resíduos de outras emissoras
       clearSchedules: false,
-      resetStations: false
+      resetStations: false,
+      clearUserSequence: true // Limpa a sequência padrão para o usuário montar a sua
     });
 
     toast({
-      title: 'Grade 24h e Pool zerados',
-      description: `${total} blocos personalizados removidos. O pool de músicas foi limpo para seguir a sequência padrão.`,
+      title: 'Sistema Formatado',
+      description: 'Grade 24h, Sequência Padrão e Pool de músicas foram zerados. Agora você pode montar sua programação do zero.',
     });
   };
 
@@ -313,7 +314,8 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     if (userStations.length > 0) {
       return userStations.map((rs, i) => ({ position: i + 1, radioSource: rs }));
     }
-    return [{ position: 1, radioSource: 'random_pop' }];
+    // Se não houver sequência definida pelo usuário, retorna vazio (liberdade para montar do zero)
+    return [];
   };
 
   const openEditor = (hour: number, minute: number) => {
@@ -637,7 +639,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                   <AlertDialogHeader>
                     <AlertDialogTitle>Zerar TODA a Grade 24h?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Isso remove TODAS as customizações de blocos (programa, LOC e sequência) de TODOS os dias da semana. A Grade 24h voltará inteiramente ao padrão automático, dando liberdade total para você montar uma nova do zero. Esta ação não pode ser desfeita.
+                      Isso remove TODAS as customizações de blocos, limpa a SEQUÊNCIA PADRÃO e reseta o pool de músicas. O sistema será totalmente formatado para que você monte sua programação do zero, seguindo apenas as emissoras que você escolher agora. Esta ação não pode ser desfeita.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -750,6 +752,11 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                     {!showSeq && !row.absorbed && (
                       <span className="text-[9px] text-muted-foreground italic ml-1">
                         ⛔ {row.reason}
+                      </span>
+                    )}
+                    {row.effectiveSequence.length === 0 && !row.absorbed && showSeq && (
+                      <span className="text-[9px] text-amber-400 italic ml-1">
+                        ⚠️ Sequência Vazia — configure no Monitoramento
                       </span>
                     )}
                   </div>
