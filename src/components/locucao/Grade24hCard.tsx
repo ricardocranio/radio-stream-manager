@@ -558,6 +558,66 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
             <span className="text-[10px] text-muted-foreground ml-2">
               💡 Clique no <Pencil className="w-3 h-3 inline" /> para editar posições, programa e LOC
             </span>
+
+            <div className="ml-auto flex items-center gap-1">
+              {/* Zerar somente o dia selecionado */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs gap-1 border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
+                    title={`Zerar customizações da grade de ${DAY_LABELS[selectedDay]}`}
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span className="hidden sm:inline">Zerar Dia</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Zerar grade de {DAY_LABELS[selectedDay]}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Isso remove TODAS as customizações de blocos (programa, LOC e sequência) deste dia, fazendo a grade voltar ao padrão automático. Os outros dias da semana não são afetados. Esta ação não pode ser desfeita.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={resetSelectedDay} className="bg-amber-600 hover:bg-amber-700">
+                      Zerar {DAY_LABELS[selectedDay]}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {/* Zerar TODA a grade 24h (todos os dias) */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs gap-1 border-rose-500/40 text-rose-400 hover:bg-rose-500/10"
+                    title="Zerar TODA a Grade 24h (todos os dias da semana)"
+                  >
+                    <Eraser className="w-3 h-3" />
+                    <span className="hidden sm:inline">Zerar Tudo</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Zerar TODA a Grade 24h?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Isso remove TODAS as customizações de blocos (programa, LOC e sequência) de TODOS os dias da semana. A Grade 24h voltará inteiramente ao padrão automático, dando liberdade total para você montar uma nova do zero. Esta ação não pode ser desfeita.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={resetAllDays} className="bg-rose-600 hover:bg-rose-700">
+                      Zerar Grade 24h
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </div>
         )}
       </CardHeader>
