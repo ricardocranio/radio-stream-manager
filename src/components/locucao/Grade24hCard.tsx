@@ -451,12 +451,31 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
           : override?.sequence
             ? override.sequence.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }))
             : realPositions.length > 0
-              ? realPositions.map((p) => ({
-                  position: p.position,
-                  radioSource: gradePosToRadioSource(p),
-                  gradeKind: p.kind,
-                  gradeLabel: p.label,
-                }))
+              ? (() => {
+                  const userStations = resolvedBase
+                    .map((s) => s.radioSource)
+                    .filter((rs) => !!rs && rs !== 'LOC' && rs !== 'LOC_END');
+                  let cycle = 0;
+                  return realPositions.map((p) => {
+                    const kind = p.kind;
+                    if (kind === 'mus' && userStations.length > 0) {
+                      const radioSource = userStations[cycle % userStations.length];
+                      cycle++;
+                      return {
+                        position: p.position,
+                        radioSource,
+                        gradeKind: kind,
+                        gradeLabel: p.label,
+                      };
+                    }
+                    return {
+                      position: p.position,
+                      radioSource: gradePosToRadioSource(p),
+                      gradeKind: kind,
+                      gradeLabel: p.label,
+                    };
+                  });
+                })()
               : resolvedBase.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }));
 
         out.push({
