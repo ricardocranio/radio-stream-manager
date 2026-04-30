@@ -963,38 +963,22 @@ export function GradePreviewCard() {
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => gradeBuilder.buildGrade(false, true)}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-            </Button>
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
-          <span className="flex items-center gap-1">
-            <Music className="w-3 h-3" />
-            {songCount} músicas
-          </span>
-          {blockDuration && (
-            <span className="flex items-center gap-1 font-medium text-foreground">
-              <Clock className="w-3 h-3" />
-              {blockDuration} min
-            </span>
-          )}
-          {isElectron && (foundCount > 0 || missingCount > 0) && (
-            <span className="flex items-center gap-1">
-              <HardDrive className="w-3 h-3" />
-              {foundCount}✅ {missingCount}❌
-            </span>
-          )}
-          {gradeBuilder.lastBuildTime && (
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {format(gradeBuilder.lastBuildTime, 'HH:mm', { locale: ptBR })}
-            </span>
+          {activeSequence && (
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[10px] text-amber-500/80 italic">
+                * Usando sequência programada "{activeSequence.name}" ao invés da padrão.
+              </span>
+            </div>
           )}
         </div>
       </CardHeader>
