@@ -133,6 +133,8 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   const { stations, fixedContent, scheduledSequences, config, policy, setPolicy } = useRadioStore();
   const [editingBlock, setEditingBlock] = useState<{ hour: number; minute: number } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [previewTemplateMode, setPreviewTemplateMode] = useState(false);
+  const [selectedBlocksForReset, setSelectedBlocksForReset] = useState<Set<string>>(new Set());
 
   // Draft buffer — só persiste no localStorage quando o usuário clica "Salvar".
   interface Draft {
@@ -246,15 +248,37 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   const resetSelectedDay = () => {
     const overrides = { ...(policy.hourOverrides || {}) };
     const prefix = `${selectedDay}-`;
-    let removed = 0;
-    for (const k of Object.keys(overrides)) {
-      if (k.startsWith(prefix)) { delete overrides[k]; removed++; }
-    }
+    
+    // Se estiver no modo preview e houver blocos selecionados, limpa apenas eles.
+    // Caso contrário, limpa o dia inteiro como antes.
+    const keysToRemove = previewTemplateMode && selectedBlocksForReset.size > 0
+      ? Array.from(selectedBlocksForReset)
+      : Object.keys(overrides).filter(k => k.startsWith(prefix));
+
+    keysToRemove.forEach(k => delete overrides[k]);
+    
     persist({ ...policy, hourOverrides: overrides });
+    
     toast({
-      title: `Grade de ${DAY_LABELS[selectedDay]} zerada`,
-      description: `${removed} bloco(s) voltaram ao padrão.`,
+      title: keysToRemove.length > 0 ? `Grade subscrita` : `Nada para alterar`,
+      description: `${keysToRemove.length} bloco(s) agora seguem a Sequência Padrão.`,
     });
+    
+    if (previewTemplateMode) {
+      setPreviewTemplateMode(false);
+      setSelectedBlocksForReset(new Set());
+    }
+  };
+
+  const toggleBlockSelection = (key: string) => {
+    const next = new Set(selectedBlocksForReset);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setSelectedBlocksForReset(next);
+  };
+
+  const selectAllBlocks = (allKeys: string[]) => {
+    setSelectedBlocksForReset(new Set(allKeys));
   };
 
   /** Remove TODOS os overrides de TODOS os dias da semana e limpa o pool de músicas. */
@@ -591,34 +615,88 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
             </span>
 
             <div className="ml-auto flex items-center gap-1">
-              {/* Zerar somente o dia selecionado */}
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
+              {/* Botão de Modo Preview / Subscrição */}
+              <Button
+                size="sm"
+                variant={previewTemplateMode ? "default" : "outline"}
+                className={`h-7 px-2 text-xs gap-1 ${previewTemplateMode ? 'bg-amber-600 hover:bg-amber-700' : 'border-amber-500/40 text-amber-400'}`}
+                onClick={() => {
+                  setPreviewTemplateMode(!previewTemplateMode);
+                  setSelectedBlocksForReset(new Set());
+                }}
+                title="Ativar modo de subscrição pela Sequência Padrão"
+              >
+                <RotateCcw className={`w-3 h-3 ${previewTemplateMode ? 'animate-spin-slow' : ''}`} />
+                <span className="hidden sm:inline">{previewTemplateMode ? 'Cancelar' : 'Subscrever Padrão'}</span>
+              </Button>
+
+              {previewTemplateMode ? (
+                <>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 px-2 text-xs gap-1 border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
-                    title={`Zerar customizações da grade de ${DAY_LABELS[selectedDay]}`}
+                    className="h-7 px-2 text-xs border-amber-500/40 text-amber-400"
+                    onClick={() => selectAllBlocks(rows.filter(r => !!r.override).map(r => overrideKey(selectedDay, r.hour, r.minute)))}
                   >
-                    <RotateCcw className="w-3 h-3" />
-                    <span className="hidden sm:inline">Zerar Dia</span>
+                    Todos
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Zerar grade de {DAY_LABELS[selectedDay]}?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Atenção: Os horários deste dia serão subscritos conforme a sua Sequência Padrão. Isso removerá qualquer edição manual. Após aceitar, esta alteração não poderá ser desfeita.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={resetSelectedDay} className="bg-amber-600 hover:bg-amber-700">
-                      Zerar {DAY_LABELS[selectedDay]}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 px-2 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700"
+                        disabled={selectedBlocksForReset.size === 0}
+                      >
+                        <Save className="w-3 h-3" />
+                        Aplicar ({selectedBlocksForReset.size})
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Confirmar Subscrição?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Os {selectedBlocksForReset.size} blocos selecionados serão substituídos pela Sequência Padrão. Esta ação não poderá ser desfeita.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={resetSelectedDay} className="bg-emerald-600 hover:bg-emerald-700">
+                          Confirmar Substituição
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </>
+              ) : (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs gap-1 border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
+                      title={`Zerar customizações da grade de ${DAY_LABELS[selectedDay]}`}
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span className="hidden sm:inline">Zerar Dia</span>
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Zerar grade de {DAY_LABELS[selectedDay]}?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Atenção: Os horários deste dia serão subscritos conforme a sua Sequência Padrão. Isso removerá qualquer edição manual. Após aceitar, esta alteração não poderá ser desfeita.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={resetSelectedDay} className="bg-amber-600 hover:bg-amber-700">
+                        Zerar {DAY_LABELS[selectedDay]}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
 
               {/* Zerar TODA a grade 24h (todos os dias) */}
               <AlertDialog>
@@ -668,12 +746,18 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
             const showSeq = !row.absorbed && row.locStatus !== 'blocked-program' && row.locStatus !== 'forced-block' && row.locStatus !== 'blocked-day' && row.locStatus !== 'blocked-time';
             // Marca visual de início de hora cheia (HH:00) — separa pares de blocos.
             const isHourStart = row.minute === 0;
+            const key = overrideKey(selectedDay, row.hour, row.minute);
+            const isSelectedForReset = selectedBlocksForReset.has(key);
+
             return (
               <div
                 key={`${row.hour}-${row.minute}`}
-                className={`grid grid-cols-[60px_1fr_auto_auto] gap-3 items-center px-4 py-2 hover:bg-secondary/30 transition-colors ${
+                onClick={() => previewTemplateMode && row.override && toggleBlockSelection(key)}
+                className={`grid grid-cols-[60px_1fr_auto_auto] gap-3 items-center px-4 py-2 transition-colors ${
+                  previewTemplateMode && row.override ? 'cursor-pointer hover:bg-amber-500/10' : 'hover:bg-secondary/30'
+                } ${
                   isLive ? 'bg-primary/10 border-l-2 border-l-primary' : ''
-                } ${hasOverride ? 'border-l-2 border-l-amber-400/60' : ''} ${
+                } ${hasOverride ? (isSelectedForReset ? 'bg-amber-500/20 border-l-4 border-l-emerald-500' : 'border-l-2 border-l-amber-400/60') : ''} ${
                   isHourStart ? 'border-t-2 border-t-border/60' : 'bg-secondary/10'
                 } ${row.absorbed ? 'opacity-60' : ''}`}
                 title={row.reason}
@@ -684,7 +768,8 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                     {row.hour.toString().padStart(2, '0')}:{row.minute.toString().padStart(2, '0')}
                   </span>
                   {isLive && <span className="text-[9px] text-primary uppercase tracking-wide">agora</span>}
-                  {hasOverride && !isLive && <span className="text-[9px] text-amber-400 uppercase tracking-wide">editado</span>}
+                  {hasOverride && !isLive && !isSelectedForReset && <span className="text-[9px] text-amber-400 uppercase tracking-wide">editado</span>}
+                  {isSelectedForReset && <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wide">substituir</span>}
                   {!isHourStart && !isLive && !hasOverride && <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">2º bloco</span>}
                 </div>
 
