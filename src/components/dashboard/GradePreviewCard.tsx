@@ -743,8 +743,13 @@ export function GradePreviewCard() {
     }
 
     setIsCheckingLibrary(false);
+    
+    // Send missing to download queue ONLY IF it's a real grade (not mock/fallback)
+    if (!nextBlockLine) {
+      console.log('[PREVIEW] 💡 Músicas de fallback/mock — não adicionando à fila de download');
+      return;
+    }
 
-    // Send missing to download queue
     const missingFiles = songsToCheck.filter(s => newStatus[s.filename.toLowerCase()] === 'missing');
     if (missingFiles.length > 0) {
       const { addMissingSong, missingSongs: existingMissing } = useRadioStore.getState();
