@@ -79,13 +79,21 @@ export function GradePreviewCard() {
     if (isElectron) return;
 
     const fetchRealSongsForPreview = async () => {
+      const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
+      
       const buildRecentFallbackSongs = async () => {
         try {
           const sinceIso = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
-          const { data } = await supabase
+          let query = supabase
             .from('scraped_songs')
             .select('artist, title, station_name, scraped_at')
-            .gte('scraped_at', sinceIso)
+            .gte('scraped_at', sinceIso);
+
+          if (enabledStations.length > 0) {
+            query = query.in('station_name', enabledStations);
+          }
+
+          const { data } = await query
             .order('scraped_at', { ascending: false })
             .limit(80);
 
