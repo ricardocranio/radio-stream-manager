@@ -79,13 +79,21 @@ export function GradePreviewCard() {
     if (isElectron) return;
 
     const fetchRealSongsForPreview = async () => {
+      const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
+      
       const buildRecentFallbackSongs = async () => {
         try {
           const sinceIso = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
-          const { data } = await supabase
+          let query = supabase
             .from('scraped_songs')
             .select('artist, title, station_name, scraped_at')
-            .gte('scraped_at', sinceIso)
+            .gte('scraped_at', sinceIso);
+
+          if (enabledStations.length > 0) {
+            query = query.in('station_name', enabledStations);
+          }
+
+          const { data } = await query
             .order('scraped_at', { ascending: false })
             .limit(80);
 
@@ -321,19 +329,31 @@ export function GradePreviewCard() {
           const stationName = legacyName || station?.name || seqItem.radioSource;
 
           try {
-            let { data } = await supabase
+            let query = supabase
               .from('scraped_songs')
               .select('artist, title, station_name')
-              .eq('station_name', stationName)
+              .eq('station_name', stationName);
+
+            if (enabledStations.length > 0) {
+              query = query.in('station_name', enabledStations);
+            }
+
+            let { data } = await query
               .order('scraped_at', { ascending: false })
               .limit(30);
 
             // Fallback: case-insensitive search if exact match found nothing
             if ((!data || data.length === 0) && stationName) {
-              const fallback = await supabase
+              let fallbackQuery = supabase
                 .from('scraped_songs')
                 .select('artist, title, station_name')
-                .ilike('station_name', stationName)
+                .ilike('station_name', stationName);
+
+              if (enabledStations.length > 0) {
+                fallbackQuery = fallbackQuery.in('station_name', enabledStations);
+              }
+
+              const fallback = await fallbackQuery
                 .order('scraped_at', { ascending: false })
                 .limit(30);
               data = fallback.data;
@@ -388,7 +408,7 @@ export function GradePreviewCard() {
     };
 
     fetchRealSongsForPreview();
-  }, [scheduledSequences, stations]);
+  }, [scheduledSequences, stations, useRadioStore.getState().sequence]);
 
   // Default fallback mock songs
   const getDefaultMockSongs = (): PreviewSong[] => [
@@ -723,8 +743,13 @@ export function GradePreviewCard() {
     }
 
     setIsCheckingLibrary(false);
+    
+    // Send missing to download queue ONLY IF it's a real grade (not mock/fallback)
+    if (!nextBlockLine) {
+      console.log('[PREVIEW] 💡 Músicas de fallback/mock — não adicionando à fila de download');
+      return;
+    }
 
-    // Send missing to download queue
     const missingFiles = songsToCheck.filter(s => newStatus[s.filename.toLowerCase()] === 'missing');
     if (missingFiles.length > 0) {
       const { addMissingSong, missingSongs: existingMissing } = useRadioStore.getState();
@@ -872,76 +897,88 @@ export function GradePreviewCard() {
     }
   }, [isBlockShort, isLoading, nextBlockTime, blockDuration, gradeBuilder]);
 
+  const activeSequence = useMemo(() => {
+    const state = useRadioStore.getState();
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTimeMinutes = currentHour * 60 + currentMinute;
+    const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
+    const currentDay = dayMap[now.getDay()];
+    
+    return state.scheduledSequences
+      .filter((s) => s.enabled)
+      .filter((s) => s.weekDays.length === 0 || s.weekDays.includes(currentDay))
+      .find((s) => {
+        const startMinutes = s.startHour * 60 + s.startMinute;
+        const endMinutes = s.endHour * 60 + s.endMinute;
+        if (endMinutes <= startMinutes) {
+          return currentTimeMinutes >= startMinutes || currentTimeMinutes < endMinutes;
+        }
+        return currentTimeMinutes >= startMinutes && currentTimeMinutes < endMinutes;
+      });
+  }, [scheduledSequences]);
+
   return (
     <Card className={`glass-card ${isBlockShort ? 'border-red-500/40' : isBlockOk ? 'border-green-500/20' : 'border-amber-500/20'}`}>
       <CardHeader className="pb-3 border-b border-border">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Eye className="w-5 h-5 text-amber-500" />
-            Preview da Próxima Grade
-            <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-400 border-amber-500/30">
-              {nextBlockTime}
-            </Badge>
-            {blockDuration && (
-              <Badge variant="outline" className={`text-xs ${
-                blockDuration >= 29 && blockDuration <= 32
-                  ? 'bg-green-500/10 text-green-400 border-green-500/30'
-                  : 'bg-red-500/10 text-red-400 border-red-500/30'
-              }`}>
-                <Clock className="w-3 h-3 mr-1" />
-                {blockDuration} min
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Eye className="w-5 h-5 text-amber-500" />
+              Preview da Próxima Grade
+              <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-400 border-amber-500/30">
+                {nextBlockTime}
               </Badge>
-            )}
-            {displaySongs.length > 0 && (
-              <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-400 border-green-500/30">
-                TXT
-              </Badge>
-            )}
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            {isCheckingLibrary && (
-              <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/30">
-                <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                Verificando
-              </Badge>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => gradeBuilder.buildGrade(false, true)}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
+              {blockDuration && (
+                <Badge variant="outline" className={`text-xs ${
+                  blockDuration >= 29 && blockDuration <= 32
+                    ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                    : 'bg-red-500/10 text-red-400 border-red-500/30'
+                }`}>
+                  <Clock className="w-3 h-3 mr-1" />
+                  {blockDuration} min
+                </Badge>
               )}
-            </Button>
+              {displaySongs.length > 0 && (
+                <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-400 border-green-500/30">
+                  TXT
+                </Badge>
+              )}
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {activeSequence && (
+                <Badge variant="outline" className="text-[10px] uppercase bg-amber-500/10 text-amber-500 border-amber-500/20 py-0 px-2 h-4 animate-pulse">
+                  Prog. Ativa: {activeSequence.name}
+                </Badge>
+              )}
+              {isCheckingLibrary && (
+                <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/30">
+                  <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  Verificando
+                </Badge>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => gradeBuilder.buildGrade(false, true)}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
-          <span className="flex items-center gap-1">
-            <Music className="w-3 h-3" />
-            {songCount} músicas
-          </span>
-          {blockDuration && (
-            <span className="flex items-center gap-1 font-medium text-foreground">
-              <Clock className="w-3 h-3" />
-              {blockDuration} min
-            </span>
-          )}
-          {isElectron && (foundCount > 0 || missingCount > 0) && (
-            <span className="flex items-center gap-1">
-              <HardDrive className="w-3 h-3" />
-              {foundCount}✅ {missingCount}❌
-            </span>
-          )}
-          {gradeBuilder.lastBuildTime && (
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {format(gradeBuilder.lastBuildTime, 'HH:mm', { locale: ptBR })}
-            </span>
+          {activeSequence && (
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[10px] text-amber-500/80 italic">
+                * Usando sequência programada "{activeSequence.name}" ao invés da padrão.
+              </span>
+            </div>
           )}
         </div>
       </CardHeader>

@@ -263,7 +263,8 @@ export function useAutoGradeBuilder() {
         entry.radioSource;
       if (!stationNames.includes(name)) stationNames.push(name);
     }
-    return stationNames.length > 0 ? stationNames : ['BH FM', 'Rádio Globo RJ', 'Band FM', 'Clube FM'];
+    const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
+    return stationNames.length > 0 ? stationNames : (enabledStations.length > 0 ? enabledStations : ['BH FM', 'Band FM', 'Clube FM', 'Rádio Globo RJ']);
   }, [getActiveSequenceForBlock, stations]);
 
   // ==================== Song Tracking ====================
@@ -463,7 +464,7 @@ export function useAutoGradeBuilder() {
       rankingSongs,
       filterChars,
       fixedContent: fixedContent as GradeContext['fixedContent'],
-      stations: stations.map(s => ({ id: s.id, name: s.name, styles: s.styles })),
+      stations: stations.map(s => ({ id: s.id, name: s.name, styles: s.styles, enabled: s.enabled })),
       musicFolders: config.musicFolders,
       artistBlackouts: config.artistBlackouts,
       sequenceStations,
@@ -520,14 +521,22 @@ export function useAutoGradeBuilder() {
 
   const fetchAllRecentSongs = useCallback(async (retryCount = 0): Promise<Record<string, SongEntry[]>> => {
     try {
+      const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
+      
       // Fetch scraped_songs and radio_historico independently to handle partial failures
       let scrapedData: Array<{ title: string; artist: string; station_name: string; scraped_at: string; ai_genre?: string | null; ai_energy?: string | null }> = [];
       let historicoData: Array<{ title: string; artist: string; station_name: string; captured_at: string }> = [];
 
       try {
-        const scrapedResult = await supabase
+        let scrapedQuery = supabase
           .from('scraped_songs')
-          .select('title, artist, station_name, scraped_at, ai_genre, ai_energy')
+          .select('title, artist, station_name, scraped_at, ai_genre, ai_energy');
+
+        if (enabledStations.length > 0) {
+          scrapedQuery = scrapedQuery.in('station_name', enabledStations);
+        }
+
+        const scrapedResult = await scrapedQuery
           .order('scraped_at', { ascending: false })
           .limit(3000);
         
@@ -541,9 +550,16 @@ export function useAutoGradeBuilder() {
       }
 
       try {
-        const historicoResult = await supabase
+        const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
+        let historicoQuery = supabase
           .from('radio_historico')
-          .select('title, artist, station_name, captured_at')
+          .select('title, artist, station_name, captured_at');
+
+        if (enabledStations.length > 0) {
+          historicoQuery = historicoQuery.in('station_name', enabledStations);
+        }
+
+        const historicoResult = await historicoQuery
           .order('captured_at', { ascending: false })
           .limit(1500);
         
@@ -728,7 +744,9 @@ export function useAutoGradeBuilder() {
   // ==================== Weekend Template Generator ====================
 
   // FALLBACK station rotation — only used when sequence has no valid stations
-  const FALLBACK_STATION_ROTATION = ['BH FM', 'Rádio Globo RJ', 'Band FM', 'Clube FM', 'Mix FM'];
+  const FALLBACK_STATION_ROTATION = stations.filter(s => s.enabled).map(s => s.name).length > 0
+    ? stations.filter(s => s.enabled).map(s => s.name)
+    : ['BH FM', 'Band FM', 'Clube FM', 'Rádio Globo RJ'];
   const saturdayStationIndexRef = useRef(0);
   // Cross-block anti-repetition set for weekend templates (persists across all blocks in the same build)
   const weekendUsedKeysRef = useRef<Set<string>>(new Set());
@@ -1004,7 +1022,9 @@ export function useAutoGradeBuilder() {
     const VHT_DUR = await getAvgVhtDuration(vinhetasF);
     const FILL_STATIONS = config.fillPriorityStations?.length
       ? config.fillPriorityStations
-      : ['BH FM', 'Metropolitana FM', 'Metropolitana'];
+      : stations.filter(s => s.enabled).map(s => s.name).length > 0 
+        ? stations.filter(s => s.enabled).map(s => s.name)
+        : ['BH FM', 'Band FM', 'Clube FM', 'Rádio Globo RJ'];
 
     const fillBlockIfShort = async (result: BlockResult): Promise<BlockResult> => {
       // Skip filling for Voz do Brasil (legally fixed duration)

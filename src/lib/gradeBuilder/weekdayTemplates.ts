@@ -124,10 +124,11 @@ async function pickMixedMonitoredSong(
   coringaCode: string,
   stationIndex: { current: number },
 ): Promise<string> {
-  // Use sequence-derived stations from context, or fallback
+  // Use sequence-derived stations from context, or fallback to enabled stations
+  const enabledStations = ctx.stations.filter(s => s.enabled).map(s => s.name);
   const stations = (ctx.sequenceStations && ctx.sequenceStations.length > 0)
     ? ctx.sequenceStations
-    : ['BH FM', 'Rádio Globo RJ', 'Band FM', 'Clube FM'];
+    : (enabledStations.length > 0 ? enabledStations : ['BH FM', 'Rádio Globo RJ', 'Band FM', 'Clube FM']);
   
   // Cycle through stations from the active sequence
   for (let attempt = 0; attempt < stations.length; attempt++) {
@@ -292,12 +293,13 @@ export async function generateRadarNoticiasBlock(
   const usedArtists = new Set<string>();
   const coringaCode = ctx.coringaCode;
 
-  const monBH = await pickMonitoredSong('BH FM', songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-  const monGlobo = await pickMonitoredSong('Rádio Globo RJ', songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-  const monDisney = await pickMonitoredSong('Disney FM', songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-  const monMix = await pickMonitoredSong('Mix FM', songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
+  const _seqIdx = { current: 0 };
+  const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+  const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+  const mon3 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+  const mon4 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
 
-  const line = `${timeStr} (ID=RADAR NOTICIAS) vht,"Radar De Noticias _ bloco 01.mp3",${monBH},vht,"Radar De Noticias _ bloco 02.mp3",${monGlobo},vht,"Radar De Noticias _ bloco 03.mp3",vht,${monDisney},vht,"Radar De Noticias _ bloco 04.mp3",vht,${monMix}`;
+  const line = `${timeStr} (ID=RADAR NOTICIAS) vht,"Radar De Noticias _ bloco 01.mp3",${mon1},vht,"Radar De Noticias _ bloco 02.mp3",${mon2},vht,"Radar De Noticias _ bloco 03.mp3",vht,${mon3},vht,"Radar De Noticias _ bloco 04.mp3",vht,${mon4}`;
 
   logs.push({ blockTime: timeStr, type: 'fixed', title: 'Radar De Notícias', artist: `Bloco ${timeStr}`, station: 'FIXO', reason: 'Template Radar de Notícias com monitoramento multi-estação' });
   return { line: ctx.sanitizeGradeLine(line), logs };
@@ -371,9 +373,10 @@ export async function generateMisturadaoV2(
     line = `${timeStr} (ID=MISTURADAO) vht,"NOTICIA_DA_HORA_15HORAS_${dayName}.mp3",vht,"MISTURADAO_BLOCO01_${dayName}.mp3","FIQUE_SABENDO_EDICAO01_${dayName}.mp3",vht,"MISTURADAO_BLOCO02_${dayName}.mp3"`;
   } else {
     // 20:30
-    const monDisney1 = await pickMonitoredSong('Disney FM', songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-    const monDisney2 = await pickMonitoredSong('Disney FM', songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-    line = `${timeStr} (ID=MISTURADAO) vht,"MISTURADAO_BLOCO03_${dayName}.mp3","FIQUE_SABENDO_EDICAO02_${dayName}.mp3","MISTURADAO_BLOCO04_${dayName}.mp3",${monDisney1},vht,${monDisney2}`;
+    const _seqIdx = { current: 0 };
+    const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+    const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+    line = `${timeStr} (ID=MISTURADAO) vht,"MISTURADAO_BLOCO03_${dayName}.mp3","FIQUE_SABENDO_EDICAO02_${dayName}.mp3","MISTURADAO_BLOCO04_${dayName}.mp3",${mon1},vht,${mon2}`;
   }
 
   logs.push({ blockTime: timeStr, type: 'fixed', title: 'Misturadão', artist: `Bloco ${timeStr}`, station: 'FIXO', reason: `Template Misturadão ${dayName}` });
