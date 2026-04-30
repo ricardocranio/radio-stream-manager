@@ -615,19 +615,19 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
             </span>
 
             <div className="ml-auto flex items-center gap-1">
-              {/* Botão de Modo Preview / Subscrição */}
+              {/* Botão de Modo Preview / Subscrição Seletiva */}
               <Button
                 size="sm"
                 variant={previewTemplateMode ? "default" : "outline"}
-                className={`h-7 px-2 text-xs gap-1 ${previewTemplateMode ? 'bg-amber-600 hover:bg-amber-700' : 'border-amber-500/40 text-amber-400'}`}
+                className={`h-7 px-2 text-xs gap-1 ${previewTemplateMode ? 'bg-amber-600 hover:bg-amber-700' : 'border-amber-500/40 text-amber-400 hover:bg-amber-500/10'}`}
                 onClick={() => {
                   setPreviewTemplateMode(!previewTemplateMode);
                   setSelectedBlocksForReset(new Set());
                 }}
-                title="Ativar modo de subscrição pela Sequência Padrão"
+                title="Ativar modo visual para formatar blocos específicos"
               >
                 <RotateCcw className={`w-3 h-3 ${previewTemplateMode ? 'animate-spin-slow' : ''}`} />
-                <span className="hidden sm:inline">{previewTemplateMode ? 'Cancelar' : 'Subscrever Padrão'}</span>
+                <span className="hidden sm:inline">{previewTemplateMode ? 'Sair do Modo Formatar' : 'Formatar Seleção'}</span>
               </Button>
 
               {previewTemplateMode ? (
@@ -635,34 +635,39 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 px-2 text-xs border-amber-500/40 text-amber-400"
+                    className="h-7 px-2 text-xs border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
                     onClick={() => selectAllBlocks(rows.filter(r => !!r.override).map(r => overrideKey(selectedDay, r.hour, r.minute)))}
                   >
-                    Todos
+                    Selecionar Todos Editados
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button
                         size="sm"
                         variant="default"
-                        className="h-7 px-2 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700"
+                        className="h-7 px-2 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/20"
                         disabled={selectedBlocksForReset.size === 0}
                       >
                         <Save className="w-3 h-3" />
-                        Aplicar ({selectedBlocksForReset.size})
+                        Aplicar Formatação ({selectedBlocksForReset.size})
                       </Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent>
+                    <AlertDialogContent className="bg-slate-900 border-border text-slate-100">
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Confirmar Subscrição?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Os {selectedBlocksForReset.size} blocos selecionados serão substituídos pela Sequência Padrão. Esta ação não poderá ser desfeita.
+                        <AlertDialogTitle className="text-emerald-400 flex items-center gap-2">
+                          <Save className="w-5 h-5" />
+                          Confirmar Formatação?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-slate-300">
+                          Os {selectedBlocksForReset.size} blocos selecionados serão <strong className="text-white">subscritos</strong> conforme a sua <strong className="text-amber-400">Sequência Padrão</strong>. 
+                          <br /><br />
+                          ⚠️ <span className="text-amber-400 font-bold uppercase">Aviso:</span> Após aceitar, esta alteração será gravada permanentemente e <strong className="text-rose-400 underline">não poderá ser desfeita</strong>.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={resetSelectedDay} className="bg-emerald-600 hover:bg-emerald-700">
-                          Confirmar Substituição
+                        <AlertDialogCancel className="bg-slate-800 text-slate-300 border-slate-700">Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={resetSelectedDay} className="bg-emerald-600 hover:bg-emerald-700 text-white border-none">
+                          Confirmar e Formatar
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -675,23 +680,27 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                       size="sm"
                       variant="outline"
                       className="h-7 px-2 text-xs gap-1 border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
-                      title={`Zerar customizações da grade de ${DAY_LABELS[selectedDay]}`}
+                      title={`Zerar e formatar grade de ${DAY_LABELS[selectedDay]}`}
                     >
-                      <RotateCcw className="w-3 h-3" />
-                      <span className="hidden sm:inline">Zerar Dia</span>
+                      <Eraser className="w-3 h-3" />
+                      <span className="hidden sm:inline text-amber-400">Zerar Dia</span>
                     </Button>
                   </AlertDialogTrigger>
-                  <AlertDialogContent>
+                  <AlertDialogContent className="bg-slate-900 border-border text-slate-100">
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Zerar grade de {DAY_LABELS[selectedDay]}?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Atenção: Os horários deste dia serão subscritos conforme a sua Sequência Padrão. Isso removerá qualquer edição manual. Após aceitar, esta alteração não poderá ser desfeita.
+                      <AlertDialogTitle className="text-amber-400">Zerar grade de {DAY_LABELS[selectedDay]}?</AlertDialogTitle>
+                      <AlertDialogDescription className="text-slate-300">
+                        Atenção: Todos os horários deste dia serão <strong className="text-white">reescritos</strong> seguindo estritamente a sua <strong className="text-amber-400">Sequência Padrão</strong>. 
+                        <br /><br />
+                        Isso removerá qualquer edição manual feita nos horários. 
+                        <br /><br />
+                        ⚠️ <span className="text-amber-400 font-bold uppercase">Aviso:</span> Após aceitar, esta alteração <strong className="text-rose-400 underline">não poderá ser desfeita</strong>.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={resetSelectedDay} className="bg-amber-600 hover:bg-amber-700">
-                        Zerar {DAY_LABELS[selectedDay]}
+                      <AlertDialogCancel className="bg-slate-800 text-slate-300 border-slate-700">Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={resetSelectedDay} className="bg-amber-600 hover:bg-amber-700 text-white border-none">
+                        Zerar e Formatar Dia
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -705,23 +714,34 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                     size="sm"
                     variant="outline"
                     className="h-7 px-2 text-xs gap-1 border-rose-500/40 text-rose-400 hover:bg-rose-500/10"
-                    title="Zerar TODA a Grade 24h (todos os dias da semana)"
+                    title="FORMATAR TUDO: Limpa a grade de todos os dias e reseta o sistema"
                   >
-                    <Eraser className="w-3 h-3" />
-                    <span className="hidden sm:inline">Zerar Tudo</span>
+                    <Trash2 className="w-3 h-3" />
+                    <span className="hidden sm:inline">Formatar Tudo</span>
                   </Button>
                 </AlertDialogTrigger>
-                <AlertDialogContent>
+                <AlertDialogContent className="bg-slate-950 border-rose-500/30 text-slate-100">
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Zerar TODA a Grade 24h?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Atenção: Todos os blocos serão subscritos conforme a sua Sequência Padrão. Isso removerá qualquer edição manual feita nos horários. Após aceitar, esta alteração não poderá ser desfeita.
+                    <AlertDialogTitle className="text-rose-500 flex items-center gap-2">
+                      <Trash2 className="w-5 h-5" />
+                      Formatar Total do Sistema?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="text-slate-300">
+                      Esta é uma <strong className="text-rose-400">formatação completa</strong>. 
+                      <br /><br />
+                      1. <strong className="text-white">Grade 24h:</strong> Todos os dias serão subscritos pela Sequência Padrão.
+                      <br />
+                      2. <strong className="text-white">Sistema:</strong> O pool de músicas e históricos serão limpos.
+                      <br /><br />
+                      Sua <strong className="text-amber-400">Sequência Padrão</strong> será preservada como o novo modelo para todo o sistema.
+                      <br /><br />
+                      ⚠️ <span className="text-rose-400 font-bold uppercase underline">Aviso Crítico:</span> Esta operação é irreversível e <strong className="text-rose-500">não poderá ser desfeita</strong>.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={resetAllDays} className="bg-rose-600 hover:bg-rose-700">
-                      Zerar Grade 24h
+                    <AlertDialogCancel className="bg-slate-800 text-slate-300 border-slate-700">Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={resetAllDays} className="bg-rose-600 hover:bg-rose-700 text-white border-none">
+                      Executar Formatação Total
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -743,23 +763,36 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
               row.override.programName !== undefined ||
               row.override.sequence !== undefined
             );
-            const showSeq = !row.absorbed && row.locStatus !== 'blocked-program' && row.locStatus !== 'forced-block' && row.locStatus !== 'blocked-day' && row.locStatus !== 'blocked-time';
-            // Marca visual de início de hora cheia (HH:00) — separa pares de blocos.
-            const isHourStart = row.minute === 0;
+            
             const key = overrideKey(selectedDay, row.hour, row.minute);
             const isSelectedForReset = selectedBlocksForReset.has(key);
+            
+            const showSeq = !row.absorbed && row.locStatus !== 'blocked-program' && row.locStatus !== 'forced-block' && row.locStatus !== 'blocked-day' && row.locStatus !== 'blocked-time';
+            const isHourStart = row.minute === 0;
+
+            const displaySequence = (previewTemplateMode && isSelectedForReset) 
+              ? baseSeqFor(row.hour, row.minute)
+              : row.effectiveSequence;
 
             return (
               <div
                 key={`${row.hour}-${row.minute}`}
                 onClick={() => previewTemplateMode && row.override && toggleBlockSelection(key)}
-                className={`grid grid-cols-[60px_1fr_auto_auto] gap-3 items-center px-4 py-2 transition-colors ${
-                  previewTemplateMode && row.override ? 'cursor-pointer hover:bg-amber-500/10' : 'hover:bg-secondary/30'
+                className={`grid grid-cols-[60px_1fr_auto_auto] gap-3 items-center px-4 py-2 transition-all duration-200 ${
+                  previewTemplateMode && row.override ? 'cursor-pointer' : ''
                 } ${
                   isLive ? 'bg-primary/10 border-l-2 border-l-primary' : ''
-                } ${hasOverride ? (isSelectedForReset ? 'bg-amber-500/20 border-l-4 border-l-emerald-500' : 'border-l-2 border-l-amber-400/60') : ''} ${
-                  isHourStart ? 'border-t-2 border-t-border/60' : 'bg-secondary/10'
-                } ${row.absorbed ? 'opacity-60' : ''}`}
+                } ${
+                  isSelectedForReset 
+                    ? 'bg-emerald-500/10 border-l-4 border-l-emerald-500 scale-[0.99]' 
+                    : hasOverride 
+                      ? (previewTemplateMode ? 'opacity-60 grayscale-[0.3] border-l-2 border-l-amber-400/30' : 'border-l-2 border-l-amber-400/60') 
+                      : ''
+                } ${
+                  isHourStart ? 'border-t border-t-border/40' : 'bg-secondary/5'
+                } ${row.absorbed ? 'opacity-60' : ''} ${
+                  previewTemplateMode && row.override && !isSelectedForReset ? 'hover:bg-amber-500/5' : ''
+                }`}
                 title={row.reason}
               >
                 {/* Hora:Minuto */}
@@ -768,15 +801,17 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                     {row.hour.toString().padStart(2, '0')}:{row.minute.toString().padStart(2, '0')}
                   </span>
                   {isLive && <span className="text-[9px] text-primary uppercase tracking-wide">agora</span>}
-                  {hasOverride && !isLive && !isSelectedForReset && <span className="text-[9px] text-amber-400 uppercase tracking-wide">editado</span>}
-                  {isSelectedForReset && <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wide">substituir</span>}
-                  {!isHourStart && !isLive && !hasOverride && <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">2º bloco</span>}
+                  {hasOverride && !isLive && !isSelectedForReset && !previewTemplateMode && <span className="text-[9px] text-amber-400 uppercase tracking-wide">editado</span>}
+                  {isSelectedForReset && <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wide animate-pulse">reescrever</span>}
+                  {previewTemplateMode && hasOverride && !isSelectedForReset && <span className="text-[9px] text-amber-400/50 uppercase tracking-wide">clique p/ formatar</span>}
                 </div>
 
                 {/* Programa + posições da sequência */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-foreground truncate">{row.programName}</span>
+                    <span className={`text-sm font-medium truncate ${isSelectedForReset ? 'text-emerald-400 font-bold' : 'text-foreground'}`}>
+                      {isSelectedForReset ? (findScheduledProgram(programs, row.hour) || 'Música livre') : row.programName}
+                    </span>
                     {row.fixedSlot?.note && (
                       <span className="text-[10px] text-muted-foreground italic">({row.fixedSlot.note})</span>
                     )}
@@ -785,80 +820,91 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                         absorvido (60min)
                       </Badge>
                     )}
-                    {row.hasCustomSeq && (
-                      <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30">
+                    {isSelectedForReset && (
+                      <Badge variant="outline" className="text-[9px] bg-emerald-500/20 text-emerald-400 border-emerald-500/40 animate-pulse">
+                        FORMATAR → PADRÃO
+                      </Badge>
+                    )}
+                    {row.hasCustomSeq && !isSelectedForReset && (
+                      <Badge variant="outline" className={`text-[9px] ${previewTemplateMode ? 'bg-amber-500/5 text-amber-400/50 border-amber-500/10' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'}`}>
                         seq. custom ({row.effectiveSequence.length})
                       </Badge>
                     )}
-                    {!row.hasCustomSeq && row.fromScheduled && !row.absorbed && (
-                      <Badge variant="outline" className="text-[9px] bg-violet-500/10 text-violet-400 border-violet-500/30" title="Sequência programada para esta hora (Sequence Scheduler)">
+                    {!row.hasCustomSeq && row.fromScheduled && !row.absorbed && !isSelectedForReset && (
+                      <Badge variant="outline" className="text-[9px] bg-violet-500/10 text-violet-400 border-violet-500/30">
                         seq. agendada
                       </Badge>
                     )}
                   </div>
                   <div className="flex gap-0.5 mt-1 flex-wrap">
                     {row.absorbed && (
-                      <span className="text-[10px] text-muted-foreground italic">
-                        ⏱️ Bloco ocupado pelo programa anterior (60min) — sem conteúdo próprio
-                      </span>
+                      <span className="text-[10px] text-muted-foreground italic">⏱️ Bloco ocupado pelo programa anterior (60min)</span>
                     )}
-                    {!row.absorbed && row.effectiveSequence.map((it: any) => {
-                      // Cores por TIPO de token da grade real
-                      const kind = it.gradeKind as GradePosition['kind'] | undefined;
-                      const cls = kind === 'mus'
-                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                        : kind === 'vht'
-                          ? 'bg-sky-500/15 text-sky-300 border-sky-500/40'
-                          : kind === 'vhtn'
-                            ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
-                            : kind === 'fun'
-                              ? 'bg-pink-500/15 text-pink-300 border-pink-500/40'
-                              : kind === 'rom'
-                                ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
-                                : kind === 'fixed'
-                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                                  : getStationColor(it.radioSource);
+                    {!row.absorbed && displaySequence.map((it: any) => {
+                      const kind = it.gradeKind || (it as any).rawToken;
+                      const cls = isSelectedForReset
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 font-bold'
+                        : kind === 'mus' || kind === 'MUS'
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                          : kind === 'vht' || kind === 'VHT'
+                            ? 'bg-sky-500/15 text-sky-300 border-sky-500/40'
+                            : kind === 'vhtn' || kind === 'VHTN'
+                              ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                              : kind === 'fun' || kind === 'FUN'
+                                ? 'bg-pink-500/15 text-pink-300 border-pink-500/40'
+                                : kind === 'rom' || kind === 'ROM'
+                                  ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                                  : kind === 'fixed'
+                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                    : getStationColor(it.radioSource);
+                      
                       const display = it.gradeLabel || getSourceDisplayName(it.radioSource);
-                      const short = kind === 'fixed' ? display : display.toUpperCase().slice(0, 8);
                       return (
                         <span
                           key={it.position}
                           className={`text-[9px] px-1.5 py-0.5 rounded font-mono border ${cls} ${
-                            showSeq ? '' : 'opacity-50 line-through decoration-rose-400/60'
+                            showSeq || isSelectedForReset ? '' : 'opacity-40 line-through decoration-rose-400/60'
                           }`}
-                          title={`Posição ${it.position} — ${display}${kind ? ` (${kind})` : ''}${showSeq ? '' : ' (LOC bloqueada — referência)'}`}
                         >
-                          {it.position.toString().padStart(2, '0')}·{short}
+                          {it.position}. {display.toUpperCase().slice(0, 10)}
                         </span>
                       );
                     })}
-                    {!showSeq && !row.absorbed && (
-                      <span className="text-[9px] text-muted-foreground italic ml-1">
-                        ⛔ {row.reason}
-                      </span>
-                    )}
-                    {row.effectiveSequence.length === 0 && !row.absorbed && showSeq && (
-                      <span className="text-[9px] text-amber-400 italic ml-1">
-                        ⚠️ Sequência Vazia — configure no Monitoramento
-                      </span>
-                    )}
                   </div>
                 </div>
 
                 {/* Status LOC */}
-                <div className="shrink-0">{statusBadge(row)}</div>
+                <div className="flex flex-col items-end gap-1">
+                  {statusBadge(row)}
+                  {!row.absorbed && hasOverride && row.override?.locked !== undefined && (
+                    <Badge variant="outline" className="text-[8px] border-amber-500/30 text-amber-400/80 bg-amber-500/5">
+                      LOC manual
+                    </Badge>
+                  )}
+                </div>
 
-                {/* Botão editar — abre Dialog grande */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-primary"
-                  title="Editar este bloco"
-                  disabled={row.absorbed}
-                  onClick={() => openEditor(row.hour, row.minute)}
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </Button>
+                {/* Ações: Editar */}
+                <div className="flex gap-1">
+                  {!row.absorbed && !previewTemplateMode && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 hover:bg-primary/20 hover:text-primary transition-colors"
+                      onClick={() => openEditor(row.hour, row.minute)}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                  {previewTemplateMode && row.override && (
+                    <div className={`h-8 w-8 flex items-center justify-center rounded-full border-2 transition-all ${
+                      isSelectedForReset 
+                        ? 'bg-emerald-500 border-emerald-400 text-white' 
+                        : 'border-slate-700 bg-slate-800 text-slate-500'
+                    }`}>
+                      {isSelectedForReset ? <Save className="w-4 h-4" /> : <div className="w-2 h-2 rounded-full bg-slate-600" />}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
