@@ -1017,11 +1017,13 @@ export const getDownloadStats = () => {
 };
 
 // Helper function to get active sequence based on current time and scheduled sequences
-export const getActiveSequence = (): SequenceConfig[] => {
+export const getActiveSequence = (targetHour?: number, targetMinute?: number): SequenceConfig[] => {
   const state = useRadioStore.getState();
   const now = new Date();
-  const currentHour = now.getHours();
-  const currentMinute = now.getMinutes();
+  
+  // Use target time if provided, otherwise current time
+  const currentHour = targetHour !== undefined ? targetHour : now.getHours();
+  const currentMinute = targetMinute !== undefined ? targetMinute : now.getMinutes();
   const currentTimeMinutes = currentHour * 60 + currentMinute;
   
   const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
