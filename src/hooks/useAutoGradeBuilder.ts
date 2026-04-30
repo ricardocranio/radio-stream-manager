@@ -728,7 +728,9 @@ export function useAutoGradeBuilder() {
   // ==================== Weekend Template Generator ====================
 
   // FALLBACK station rotation — only used when sequence has no valid stations
-  const FALLBACK_STATION_ROTATION = ['BH FM', 'Rádio Globo RJ', 'Band FM', 'Clube FM', 'Mix FM'];
+  const FALLBACK_STATION_ROTATION = stations.filter(s => s.enabled).map(s => s.name).length > 0
+    ? stations.filter(s => s.enabled).map(s => s.name)
+    : ['BH FM', 'Band FM', 'Clube FM', 'Rádio Globo RJ'];
   const saturdayStationIndexRef = useRef(0);
   // Cross-block anti-repetition set for weekend templates (persists across all blocks in the same build)
   const weekendUsedKeysRef = useRef<Set<string>>(new Set());
