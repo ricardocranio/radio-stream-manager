@@ -744,16 +744,8 @@ app.on('before-quit', async (event) => {
           _activeDownloadProcess = null;
           app._waitingForDownload = false;
           
-          // Now actually quit
-          pythonMonitor.killMonitorProcess();
-          if (lanServer) {
-            try { lanServer.close(); } catch (e) {}
-            lanServer = null;
-          }
-          if (tray && !tray.isDestroyed()) {
-            tray.destroy();
-            tray = null;
-          }
+          // Cleanup and quit
+          finalizeShutdown();
           app.quit();
         }
       }, 500);
@@ -762,16 +754,34 @@ app.on('before-quit', async (event) => {
   }
   
   app.isQuitting = true;
-  pythonMonitor.killMonitorProcess();
+  finalizeShutdown();
+});
+
+function finalizeShutdown() {
+  console.log('[SHUTDOWN] Encerrando processos e serviços...');
+  
+  // Kill Python monitor definitively
+  try {
+    pythonMonitor.killMonitorProcess();
+  } catch (e) {
+    console.error('[SHUTDOWN] Erro ao encerrar monitor:', e.message);
+  }
+  
+  // Close LAN server
   if (lanServer) {
-    try { lanServer.close(); } catch (e) {}
+    try { 
+      lanServer.close(); 
+      console.log('[SHUTDOWN] Servidor LAN encerrado.');
+    } catch (e) {}
     lanServer = null;
   }
+  
+  // Destroy tray
   if (tray && !tray.isDestroyed()) {
     tray.destroy();
     tray = null;
   }
-});
+}
 
 // Export for use by deezerDownload module
 module.exports = { setActiveDownloadProcess, getActiveDownloadProcess };
