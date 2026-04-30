@@ -259,23 +259,21 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
 
   /** Remove TODOS os overrides de TODOS os dias da semana e limpa o pool de músicas. */
   const resetAllDays = async () => {
-    const total = Object.keys(policy.hourOverrides || {}).length;
-    
-    // 1. Limpa overrides manuais da grade 24h
+    // 1. Limpa overrides manuais da grade 24h (formata os blocos)
     persist({ ...policy, hourOverrides: {} });
     
-    // 2. Executa o reset do pool e também limpa a SEQUÊNCIA PADRÃO
-    // para que o usuário possa montar a dele do zero (formatação completa).
+    // 2. Executa o reset do pool, mas PRESERVA a SEQUÊNCIA PADRÃO do usuário
+    // para que o sistema siga exatamente o que foi configurado no monitoramento.
     await executeFullSystemReset({
-      clearSupabase: true, // Limpa o histórico para evitar resíduos de outras emissoras
+      clearSupabase: true, // Limpa o histórico para evitar resíduos
       clearSchedules: false,
       resetStations: false,
-      clearUserSequence: true // Limpa a sequência padrão para o usuário montar a sua
+      clearUserSequence: false // PRESERVA a sequência para ser usada como template
     });
 
     toast({
       title: 'Sistema Formatado',
-      description: 'Grade 24h, Sequência Padrão e Pool de músicas foram zerados. Agora você pode montar sua programação do zero.',
+      description: 'As customizações manuais foram removidas. A grade agora segue estritamente a sua Sequência Padrão.',
     });
   };
 
