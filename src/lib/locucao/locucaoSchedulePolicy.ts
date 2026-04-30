@@ -200,3 +200,9 @@ export function getHourOverride(
 ): HourOverride | undefined {
   return policy.hourOverrides?.[overrideKey(day, hour, minute)];
 }
+
+/** Limpa todos os overrides de todos os dias. */
+export function clearAllOverrides() {
+  const policy = loadPolicy();
+  savePolicy({ ...policy, hourOverrides: {} });
+}
