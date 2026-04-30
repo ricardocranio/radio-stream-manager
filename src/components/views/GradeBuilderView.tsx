@@ -532,7 +532,16 @@ export function GradeBuilderView() {
             Grade gerada com {realSongs.length} músicas reais de {Object.keys(stationCounts).length} emissoras
           </p>
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 mr-2 bg-secondary/30 px-3 py-1.5 rounded-lg border border-border">
+            <Label htmlFor="builder-grade-24h" className="text-xs font-medium whitespace-nowrap">Grade 24h</Label>
+            <Switch
+              id="builder-grade-24h"
+              checked={config.useGrade24h !== false}
+              onCheckedChange={(checked) => setConfig({ useGrade24h: checked })}
+            />
+          </div>
+
           <Button variant="outline" size="sm" onClick={fetchRealSongs} disabled={isLoading}>
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin sm:mr-2" /> : <RefreshCw className="w-4 h-4 sm:mr-2" />}
             <span className="hidden sm:inline">Atualizar Músicas</span>
