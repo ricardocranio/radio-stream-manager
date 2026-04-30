@@ -615,34 +615,88 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
             </span>
 
             <div className="ml-auto flex items-center gap-1">
-              {/* Zerar somente o dia selecionado */}
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
+              {/* Botão de Modo Preview / Subscrição */}
+              <Button
+                size="sm"
+                variant={previewTemplateMode ? "default" : "outline"}
+                className={`h-7 px-2 text-xs gap-1 ${previewTemplateMode ? 'bg-amber-600 hover:bg-amber-700' : 'border-amber-500/40 text-amber-400'}`}
+                onClick={() => {
+                  setPreviewTemplateMode(!previewTemplateMode);
+                  setSelectedBlocksForReset(new Set());
+                }}
+                title="Ativar modo de subscrição pela Sequência Padrão"
+              >
+                <RotateCcw className={`w-3 h-3 ${previewTemplateMode ? 'animate-spin-slow' : ''}`} />
+                <span className="hidden sm:inline">{previewTemplateMode ? 'Cancelar' : 'Subscrever Padrão'}</span>
+              </Button>
+
+              {previewTemplateMode ? (
+                <>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 px-2 text-xs gap-1 border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
-                    title={`Zerar customizações da grade de ${DAY_LABELS[selectedDay]}`}
+                    className="h-7 px-2 text-xs border-amber-500/40 text-amber-400"
+                    onClick={() => selectAllBlocks(rows.filter(r => !!r.override).map(r => overrideKey(selectedDay, r.hour, r.minute)))}
                   >
-                    <RotateCcw className="w-3 h-3" />
-                    <span className="hidden sm:inline">Zerar Dia</span>
+                    Todos
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Zerar grade de {DAY_LABELS[selectedDay]}?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Atenção: Os horários deste dia serão subscritos conforme a sua Sequência Padrão. Isso removerá qualquer edição manual. Após aceitar, esta alteração não poderá ser desfeita.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={resetSelectedDay} className="bg-amber-600 hover:bg-amber-700">
-                      Zerar {DAY_LABELS[selectedDay]}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 px-2 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700"
+                        disabled={selectedBlocksForReset.size === 0}
+                      >
+                        <Save className="w-3 h-3" />
+                        Aplicar ({selectedBlocksForReset.size})
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Confirmar Subscrição?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Os {selectedBlocksForReset.size} blocos selecionados serão substituídos pela Sequência Padrão. Esta ação não poderá ser desfeita.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={resetSelectedDay} className="bg-emerald-600 hover:bg-emerald-700">
+                          Confirmar Substituição
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </>
+              ) : (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs gap-1 border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
+                      title={`Zerar customizações da grade de ${DAY_LABELS[selectedDay]}`}
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span className="hidden sm:inline">Zerar Dia</span>
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Zerar grade de {DAY_LABELS[selectedDay]}?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Atenção: Os horários deste dia serão subscritos conforme a sua Sequência Padrão. Isso removerá qualquer edição manual. Após aceitar, esta alteração não poderá ser desfeita.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={resetSelectedDay} className="bg-amber-600 hover:bg-amber-700">
+                        Zerar {DAY_LABELS[selectedDay]}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
 
               {/* Zerar TODA a grade 24h (todos os dias) */}
               <AlertDialog>
