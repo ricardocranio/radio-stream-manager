@@ -26,6 +26,10 @@ export interface RadioStation {
   autoDownloadEnabled?: boolean; // Enable automatic download of songs from this station
   monitoringSchedules?: MonitoringSchedule[]; // Horários específicos para monitoramento
   downloadFolder?: string; // Station-specific download subfolder (e.g. "hist", "sertanejo")
+  // New flags for filtering pool
+  isMonitoring?: boolean;
+  isSequence?: boolean;
+  isCapture?: boolean;
 }
 
 export interface ProgramSchedule {
