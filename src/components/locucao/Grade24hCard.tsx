@@ -487,14 +487,14 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
         // Detectamos via raw: se realPositions é vazio E o template do dia
         // cobre outros blocos próximos (heurística: hora 21:30 dia útil).
         const isWeekday = ['seg','ter','qua','qui','sex'].includes(selectedDay);
-        const absorbed = isWeekday && hour === 21 && minute === 30 && realPositions.length === 0;
+        const absorbed = config.useDefaultFixedSchedules && isWeekday && hour === 21 && minute === 30 && realPositions.length === 0;
 
         // Posições EXATAS do .txt — prioridade: override custom > template real do dia > sequência configurada
         const effectiveSequence = absorbed
           ? []
           : override?.sequence
             ? override.sequence.map((s) => ({ position: s.position, radioSource: s.radioSource, customFileName: s.customFileName }))
-            : realPositions.length > 0
+            : (realPositions.length > 0 && config.useDefaultFixedSchedules)
               ? (() => {
                   const userStations = resolvedBase
                     .map((s) => s.radioSource)
