@@ -30,6 +30,7 @@ export function SettingsView() {
   const { config, setConfig, deezerConfig, setDeezerConfig, songAliases, addSongAlias, removeSongAlias, updateSongAlias } = useRadioStore();
   const similarityStats = useSimilarityLogStore((state) => state.stats);
   const resetSimilarityStats = useSimilarityLogStore((state) => state.resetStats);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const [localConfig, setLocalConfig] = useState(config);
   const [showArl, setShowArl] = useState(false);
@@ -258,6 +259,39 @@ export function SettingsView() {
     };
   }, [deezerConfig.arl]);
 
+  const handleExport = () => {
+    try {
+      const state = useRadioStore.getState();
+      const dataStr = JSON.stringify(state, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+      const date = new Date().toISOString().split('T')[0];
+      const link = document.createElement('a');
+      link.setAttribute('href', dataUri);
+      link.setAttribute('download', `pgm-radio-config-${date}.json`);
+      link.click();
+      toast({ title: 'Configuração Exportada', description: 'O arquivo foi salvo no seu PC.' });
+    } catch (err) {
+      toast({ title: 'Erro ao exportar', description: String(err), variant: 'destructive' });
+    }
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        if (!json.config || !json.stations) throw new Error('Arquivo inválido');
+        useRadioStore.setState(json);
+        toast({ title: 'Configuração Restaurada', description: 'Os dados foram carregados com sucesso.' });
+      } catch (err) {
+        toast({ title: 'Erro ao importar', description: 'O arquivo não é uma configuração válida.', variant: 'destructive' });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">
@@ -267,10 +301,21 @@ export function SettingsView() {
           <p className="text-muted-foreground">Ajuste os parâmetros do sistema de programação</p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          <span className="text-xs text-green-500 bg-green-500/10 px-2 py-1 rounded-full flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" />
-            Auto-save ativo
-          </span>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImport}
+            accept=".json"
+            className="hidden"
+          />
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/20">
+            <Upload className="w-4 h-4 mr-2" />
+            Importar PC
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExport} className="bg-primary/10 text-primary border-primary/30 hover:bg-primary/20">
+            <Download className="w-4 h-4 mr-2" />
+            Exportar PC
+          </Button>
           <Button variant="outline" onClick={handleReset} size="sm">
             <RotateCcw className="w-4 h-4 mr-2" />
             Restaurar
