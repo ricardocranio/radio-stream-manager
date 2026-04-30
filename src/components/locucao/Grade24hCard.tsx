@@ -129,7 +129,7 @@ function resolveSequenceForHour(
 export function Grade24hCard({ sequence, programs, getStationColor, getSourceDisplayName }: Grade24hCardProps) {
   const today = useMemo(() => dayKeyFromDate(new Date()), []);
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
-  const [policy, setPolicy] = useState<LocucaoSchedulePolicy>(() => loadPolicy());
+  const { stations, fixedContent, scheduledSequences, config, sequence, policy, setPolicy } = useRadioStore();
   const [editingBlock, setEditingBlock] = useState<{ hour: number; minute: number } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
