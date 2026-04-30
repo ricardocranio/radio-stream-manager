@@ -520,14 +520,22 @@ export function useAutoGradeBuilder() {
 
   const fetchAllRecentSongs = useCallback(async (retryCount = 0): Promise<Record<string, SongEntry[]>> => {
     try {
+      const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
+      
       // Fetch scraped_songs and radio_historico independently to handle partial failures
       let scrapedData: Array<{ title: string; artist: string; station_name: string; scraped_at: string; ai_genre?: string | null; ai_energy?: string | null }> = [];
       let historicoData: Array<{ title: string; artist: string; station_name: string; captured_at: string }> = [];
 
       try {
-        const scrapedResult = await supabase
+        let scrapedQuery = supabase
           .from('scraped_songs')
-          .select('title, artist, station_name, scraped_at, ai_genre, ai_energy')
+          .select('title, artist, station_name, scraped_at, ai_genre, ai_energy');
+
+        if (enabledStations.length > 0) {
+          scrapedQuery = scrapedQuery.in('station_name', enabledStations);
+        }
+
+        const scrapedResult = await scrapedQuery
           .order('scraped_at', { ascending: false })
           .limit(3000);
         
