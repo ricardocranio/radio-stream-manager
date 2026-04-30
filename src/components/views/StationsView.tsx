@@ -751,11 +751,12 @@ export function StationsView() {
                     <Label className="text-[10px] text-muted-foreground uppercase">Monit.</Label>
                     <Switch
                       checked={data.isMonitoring !== false}
-                      onCheckedChange={(checked) => {
+                      onCheckedChange={async (checked) => {
                         if (isEditing) {
                           setEditForm((prev) => prev && { ...prev, isMonitoring: checked });
                         } else {
                           updateStation(station.id, { isMonitoring: checked });
+                          await supabase.from('radio_stations').update({ is_monitoring: checked }).eq('name', station.name);
                         }
                       }}
                       className="scale-75"
