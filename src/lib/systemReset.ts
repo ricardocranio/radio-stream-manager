@@ -20,6 +20,8 @@ export interface SystemResetOptions {
   clearSchedules: boolean;
   /** Disable all radio_stations rows. */
   resetStations: boolean;
+  /** Clear the user's standard sequence configuration. */
+  clearUserSequence?: boolean;
 }
 
 export interface SystemResetResult {
@@ -33,6 +35,7 @@ const DEFAULT_OPTIONS: SystemResetOptions = {
   clearSupabase: true,
   clearSchedules: false,
   resetStations: false,
+  clearUserSequence: false,
 };
 
 /**
@@ -99,8 +102,8 @@ export async function executeFullSystemReset(
     const preservedAliases = [...store.songAliases];
     const preservedStations = [...store.stations];
     const preservedFixedContent = [...store.fixedContent];
-    const preservedSequence = [...store.sequence];
-    const preservedScheduledSeq = [...store.scheduledSequences];
+    const preservedSequence = opts.clearUserSequence ? [] : [...store.sequence];
+    const preservedScheduledSeq = opts.clearUserSequence ? [] : [...store.scheduledSequences];
     const preservedPrograms = [...store.programs];
     const preservedMapasConfig = store.mapasConfig ? { ...store.mapasConfig } : undefined;
     const preservedAutoScrape = store.autoScrapeEnabled;
