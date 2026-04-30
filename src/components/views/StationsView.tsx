@@ -739,13 +739,58 @@ export function StationsView() {
                   </CollapsibleContent>
                 </Collapsible>
 
+                {/* Pool & Mode Toggles */}
+                <div className="grid grid-cols-3 gap-2 border-y border-border/50 py-2 my-2">
+                  <div className="flex flex-col items-center gap-1">
+                    <Label className="text-[10px] text-muted-foreground uppercase">Monit.</Label>
+                    <Switch
+                      checked={data.isMonitoring !== false}
+                      onCheckedChange={(checked) => {
+                        if (isEditing) {
+                          setEditForm((prev) => prev && { ...prev, isMonitoring: checked });
+                        } else {
+                          updateStation(station.id, { isMonitoring: checked });
+                        }
+                      }}
+                      className="scale-75"
+                    />
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <Label className="text-[10px] text-muted-foreground uppercase">Seq.</Label>
+                    <Switch
+                      checked={data.isSequence !== false}
+                      onCheckedChange={(checked) => {
+                        if (isEditing) {
+                          setEditForm((prev) => prev && { ...prev, isSequence: checked });
+                        } else {
+                          updateStation(station.id, { isSequence: checked });
+                        }
+                      }}
+                      className="scale-75"
+                    />
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <Label className="text-[10px] text-muted-foreground uppercase">Capt.</Label>
+                    <Switch
+                      checked={data.isCapture !== false}
+                      onCheckedChange={(checked) => {
+                        if (isEditing) {
+                          setEditForm((prev) => prev && { ...prev, isCapture: checked });
+                        } else {
+                          updateStation(station.id, { isCapture: checked });
+                        }
+                      }}
+                      className="scale-75"
+                    />
+                  </div>
+                </div>
+
                 {/* Auto Download Toggle */}
                 <div className="flex items-center justify-between py-1">
                   <div className="flex items-center gap-2">
                     <Download className="w-3.5 h-3.5 text-green-500" />
                     <div>
                       <span className="text-xs font-medium">Download Automático</span>
-                      <p className="text-[10px] text-muted-foreground">Baixar músicas desta emissora</p>
                     </div>
                   </div>
                   <Switch
@@ -757,6 +802,7 @@ export function StationsView() {
                         updateStation(station.id, { autoDownloadEnabled: checked });
                       }
                     }}
+                    className="scale-75"
                   />
                 </div>
 
@@ -777,6 +823,7 @@ export function StationsView() {
                         updateStation(station.id, { prioritizeDownloads: checked, ...(checked ? { autoDownloadEnabled: true } : {}) });
                       }
                     }}
+                    className="scale-75"
                   />
                 </div>
 
