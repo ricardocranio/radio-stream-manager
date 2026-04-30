@@ -892,6 +892,7 @@ export const useRadioStore = create<RadioState>()(
           })),
           scheduledSequences: [],
           fixedContent: [],
+          config: { ...state.config, useDefaultFixedSchedules: false },
         }),
     }),
     {
