@@ -408,7 +408,7 @@ export function GradePreviewCard() {
     };
 
     fetchRealSongsForPreview();
-  }, [scheduledSequences, stations]);
+  }, [scheduledSequences, stations, useRadioStore.getState().sequence]);
 
   // Default fallback mock songs
   const getDefaultMockSongs = (): PreviewSong[] => [
