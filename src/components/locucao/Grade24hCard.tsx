@@ -143,7 +143,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   const [draft, setDraft] = useState<Draft | null>(null);
   const { toast } = useToast();
 
-  const { stations, fixedContent, scheduledSequences } = useRadioStore();
+  const { stations, fixedContent, scheduledSequences, config } = useRadioStore();
 
   const fixedSlots = useMemo(() => {
     if (config.useDefaultFixedSchedules === false) return [];
