@@ -859,7 +859,17 @@ export function SequenceView() {
           <p className="text-muted-foreground text-sm">
             Configure a ordem das rádios para montar o arquivo %dd%.txt
           </p>
-        </div>
+          </div>
+          
+          <div className="flex items-center gap-2 mr-2 bg-secondary/30 px-3 py-1.5 rounded-lg border border-border">
+            <Label htmlFor="use-default-fixed" className="text-xs font-medium whitespace-nowrap">Programas Padrão</Label>
+            <Switch
+              id="use-default-fixed"
+              checked={config.useDefaultFixedSchedules !== false}
+              onCheckedChange={(checked) => setConfig({ useDefaultFixedSchedules: checked })}
+              title="Ativa/Desativa os programas fixos padrão do sistema (Madrugada, Sintonia Total, etc.)"
+            />
+          </div>
         <div className="flex items-center gap-2 shrink-0">
           <div className="flex items-center gap-2 mr-2 bg-secondary/30 px-3 py-1.5 rounded-lg border border-border">
             <Label htmlFor="use-grade-24h" className="text-xs font-medium whitespace-nowrap">Grade 24h</Label>
