@@ -373,9 +373,10 @@ export async function generateMisturadaoV2(
     line = `${timeStr} (ID=MISTURADAO) vht,"NOTICIA_DA_HORA_15HORAS_${dayName}.mp3",vht,"MISTURADAO_BLOCO01_${dayName}.mp3","FIQUE_SABENDO_EDICAO01_${dayName}.mp3",vht,"MISTURADAO_BLOCO02_${dayName}.mp3"`;
   } else {
     // 20:30
-    const monDisney1 = await pickMonitoredSong('Disney FM', songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-    const monDisney2 = await pickMonitoredSong('Disney FM', songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-    line = `${timeStr} (ID=MISTURADAO) vht,"MISTURADAO_BLOCO03_${dayName}.mp3","FIQUE_SABENDO_EDICAO02_${dayName}.mp3","MISTURADAO_BLOCO04_${dayName}.mp3",${monDisney1},vht,${monDisney2}`;
+    const _seqIdx = { current: 0 };
+    const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+    const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+    line = `${timeStr} (ID=MISTURADAO) vht,"MISTURADAO_BLOCO03_${dayName}.mp3","FIQUE_SABENDO_EDICAO02_${dayName}.mp3","MISTURADAO_BLOCO04_${dayName}.mp3",${mon1},vht,${mon2}`;
   }
 
   logs.push({ blockTime: timeStr, type: 'fixed', title: 'Misturadão', artist: `Bloco ${timeStr}`, station: 'FIXO', reason: `Template Misturadão ${dayName}` });
