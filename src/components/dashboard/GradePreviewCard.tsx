@@ -900,12 +900,14 @@ export function GradePreviewCard() {
 
   const activeSequence = useMemo(() => {
     const state = useRadioStore.getState();
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    const currentTimeMinutes = currentHour * 60 + currentMinute;
     const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
-    const currentDay = dayMap[now.getDay()];
+    const currentDay = dayMap[new Date().getDay()];
+    
+    // Check for the next block time specifically
+    const [nextH, nextM] = nextBlockTime.split(':').map(Number);
+    if (isNaN(nextH)) return null;
+    
+    const targetMinutes = nextH * 60 + (nextM || 0);
     
     return state.scheduledSequences
       .filter((s) => s.enabled)
@@ -914,11 +916,11 @@ export function GradePreviewCard() {
         const startMinutes = s.startHour * 60 + s.startMinute;
         const endMinutes = s.endHour * 60 + s.endMinute;
         if (endMinutes <= startMinutes) {
-          return currentTimeMinutes >= startMinutes || currentTimeMinutes < endMinutes;
+          return targetMinutes >= startMinutes || targetMinutes < endMinutes;
         }
-        return currentTimeMinutes >= startMinutes && currentTimeMinutes < endMinutes;
+        return targetMinutes >= startMinutes && targetMinutes < endMinutes;
       });
-  }, [scheduledSequences]);
+  }, [scheduledSequences, nextBlockTime]);
 
   return (
     <Card className={`glass-card ${isBlockShort ? 'border-red-500/40' : isBlockOk ? 'border-green-500/20' : 'border-amber-500/20'}`}>
