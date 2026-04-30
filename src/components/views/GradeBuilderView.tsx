@@ -263,7 +263,12 @@ export function GradeBuilderView() {
     // Sertanejo Nossa (05:00-07:30)
     if (hour >= 5 && hour <= 7) {
       const sertStations = ['Liberdade FM', 'Positiva FM', 'Positividade FM'];
+      // Filter by station flags
+      const poolStations = stations.filter(s => s.isMonitoring !== false && s.isSequence !== false && s.isCapture !== false);
+      const poolStationNames = new Set(poolStations.map(s => s.name));
+      
       const sertPool = realSongs.filter(s =>
+        poolStationNames.has(s.station_name) &&
         sertStations.some(st => s.station_name.toLowerCase().includes(st.toLowerCase().replace(' fm', ''))) &&
         !usedSongs.has(`${s.title.toLowerCase()}-${s.artist.toLowerCase()}`)
       );
