@@ -1126,7 +1126,7 @@ export function useAutoGradeBuilder() {
       const todayKey: DayKey = (targetDay as DayKey) || dayMap2[new Date().getDay()];
       const locPolicy = loadLocucaoPolicy();
       const ovr = getHourOverride(locPolicy, todayKey, hour, minute);
-      if (ovr?.sequence && ovr.sequence.length > 0) {
+      if (config.useGrade24h !== false && ovr?.sequence && ovr.sequence.length > 0) {
         const overrideProgramName = ovr.programName?.trim() || programName;
         const overrideResult = await buildBlockFromOverride({
           hour, minute,

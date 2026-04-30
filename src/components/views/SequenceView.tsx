@@ -217,6 +217,9 @@ export function SequenceView() {
     removeScheduledSequence,
     fixedContent,
     programs,
+    config,
+    setConfig,
+    resetProgramming,
   } = useRadioStore();
   const { toast } = useToast();
   const [localSequence, setLocalSequence] = useState(sequence);
@@ -833,6 +836,15 @@ export function SequenceView() {
     return currentMinutes >= startMinutes && currentMinutes < endMinutes;
   });
 
+  const handleResetSystemProgramming = () => {
+    resetProgramming();
+    setLocalSequence(useRadioStore.getState().sequence);
+    toast({
+      title: 'Programação zerada',
+      description: 'Programas, sequências e conteúdos fixos foram removidos.',
+    });
+  };
+
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -842,7 +854,39 @@ export function SequenceView() {
             Configure a ordem das rádios para montar o arquivo %dd%.txt
           </p>
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 mr-2 bg-secondary/30 px-3 py-1.5 rounded-lg border border-border">
+            <Label htmlFor="use-grade-24h" className="text-xs font-medium whitespace-nowrap">Grade 24h</Label>
+            <Switch
+              id="use-grade-24h"
+              checked={config.useGrade24h !== false}
+              onCheckedChange={(checked) => setConfig({ useGrade24h: checked })}
+            />
+          </div>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                <Trash2 className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Zerar Tudo</span>
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Zerar toda a programação?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Isso removerá todos os programas, sequências programadas, conteúdos fixos e resetará a sequência padrão para o modo aleatório. Esta ação não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleResetSystemProgramming} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Zerar Programação
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
           <Button variant="outline" size="sm" onClick={openNewScheduleDialog}>
             <Clock className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Nova Programação</span>
@@ -1154,12 +1198,23 @@ export function SequenceView() {
         </Collapsible>
 
         {/* Grade 24h — visão completa hora a hora (com collapse próprio no header) */}
-        <Grade24hCard
-          sequence={activeScheduled ? activeSequence : localSequence}
-          programs={programs}
-          getStationColor={getStationColor}
-          getSourceDisplayName={getSourceDisplayName}
-        />
+        <div className={config.useGrade24h === false ? 'opacity-40 grayscale pointer-events-none' : ''}>
+          <div className="relative">
+            {config.useGrade24h === false && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/20 backdrop-blur-[1px] rounded-xl">
+                <Badge variant="secondary" className="bg-destructive/10 text-destructive border-destructive/20 px-4 py-2 text-sm shadow-lg">
+                  Grade 24h Desativada
+                </Badge>
+              </div>
+            )}
+            <Grade24hCard
+              sequence={activeScheduled ? activeSequence : localSequence}
+              programs={programs}
+              getStationColor={getStationColor}
+              getSourceDisplayName={getSourceDisplayName}
+            />
+          </div>
+        </div>
 
         {/* Fixed Content Panel - Sidebar */}
         <Collapsible open={fixedOpen} onOpenChange={setFixedOpen}>

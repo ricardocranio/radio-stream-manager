@@ -219,6 +219,7 @@ interface RadioState {
   // Grade Preview Songs tracking (artist|title keys of songs in next grade)
   gradePreviewSongKeys: Set<string>;
   setGradePreviewSongKeys: (keys: Set<string>) => void;
+  resetProgramming: () => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
@@ -336,6 +337,7 @@ const defaultConfig: SystemConfig = {
   artistRepetitionMinutes: 60,
   safetyMarginMinutes: 7, // Maximum 7 minutes before block
   coringaCode: 'mus',
+  useGrade24h: true, // Grade 24h enabled by default
   // V21 additions
   vozBrasilFolder: 'C:\\Playlist\\A Voz do Brasil',
   vozBrasilTime: '20:35',
@@ -880,6 +882,16 @@ export const useRadioStore = create<RadioState>()(
       // Grade Preview Songs tracking (not persisted)
       gradePreviewSongKeys: new Set<string>(),
       setGradePreviewSongKeys: (keys) => set({ gradePreviewSongKeys: keys }),
+      resetProgramming: () =>
+        set({
+          programs: [],
+          sequence: Array.from({ length: 10 }, (_, i) => ({
+            position: i + 1,
+            radioSource: 'random_pop',
+          })),
+          scheduledSequences: [],
+          fixedContent: [],
+        }),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
