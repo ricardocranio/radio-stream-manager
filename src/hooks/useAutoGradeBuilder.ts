@@ -464,7 +464,7 @@ export function useAutoGradeBuilder() {
       rankingSongs,
       filterChars,
       fixedContent: fixedContent as GradeContext['fixedContent'],
-      stations: stations.map(s => ({ id: s.id, name: s.name, styles: s.styles })),
+      stations: stations.map(s => ({ id: s.id, name: s.name, styles: s.styles, enabled: s.enabled })),
       musicFolders: config.musicFolders,
       artistBlackouts: config.artistBlackouts,
       sequenceStations,
