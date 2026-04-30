@@ -930,34 +930,39 @@ export function GradePreviewCard() {
               <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-400 border-amber-500/30">
                 {nextBlockTime}
               </Badge>
-            {blockDuration && (
-              <Badge variant="outline" className={`text-xs ${
-                blockDuration >= 29 && blockDuration <= 32
-                  ? 'bg-green-500/10 text-green-400 border-green-500/30'
-                  : 'bg-red-500/10 text-red-400 border-red-500/30'
-              }`}>
-                <Clock className="w-3 h-3 mr-1" />
-                {blockDuration} min
-              </Badge>
-            )}
-            {displaySongs.length > 0 && (
-              <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-400 border-green-500/30">
-                TXT
-              </Badge>
-            )}
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            {isCheckingLibrary && (
-              <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/30">
-                <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                Verificando
-              </Badge>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => gradeBuilder.buildGrade(false, true)}
+              {blockDuration && (
+                <Badge variant="outline" className={`text-xs ${
+                  blockDuration >= 29 && blockDuration <= 32
+                    ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                    : 'bg-red-500/10 text-red-400 border-red-500/30'
+                }`}>
+                  <Clock className="w-3 h-3 mr-1" />
+                  {blockDuration} min
+                </Badge>
+              )}
+              {displaySongs.length > 0 && (
+                <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-400 border-green-500/30">
+                  TXT
+                </Badge>
+              )}
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {activeSequence && (
+                <Badge variant="outline" className="text-[10px] uppercase bg-amber-500/10 text-amber-500 border-amber-500/20 py-0 px-2 h-4 animate-pulse">
+                  Prog. Ativa: {activeSequence.name}
+                </Badge>
+              )}
+              {isCheckingLibrary && (
+                <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/30">
+                  <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  Verificando
+                </Badge>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => gradeBuilder.buildGrade(false, true)}
               disabled={isLoading}
             >
               {isLoading ? (
