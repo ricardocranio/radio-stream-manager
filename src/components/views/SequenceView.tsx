@@ -36,6 +36,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { LocucaoBadgePopover } from '@/components/locucao/LocucaoBadgePopover';
 import { Grade24hCard } from '@/components/locucao/Grade24hCard';
+import { clearAllOverrides } from '@/lib/locucao/locucaoSchedulePolicy';
 
 const WEEK_DAYS: { value: WeekDay; label: string }[] = [
   { value: 'dom', label: 'Dom' },
