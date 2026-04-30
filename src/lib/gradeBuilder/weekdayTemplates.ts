@@ -124,10 +124,11 @@ async function pickMixedMonitoredSong(
   coringaCode: string,
   stationIndex: { current: number },
 ): Promise<string> {
-  // Use sequence-derived stations from context, or fallback
+  // Use sequence-derived stations from context, or fallback to enabled stations
+  const enabledStations = ctx.stations.filter(s => s.enabled).map(s => s.name);
   const stations = (ctx.sequenceStations && ctx.sequenceStations.length > 0)
     ? ctx.sequenceStations
-    : ['BH FM', 'Rádio Globo RJ', 'Band FM', 'Clube FM'];
+    : (enabledStations.length > 0 ? enabledStations : ['BH FM', 'Rádio Globo RJ', 'Band FM', 'Clube FM']);
   
   // Cycle through stations from the active sequence
   for (let attempt = 0; attempt < stations.length; attempt++) {
