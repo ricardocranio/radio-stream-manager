@@ -1006,7 +1006,9 @@ export function useAutoGradeBuilder() {
     const VHT_DUR = await getAvgVhtDuration(vinhetasF);
     const FILL_STATIONS = config.fillPriorityStations?.length
       ? config.fillPriorityStations
-      : ['BH FM', 'Metropolitana FM', 'Metropolitana'];
+      : stations.filter(s => s.enabled).map(s => s.name).length > 0 
+        ? stations.filter(s => s.enabled).map(s => s.name)
+        : ['BH FM', 'Band FM', 'Clube FM', 'Rádio Globo RJ'];
 
     const fillBlockIfShort = async (result: BlockResult): Promise<BlockResult> => {
       // Skip filling for Voz do Brasil (legally fixed duration)
