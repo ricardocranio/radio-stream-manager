@@ -133,6 +133,8 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   const { stations, fixedContent, scheduledSequences, config, policy, setPolicy } = useRadioStore();
   const [editingBlock, setEditingBlock] = useState<{ hour: number; minute: number } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [previewTemplateMode, setPreviewTemplateMode] = useState(false);
+  const [selectedBlocksForReset, setSelectedBlocksForReset] = useState<Set<string>>(new Set());
 
   // Draft buffer — só persiste no localStorage quando o usuário clica "Salvar".
   interface Draft {
