@@ -237,6 +237,9 @@ const defaultStations: RadioStation[] = [
     styles: ['SERTANEJO', 'PAGODE', 'AGRONEJO'],
     enabled: true,
     downloadFolder: 'hist',
+    isMonitoring: true,
+    isSequence: true,
+    isCapture: true,
   },
   {
     id: 'band',
@@ -246,6 +249,9 @@ const defaultStations: RadioStation[] = [
     styles: ['SERTANEJO', 'PAGODE', 'AGRONEJO'],
     enabled: true,
     downloadFolder: 'hist',
+    isMonitoring: true,
+    isSequence: true,
+    isCapture: true,
   },
   {
     id: 'clube',
@@ -255,6 +261,9 @@ const defaultStations: RadioStation[] = [
     styles: ['SERTANEJO', 'PAGODE', 'POP/VARIADO'],
     enabled: true,
     downloadFolder: 'hist',
+    isMonitoring: true,
+    isSequence: true,
+    isCapture: true,
   },
   {
     id: 'globo',
@@ -264,6 +273,9 @@ const defaultStations: RadioStation[] = [
     styles: ['POP', 'SERTANEJO'],
     enabled: true,
     downloadFolder: 'hist',
+    isMonitoring: true,
+    isSequence: true,
+    isCapture: true,
   },
   {
     id: 'blink',
@@ -272,6 +284,9 @@ const defaultStations: RadioStation[] = [
     scrapeUrl: 'https://mytuner-radio.com/pt/radio/radio-blink-102-fm-407711/',
     styles: ['POP', 'DANCE'],
     enabled: true,
+    isMonitoring: false,
+    isSequence: false,
+    isCapture: false,
   },
   {
     id: 'positiva',
@@ -281,6 +296,9 @@ const defaultStations: RadioStation[] = [
     styles: ['POP', 'SERTANEJO'],
     enabled: true,
     downloadFolder: 'sertanejo',
+    isMonitoring: false,
+    isSequence: false,
+    isCapture: false,
   },
   {
     id: 'liberdade',
@@ -290,6 +308,9 @@ const defaultStations: RadioStation[] = [
     styles: ['SERTANEJO'],
     enabled: true,
     downloadFolder: 'sertanejo',
+    isMonitoring: false,
+    isSequence: false,
+    isCapture: false,
   },
   {
     id: 'mix',
@@ -299,6 +320,9 @@ const defaultStations: RadioStation[] = [
     styles: ['POP', 'DANCE'],
     enabled: true,
     downloadFolder: 'jovem',
+    isMonitoring: false,
+    isSequence: false,
+    isCapture: false,
   },
 ];
 
