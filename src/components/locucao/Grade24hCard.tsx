@@ -763,23 +763,36 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
               row.override.programName !== undefined ||
               row.override.sequence !== undefined
             );
-            const showSeq = !row.absorbed && row.locStatus !== 'blocked-program' && row.locStatus !== 'forced-block' && row.locStatus !== 'blocked-day' && row.locStatus !== 'blocked-time';
-            // Marca visual de início de hora cheia (HH:00) — separa pares de blocos.
-            const isHourStart = row.minute === 0;
+            
             const key = overrideKey(selectedDay, row.hour, row.minute);
             const isSelectedForReset = selectedBlocksForReset.has(key);
+            
+            const showSeq = !row.absorbed && row.locStatus !== 'blocked-program' && row.locStatus !== 'forced-block' && row.locStatus !== 'blocked-day' && row.locStatus !== 'blocked-time';
+            const isHourStart = row.minute === 0;
+
+            const displaySequence = (previewTemplateMode && isSelectedForReset) 
+              ? baseSeqFor(row.hour, row.minute)
+              : row.effectiveSequence;
 
             return (
               <div
                 key={`${row.hour}-${row.minute}`}
                 onClick={() => previewTemplateMode && row.override && toggleBlockSelection(key)}
-                className={`grid grid-cols-[60px_1fr_auto_auto] gap-3 items-center px-4 py-2 transition-colors ${
-                  previewTemplateMode && row.override ? 'cursor-pointer hover:bg-amber-500/10' : 'hover:bg-secondary/30'
+                className={`grid grid-cols-[60px_1fr_auto_auto] gap-3 items-center px-4 py-2 transition-all duration-200 ${
+                  previewTemplateMode && row.override ? 'cursor-pointer' : ''
                 } ${
                   isLive ? 'bg-primary/10 border-l-2 border-l-primary' : ''
-                } ${hasOverride ? (isSelectedForReset ? 'bg-amber-500/20 border-l-4 border-l-emerald-500' : 'border-l-2 border-l-amber-400/60') : ''} ${
-                  isHourStart ? 'border-t-2 border-t-border/60' : 'bg-secondary/10'
-                } ${row.absorbed ? 'opacity-60' : ''}`}
+                } ${
+                  isSelectedForReset 
+                    ? 'bg-emerald-500/10 border-l-4 border-l-emerald-500 scale-[0.99]' 
+                    : hasOverride 
+                      ? (previewTemplateMode ? 'opacity-60 grayscale-[0.3] border-l-2 border-l-amber-400/30' : 'border-l-2 border-l-amber-400/60') 
+                      : ''
+                } ${
+                  isHourStart ? 'border-t border-t-border/40' : 'bg-secondary/5'
+                } ${row.absorbed ? 'opacity-60' : ''} ${
+                  previewTemplateMode && row.override && !isSelectedForReset ? 'hover:bg-amber-500/5' : ''
+                }`}
                 title={row.reason}
               >
                 {/* Hora:Minuto */}
@@ -788,15 +801,17 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                     {row.hour.toString().padStart(2, '0')}:{row.minute.toString().padStart(2, '0')}
                   </span>
                   {isLive && <span className="text-[9px] text-primary uppercase tracking-wide">agora</span>}
-                  {hasOverride && !isLive && !isSelectedForReset && <span className="text-[9px] text-amber-400 uppercase tracking-wide">editado</span>}
-                  {isSelectedForReset && <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wide">substituir</span>}
-                  {!isHourStart && !isLive && !hasOverride && <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">2º bloco</span>}
+                  {hasOverride && !isLive && !isSelectedForReset && !previewTemplateMode && <span className="text-[9px] text-amber-400 uppercase tracking-wide">editado</span>}
+                  {isSelectedForReset && <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wide animate-pulse">reescrever</span>}
+                  {previewTemplateMode && hasOverride && !isSelectedForReset && <span className="text-[9px] text-amber-400/50 uppercase tracking-wide">clique p/ formatar</span>}
                 </div>
 
                 {/* Programa + posições da sequência */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-foreground truncate">{row.programName}</span>
+                    <span className={`text-sm font-medium truncate ${isSelectedForReset ? 'text-emerald-400 font-bold' : 'text-foreground'}`}>
+                      {isSelectedForReset ? (findScheduledProgram(programs, row.hour) || 'Música livre') : row.programName}
+                    </span>
                     {row.fixedSlot?.note && (
                       <span className="text-[10px] text-muted-foreground italic">({row.fixedSlot.note})</span>
                     )}
@@ -805,80 +820,91 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                         absorvido (60min)
                       </Badge>
                     )}
-                    {row.hasCustomSeq && (
-                      <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30">
+                    {isSelectedForReset && (
+                      <Badge variant="outline" className="text-[9px] bg-emerald-500/20 text-emerald-400 border-emerald-500/40 animate-pulse">
+                        FORMATAR → PADRÃO
+                      </Badge>
+                    )}
+                    {row.hasCustomSeq && !isSelectedForReset && (
+                      <Badge variant="outline" className={`text-[9px] ${previewTemplateMode ? 'bg-amber-500/5 text-amber-400/50 border-amber-500/10' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'}`}>
                         seq. custom ({row.effectiveSequence.length})
                       </Badge>
                     )}
-                    {!row.hasCustomSeq && row.fromScheduled && !row.absorbed && (
-                      <Badge variant="outline" className="text-[9px] bg-violet-500/10 text-violet-400 border-violet-500/30" title="Sequência programada para esta hora (Sequence Scheduler)">
+                    {!row.hasCustomSeq && row.fromScheduled && !row.absorbed && !isSelectedForReset && (
+                      <Badge variant="outline" className="text-[9px] bg-violet-500/10 text-violet-400 border-violet-500/30">
                         seq. agendada
                       </Badge>
                     )}
                   </div>
                   <div className="flex gap-0.5 mt-1 flex-wrap">
                     {row.absorbed && (
-                      <span className="text-[10px] text-muted-foreground italic">
-                        ⏱️ Bloco ocupado pelo programa anterior (60min) — sem conteúdo próprio
-                      </span>
+                      <span className="text-[10px] text-muted-foreground italic">⏱️ Bloco ocupado pelo programa anterior (60min)</span>
                     )}
-                    {!row.absorbed && row.effectiveSequence.map((it: any) => {
-                      // Cores por TIPO de token da grade real
-                      const kind = it.gradeKind as GradePosition['kind'] | undefined;
-                      const cls = kind === 'mus'
-                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                        : kind === 'vht'
-                          ? 'bg-sky-500/15 text-sky-300 border-sky-500/40'
-                          : kind === 'vhtn'
-                            ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
-                            : kind === 'fun'
-                              ? 'bg-pink-500/15 text-pink-300 border-pink-500/40'
-                              : kind === 'rom'
-                                ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
-                                : kind === 'fixed'
-                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                                  : getStationColor(it.radioSource);
+                    {!row.absorbed && displaySequence.map((it: any) => {
+                      const kind = it.gradeKind || (it as any).rawToken;
+                      const cls = isSelectedForReset
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 font-bold'
+                        : kind === 'mus' || kind === 'MUS'
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                          : kind === 'vht' || kind === 'VHT'
+                            ? 'bg-sky-500/15 text-sky-300 border-sky-500/40'
+                            : kind === 'vhtn' || kind === 'VHTN'
+                              ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                              : kind === 'fun' || kind === 'FUN'
+                                ? 'bg-pink-500/15 text-pink-300 border-pink-500/40'
+                                : kind === 'rom' || kind === 'ROM'
+                                  ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                                  : kind === 'fixed'
+                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                    : getStationColor(it.radioSource);
+                      
                       const display = it.gradeLabel || getSourceDisplayName(it.radioSource);
-                      const short = kind === 'fixed' ? display : display.toUpperCase().slice(0, 8);
                       return (
                         <span
                           key={it.position}
                           className={`text-[9px] px-1.5 py-0.5 rounded font-mono border ${cls} ${
-                            showSeq ? '' : 'opacity-50 line-through decoration-rose-400/60'
+                            showSeq || isSelectedForReset ? '' : 'opacity-40 line-through decoration-rose-400/60'
                           }`}
-                          title={`Posição ${it.position} — ${display}${kind ? ` (${kind})` : ''}${showSeq ? '' : ' (LOC bloqueada — referência)'}`}
                         >
-                          {it.position.toString().padStart(2, '0')}·{short}
+                          {it.position}. {display.toUpperCase().slice(0, 10)}
                         </span>
                       );
                     })}
-                    {!showSeq && !row.absorbed && (
-                      <span className="text-[9px] text-muted-foreground italic ml-1">
-                        ⛔ {row.reason}
-                      </span>
-                    )}
-                    {row.effectiveSequence.length === 0 && !row.absorbed && showSeq && (
-                      <span className="text-[9px] text-amber-400 italic ml-1">
-                        ⚠️ Sequência Vazia — configure no Monitoramento
-                      </span>
-                    )}
                   </div>
                 </div>
 
                 {/* Status LOC */}
-                <div className="shrink-0">{statusBadge(row)}</div>
+                <div className="flex flex-col items-end gap-1">
+                  {statusBadge(row)}
+                  {!row.absorbed && hasOverride && row.override?.locked !== undefined && (
+                    <Badge variant="outline" className="text-[8px] border-amber-500/30 text-amber-400/80 bg-amber-500/5">
+                      LOC manual
+                    </Badge>
+                  )}
+                </div>
 
-                {/* Botão editar — abre Dialog grande */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-primary"
-                  title="Editar este bloco"
-                  disabled={row.absorbed}
-                  onClick={() => openEditor(row.hour, row.minute)}
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </Button>
+                {/* Ações: Editar */}
+                <div className="flex gap-1">
+                  {!row.absorbed && !previewTemplateMode && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 hover:bg-primary/20 hover:text-primary transition-colors"
+                      onClick={() => openEditor(row.hour, row.minute)}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                  {previewTemplateMode && row.override && (
+                    <div className={`h-8 w-8 flex items-center justify-center rounded-full border-2 transition-all ${
+                      isSelectedForReset 
+                        ? 'bg-emerald-500 border-emerald-400 text-white' 
+                        : 'border-slate-700 bg-slate-800 text-slate-500'
+                    }`}>
+                      {isSelectedForReset ? <Save className="w-4 h-4" /> : <div className="w-2 h-2 rounded-full bg-slate-600" />}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
