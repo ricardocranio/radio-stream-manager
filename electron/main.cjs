@@ -4,6 +4,19 @@ const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification, dialog } =
 const path = require('path');
 const fs = require('fs');
 
+// =============== UNCAUGHT ERROR HANDLING ===============
+process.on('uncaughtException', (error) => {
+  console.error('[CRITICAL] Uncaught Exception:', error);
+  try {
+    const logPath = path.join(app.getPath('userData'), 'error.log');
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] Uncaught Exception: ${error.stack || error}\n`);
+  } catch (e) {}
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[CRITICAL] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 // LAN API Router - enables remote access to all IPC handlers
 const { handleApiRequest, createDualHandle } = require('./modules/lanApiRouter.cjs');
 
@@ -25,7 +38,8 @@ const safeHandle = createDualHandle(_baseSafeHandle);
 let autoUpdater = null;
 if (app.isPackaged) {
   try {
-    autoUpdater = require('electron-updater').autoUpdater;
+    const { autoUpdater: updater } = require('electron-updater');
+    autoUpdater = updater;
   } catch (e) {
     console.log('electron-updater not available:', e.message);
   }
