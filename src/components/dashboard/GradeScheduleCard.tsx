@@ -151,9 +151,16 @@ export function GradeScheduleCard() {
 
   // Generate songs pool from captured songs
   const songsPool = useMemo(() => {
+    // Filter stations that are selected for monitoring, sequence, and capture
+    const poolStations = stations.filter(s => s.isMonitoring !== false && s.isSequence !== false && s.isCapture !== false);
+    const poolStationNames = new Set(poolStations.map(s => s.name));
+    
     const uniqueSongs = new Map<string, BlockSong>();
     
     capturedSongs.forEach((song, index) => {
+      // Only include if station is in the filtered list
+      if (!poolStationNames.has(song.station_name)) return;
+      
       const key = `${song.title}-${song.artist}`;
       if (!uniqueSongs.has(key)) {
         const stationAbbrev = song.station_name.split(' ').map(w => w[0]).join('').toUpperCase();
