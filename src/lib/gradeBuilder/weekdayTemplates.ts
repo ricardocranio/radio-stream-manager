@@ -293,12 +293,13 @@ export async function generateRadarNoticiasBlock(
   const usedArtists = new Set<string>();
   const coringaCode = ctx.coringaCode;
 
-  const monBH = await pickMonitoredSong('BH FM', songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-  const monGlobo = await pickMonitoredSong('Rádio Globo RJ', songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-  const monDisney = await pickMonitoredSong('Disney FM', songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
-  const monMix = await pickMonitoredSong('Mix FM', songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode);
+  const _seqIdx = { current: 0 };
+  const mon1 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+  const mon2 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+  const mon3 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
+  const mon4 = await pickMixedMonitoredSong(songsByStation, ctx, timeStr, isFullDay, usedKeys, usedArtists, logs, coringaCode, _seqIdx);
 
-  const line = `${timeStr} (ID=RADAR NOTICIAS) vht,"Radar De Noticias _ bloco 01.mp3",${monBH},vht,"Radar De Noticias _ bloco 02.mp3",${monGlobo},vht,"Radar De Noticias _ bloco 03.mp3",vht,${monDisney},vht,"Radar De Noticias _ bloco 04.mp3",vht,${monMix}`;
+  const line = `${timeStr} (ID=RADAR NOTICIAS) vht,"Radar De Noticias _ bloco 01.mp3",${mon1},vht,"Radar De Noticias _ bloco 02.mp3",${mon2},vht,"Radar De Noticias _ bloco 03.mp3",vht,${mon3},vht,"Radar De Noticias _ bloco 04.mp3",vht,${mon4}`;
 
   logs.push({ blockTime: timeStr, type: 'fixed', title: 'Radar De Notícias', artist: `Bloco ${timeStr}`, station: 'FIXO', reason: 'Template Radar de Notícias com monitoramento multi-estação' });
   return { line: ctx.sanitizeGradeLine(line), logs };
