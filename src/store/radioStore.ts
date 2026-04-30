@@ -223,7 +223,12 @@ interface RadioState {
   policy: LocucaoSchedulePolicy;
   setPolicy: (policy: LocucaoSchedulePolicy) => void;
   resetProgramming: () => void;
+  // Locucao Policy
+  policy: LocucaoSchedulePolicy;
+  setPolicy: (policy: LocucaoSchedulePolicy) => void;
 }
+
+import { loadPolicy, savePolicy, type LocucaoSchedulePolicy, DEFAULT_POLICY } from '@/lib/locucao/locucaoSchedulePolicy';
 
 import { loadPolicy, savePolicy, type LocucaoSchedulePolicy } from '@/lib/locucao/locucaoSchedulePolicy';
 
