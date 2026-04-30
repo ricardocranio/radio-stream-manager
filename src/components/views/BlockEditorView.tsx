@@ -278,7 +278,7 @@ export function BlockEditorView() {
     }
     
     // Filter stations that are selected for monitoring, sequence, and capture
-    const poolStations = stations.filter(s => s.isMonitoring !== false && s.isSequence !== false && s.isCapture !== false);
+    const poolStations = stations.filter(s => s.isCapture !== false);
     const poolStationNames = new Set(poolStations.map(s => s.name));
     
     // Use real captured songs - get unique songs from selected stations
