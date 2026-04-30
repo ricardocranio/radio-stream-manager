@@ -884,7 +884,7 @@ export const useRadioStore = create<RadioState>()(
       gradePreviewSongKeys: new Set<string>(),
       setGradePreviewSongKeys: (keys) => set({ gradePreviewSongKeys: keys }),
       resetProgramming: () =>
-        set({
+        set((state) => ({
           programs: [],
           sequence: Array.from({ length: 10 }, (_, i) => ({
             position: i + 1,
@@ -893,7 +893,7 @@ export const useRadioStore = create<RadioState>()(
           scheduledSequences: [],
           fixedContent: [],
           config: { ...state.config, useDefaultFixedSchedules: false },
-        }),
+        })),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
