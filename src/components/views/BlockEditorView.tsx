@@ -277,9 +277,16 @@ export function BlockEditorView() {
       return demoSongs;
     }
     
-    // Use real captured songs - get unique songs
+    // Filter stations that are selected for monitoring, sequence, and capture
+    const poolStations = stations.filter(s => s.isMonitoring !== false && s.isSequence !== false && s.isCapture !== false);
+    const poolStationNames = new Set(poolStations.map(s => s.name));
+    
+    // Use real captured songs - get unique songs from selected stations
     const uniqueSongs = new Map<string, Omit<BlockSong, 'id'>>();
     capturedSongs.forEach(song => {
+      // Only include if station is in the filtered list
+      if (!poolStationNames.has(song.station)) return;
+      
       const key = `${song.title}-${song.artist}`;
       if (!uniqueSongs.has(key)) {
         const stationAbbrev = song.station.split(' ').map(w => w[0]).join('').toUpperCase();
