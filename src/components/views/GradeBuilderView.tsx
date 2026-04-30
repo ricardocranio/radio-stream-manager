@@ -55,7 +55,7 @@ interface SongPool {
 
 export function GradeBuilderView() {
   const isReady = useDeferredRender();
-  const { programs, sequence, stations, rankingSongs, scheduledSequences, fixedContent, config } = useRadioStore();
+  const { programs, sequence, stations, rankingSongs, scheduledSequences, fixedContent, config, setConfig } = useRadioStore();
   const { toast } = useToast();
   const [format, setFormat] = useState<GradeFormat>(defaultFormat);
   const [selectedHour, setSelectedHour] = useState(14);
