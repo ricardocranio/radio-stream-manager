@@ -329,19 +329,31 @@ export function GradePreviewCard() {
           const stationName = legacyName || station?.name || seqItem.radioSource;
 
           try {
-            let { data } = await supabase
+            let query = supabase
               .from('scraped_songs')
               .select('artist, title, station_name')
-              .eq('station_name', stationName)
+              .eq('station_name', stationName);
+
+            if (enabledStations.length > 0) {
+              query = query.in('station_name', enabledStations);
+            }
+
+            let { data } = await query
               .order('scraped_at', { ascending: false })
               .limit(30);
 
             // Fallback: case-insensitive search if exact match found nothing
             if ((!data || data.length === 0) && stationName) {
-              const fallback = await supabase
+              let fallbackQuery = supabase
                 .from('scraped_songs')
                 .select('artist, title, station_name')
-                .ilike('station_name', stationName)
+                .ilike('station_name', stationName);
+
+              if (enabledStations.length > 0) {
+                fallbackQuery = fallbackQuery.in('station_name', enabledStations);
+              }
+
+              const fallback = await fallbackQuery
                 .order('scraped_at', { ascending: false })
                 .limit(30);
               data = fallback.data;
