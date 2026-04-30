@@ -746,12 +746,18 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
             const showSeq = !row.absorbed && row.locStatus !== 'blocked-program' && row.locStatus !== 'forced-block' && row.locStatus !== 'blocked-day' && row.locStatus !== 'blocked-time';
             // Marca visual de início de hora cheia (HH:00) — separa pares de blocos.
             const isHourStart = row.minute === 0;
+            const key = overrideKey(selectedDay, row.hour, row.minute);
+            const isSelectedForReset = selectedBlocksForReset.has(key);
+
             return (
               <div
                 key={`${row.hour}-${row.minute}`}
-                className={`grid grid-cols-[60px_1fr_auto_auto] gap-3 items-center px-4 py-2 hover:bg-secondary/30 transition-colors ${
+                onClick={() => previewTemplateMode && row.override && toggleBlockSelection(key)}
+                className={`grid grid-cols-[60px_1fr_auto_auto] gap-3 items-center px-4 py-2 transition-colors ${
+                  previewTemplateMode && row.override ? 'cursor-pointer hover:bg-amber-500/10' : 'hover:bg-secondary/30'
+                } ${
                   isLive ? 'bg-primary/10 border-l-2 border-l-primary' : ''
-                } ${hasOverride ? 'border-l-2 border-l-amber-400/60' : ''} ${
+                } ${hasOverride ? (isSelectedForReset ? 'bg-amber-500/20 border-l-4 border-l-emerald-500' : 'border-l-2 border-l-amber-400/60') : ''} ${
                   isHourStart ? 'border-t-2 border-t-border/60' : 'bg-secondary/10'
                 } ${row.absorbed ? 'opacity-60' : ''}`}
                 title={row.reason}
