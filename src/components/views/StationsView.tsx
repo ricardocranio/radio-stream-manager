@@ -139,6 +139,9 @@ export function StationsView() {
             monitoring_end_hour: (s as any).monitoring_end_hour ?? null,
             monitoring_end_minute: (s as any).monitoring_end_minute ?? 0,
             monitoring_week_days: (s as any).monitoring_week_days || ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'],
+            is_monitoring: (s as any).is_monitoring ?? true,
+            is_sequence: (s as any).is_sequence ?? true,
+            is_capture: (s as any).is_capture ?? true,
           })));
         }
       } catch (error) {
