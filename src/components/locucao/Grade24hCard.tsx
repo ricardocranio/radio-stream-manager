@@ -768,7 +768,8 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                     {row.hour.toString().padStart(2, '0')}:{row.minute.toString().padStart(2, '0')}
                   </span>
                   {isLive && <span className="text-[9px] text-primary uppercase tracking-wide">agora</span>}
-                  {hasOverride && !isLive && <span className="text-[9px] text-amber-400 uppercase tracking-wide">editado</span>}
+                  {hasOverride && !isLive && !isSelectedForReset && <span className="text-[9px] text-amber-400 uppercase tracking-wide">editado</span>}
+                  {isSelectedForReset && <span className="text-[9px] text-emerald-400 uppercase font-bold tracking-wide">substituir</span>}
                   {!isHourStart && !isLive && !hasOverride && <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">2º bloco</span>}
                 </div>
 
