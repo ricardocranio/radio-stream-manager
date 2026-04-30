@@ -263,7 +263,8 @@ export function useAutoGradeBuilder() {
         entry.radioSource;
       if (!stationNames.includes(name)) stationNames.push(name);
     }
-    return stationNames.length > 0 ? stationNames : ['BH FM', 'Rádio Globo RJ', 'Band FM', 'Clube FM'];
+    const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
+    return stationNames.length > 0 ? stationNames : (enabledStations.length > 0 ? enabledStations : ['BH FM', 'Band FM', 'Clube FM', 'Rádio Globo RJ']);
   }, [getActiveSequenceForBlock, stations]);
 
   // ==================== Song Tracking ====================
