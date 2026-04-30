@@ -241,6 +241,31 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     toast({ title: 'Override removido', description: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} voltou ao padrão.` });
   };
 
+  /** Remove TODOS os overrides do dia atualmente selecionado. */
+  const resetSelectedDay = () => {
+    const overrides = { ...(policy.hourOverrides || {}) };
+    const prefix = `${selectedDay}-`;
+    let removed = 0;
+    for (const k of Object.keys(overrides)) {
+      if (k.startsWith(prefix)) { delete overrides[k]; removed++; }
+    }
+    persist({ ...policy, hourOverrides: overrides });
+    toast({
+      title: `Grade de ${DAY_LABELS[selectedDay]} zerada`,
+      description: `${removed} bloco(s) voltaram ao padrão.`,
+    });
+  };
+
+  /** Remove TODOS os overrides de TODOS os dias da semana. */
+  const resetAllDays = () => {
+    const total = Object.keys(policy.hourOverrides || {}).length;
+    persist({ ...policy, hourOverrides: {} });
+    toast({
+      title: 'Grade 24h zerada',
+      description: `${total} bloco(s) personalizados foram removidos. A grade voltou inteiramente ao padrão.`,
+    });
+  };
+
   // ---------- Draft helpers (popover de edição) ----------
   /**
    * Sequência base "como vai pra grade .txt" para um bloco específico
