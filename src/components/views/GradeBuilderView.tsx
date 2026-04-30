@@ -118,13 +118,20 @@ export function GradeBuilderView() {
 
   // Build songs by station
   const songsByStation = useCallback((): Record<string, SongPool[]> => {
+    // Filter stations that are selected for monitoring, sequence, and capture
+    const poolStations = stations.filter(s => s.isMonitoring !== false && s.isSequence !== false && s.isCapture !== false);
+    const poolStationNames = new Set(poolStations.map(s => s.name));
+    
     const map: Record<string, SongPool[]> = {};
     for (const song of realSongs) {
+      // Only include if station is in the filtered list
+      if (!poolStationNames.has(song.station_name)) continue;
+      
       if (!map[song.station_name]) map[song.station_name] = [];
       map[song.station_name].push(song);
     }
     return map;
-  }, [realSongs]);
+  }, [realSongs, stations]);
 
   // Get active sequence for a specific block
   const getActiveSequenceForBlock = useCallback((hour: number, minute: number): SequenceConfig[] => {
