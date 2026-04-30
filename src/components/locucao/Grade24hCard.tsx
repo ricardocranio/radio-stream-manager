@@ -130,7 +130,7 @@ function resolveSequenceForHour(
 export function Grade24hCard({ sequence, programs, getStationColor, getSourceDisplayName }: Grade24hCardProps) {
   const today = useMemo(() => dayKeyFromDate(new Date()), []);
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
-  const { stations, fixedContent, scheduledSequences, config, policy, setPolicy } = useRadioStore();
+  const { stations, fixedContent, scheduledSequences, config, setConfig, programs: storePrograms, setPrograms, policy, setPolicy } = useRadioStore();
   const [editingBlock, setEditingBlock] = useState<{ hour: number; minute: number } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [previewTemplateMode, setPreviewTemplateMode] = useState(false);
@@ -281,23 +281,28 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     setSelectedBlocksForReset(new Set(allKeys));
   };
 
-  /** Remove TODOS os overrides de TODOS os dias da semana e limpa o pool de músicas. */
+  /** Remove TODOS os overrides de TODOS os dias da semana, limpa programas agendados e o pool de músicas. */
   const resetAllDays = async () => {
-    // 1. Limpa overrides manuais da grade 24h (formata os blocos)
+    // 1. Limpa overrides manuais da grade 24h
     persist({ ...policy, hourOverrides: {} });
     
-    // 2. Executa o reset do pool, mas PRESERVA a SEQUÊNCIA PADRÃO do usuário
-    // para que o sistema siga exatamente o que foi configurado no monitoramento.
+    // 2. Limpa os programas agendados (programas fixos customizados)
+    setPrograms([]);
+    
+    // 3. Desativa os horários fixos padronizados (Nossa Madrugada, etc)
+    setConfig({ useDefaultFixedSchedules: false });
+
+    // 4. Executa o reset do pool, mas PRESERVA a SEQUÊNCIA PADRÃO do usuário
     await executeFullSystemReset({
-      clearSupabase: true, // Limpa o histórico para evitar resíduos
+      clearSupabase: true,
       clearSchedules: false,
       resetStations: false,
-      clearUserSequence: false // PRESERVA a sequência para ser usada como template
+      clearUserSequence: false
     });
 
     toast({
       title: 'Sistema Formatado',
-      description: 'As customizações manuais foram removidas. A grade agora segue estritamente a sua Sequência Padrão.',
+      description: 'Programas fixos e customizações foram removidos. A grade agora é 100% baseada na sua Sequência Padrão.',
     });
   };
 
