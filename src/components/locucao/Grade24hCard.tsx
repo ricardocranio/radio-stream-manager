@@ -129,7 +129,7 @@ function resolveSequenceForHour(
 export function Grade24hCard({ sequence, programs, getStationColor, getSourceDisplayName }: Grade24hCardProps) {
   const today = useMemo(() => dayKeyFromDate(new Date()), []);
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
-  const { stations, fixedContent, scheduledSequences, config, sequence, policy, setPolicy } = useRadioStore();
+  const { stations, fixedContent, scheduledSequences, config, policy, setPolicy } = useRadioStore();
   const [editingBlock, setEditingBlock] = useState<{ hour: number; minute: number } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -142,8 +142,6 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   }
   const [draft, setDraft] = useState<Draft | null>(null);
   const { toast } = useToast();
-
-  const { stations, fixedContent, scheduledSequences, config } = useRadioStore();
 
   const fixedSlots = useMemo(() => {
     if (config.useDefaultFixedSchedules === false) return [];
