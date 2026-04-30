@@ -267,7 +267,10 @@ export function StationsView() {
               name: editForm.name,
               scrape_url: editForm.scrapeUrl,
               enabled: editForm.enabled,
-              styles: editForm.styles
+              styles: editForm.styles,
+              is_monitoring: editForm.isMonitoring !== false,
+              is_sequence: editForm.isSequence !== false,
+              is_capture: editForm.isCapture !== false
             }, { onConflict: 'name' });
           
           if (!error) {
