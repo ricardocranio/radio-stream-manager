@@ -220,7 +220,12 @@ interface RadioState {
   gradePreviewSongKeys: Set<string>;
   setGradePreviewSongKeys: (keys: Set<string>) => void;
   resetProgramming: () => void;
+  // Locucao Policy
+  policy: LocucaoSchedulePolicy;
+  setPolicy: (policy: LocucaoSchedulePolicy) => void;
 }
+
+import { loadPolicy, savePolicy, type LocucaoSchedulePolicy, DEFAULT_POLICY } from '@/lib/locucao/locucaoSchedulePolicy';
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
 const defaultStations: RadioStation[] = [
@@ -884,16 +889,24 @@ export const useRadioStore = create<RadioState>()(
       gradePreviewSongKeys: new Set<string>(),
       setGradePreviewSongKeys: (keys) => set({ gradePreviewSongKeys: keys }),
       resetProgramming: () =>
-        set((state) => ({
-          programs: [],
-          sequence: Array.from({ length: 10 }, (_, i) => ({
-            position: i + 1,
-            radioSource: 'random_pop',
-          })),
-          scheduledSequences: [],
-          fixedContent: [],
-          config: { ...state.config, useDefaultFixedSchedules: false },
-        })),
+        set((state) => {
+          const nextPolicy = { ...state.policy, hourOverrides: {} };
+          savePolicy(nextPolicy);
+          return {
+            programs: defaultPrograms,
+            sequence: defaultSequence,
+            scheduledSequences: [],
+            fixedContent: defaultFixedContent,
+            config: { ...state.config, useDefaultFixedSchedules: true },
+            policy: nextPolicy,
+          };
+        }),
+
+      policy: loadPolicy(),
+      setPolicy: (policy) => {
+        savePolicy(policy);
+        set({ policy });
+      },
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
@@ -915,6 +928,7 @@ export const useRadioStore = create<RadioState>()(
         autoScrapeEnabled: state.autoScrapeEnabled,
         songAliases: state.songAliases,
         mapasConfig: state.mapasConfig,
+        policy: state.policy,
       }),
       // Handle Date objects that get serialized as strings
       onRehydrateStorage: () => (state) => {

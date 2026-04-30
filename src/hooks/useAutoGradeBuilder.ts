@@ -129,6 +129,7 @@ export function useAutoGradeBuilder() {
     stations, config, fixedContent, rankingSongs,
     addGradeHistory, addMissingSong,
     missingSongs: existingMissingSongs,
+    policy: locPolicy,
   } = useRadioStore();
 
   const { addBlockLogs } = useGradeLogStore();
@@ -1144,7 +1145,6 @@ export function useAutoGradeBuilder() {
     try {
       const dayMap2: DayKey[] = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
       const todayKey: DayKey = (targetDay as DayKey) || dayMap2[new Date().getDay()];
-      const locPolicy = loadLocucaoPolicy();
       const ovr = getHourOverride(locPolicy, todayKey, hour, minute);
       if (config.useGrade24h !== false && ovr?.sequence && ovr.sequence.length > 0) {
         const overrideProgramName = ovr.programName?.trim() || programName;
