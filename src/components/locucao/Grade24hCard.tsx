@@ -289,10 +289,14 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     // 2. Limpa os programas agendados (programas fixos customizados)
     setPrograms([]);
     
-    // 3. Desativa os horários fixos padronizados (Nossa Madrugada, etc)
+    // 3. Limpa sequências agendadas (overrides de horários específicos)
+    const { setScheduledSequences } = useRadioStore.getState();
+    setScheduledSequences([]);
+
+    // 4. Desativa os horários fixos padronizados (Nossa Madrugada, etc)
     setConfig({ useDefaultFixedSchedules: false });
 
-    // 4. Executa o reset do pool, mas PRESERVA a SEQUÊNCIA PADRÃO do usuário
+    // 5. Executa o reset do pool, mas PRESERVA a SEQUÊNCIA PADRÃO do usuário
     await executeFullSystemReset({
       clearSupabase: true,
       clearSchedules: false,
