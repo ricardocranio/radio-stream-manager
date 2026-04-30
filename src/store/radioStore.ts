@@ -337,6 +337,7 @@ const defaultConfig: SystemConfig = {
   artistRepetitionMinutes: 60,
   safetyMarginMinutes: 7, // Maximum 7 minutes before block
   coringaCode: 'mus',
+  useGrade24h: true, // Grade 24h enabled by default
   // V21 additions
   vozBrasilFolder: 'C:\\Playlist\\A Voz do Brasil',
   vozBrasilTime: '20:35',
