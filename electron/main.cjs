@@ -4,6 +4,19 @@ const { app, BrowserWindow, Menu, Tray, ipcMain, shell, Notification, dialog } =
 const path = require('path');
 const fs = require('fs');
 
+// =============== UNCAUGHT ERROR HANDLING ===============
+process.on('uncaughtException', (error) => {
+  console.error('[CRITICAL] Uncaught Exception:', error);
+  try {
+    const logPath = path.join(app.getPath('userData'), 'error.log');
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] Uncaught Exception: ${error.stack || error}\n`);
+  } catch (e) {}
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[CRITICAL] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 // LAN API Router - enables remote access to all IPC handlers
 const { handleApiRequest, createDualHandle } = require('./modules/lanApiRouter.cjs');
 
@@ -25,7 +38,8 @@ const safeHandle = createDualHandle(_baseSafeHandle);
 let autoUpdater = null;
 if (app.isPackaged) {
   try {
-    autoUpdater = require('electron-updater').autoUpdater;
+    const { autoUpdater: updater } = require('electron-updater');
+    autoUpdater = updater;
   } catch (e) {
     console.log('electron-updater not available:', e.message);
   }
@@ -730,16 +744,8 @@ app.on('before-quit', async (event) => {
           _activeDownloadProcess = null;
           app._waitingForDownload = false;
           
-          // Now actually quit
-          pythonMonitor.killMonitorProcess();
-          if (lanServer) {
-            try { lanServer.close(); } catch (e) {}
-            lanServer = null;
-          }
-          if (tray && !tray.isDestroyed()) {
-            tray.destroy();
-            tray = null;
-          }
+          // Cleanup and quit
+          finalizeShutdown();
           app.quit();
         }
       }, 500);
@@ -748,16 +754,34 @@ app.on('before-quit', async (event) => {
   }
   
   app.isQuitting = true;
-  pythonMonitor.killMonitorProcess();
+  finalizeShutdown();
+});
+
+function finalizeShutdown() {
+  console.log('[SHUTDOWN] Encerrando processos e serviços...');
+  
+  // Kill Python monitor definitively
+  try {
+    pythonMonitor.killMonitorProcess();
+  } catch (e) {
+    console.error('[SHUTDOWN] Erro ao encerrar monitor:', e.message);
+  }
+  
+  // Close LAN server
   if (lanServer) {
-    try { lanServer.close(); } catch (e) {}
+    try { 
+      lanServer.close(); 
+      console.log('[SHUTDOWN] Servidor LAN encerrado.');
+    } catch (e) {}
     lanServer = null;
   }
+  
+  // Destroy tray
   if (tray && !tray.isDestroyed()) {
     tray.destroy();
     tray = null;
   }
-});
+}
 
 // Export for use by deezerDownload module
 module.exports = { setActiveDownloadProcess, getActiveDownloadProcess };
