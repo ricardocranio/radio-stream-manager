@@ -766,11 +766,12 @@ export function StationsView() {
                     <Label className="text-[10px] text-muted-foreground uppercase">Seq.</Label>
                     <Switch
                       checked={data.isSequence !== false}
-                      onCheckedChange={(checked) => {
+                      onCheckedChange={async (checked) => {
                         if (isEditing) {
                           setEditForm((prev) => prev && { ...prev, isSequence: checked });
                         } else {
                           updateStation(station.id, { isSequence: checked });
+                          await supabase.from('radio_stations').update({ is_sequence: checked }).eq('name', station.name);
                         }
                       }}
                       className="scale-75"
@@ -780,11 +781,12 @@ export function StationsView() {
                     <Label className="text-[10px] text-muted-foreground uppercase">Capt.</Label>
                     <Switch
                       checked={data.isCapture !== false}
-                      onCheckedChange={(checked) => {
+                      onCheckedChange={async (checked) => {
                         if (isEditing) {
                           setEditForm((prev) => prev && { ...prev, isCapture: checked });
                         } else {
                           updateStation(station.id, { isCapture: checked });
+                          await supabase.from('radio_stations').update({ is_capture: checked }).eq('name', station.name);
                         }
                       }}
                       className="scale-75"
