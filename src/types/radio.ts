@@ -81,6 +81,8 @@ export interface SystemConfig {
   artistBlackouts?: Array<{ artist: string; startHour: number; endHour: number }>;
   // Toggle for Grade 24h (hour-specific overrides)
   useGrade24h?: boolean;
+  // Use hardcoded fixed schedules from fixedScheduleMap.ts
+  useDefaultFixedSchedules?: boolean;
 }
 
 export interface SequenceConfig {

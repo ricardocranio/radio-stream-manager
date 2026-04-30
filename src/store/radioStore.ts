@@ -338,6 +338,7 @@ const defaultConfig: SystemConfig = {
   safetyMarginMinutes: 7, // Maximum 7 minutes before block
   coringaCode: 'mus',
   useGrade24h: true, // Grade 24h enabled by default
+  useDefaultFixedSchedules: true, // Show hardcoded programs by default
   // V21 additions
   vozBrasilFolder: 'C:\\Playlist\\A Voz do Brasil',
   vozBrasilTime: '20:35',
@@ -883,7 +884,7 @@ export const useRadioStore = create<RadioState>()(
       gradePreviewSongKeys: new Set<string>(),
       setGradePreviewSongKeys: (keys) => set({ gradePreviewSongKeys: keys }),
       resetProgramming: () =>
-        set({
+        set((state) => ({
           programs: [],
           sequence: Array.from({ length: 10 }, (_, i) => ({
             position: i + 1,
@@ -891,7 +892,8 @@ export const useRadioStore = create<RadioState>()(
           })),
           scheduledSequences: [],
           fixedContent: [],
-        }),
+          config: { ...state.config, useDefaultFixedSchedules: false },
+        })),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
