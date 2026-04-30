@@ -19,29 +19,30 @@ export function getAllowedDownloadStations(): Set<string> {
     }
   }
 
-  // 2. Stations from the default sequence
+  // 2. Stations from the default sequence (only if enabled in the station list)
+  const enabledNames = new Set(stations.filter(s => s.enabled).map(s => s.name.toLowerCase()));
+  
   for (const seq of sequence) {
     const dbName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()];
-    if (dbName) {
+    if (dbName && enabledNames.has(dbName.toLowerCase())) {
       allowed.add(dbName.toLowerCase());
     }
-    // Also try matching by UUID or exact station name
     const station = stations.find(s => s.id === seq.radioSource || s.name.toLowerCase() === seq.radioSource.toLowerCase());
-    if (station) {
+    if (station && station.enabled) {
       allowed.add(station.name.toLowerCase());
     }
   }
 
-  // 3. Stations from all enabled scheduled sequences
+  // 3. Stations from all enabled scheduled sequences (only if enabled in the station list)
   for (const sched of scheduledSequences) {
     if (!sched.enabled) continue;
     for (const seq of sched.sequence) {
       const dbName = STATION_ID_TO_DB_NAME[seq.radioSource] || STATION_ID_TO_DB_NAME[seq.radioSource.toLowerCase()];
-      if (dbName) {
+      if (dbName && enabledNames.has(dbName.toLowerCase())) {
         allowed.add(dbName.toLowerCase());
       }
       const station = stations.find(s => s.id === seq.radioSource || s.name.toLowerCase() === seq.radioSource.toLowerCase());
-      if (station) {
+      if (station && station.enabled) {
         allowed.add(station.name.toLowerCase());
       }
     }
