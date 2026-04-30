@@ -286,7 +286,7 @@ export function GradeBuilderView() {
       }
       // Fill remaining with general pool
       if (picked.length < 10) {
-        const generalPool = realSongs.filter(s => !usedSongs.has(`${s.title.toLowerCase()}-${s.artist.toLowerCase()}`));
+        const generalPool = realSongs.filter(s => poolStationNames.has(s.station_name) && !usedSongs.has(`${s.title.toLowerCase()}-${s.artist.toLowerCase()}`));
         for (const s of generalPool) {
           if (picked.length >= 10) break;
           const artistKey = s.artist.toLowerCase().trim();
