@@ -882,6 +882,16 @@ export const useRadioStore = create<RadioState>()(
       // Grade Preview Songs tracking (not persisted)
       gradePreviewSongKeys: new Set<string>(),
       setGradePreviewSongKeys: (keys) => set({ gradePreviewSongKeys: keys }),
+      resetProgramming: () =>
+        set({
+          programs: [],
+          sequence: Array.from({ length: 10 }, (_, i) => ({
+            position: i + 1,
+            radioSource: 'random_pop',
+          })),
+          scheduledSequences: [],
+          fixedContent: [],
+        }),
     }),
     {
       name: 'pgm-radio-storage', // localStorage key
