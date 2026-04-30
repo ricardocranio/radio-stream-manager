@@ -129,6 +129,7 @@ export function useAutoGradeBuilder() {
     stations, config, fixedContent, rankingSongs,
     addGradeHistory, addMissingSong,
     missingSongs: existingMissingSongs,
+    policy: locPolicy,
   } = useRadioStore();
 
   const { addBlockLogs } = useGradeLogStore();
