@@ -217,6 +217,9 @@ export function SequenceView() {
     removeScheduledSequence,
     fixedContent,
     programs,
+    config,
+    setConfig,
+    resetProgramming,
   } = useRadioStore();
   const { toast } = useToast();
   const [localSequence, setLocalSequence] = useState(sequence);
