@@ -219,8 +219,13 @@ interface RadioState {
   // Grade Preview Songs tracking (artist|title keys of songs in next grade)
   gradePreviewSongKeys: Set<string>;
   setGradePreviewSongKeys: (keys: Set<string>) => void;
+  // Locucao Policy
+  policy: LocucaoSchedulePolicy;
+  setPolicy: (policy: LocucaoSchedulePolicy) => void;
   resetProgramming: () => void;
 }
+
+import { loadPolicy, savePolicy, type LocucaoSchedulePolicy } from '@/lib/locucao/locucaoSchedulePolicy';
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
 const defaultStations: RadioStation[] = [
