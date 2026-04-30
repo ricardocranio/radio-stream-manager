@@ -928,6 +928,7 @@ export const useRadioStore = create<RadioState>()(
         autoScrapeEnabled: state.autoScrapeEnabled,
         songAliases: state.songAliases,
         mapasConfig: state.mapasConfig,
+        policy: state.policy,
       }),
       // Handle Date objects that get serialized as strings
       onRehydrateStorage: () => (state) => {
