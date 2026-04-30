@@ -158,8 +158,9 @@ export function GradePreviewCard() {
         }
       };
 
-      // Get active sequence for the next block time
-      const activeSeq = getActiveSequence();
+      // Get active sequence for the next block time (priority over default)
+      const [nextH, nextM] = nextBlockTime.split(':').map(Number);
+      const activeSeq = getActiveSequence(isNaN(nextH) ? undefined : nextH, isNaN(nextM) ? undefined : nextM);
       
       // Extract genres from the sequence
       const genrePositions = activeSeq
