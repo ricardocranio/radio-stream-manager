@@ -1198,12 +1198,23 @@ export function SequenceView() {
         </Collapsible>
 
         {/* Grade 24h — visão completa hora a hora (com collapse próprio no header) */}
-        <Grade24hCard
-          sequence={activeScheduled ? activeSequence : localSequence}
-          programs={programs}
-          getStationColor={getStationColor}
-          getSourceDisplayName={getSourceDisplayName}
-        />
+        <div className={config.useGrade24h === false ? 'opacity-40 grayscale pointer-events-none' : ''}>
+          <div className="relative">
+            {config.useGrade24h === false && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/20 backdrop-blur-[1px] rounded-xl">
+                <Badge variant="secondary" className="bg-destructive/10 text-destructive border-destructive/20 px-4 py-2 text-sm shadow-lg">
+                  Grade 24h Desativada
+                </Badge>
+              </div>
+            )}
+            <Grade24hCard
+              sequence={activeScheduled ? activeSequence : localSequence}
+              programs={programs}
+              getStationColor={getStationColor}
+              getSourceDisplayName={getSourceDisplayName}
+            />
+          </div>
+        </div>
 
         {/* Fixed Content Panel - Sidebar */}
         <Collapsible open={fixedOpen} onOpenChange={setFixedOpen}>
