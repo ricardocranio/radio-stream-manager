@@ -608,7 +608,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                   <AlertDialogHeader>
                     <AlertDialogTitle>Zerar grade de {DAY_LABELS[selectedDay]}?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Isso remove TODAS as customizações de blocos (programa, LOC e sequência) deste dia, fazendo a grade voltar ao padrão automático. Os outros dias da semana não são afetados. Esta ação não pode ser desfeita.
+                      Atenção: Os horários deste dia serão subscritos conforme a sua Sequência Padrão. Isso removerá qualquer edição manual. Após aceitar, esta alteração não poderá ser desfeita.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
