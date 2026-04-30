@@ -637,7 +637,7 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                   <AlertDialogHeader>
                     <AlertDialogTitle>Zerar TODA a Grade 24h?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Isso remove TODAS as customizações de blocos, limpa a SEQUÊNCIA PADRÃO e reseta o pool de músicas. O sistema será totalmente formatado para que você monte sua programação do zero, seguindo apenas as emissoras que você escolher agora. Esta ação não pode ser desfeita.
+                      Atenção: Todos os blocos serão subscritos conforme a sua Sequência Padrão. Isso removerá qualquer edição manual feita nos horários. Após aceitar, esta alteração não poderá ser desfeita.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
