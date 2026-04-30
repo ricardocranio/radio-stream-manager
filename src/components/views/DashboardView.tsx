@@ -120,6 +120,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
     clearSupabase: true,
     clearSchedules: false,
     resetStations: false,
+    clearUserSequence: false, // Nova opção de formatação
   });
   
   // Realtime notifications hook
@@ -522,6 +523,13 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
                       </div>
                     </>
                   )}
+                  <div className="flex items-center space-x-2 border-t border-border pt-2 mt-2">
+                    <Checkbox id="clearUserSequence" checked={resetOptions.clearUserSequence} onCheckedChange={(checked) => setResetOptions(prev => ({ ...prev, clearUserSequence: checked === true }))} />
+                    <div className="grid gap-1.5 leading-none">
+                      <Label htmlFor="clearUserSequence" className="text-sm font-bold cursor-pointer text-amber-500">Formatar Programação</Label>
+                      <p className="text-[10px] text-muted-foreground">Limpa sequências, programas e blocos manuais (Clean Slate).</p>
+                    </div>
+                  </div>
                 </div>
                 <p className="text-destructive text-xs font-medium pt-2">⚠️ Esta ação é irreversível!</p>
               </AlertDialogDescription>
