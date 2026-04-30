@@ -248,15 +248,37 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
   const resetSelectedDay = () => {
     const overrides = { ...(policy.hourOverrides || {}) };
     const prefix = `${selectedDay}-`;
-    let removed = 0;
-    for (const k of Object.keys(overrides)) {
-      if (k.startsWith(prefix)) { delete overrides[k]; removed++; }
-    }
+    
+    // Se estiver no modo preview e houver blocos selecionados, limpa apenas eles.
+    // Caso contrário, limpa o dia inteiro como antes.
+    const keysToRemove = previewTemplateMode && selectedBlocksForReset.size > 0
+      ? Array.from(selectedBlocksForReset)
+      : Object.keys(overrides).filter(k => k.startsWith(prefix));
+
+    keysToRemove.forEach(k => delete overrides[k]);
+    
     persist({ ...policy, hourOverrides: overrides });
+    
     toast({
-      title: `Grade de ${DAY_LABELS[selectedDay]} zerada`,
-      description: `${removed} bloco(s) voltaram ao padrão.`,
+      title: keysToRemove.length > 0 ? `Grade subscrita` : `Nada para alterar`,
+      description: `${keysToRemove.length} bloco(s) agora seguem a Sequência Padrão.`,
     });
+    
+    if (previewTemplateMode) {
+      setPreviewTemplateMode(false);
+      setSelectedBlocksForReset(new Set());
+    }
+  };
+
+  const toggleBlockSelection = (key: string) => {
+    const next = new Set(selectedBlocksForReset);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setSelectedBlocksForReset(next);
+  };
+
+  const selectAllBlocks = (allKeys: string[]) => {
+    setSelectedBlocksForReset(new Set(allKeys));
   };
 
   /** Remove TODOS os overrides de TODOS os dias da semana e limpa o pool de músicas. */
