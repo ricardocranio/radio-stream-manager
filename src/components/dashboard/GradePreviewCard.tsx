@@ -897,16 +897,39 @@ export function GradePreviewCard() {
     }
   }, [isBlockShort, isLoading, nextBlockTime, blockDuration, gradeBuilder]);
 
+  const activeSequence = useMemo(() => {
+    const state = useRadioStore.getState();
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTimeMinutes = currentHour * 60 + currentMinute;
+    const dayMap = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
+    const currentDay = dayMap[now.getDay()];
+    
+    return state.scheduledSequences
+      .filter((s) => s.enabled)
+      .filter((s) => s.weekDays.length === 0 || s.weekDays.includes(currentDay))
+      .find((s) => {
+        const startMinutes = s.startHour * 60 + s.startMinute;
+        const endMinutes = s.endHour * 60 + s.endMinute;
+        if (endMinutes <= startMinutes) {
+          return currentTimeMinutes >= startMinutes || currentTimeMinutes < endMinutes;
+        }
+        return currentTimeMinutes >= startMinutes && currentTimeMinutes < endMinutes;
+      });
+  }, [scheduledSequences]);
+
   return (
     <Card className={`glass-card ${isBlockShort ? 'border-red-500/40' : isBlockOk ? 'border-green-500/20' : 'border-amber-500/20'}`}>
       <CardHeader className="pb-3 border-b border-border">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Eye className="w-5 h-5 text-amber-500" />
-            Preview da Próxima Grade
-            <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-400 border-amber-500/30">
-              {nextBlockTime}
-            </Badge>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Eye className="w-5 h-5 text-amber-500" />
+              Preview da Próxima Grade
+              <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-400 border-amber-500/30">
+                {nextBlockTime}
+              </Badge>
             {blockDuration && (
               <Badge variant="outline" className={`text-xs ${
                 blockDuration >= 29 && blockDuration <= 32
