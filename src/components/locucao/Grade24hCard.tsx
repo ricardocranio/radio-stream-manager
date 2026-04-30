@@ -615,19 +615,19 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
             </span>
 
             <div className="ml-auto flex items-center gap-1">
-              {/* Botão de Modo Preview / Subscrição */}
+              {/* Botão de Modo Preview / Subscrição Seletiva */}
               <Button
                 size="sm"
                 variant={previewTemplateMode ? "default" : "outline"}
-                className={`h-7 px-2 text-xs gap-1 ${previewTemplateMode ? 'bg-amber-600 hover:bg-amber-700' : 'border-amber-500/40 text-amber-400'}`}
+                className={`h-7 px-2 text-xs gap-1 ${previewTemplateMode ? 'bg-amber-600 hover:bg-amber-700' : 'border-amber-500/40 text-amber-400 hover:bg-amber-500/10'}`}
                 onClick={() => {
                   setPreviewTemplateMode(!previewTemplateMode);
                   setSelectedBlocksForReset(new Set());
                 }}
-                title="Ativar modo de subscrição pela Sequência Padrão"
+                title="Ativar modo visual para formatar blocos específicos"
               >
                 <RotateCcw className={`w-3 h-3 ${previewTemplateMode ? 'animate-spin-slow' : ''}`} />
-                <span className="hidden sm:inline">{previewTemplateMode ? 'Cancelar' : 'Subscrever Padrão'}</span>
+                <span className="hidden sm:inline">{previewTemplateMode ? 'Sair do Modo Formatar' : 'Formatar Seleção'}</span>
               </Button>
 
               {previewTemplateMode ? (
@@ -635,34 +635,39 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 px-2 text-xs border-amber-500/40 text-amber-400"
+                    className="h-7 px-2 text-xs border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
                     onClick={() => selectAllBlocks(rows.filter(r => !!r.override).map(r => overrideKey(selectedDay, r.hour, r.minute)))}
                   >
-                    Todos
+                    Selecionar Todos Editados
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button
                         size="sm"
                         variant="default"
-                        className="h-7 px-2 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700"
+                        className="h-7 px-2 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/20"
                         disabled={selectedBlocksForReset.size === 0}
                       >
                         <Save className="w-3 h-3" />
-                        Aplicar ({selectedBlocksForReset.size})
+                        Aplicar Formatação ({selectedBlocksForReset.size})
                       </Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent>
+                    <AlertDialogContent className="bg-slate-900 border-border text-slate-100">
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Confirmar Subscrição?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Os {selectedBlocksForReset.size} blocos selecionados serão substituídos pela Sequência Padrão. Esta ação não poderá ser desfeita.
+                        <AlertDialogTitle className="text-emerald-400 flex items-center gap-2">
+                          <Save className="w-5 h-5" />
+                          Confirmar Formatação?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-slate-300">
+                          Os {selectedBlocksForReset.size} blocos selecionados serão <strong className="text-white">subscritos</strong> conforme a sua <strong className="text-amber-400">Sequência Padrão</strong>. 
+                          <br /><br />
+                          ⚠️ <span className="text-amber-400 font-bold uppercase">Aviso:</span> Após aceitar, esta alteração será gravada permanentemente e <strong className="text-rose-400 underline">não poderá ser desfeita</strong>.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={resetSelectedDay} className="bg-emerald-600 hover:bg-emerald-700">
-                          Confirmar Substituição
+                        <AlertDialogCancel className="bg-slate-800 text-slate-300 border-slate-700">Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={resetSelectedDay} className="bg-emerald-600 hover:bg-emerald-700 text-white border-none">
+                          Confirmar e Formatar
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -675,23 +680,27 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                       size="sm"
                       variant="outline"
                       className="h-7 px-2 text-xs gap-1 border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
-                      title={`Zerar customizações da grade de ${DAY_LABELS[selectedDay]}`}
+                      title={`Zerar e formatar grade de ${DAY_LABELS[selectedDay]}`}
                     >
-                      <RotateCcw className="w-3 h-3" />
-                      <span className="hidden sm:inline">Zerar Dia</span>
+                      <Eraser className="w-3 h-3" />
+                      <span className="hidden sm:inline text-amber-400">Zerar Dia</span>
                     </Button>
                   </AlertDialogTrigger>
-                  <AlertDialogContent>
+                  <AlertDialogContent className="bg-slate-900 border-border text-slate-100">
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Zerar grade de {DAY_LABELS[selectedDay]}?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Atenção: Os horários deste dia serão subscritos conforme a sua Sequência Padrão. Isso removerá qualquer edição manual. Após aceitar, esta alteração não poderá ser desfeita.
+                      <AlertDialogTitle className="text-amber-400">Zerar grade de {DAY_LABELS[selectedDay]}?</AlertDialogTitle>
+                      <AlertDialogDescription className="text-slate-300">
+                        Atenção: Todos os horários deste dia serão <strong className="text-white">reescritos</strong> seguindo estritamente a sua <strong className="text-amber-400">Sequência Padrão</strong>. 
+                        <br /><br />
+                        Isso removerá qualquer edição manual feita nos horários. 
+                        <br /><br />
+                        ⚠️ <span className="text-amber-400 font-bold uppercase">Aviso:</span> Após aceitar, esta alteração <strong className="text-rose-400 underline">não poderá ser desfeita</strong>.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={resetSelectedDay} className="bg-amber-600 hover:bg-amber-700">
-                        Zerar {DAY_LABELS[selectedDay]}
+                      <AlertDialogCancel className="bg-slate-800 text-slate-300 border-slate-700">Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={resetSelectedDay} className="bg-amber-600 hover:bg-amber-700 text-white border-none">
+                        Zerar e Formatar Dia
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -705,23 +714,34 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
                     size="sm"
                     variant="outline"
                     className="h-7 px-2 text-xs gap-1 border-rose-500/40 text-rose-400 hover:bg-rose-500/10"
-                    title="Zerar TODA a Grade 24h (todos os dias da semana)"
+                    title="FORMATAR TUDO: Limpa a grade de todos os dias e reseta o sistema"
                   >
-                    <Eraser className="w-3 h-3" />
-                    <span className="hidden sm:inline">Zerar Tudo</span>
+                    <Trash2 className="w-3 h-3" />
+                    <span className="hidden sm:inline">Formatar Tudo</span>
                   </Button>
                 </AlertDialogTrigger>
-                <AlertDialogContent>
+                <AlertDialogContent className="bg-slate-950 border-rose-500/30 text-slate-100">
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Zerar TODA a Grade 24h?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Atenção: Todos os blocos serão subscritos conforme a sua Sequência Padrão. Isso removerá qualquer edição manual feita nos horários. Após aceitar, esta alteração não poderá ser desfeita.
+                    <AlertDialogTitle className="text-rose-500 flex items-center gap-2">
+                      <Trash2 className="w-5 h-5" />
+                      Formatar Total do Sistema?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="text-slate-300">
+                      Esta é uma <strong className="text-rose-400">formatação completa</strong>. 
+                      <br /><br />
+                      1. <strong className="text-white">Grade 24h:</strong> Todos os dias serão subscritos pela Sequência Padrão.
+                      <br />
+                      2. <strong className="text-white">Sistema:</strong> O pool de músicas e históricos serão limpos.
+                      <br /><br />
+                      Sua <strong className="text-amber-400">Sequência Padrão</strong> será preservada como o novo modelo para todo o sistema.
+                      <br /><br />
+                      ⚠️ <span className="text-rose-400 font-bold uppercase underline">Aviso Crítico:</span> Esta operação é irreversível e <strong className="text-rose-500">não poderá ser desfeita</strong>.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={resetAllDays} className="bg-rose-600 hover:bg-rose-700">
-                      Zerar Grade 24h
+                    <AlertDialogCancel className="bg-slate-800 text-slate-300 border-slate-700">Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={resetAllDays} className="bg-rose-600 hover:bg-rose-700 text-white border-none">
+                      Executar Formatação Total
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
