@@ -105,6 +105,7 @@ export interface GradeContext {
     id: string;
     name: string;
     styles?: string[];
+    enabled?: boolean;
   }>;
   musicFolders: string[];
   artistBlackouts?: Array<{ artist: string; startHour: number; endHour: number }>;
