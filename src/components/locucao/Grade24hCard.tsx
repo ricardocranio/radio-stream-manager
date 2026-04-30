@@ -44,6 +44,7 @@ import {
 } from '@/lib/locucao/locucaoSchedulePolicy';
 import { getFixedScheduleForDay, type FixedSlot } from '@/lib/locucao/fixedScheduleMap';
 import { getRealGradePositions, gradePosToRadioSource, type GradePosition } from '@/lib/locucao/realGradeTemplate';
+import { executeFullSystemReset } from '@/lib/systemReset';
 import { useRadioStore } from '@/store/radioStore';
 import type { SequenceConfig, ProgramSchedule } from '@/types/radio';
 import { useToast } from '@/hooks/use-toast';
@@ -256,13 +257,24 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
     });
   };
 
-  /** Remove TODOS os overrides de TODOS os dias da semana. */
-  const resetAllDays = () => {
+  /** Remove TODOS os overrides de TODOS os dias da semana e limpa o pool de músicas. */
+  const resetAllDays = async () => {
     const total = Object.keys(policy.hourOverrides || {}).length;
+    
+    // 1. Limpa overrides manuais da grade 24h
     persist({ ...policy, hourOverrides: {} });
+    
+    // 2. Executa o reset do pool (músicas capturadas, downloads, etc)
+    // Preservando as configurações principais conforme solicitado (emissoras, sequências, etc)
+    await executeFullSystemReset({
+      clearSupabase: false, // Não limpa o histórico remoto, apenas o pool local
+      clearSchedules: false,
+      resetStations: false
+    });
+
     toast({
-      title: 'Grade 24h zerada',
-      description: `${total} bloco(s) personalizados foram removidos. A grade voltou inteiramente ao padrão.`,
+      title: 'Grade 24h e Pool zerados',
+      description: `${total} blocos personalizados removidos. O pool de músicas foi limpo para seguir a sequência padrão.`,
     });
   };
 
