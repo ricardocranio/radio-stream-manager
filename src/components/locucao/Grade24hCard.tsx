@@ -206,7 +206,6 @@ export function Grade24hCard({ sequence, programs, getStationColor, getSourceDis
 
   const persist = (next: LocucaoSchedulePolicy) => {
     setPolicy(next);
-    savePolicy(next);
   };
 
   const patchOverride = (hour: number, minute: number, patch: Partial<{ locked: boolean | null; programName: string | null; sequence: HourOverridePosition[] | null }>) => {
