@@ -219,6 +219,7 @@ interface RadioState {
   // Grade Preview Songs tracking (artist|title keys of songs in next grade)
   gradePreviewSongKeys: Set<string>;
   setGradePreviewSongKeys: (keys: Set<string>) => void;
+  resetProgramming: () => void;
 }
 
 // V21 Configuration - Updated from FINAL_PGM_V21.py
