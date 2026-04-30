@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { useRadioStore, getActiveSequence } from '@/store/radioStore';
 import { sanitizeFilename } from '@/lib/sanitizeFilename';
@@ -150,6 +151,7 @@ export function GradeBuilderView() {
   }, [getProgramForHour, songsByStation, config.coringaCode, stations]);
 
   const generateFullGrade = useCallback(() => {
+    if (realSongs.length === 0) return;
     const usedSongs = new Set<string>();
     const usedArtists = new Set<string>();
     const lines: Array<{ time: string; line: string; type: string }> = [];
@@ -160,29 +162,74 @@ export function GradeBuilderView() {
       }
     }
     setGradeLines(lines);
-  }, [generateRealLine]);
+  }, [realSongs, generateRealLine]);
 
-  useEffect(() => { if (realSongs.length > 0) generateFullGrade(); }, [realSongs]);
+  useEffect(() => { if (realSongs.length > 0) generateFullGrade(); }, [realSongs, generateFullGrade]);
+
+  const stationCounts = realSongs.reduce<Record<string, number>>((acc, s) => {
+    acc[s.station_name] = (acc[s.station_name] || 0) + 1;
+    return acc;
+  }, {});
+
+  if (!isReady) return null;
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold">GradeBuilder</h2>
-      <div className="mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Prévia da Grade</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[500px]">
-              {gradeLines.map((line, i) => (
-                <div key={i} className="font-mono text-xs py-1 border-b border-border">
-                  {line.line}
-                </div>
-              ))}
-            </ScrollArea>
-          </CardContent>
-        </Card>
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Montagem da Grade</h2>
+          <p className="text-muted-foreground text-sm">Pool sincronizado com Captura em Tempo Real</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={fetchRealSongs} disabled={isLoading}>
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            Atualizar Pool
+          </Button>
+          <Button size="sm" onClick={generateFullGrade}>Gerar Grade</Button>
+        </div>
       </div>
+
+      <Card className="glass-card border-primary/20">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-medium text-muted-foreground">Emissoras Seletas (Pool):</span>
+            {Object.entries(stationCounts).sort((a, b) => b[1] - a[1]).map(([name, count]) => (
+              <Badge key={name} variant="secondary" className="text-xs">{name}: {count}</Badge>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Tabs defaultValue="preview">
+        <TabsList>
+          <TabsTrigger value="preview">Prévia da Grade</TabsTrigger>
+          <TabsTrigger value="settings">Configurações</TabsTrigger>
+        </TabsList>
+        <TabsContent value="preview">
+          <Card>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[600px] font-mono text-xs">
+                <div className="p-4 space-y-1">
+                  {gradeLines.map((entry, i) => (
+                    <div key={i} className="py-1 hover:bg-secondary/30 rounded px-2">{entry.line}</div>
+                  ))}
+                  {gradeLines.length === 0 && <div className="text-center p-8 text-muted-foreground">Clique em "Gerar Grade" para visualizar</div>}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="settings">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2">
+                <Label>Grade 24h</Label>
+                <Switch checked={config.useGrade24h} onCheckedChange={(c) => setConfig({ useGrade24h: c })} />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
