@@ -549,9 +549,16 @@ export function useAutoGradeBuilder() {
       }
 
       try {
-        const historicoResult = await supabase
+        const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
+        let historicoQuery = supabase
           .from('radio_historico')
-          .select('title, artist, station_name, captured_at')
+          .select('title, artist, station_name, captured_at');
+
+        if (enabledStations.length > 0) {
+          historicoQuery = historicoQuery.in('station_name', enabledStations);
+        }
+
+        const historicoResult = await historicoQuery
           .order('captured_at', { ascending: false })
           .limit(1500);
         
