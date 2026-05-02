@@ -711,6 +711,7 @@ class RadioMonitor:
         self.total_blocked = 0
         self.total_errors = 0
         self.source_stats: Dict[str, int] = {}
+        self.machine_id: Optional[str] = None
         
         # ── Buffer de frescor ──────────────────────────────────────────
         # Formato: {'BH FM': [{'song': 'Artista - Música', 'ts': datetime}, ...]}
