@@ -318,10 +318,12 @@ export function StationsView() {
     const station = stations.find(s => s.id === stationId);
     if (station) {
       try {
+        const machineId = await (await import('@/lib/machineId')).getMachineId();
         await supabase
           .from('radio_stations')
           .update({ enabled })
-          .eq('name', station.name);
+          .eq('name', station.name)
+          .eq('machine_id', machineId);
       } catch (e) {
         console.log('Local update only');
       }
