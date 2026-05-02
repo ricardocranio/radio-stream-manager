@@ -159,6 +159,7 @@ export async function syncStationsToSupabase(stations: { name: string; scrapeUrl
               scrape_url: station.scrapeUrl,
               styles: station.styles,
               enabled: station.enabled,
+              machine_id: machineId,
             });
         }
       }
