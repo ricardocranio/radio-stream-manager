@@ -522,7 +522,7 @@ export function useAutoGradeBuilder() {
 
   const fetchAllRecentSongs = useCallback(async (retryCount = 0): Promise<Record<string, SongEntry[]>> => {
     try {
-      const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
+      const captureStations = stations.filter(s => s.isCapture !== false).map(s => s.name);
       
       // Fetch scraped_songs and radio_historico independently to handle partial failures
       let scrapedData: Array<{ title: string; artist: string; station_name: string; scraped_at: string; ai_genre?: string | null; ai_energy?: string | null }> = [];
