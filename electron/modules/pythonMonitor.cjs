@@ -95,7 +95,7 @@ async function startPythonMonitor(isAutoStart = false) {
   addMonitorLog(`🚀 Iniciando monitor... (${pythonCmd})`);
 
   try {
-    pythonMonitorProcess = spawn(pythonCmd, ['-u', scriptPath], {
+    pythonMonitorProcess = spawn(pythonCmd, ['-u', scriptPath, '--machine-id', _machineId], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONUNBUFFERED: '1' },
       windowsHide: true,
