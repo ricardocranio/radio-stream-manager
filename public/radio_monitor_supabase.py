@@ -927,10 +927,14 @@ class RadioMonitor:
             return [r for r in config.get('radios', []) if r.get('ativo', True)]
         
         try:
-            stations = supabase_select('radio_stations', {
+            query_params = {
                 'select': '*',
                 'enabled': 'eq.true'
-            })
+            }
+            if self.machine_id:
+                query_params['machine_id'] = f'eq.{self.machine_id}'
+                
+            stations = supabase_select('radio_stations', query_params)
             
             radios = []
             skipped = 0
