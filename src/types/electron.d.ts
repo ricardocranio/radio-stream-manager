@@ -226,6 +226,7 @@ interface ElectronAPI {
   // App info
   getAppVersion: () => Promise<string>;
   getAppPath: (name: string) => Promise<string>;
+  getMachineId: () => Promise<string>;
   
   // Shell operations
   openExternal: (url: string) => Promise<void>;
