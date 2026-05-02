@@ -111,6 +111,18 @@ const deezerDownloadModule = require('./modules/deezerDownload.cjs');
 const vozBrasilModule = require('./modules/vozBrasil.cjs');
 const radioagenciaModule = require('./modules/radioagencia.cjs');
 const fileOpsModule = require('./modules/fileOps.cjs');
+const { getMachineId } = require('./modules/utils.cjs');
+
+const machineId = getMachineId(app);
+console.log('[INIT] Machine ID:', machineId);
+
+const ctx = {
+  app,
+  getMainWindow: () => mainWindow,
+  showNotification,
+  safeHandle,
+  machineId,
+};
 
 pythonMonitor.register(ctx);
 deemixModule.register(ctx);
@@ -120,6 +132,9 @@ deezerDownloadModule.register(ctx);
 vozBrasilModule.register(ctx);
 radioagenciaModule.register(ctx);
 fileOpsModule.register(ctx);
+
+// Add IPC handler for frontend to get machine ID
+safeHandle('get-machine-id', () => machineId);
 
 // =============== DEFAULT FOLDERS ===============
 const DEFAULT_FOLDERS = [
