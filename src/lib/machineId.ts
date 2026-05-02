@@ -1,6 +1,17 @@
+interface ElectronAPI {
+  getMachineId: () => Promise<string>;
+  [key: string]: any;
+}
+
+declare global {
+  interface Window {
+    electronAPI: ElectronAPI;
+  }
+}
+
 export const getMachineId = async (): Promise<string> => {
-  if (window.electron && window.electron.getMachineId) {
-    return await window.electron.getMachineId();
+  if (window.electronAPI && window.electronAPI.getMachineId) {
+    return await window.electronAPI.getMachineId();
   }
   // Fallback for browser/dev mode
   let machineId = localStorage.getItem('pgm_machine_id');
