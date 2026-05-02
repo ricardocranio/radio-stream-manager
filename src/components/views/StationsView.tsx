@@ -792,7 +792,8 @@ export function StationsView() {
                           setEditForm((prev) => prev && { ...prev, isCapture: checked });
                         } else {
                           updateStation(station.id, { isCapture: checked });
-                          await supabase.from('radio_stations').update({ is_capture: checked }).eq('name', station.name);
+                          const machineId = await (await import('@/lib/machineId')).getMachineId();
+                          await supabase.from('radio_stations').update({ is_capture: checked }).eq('name', station.name).eq('machine_id', machineId);
                         }
                       }}
                       className="scale-75"
