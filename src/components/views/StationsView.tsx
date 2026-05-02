@@ -760,7 +760,8 @@ export function StationsView() {
                           setEditForm((prev) => prev && { ...prev, isMonitoring: checked });
                         } else {
                           updateStation(station.id, { isMonitoring: checked });
-                          await supabase.from('radio_stations').update({ is_monitoring: checked }).eq('name', station.name);
+                          const machineId = await (await import('@/lib/machineId')).getMachineId();
+                          await supabase.from('radio_stations').update({ is_monitoring: checked }).eq('name', station.name).eq('machine_id', machineId);
                         }
                       }}
                       className="scale-75"
