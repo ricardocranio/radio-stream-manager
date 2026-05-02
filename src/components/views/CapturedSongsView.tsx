@@ -245,8 +245,8 @@ export function CapturedSongsView() {
 
       if (shouldRefreshMetadata) {
         const [{ count, error: countError }, { data: stationsData, error: stationsError }] = await Promise.all([
-          supabase.from('scraped_songs').select('*', { count: 'exact', head: true }),
-          supabase.from('radio_stations').select('name').order('name'),
+          supabase.from('scraped_songs').select('*', { count: 'exact', head: true }).eq('machine_id', machineId),
+          supabase.from('radio_stations').select('name').eq('machine_id', machineId).order('name'),
         ]);
 
         if (!countError) {
