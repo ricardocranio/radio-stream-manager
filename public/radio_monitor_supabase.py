@@ -618,15 +618,19 @@ def scrape_icy_metadata(stream_url: str, station_name: str) -> Optional[Dict]:
         return None
 
 
-def get_db_fallback(station_name: str) -> Optional[Dict]:
+def get_db_fallback(station_name: str, machine_id: str = None) -> Optional[Dict]:
     """Busca a música mais recente já conhecida no backend para evitar ciclos vazios."""
     try:
-        scraped_rows = supabase_select('scraped_songs', {
+        query_params = {
             'select': 'artist,title,source,scraped_at',
             'station_name': f'eq.{station_name}',
             'order': 'scraped_at.desc',
             'limit': 5,
-        })
+        }
+        if machine_id:
+            query_params['machine_id'] = f'eq.{machine_id}'
+            
+        scraped_rows = supabase_select('scraped_songs', query_params)
 
         fresh_rows = []
         now_ts = datetime.now().timestamp()
