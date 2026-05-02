@@ -120,7 +120,8 @@ export async function syncStationsToSupabase(stations: { name: string; scrapeUrl
         .from('radio_stations')
         .select('id')
         .eq('name', normalizedName)
-        .single();
+        .eq('machine_id', machineId)
+        .maybeSingle();
 
       if (existing) {
         await supabase
