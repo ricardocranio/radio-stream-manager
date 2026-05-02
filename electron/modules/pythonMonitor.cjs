@@ -15,6 +15,7 @@ const AUTO_RESTART_DELAYS = [15000, 30000, 45000];
 
 let _getMainWindow = null;
 let _app = null;
+let _machineId = null;
 
 function getPythonCommand() {
   return new Promise((resolve) => {
