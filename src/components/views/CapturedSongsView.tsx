@@ -214,11 +214,13 @@ export function CapturedSongsView() {
   // Load songs from backend
   const loadSongs = useCallback(async () => {
     try {
+      const machineId = await (await import('@/lib/machineId')).getMachineId();
       const dateThreshold = getDateThreshold(dateRange);
 
       let query = supabase
         .from('scraped_songs')
         .select('id, title, artist, station_name, scraped_at, is_now_playing, source, ai_genre, ai_energy')
+        .eq('machine_id', machineId)
         .gte('scraped_at', dateThreshold.toISOString())
         .order('scraped_at', { ascending: false })
         .limit(500);
