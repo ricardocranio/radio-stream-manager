@@ -533,8 +533,8 @@ export function useAutoGradeBuilder() {
           .from('scraped_songs')
           .select('title, artist, station_name, scraped_at, ai_genre, ai_energy');
 
-        if (enabledStations.length > 0) {
-          scrapedQuery = scrapedQuery.in('station_name', enabledStations);
+        if (captureStations.length > 0) {
+          scrapedQuery = scrapedQuery.in('station_name', captureStations);
         }
 
         const scrapedResult = await scrapedQuery
@@ -551,13 +551,12 @@ export function useAutoGradeBuilder() {
       }
 
       try {
-        const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
         let historicoQuery = supabase
           .from('radio_historico')
           .select('title, artist, station_name, captured_at');
 
-        if (enabledStations.length > 0) {
-          historicoQuery = historicoQuery.in('station_name', enabledStations);
+        if (captureStations.length > 0) {
+          historicoQuery = historicoQuery.in('station_name', captureStations);
         }
 
         const historicoResult = await historicoQuery
