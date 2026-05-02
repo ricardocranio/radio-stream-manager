@@ -1240,14 +1240,17 @@ export function useAutoGradeBuilder() {
       }
 
       // === WEEKDAY TEMPLATE BLOCKS (09:00-10:30, 12:00-13:30, 17:00-20:30, 22:00-23:30) ===
-      // These replace the old individual handlers for these time slots
-      if (isWeekday(targetDay) && isWeekdayTemplateBlock(hour, minute)) {
+      // Only used if NOT disabled in settings (config.useDefaultFixedSchedules !== false)
+      if (isWeekday(targetDay) && isWeekdayTemplateBlock(hour, minute) && config.useDefaultFixedSchedules !== false) {
         const templateResult = await generateWeekdayTemplateBlock(hour, minute, songsByStation, stats, isFullDay, ctx, targetDay);
         if (templateResult) return fillBlockIfShort(templateResult);
       }
 
       // Raridades (year-filtered program) — skip on Sunday (no fixed programs)
-      const raridadesItem = targetDay !== 'dom' ? fixedItems.find(fc => fc.type === 'raridades' && fc.yearMin && fc.yearMax) : undefined;
+      // Only used if NOT disabled in settings
+      const raridadesItem = targetDay !== 'dom' && config.useDefaultFixedSchedules !== false
+        ? fixedItems.find(fc => fc.type === 'raridades' && fc.yearMin && fc.yearMax)
+        : undefined;
       if (raridadesItem) {
         const slotIndex = raridadesItem.timeSlots.findIndex(ts => ts.hour === hour && ts.minute === minute);
         return fillBlockIfShort(await generateRaridades(
@@ -1259,8 +1262,10 @@ export function useAutoGradeBuilder() {
         ));
       }
 
-      // TOP50 blocks (skip on Sunday)
-      const top50Item = targetDay !== 'dom' ? fixedItems.find(fc => fc.type === 'top50') : undefined;
+      // TOP50 blocks (skip on Sunday or if disabled in settings)
+      const top50Item = targetDay !== 'dom' && config.useDefaultFixedSchedules !== false
+        ? fixedItems.find(fc => fc.type === 'top50')
+        : undefined;
       if (top50Item) {
         return fillBlockIfShort(await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx));
       }
