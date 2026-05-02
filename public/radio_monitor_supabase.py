@@ -664,12 +664,16 @@ def get_db_fallback(station_name: str, machine_id: str = None) -> Optional[Dict]
                     "source": "db-fallback(scraped)"
                 }
 
-        historico_rows = supabase_select('radio_historico', {
+        hist_query_params = {
             'select': 'artist,title,source,captured_at',
             'station_name': f'eq.{station_name}',
             'order': 'captured_at.desc',
             'limit': 5,
-        })
+        }
+        if machine_id:
+            hist_query_params['machine_id'] = f'eq.{machine_id}'
+            
+        historico_rows = supabase_select('radio_historico', hist_query_params)
 
         songs = []
         for row in historico_rows:
