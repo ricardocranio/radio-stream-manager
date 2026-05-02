@@ -1,14 +1,3 @@
-interface ElectronAPI {
-  getMachineId: () => Promise<string>;
-  [key: string]: any;
-}
-
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI;
-  }
-}
-
 export const getMachineId = async (): Promise<string> => {
   if (window.electronAPI && window.electronAPI.getMachineId) {
     return await window.electronAPI.getMachineId();
