@@ -207,6 +207,7 @@ export type Database = {
           end_minute: number
           id: string
           label: string | null
+          machine_id: string | null
           scrape_url: string
           start_hour: number
           start_minute: number
@@ -221,6 +222,7 @@ export type Database = {
           end_minute: number
           id?: string
           label?: string | null
+          machine_id?: string | null
           scrape_url: string
           start_hour: number
           start_minute: number
@@ -235,6 +237,7 @@ export type Database = {
           end_minute?: number
           id?: string
           label?: string | null
+          machine_id?: string | null
           scrape_url?: string
           start_hour?: number
           start_minute?: number
