@@ -1054,7 +1054,8 @@ class RadioMonitor:
                 'station_name': station_name,
                 'artist': artist,
                 'title': title,
-                'source': source
+                'source': source,
+                'machine_id': self.machine_id
             }
             ok2 = supabase_insert('radio_historico', hist_data)
             if ok2:
