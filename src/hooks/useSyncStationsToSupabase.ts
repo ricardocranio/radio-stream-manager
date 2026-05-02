@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useRadioStore } from '@/store/radioStore';
 import { toast } from 'sonner';
+import { getMachineId } from '@/lib/machineId';
 
 /**
  * Hook that syncs local store stations to Supabase radio_stations table
