@@ -1,7 +1,7 @@
 // =============== SHARED UTILITY FUNCTIONS ===============
 const fs = require('fs');
 const path = require('path');
-const { crypto } = require('crypto');
+const crypto = require('crypto');
 
 // Get unique machine ID (persisted in userData)
 function getMachineId(app) {
@@ -9,7 +9,7 @@ function getMachineId(app) {
   if (fs.existsSync(idPath)) {
     return fs.readFileSync(idPath, 'utf8').trim();
   }
-  const newId = require('crypto').randomUUID();
+  const newId = crypto.randomUUID();
   fs.writeFileSync(idPath, newId, 'utf8');
   return newId;
 }
