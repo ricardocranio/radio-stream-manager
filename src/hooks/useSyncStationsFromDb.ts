@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useRadioStore } from '@/store/radioStore';
 import { RadioStation } from '@/types/radio';
+import { getMachineId } from '@/lib/machineId';
 
 /**
  * Hook that syncs stations from Supabase database to local store on mount.
