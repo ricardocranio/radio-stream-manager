@@ -351,9 +351,11 @@ export function CapturedSongsView() {
 
     setIsSyncing(true);
     try {
+      const machineId = await (await import('@/lib/machineId')).getMachineId();
       const { data: stationsData } = await supabase
         .from('radio_stations')
-        .select('name, styles');
+        .select('name, styles')
+        .eq('machine_id', machineId);
 
       const stationStyleMap = new Map<string, string>();
       if (stationsData) {
