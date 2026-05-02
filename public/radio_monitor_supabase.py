@@ -979,10 +979,14 @@ class RadioMonitor:
             return []
         
         try:
-            specials = supabase_select('special_monitoring', {
+            query_params = {
                 'select': '*',
                 'enabled': 'eq.true'
-            })
+            }
+            if self.machine_id:
+                query_params['machine_id'] = f'eq.{self.machine_id}'
+                
+            specials = supabase_select('special_monitoring', query_params)
             
             radios = []
             for sp in specials:
