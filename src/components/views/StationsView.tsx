@@ -121,10 +121,12 @@ export function StationsView() {
           setLastCapture(new Date(lastSong.scraped_at).toLocaleString('pt-BR'));
         }
         
-        // Load stations from DB
+        // Load stations from DB for this machine
+        const machineId = await (await import('@/lib/machineId')).getMachineId();
         const { data: stationsData } = await supabase
           .from('radio_stations')
           .select('*')
+          .eq('machine_id', machineId)
           .order('name');
         
         if (stationsData) {
