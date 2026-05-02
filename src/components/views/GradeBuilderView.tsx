@@ -68,11 +68,13 @@ export function GradeBuilderView() {
   const [gradeLines, setGradeLines] = useState<Array<{ time: string; line: string; type: string }>>([]);
 
   const getProgramForHour = useCallback((hour: number) => {
+    if (config.useDefaultFixedSchedules === false) return 'SEQUÊNCIA';
+    
     return programs.find(p => {
       const [start, end] = p.timeRange.split('-').map(Number);
       return hour >= start && hour <= end;
-    })?.programName || 'PROGRAMA';
-  }, [programs]);
+    })?.programName || 'SEQUÊNCIA';
+  }, [programs, config.useDefaultFixedSchedules]);
 
   const fetchRealSongs = useCallback(async () => {
     setIsLoading(true);
