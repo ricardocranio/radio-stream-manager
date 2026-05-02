@@ -68,11 +68,13 @@ export function GradeBuilderView() {
   const [gradeLines, setGradeLines] = useState<Array<{ time: string; line: string; type: string }>>([]);
 
   const getProgramForHour = useCallback((hour: number) => {
+    if (config.useDefaultFixedSchedules === false) return 'SEQUÊNCIA';
+    
     return programs.find(p => {
       const [start, end] = p.timeRange.split('-').map(Number);
       return hour >= start && hour <= end;
-    })?.programName || 'PROGRAMA';
-  }, [programs]);
+    })?.programName || 'SEQUÊNCIA';
+  }, [programs, config.useDefaultFixedSchedules]);
 
   const fetchRealSongs = useCallback(async () => {
     setIsLoading(true);
@@ -109,7 +111,8 @@ export function GradeBuilderView() {
   useEffect(() => { fetchRealSongs(); }, []);
 
   const songsByStation = useCallback((): Record<string, SongPool[]> => {
-    const poolStations = stations.filter(s => s.isCapture !== false);
+    // Only use stations that are explicitly enabled and marked for capture
+    const poolStations = stations.filter(s => s.enabled && s.isCapture !== false);
     const poolStationNames = new Set(poolStations.map(s => s.name));
     const map: Record<string, SongPool[]> = {};
     for (const song of realSongs) {

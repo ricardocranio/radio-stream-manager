@@ -522,7 +522,7 @@ export function useAutoGradeBuilder() {
 
   const fetchAllRecentSongs = useCallback(async (retryCount = 0): Promise<Record<string, SongEntry[]>> => {
     try {
-      const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
+      const captureStations = stations.filter(s => s.isCapture !== false).map(s => s.name);
       
       // Fetch scraped_songs and radio_historico independently to handle partial failures
       let scrapedData: Array<{ title: string; artist: string; station_name: string; scraped_at: string; ai_genre?: string | null; ai_energy?: string | null }> = [];
@@ -533,8 +533,8 @@ export function useAutoGradeBuilder() {
           .from('scraped_songs')
           .select('title, artist, station_name, scraped_at, ai_genre, ai_energy');
 
-        if (enabledStations.length > 0) {
-          scrapedQuery = scrapedQuery.in('station_name', enabledStations);
+        if (captureStations.length > 0) {
+          scrapedQuery = scrapedQuery.in('station_name', captureStations);
         }
 
         const scrapedResult = await scrapedQuery
@@ -551,13 +551,12 @@ export function useAutoGradeBuilder() {
       }
 
       try {
-        const enabledStations = stations.filter(s => s.enabled).map(s => s.name);
         let historicoQuery = supabase
           .from('radio_historico')
           .select('title, artist, station_name, captured_at');
 
-        if (enabledStations.length > 0) {
-          historicoQuery = historicoQuery.in('station_name', enabledStations);
+        if (captureStations.length > 0) {
+          historicoQuery = historicoQuery.in('station_name', captureStations);
         }
 
         const historicoResult = await historicoQuery
@@ -1240,14 +1239,17 @@ export function useAutoGradeBuilder() {
       }
 
       // === WEEKDAY TEMPLATE BLOCKS (09:00-10:30, 12:00-13:30, 17:00-20:30, 22:00-23:30) ===
-      // These replace the old individual handlers for these time slots
-      if (isWeekday(targetDay) && isWeekdayTemplateBlock(hour, minute)) {
+      // Only used if NOT disabled in settings (config.useDefaultFixedSchedules !== false)
+      if (isWeekday(targetDay) && isWeekdayTemplateBlock(hour, minute) && config.useDefaultFixedSchedules !== false) {
         const templateResult = await generateWeekdayTemplateBlock(hour, minute, songsByStation, stats, isFullDay, ctx, targetDay);
         if (templateResult) return fillBlockIfShort(templateResult);
       }
 
       // Raridades (year-filtered program) — skip on Sunday (no fixed programs)
-      const raridadesItem = targetDay !== 'dom' ? fixedItems.find(fc => fc.type === 'raridades' && fc.yearMin && fc.yearMax) : undefined;
+      // Only used if NOT disabled in settings
+      const raridadesItem = targetDay !== 'dom' && config.useDefaultFixedSchedules !== false
+        ? fixedItems.find(fc => fc.type === 'raridades' && fc.yearMin && fc.yearMax)
+        : undefined;
       if (raridadesItem) {
         const slotIndex = raridadesItem.timeSlots.findIndex(ts => ts.hour === hour && ts.minute === minute);
         return fillBlockIfShort(await generateRaridades(
@@ -1259,8 +1261,10 @@ export function useAutoGradeBuilder() {
         ));
       }
 
-      // TOP50 blocks (skip on Sunday)
-      const top50Item = targetDay !== 'dom' ? fixedItems.find(fc => fc.type === 'top50') : undefined;
+      // TOP50 blocks (skip on Sunday or if disabled in settings)
+      const top50Item = targetDay !== 'dom' && config.useDefaultFixedSchedules !== false
+        ? fixedItems.find(fc => fc.type === 'top50')
+        : undefined;
       if (top50Item) {
         return fillBlockIfShort(await generateTop50Block(hour, minute, top50Item.top50Count || 10, ctx));
       }
@@ -1279,10 +1283,13 @@ export function useAutoGradeBuilder() {
 
     const blockLogs: BlockLogItem[] = [];
 
-    // Fixed content handling — SKIPPED on Sunday, during scheduled sequences, AND during madrugada (00:00-07:59)
+    // Fixed content handling — SKIPPED on Sunday, during scheduled sequences, during madrugada (00:00-07:59), 
+    // OR if default fixed schedules are disabled in settings
     const isSunday = targetDay === 'dom';
     const isMadrugada = hour >= 0 && hour <= 7;
-    const fixedItem = (hasScheduledSequence || isSunday || isMadrugada) ? undefined : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil' && fc.type !== 'raridades');
+    const fixedItem = (hasScheduledSequence || isSunday || isMadrugada || config.useDefaultFixedSchedules === false) 
+      ? undefined 
+      : fixedItems.find(fc => fc.type !== 'top50' && fc.type !== 'vozbrasil' && fc.type !== 'raridades');
     let fixedContentFile: string | null = null;
     let fixedPosition: 'start' | 'middle' | 'end' | number = 'start';
 
