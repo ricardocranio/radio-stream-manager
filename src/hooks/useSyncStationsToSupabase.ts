@@ -104,11 +104,12 @@ export function useSyncStationsToSupabase() {
  */
 export async function syncStationsToSupabase(stations: { name: string; scrapeUrl: string; styles: string[]; enabled: boolean }[]) {
   try {
-    // Disable all stations first
+    const machineId = await getMachineId();
+    // Disable all stations first for this machine
     await supabase
       .from('radio_stations')
       .update({ enabled: false })
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Update all
+      .eq('machine_id', machineId);
 
     // Update or insert each local station
     for (const station of stations) {
