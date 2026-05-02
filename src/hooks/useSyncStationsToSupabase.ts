@@ -79,6 +79,7 @@ export function useSyncStationsToSupabase() {
                 scrape_url: localStation.scrapeUrl,
                 styles: localStation.styles,
                 enabled: localStation.enabled,
+                machine_id: machineId,
               });
           }
         }
