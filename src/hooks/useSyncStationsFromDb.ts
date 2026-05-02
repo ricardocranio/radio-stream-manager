@@ -15,9 +15,11 @@ export function useSyncStationsFromDb() {
   useEffect(() => {
     const syncFromDb = async () => {
       try {
+        const machineId = await getMachineId();
         const { data: dbStations, error } = await supabase
           .from('radio_stations')
           .select('*')
+          .eq('machine_id', machineId)
           .order('name');
 
         if (error) {
