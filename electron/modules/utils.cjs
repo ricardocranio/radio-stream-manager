@@ -263,4 +263,5 @@ module.exports = {
   parseID3TagsFromFile,
   checkFileExistsInSubfolders,
   cleanupPartialFiles,
+  getMachineId,
 };
