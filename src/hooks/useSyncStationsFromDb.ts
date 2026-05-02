@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useRadioStore } from '@/store/radioStore';
 import { RadioStation } from '@/types/radio';
+import { getMachineId } from '@/lib/machineId';
 
 /**
  * Hook that syncs stations from Supabase database to local store on mount.
@@ -14,9 +15,11 @@ export function useSyncStationsFromDb() {
   useEffect(() => {
     const syncFromDb = async () => {
       try {
+        const machineId = await getMachineId();
         const { data: dbStations, error } = await supabase
           .from('radio_stations')
           .select('*')
+          .eq('machine_id', machineId)
           .order('name');
 
         if (error) {

@@ -618,15 +618,19 @@ def scrape_icy_metadata(stream_url: str, station_name: str) -> Optional[Dict]:
         return None
 
 
-def get_db_fallback(station_name: str) -> Optional[Dict]:
+def get_db_fallback(station_name: str, machine_id: str = None) -> Optional[Dict]:
     """Busca a música mais recente já conhecida no backend para evitar ciclos vazios."""
     try:
-        scraped_rows = supabase_select('scraped_songs', {
+        query_params = {
             'select': 'artist,title,source,scraped_at',
             'station_name': f'eq.{station_name}',
             'order': 'scraped_at.desc',
             'limit': 5,
-        })
+        }
+        if machine_id:
+            query_params['machine_id'] = f'eq.{machine_id}'
+            
+        scraped_rows = supabase_select('scraped_songs', query_params)
 
         fresh_rows = []
         now_ts = datetime.now().timestamp()
@@ -660,12 +664,16 @@ def get_db_fallback(station_name: str) -> Optional[Dict]:
                     "source": "db-fallback(scraped)"
                 }
 
-        historico_rows = supabase_select('radio_historico', {
+        hist_query_params = {
             'select': 'artist,title,source,captured_at',
             'station_name': f'eq.{station_name}',
             'order': 'captured_at.desc',
             'limit': 5,
-        })
+        }
+        if machine_id:
+            hist_query_params['machine_id'] = f'eq.{machine_id}'
+            
+        historico_rows = supabase_select('radio_historico', hist_query_params)
 
         songs = []
         for row in historico_rows:
@@ -711,6 +719,7 @@ class RadioMonitor:
         self.total_blocked = 0
         self.total_errors = 0
         self.source_stats: Dict[str, int] = {}
+        self.machine_id: Optional[str] = None
         
         # ── Buffer de frescor ──────────────────────────────────────────
         # Formato: {'BH FM': [{'song': 'Artista - Música', 'ts': datetime}, ...]}
@@ -926,10 +935,14 @@ class RadioMonitor:
             return [r for r in config.get('radios', []) if r.get('ativo', True)]
         
         try:
-            stations = supabase_select('radio_stations', {
+            query_params = {
                 'select': '*',
                 'enabled': 'eq.true'
-            })
+            }
+            if self.machine_id:
+                query_params['machine_id'] = f'eq.{self.machine_id}'
+                
+            stations = supabase_select('radio_stations', query_params)
             
             radios = []
             skipped = 0
@@ -966,10 +979,14 @@ class RadioMonitor:
             return []
         
         try:
-            specials = supabase_select('special_monitoring', {
+            query_params = {
                 'select': '*',
                 'enabled': 'eq.true'
-            })
+            }
+            if self.machine_id:
+                query_params['machine_id'] = f'eq.{self.machine_id}'
+                
+            specials = supabase_select('special_monitoring', query_params)
             
             radios = []
             for sp in specials:
@@ -1033,7 +1050,8 @@ class RadioMonitor:
                 'title': title,
                 'artist': artist,
                 'is_now_playing': True,
-                'source': source
+                'source': source,
+                'machine_id': self.machine_id
             }
             if station_id and not radio.get('is_special'):
                 song_data['station_id'] = station_id
@@ -1048,7 +1066,8 @@ class RadioMonitor:
                 'station_name': station_name,
                 'artist': artist,
                 'title': title,
-                'source': source
+                'source': source,
+                'machine_id': self.machine_id
             }
             ok2 = supabase_insert('radio_historico', hist_data)
             if ok2:
@@ -1066,7 +1085,8 @@ class RadioMonitor:
                         'station_name': station_name,
                         'artist': a,
                         'title': t,
-                        'source': source
+                        'source': source,
+                        'machine_id': self.machine_id
                     })
             
         except Exception as e:
@@ -1292,7 +1312,7 @@ class RadioMonitor:
         # === Fonte 5: Fallback no backend ===
         if SUPABASE_OK:
             print(cor(Cores.BLUE, f"     ☁️  Tentando fallback no histórico..."))
-            result = get_db_fallback(nome)
+            result = get_db_fallback(nome, self.machine_id)
             if result and result.get('tocando_agora'):
                 return {**dados_base, **result}
 
@@ -1527,12 +1547,24 @@ class RadioMonitor:
 # EXECUÇÃO
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def parse_arguments():
+    import argparse
+    parser = argparse.ArgumentParser(description='Monitor de Rádios - Tempo Real')
+    parser.add_argument('--machine-id', type=str, help='ID único desta instalação')
+    return parser.parse_args()
+
 if __name__ == "__main__":
+    args = parse_arguments()
+    machine_id = args.machine_id
+    
     print()
     print(cor(Cores.CYAN, "╔" + "═" * 60 + "╗"))
     print(cor(Cores.CYAN, "║") + cor(Cores.BOLD, " 🎵 MONITOR DE RÁDIOS v3.5 - FRESCOR + POOL EDITION ".center(60)) + cor(Cores.CYAN, "║"))
     print(cor(Cores.CYAN, "╚" + "═" * 60 + "╝"))
     print()
+    
+    if machine_id:
+        print(cor(Cores.MAGENTA, f"  💻 ID da Instalação: {machine_id}"))
     
     config = carregar_configuracao()
     
@@ -1549,4 +1581,6 @@ if __name__ == "__main__":
     print(cor(Cores.CYAN, "  Pressione Ctrl+C a qualquer momento para encerrar."))
     print()
     
-    asyncio.run(RadioMonitor(config).iniciar())
+    monitor = RadioMonitor(config)
+    monitor.machine_id = machine_id
+    asyncio.run(monitor.iniciar())

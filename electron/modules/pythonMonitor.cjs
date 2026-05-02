@@ -15,6 +15,7 @@ const AUTO_RESTART_DELAYS = [15000, 30000, 45000];
 
 let _getMainWindow = null;
 let _app = null;
+let _machineId = null;
 
 function getPythonCommand() {
   return new Promise((resolve) => {
@@ -94,7 +95,7 @@ async function startPythonMonitor(isAutoStart = false) {
   addMonitorLog(`🚀 Iniciando monitor... (${pythonCmd})`);
 
   try {
-    pythonMonitorProcess = spawn(pythonCmd, ['-u', scriptPath], {
+    pythonMonitorProcess = spawn(pythonCmd, ['-u', scriptPath, '--machine-id', _machineId], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONUNBUFFERED: '1' },
       windowsHide: true,
@@ -204,9 +205,10 @@ function killMonitorProcess() {
   }
 }
 
-function register({ app, getMainWindow, safeHandle }) {
+function register({ app, getMainWindow, safeHandle, machineId }) {
   _app = app;
   _getMainWindow = getMainWindow;
+  _machineId = machineId;
   const handle = safeHandle || ipcMain.handle.bind(ipcMain);
 
   handle('start-python-monitor', async () => {

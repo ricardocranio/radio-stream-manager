@@ -35,6 +35,7 @@ if (!process.isMainFrame) {
       // App info
       getAppVersion: () => ipcRenderer.invoke('get-app-version'),
       getAppPath: (name) => ipcRenderer.invoke('get-app-path', name),
+      getMachineId: () => ipcRenderer.invoke('get-machine-id'),
       
       // Shell operations
       openExternal: (url) => ipcRenderer.invoke('open-external', url),

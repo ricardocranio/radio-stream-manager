@@ -121,10 +121,12 @@ export function StationsView() {
           setLastCapture(new Date(lastSong.scraped_at).toLocaleString('pt-BR'));
         }
         
-        // Load stations from DB
+        // Load stations from DB for this machine
+        const machineId = await (await import('@/lib/machineId')).getMachineId();
         const { data: stationsData } = await supabase
           .from('radio_stations')
           .select('*')
+          .eq('machine_id', machineId)
           .order('name');
         
         if (stationsData) {
@@ -318,10 +320,12 @@ export function StationsView() {
     const station = stations.find(s => s.id === stationId);
     if (station) {
       try {
+        const machineId = await (await import('@/lib/machineId')).getMachineId();
         await supabase
           .from('radio_stations')
           .update({ enabled })
-          .eq('name', station.name);
+          .eq('name', station.name)
+          .eq('machine_id', machineId);
       } catch (e) {
         console.log('Local update only');
       }
@@ -756,7 +760,8 @@ export function StationsView() {
                           setEditForm((prev) => prev && { ...prev, isMonitoring: checked });
                         } else {
                           updateStation(station.id, { isMonitoring: checked });
-                          await supabase.from('radio_stations').update({ is_monitoring: checked }).eq('name', station.name);
+                          const machineId = await (await import('@/lib/machineId')).getMachineId();
+                          await supabase.from('radio_stations').update({ is_monitoring: checked }).eq('name', station.name).eq('machine_id', machineId);
                         }
                       }}
                       className="scale-75"
@@ -771,7 +776,8 @@ export function StationsView() {
                           setEditForm((prev) => prev && { ...prev, isSequence: checked });
                         } else {
                           updateStation(station.id, { isSequence: checked });
-                          await supabase.from('radio_stations').update({ is_sequence: checked }).eq('name', station.name);
+                          const machineId = await (await import('@/lib/machineId')).getMachineId();
+                          await supabase.from('radio_stations').update({ is_sequence: checked }).eq('name', station.name).eq('machine_id', machineId);
                         }
                       }}
                       className="scale-75"
@@ -786,7 +792,8 @@ export function StationsView() {
                           setEditForm((prev) => prev && { ...prev, isCapture: checked });
                         } else {
                           updateStation(station.id, { isCapture: checked });
-                          await supabase.from('radio_stations').update({ is_capture: checked }).eq('name', station.name);
+                          const machineId = await (await import('@/lib/machineId')).getMachineId();
+                          await supabase.from('radio_stations').update({ is_capture: checked }).eq('name', station.name).eq('machine_id', machineId);
                         }
                       }}
                       className="scale-75"

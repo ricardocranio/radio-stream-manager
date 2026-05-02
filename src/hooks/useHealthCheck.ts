@@ -39,11 +39,15 @@ export function useHealthCheck() {
       const startTime = Date.now();
       
       // Use Promise.race with a timeout to prevent the health check from hanging
-      const queryPromise = supabase
-        .from('radio_stations')
-        .select('id')
-        .limit(1)
-        .maybeSingle();
+      const queryPromise = (async () => {
+        const machineId = await (await import('@/lib/machineId')).getMachineId();
+        return supabase
+          .from('radio_stations')
+          .select('id')
+          .eq('machine_id', machineId)
+          .limit(1)
+          .maybeSingle();
+      })();
       
       const timeoutPromise = new Promise<{ error: { code: string; message: string } }>((resolve) => {
         setTimeout(() => resolve({ error: { code: 'TIMEOUT', message: 'Health check timeout' } }), LATENCY_THRESHOLD);

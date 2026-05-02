@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useRadioStore } from '@/store/radioStore';
 import { toast } from 'sonner';
+import { getMachineId } from '@/lib/machineId';
 
 /**
  * Hook that syncs local store stations to Supabase radio_stations table
@@ -12,10 +13,12 @@ export function useSyncStationsToSupabase() {
 
   const syncStations = useCallback(async () => {
     try {
-      // Get current stations from Supabase
+      const machineId = await getMachineId();
+      // Get current stations from Supabase for this machine
       const { data: supabaseStations, error: fetchError } = await supabase
         .from('radio_stations')
-        .select('id, name, scrape_url, styles, enabled');
+        .select('id, name, scrape_url, styles, enabled, machine_id')
+        .eq('machine_id', machineId);
 
       if (fetchError) {
         console.error('Error fetching Supabase stations:', fetchError);
@@ -76,6 +79,7 @@ export function useSyncStationsToSupabase() {
                 scrape_url: localStation.scrapeUrl,
                 styles: localStation.styles,
                 enabled: localStation.enabled,
+                machine_id: machineId,
               });
           }
         }
@@ -100,11 +104,12 @@ export function useSyncStationsToSupabase() {
  */
 export async function syncStationsToSupabase(stations: { name: string; scrapeUrl: string; styles: string[]; enabled: boolean }[]) {
   try {
-    // Disable all stations first
+    const machineId = await getMachineId();
+    // Disable all stations first for this machine
     await supabase
       .from('radio_stations')
       .update({ enabled: false })
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Update all
+      .eq('machine_id', machineId);
 
     // Update or insert each local station
     for (const station of stations) {
@@ -115,7 +120,8 @@ export async function syncStationsToSupabase(stations: { name: string; scrapeUrl
         .from('radio_stations')
         .select('id')
         .eq('name', normalizedName)
-        .single();
+        .eq('machine_id', machineId)
+        .maybeSingle();
 
       if (existing) {
         await supabase
@@ -153,6 +159,7 @@ export async function syncStationsToSupabase(stations: { name: string; scrapeUrl
               scrape_url: station.scrapeUrl,
               styles: station.styles,
               enabled: station.enabled,
+              machine_id: machineId,
             });
         }
       }

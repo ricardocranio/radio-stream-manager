@@ -214,11 +214,13 @@ export function CapturedSongsView() {
   // Load songs from backend
   const loadSongs = useCallback(async () => {
     try {
+      const machineId = await (await import('@/lib/machineId')).getMachineId();
       const dateThreshold = getDateThreshold(dateRange);
 
       let query = supabase
         .from('scraped_songs')
         .select('id, title, artist, station_name, scraped_at, is_now_playing, source, ai_genre, ai_energy')
+        .eq('machine_id', machineId)
         .gte('scraped_at', dateThreshold.toISOString())
         .order('scraped_at', { ascending: false })
         .limit(500);
@@ -243,8 +245,8 @@ export function CapturedSongsView() {
 
       if (shouldRefreshMetadata) {
         const [{ count, error: countError }, { data: stationsData, error: stationsError }] = await Promise.all([
-          supabase.from('scraped_songs').select('*', { count: 'exact', head: true }),
-          supabase.from('radio_stations').select('name').order('name'),
+          supabase.from('scraped_songs').select('*', { count: 'exact', head: true }).eq('machine_id', machineId),
+          supabase.from('radio_stations').select('name').eq('machine_id', machineId).order('name'),
         ]);
 
         if (!countError) {
@@ -349,9 +351,11 @@ export function CapturedSongsView() {
 
     setIsSyncing(true);
     try {
+      const machineId = await (await import('@/lib/machineId')).getMachineId();
       const { data: stationsData } = await supabase
         .from('radio_stations')
-        .select('name, styles');
+        .select('name, styles')
+        .eq('machine_id', machineId);
 
       const stationStyleMap = new Map<string, string>();
       if (stationsData) {

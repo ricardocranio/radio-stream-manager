@@ -19,6 +19,7 @@ export type Database = {
           artist: string
           captured_at: string
           id: string
+          machine_id: string | null
           source: string | null
           station_name: string
           title: string
@@ -27,6 +28,7 @@ export type Database = {
           artist: string
           captured_at?: string
           id?: string
+          machine_id?: string | null
           source?: string | null
           station_name: string
           title: string
@@ -35,6 +37,7 @@ export type Database = {
           artist?: string
           captured_at?: string
           id?: string
+          machine_id?: string | null
           source?: string | null
           station_name?: string
           title?: string
@@ -85,6 +88,7 @@ export type Database = {
           is_capture: boolean | null
           is_monitoring: boolean | null
           is_sequence: boolean | null
+          machine_id: string | null
           monitoring_end_hour: number | null
           monitoring_end_minute: number | null
           monitoring_start_hour: number | null
@@ -104,6 +108,7 @@ export type Database = {
           is_capture?: boolean | null
           is_monitoring?: boolean | null
           is_sequence?: boolean | null
+          machine_id?: string | null
           monitoring_end_hour?: number | null
           monitoring_end_minute?: number | null
           monitoring_start_hour?: number | null
@@ -123,6 +128,7 @@ export type Database = {
           is_capture?: boolean | null
           is_monitoring?: boolean | null
           is_sequence?: boolean | null
+          machine_id?: string | null
           monitoring_end_hour?: number | null
           monitoring_end_minute?: number | null
           monitoring_start_hour?: number | null
@@ -144,6 +150,7 @@ export type Database = {
           artist: string
           id: string
           is_now_playing: boolean | null
+          machine_id: string | null
           scraped_at: string
           source: string | null
           station_id: string | null
@@ -158,6 +165,7 @@ export type Database = {
           artist: string
           id?: string
           is_now_playing?: boolean | null
+          machine_id?: string | null
           scraped_at?: string
           source?: string | null
           station_id?: string | null
@@ -172,6 +180,7 @@ export type Database = {
           artist?: string
           id?: string
           is_now_playing?: boolean | null
+          machine_id?: string | null
           scraped_at?: string
           source?: string | null
           station_id?: string | null
@@ -198,6 +207,7 @@ export type Database = {
           end_minute: number
           id: string
           label: string | null
+          machine_id: string | null
           scrape_url: string
           start_hour: number
           start_minute: number
@@ -212,6 +222,7 @@ export type Database = {
           end_minute: number
           id?: string
           label?: string | null
+          machine_id?: string | null
           scrape_url: string
           start_hour: number
           start_minute: number
@@ -226,6 +237,7 @@ export type Database = {
           end_minute?: number
           id?: string
           label?: string | null
+          machine_id?: string | null
           scrape_url?: string
           start_hour?: number
           start_minute?: number
