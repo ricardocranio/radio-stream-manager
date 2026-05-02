@@ -235,21 +235,23 @@ export function GradeScheduleCard() {
       const timeKey = `${blockHour.toString().padStart(2, '0')}:${blockMinute.toString().padStart(2, '0')}`;
       
       // Get program name for this hour, considering day-specific programs
-      let programName = 'PROGRAMA';
-      for (const prog of programs) {
-        const [start, end] = prog.timeRange.split('-').map(Number);
-        if (blockHour >= start && blockHour <= end) {
-          // Check if this program is day-specific (VOZ_BRASIL = weekdays only)
-          const isVozBrasil = prog.programName.includes('VOZ') || prog.programName.includes('Voz');
-          const isTop50 = prog.programName === 'TOP50' || prog.programName === 'TOP10';
-          
-          // Skip weekday-only programs on weekends
-          if ((isVozBrasil || isTop50) && isWeekend) {
-            continue;
+      let programName = config.useDefaultFixedSchedules === false ? 'SEQUÊNCIA' : 'PROGRAMA';
+      if (config.useDefaultFixedSchedules !== false) {
+        for (const prog of programs) {
+          const [start, end] = prog.timeRange.split('-').map(Number);
+          if (blockHour >= start && blockHour <= end) {
+            // Check if this program is day-specific (VOZ_BRASIL = weekdays only)
+            const isVozBrasil = prog.programName.includes('VOZ') || prog.programName.includes('Voz');
+            const isTop50 = prog.programName === 'TOP50' || prog.programName === 'TOP10';
+            
+            // Skip weekday-only programs on weekends
+            if ((isVozBrasil || isTop50) && isWeekend) {
+              continue;
+            }
+            
+            programName = prog.programName;
+            break;
           }
-          
-          programName = prog.programName;
-          break;
         }
       }
       
