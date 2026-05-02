@@ -205,9 +205,10 @@ function killMonitorProcess() {
   }
 }
 
-function register({ app, getMainWindow, safeHandle }) {
+function register({ app, getMainWindow, safeHandle, machineId }) {
   _app = app;
   _getMainWindow = getMainWindow;
+  _machineId = machineId;
   const handle = safeHandle || ipcMain.handle.bind(ipcMain);
 
   handle('start-python-monitor', async () => {
