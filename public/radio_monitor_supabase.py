@@ -1038,7 +1038,8 @@ class RadioMonitor:
                 'title': title,
                 'artist': artist,
                 'is_now_playing': True,
-                'source': source
+                'source': source,
+                'machine_id': self.machine_id
             }
             if station_id and not radio.get('is_special'):
                 song_data['station_id'] = station_id
