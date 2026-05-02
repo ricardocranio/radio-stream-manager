@@ -1073,7 +1073,8 @@ class RadioMonitor:
                         'station_name': station_name,
                         'artist': a,
                         'title': t,
-                        'source': source
+                        'source': source,
+                        'machine_id': self.machine_id
                     })
             
         except Exception as e:
