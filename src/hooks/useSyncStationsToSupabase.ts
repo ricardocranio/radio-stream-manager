@@ -13,10 +13,12 @@ export function useSyncStationsToSupabase() {
 
   const syncStations = useCallback(async () => {
     try {
-      // Get current stations from Supabase
+      const machineId = await getMachineId();
+      // Get current stations from Supabase for this machine
       const { data: supabaseStations, error: fetchError } = await supabase
         .from('radio_stations')
-        .select('id, name, scrape_url, styles, enabled');
+        .select('id, name, scrape_url, styles, enabled, machine_id')
+        .eq('machine_id', machineId);
 
       if (fetchError) {
         console.error('Error fetching Supabase stations:', fetchError);
