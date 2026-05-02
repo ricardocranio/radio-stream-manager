@@ -1527,12 +1527,24 @@ class RadioMonitor:
 # EXECUÇÃO
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def parse_arguments():
+    import argparse
+    parser = argparse.ArgumentParser(description='Monitor de Rádios - Tempo Real')
+    parser.add_argument('--machine-id', type=str, help='ID único desta instalação')
+    return parser.parse_args()
+
 if __name__ == "__main__":
+    args = parse_arguments()
+    machine_id = args.machine_id
+    
     print()
     print(cor(Cores.CYAN, "╔" + "═" * 60 + "╗"))
     print(cor(Cores.CYAN, "║") + cor(Cores.BOLD, " 🎵 MONITOR DE RÁDIOS v3.5 - FRESCOR + POOL EDITION ".center(60)) + cor(Cores.CYAN, "║"))
     print(cor(Cores.CYAN, "╚" + "═" * 60 + "╝"))
     print()
+    
+    if machine_id:
+        print(cor(Cores.MAGENTA, f"  💻 ID da Instalação: {machine_id}"))
     
     config = carregar_configuracao()
     
@@ -1549,4 +1561,6 @@ if __name__ == "__main__":
     print(cor(Cores.CYAN, "  Pressione Ctrl+C a qualquer momento para encerrar."))
     print()
     
-    asyncio.run(RadioMonitor(config).iniciar())
+    monitor = RadioMonitor(config)
+    monitor.machine_id = machine_id
+    asyncio.run(monitor.iniciar())
