@@ -1,6 +1,18 @@
 // =============== SHARED UTILITY FUNCTIONS ===============
 const fs = require('fs');
 const path = require('path');
+const { crypto } = require('crypto');
+
+// Get unique machine ID (persisted in userData)
+function getMachineId(app) {
+  const idPath = path.join(app.getPath('userData'), 'machine_id.txt');
+  if (fs.existsSync(idPath)) {
+    return fs.readFileSync(idPath, 'utf8').trim();
+  }
+  const newId = require('crypto').randomUUID();
+  fs.writeFileSync(idPath, newId, 'utf8');
+  return newId;
+}
 
 // Sanitize folder name for filesystem
 function sanitizeFolderName(name) {
