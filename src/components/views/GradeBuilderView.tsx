@@ -111,7 +111,8 @@ export function GradeBuilderView() {
   useEffect(() => { fetchRealSongs(); }, []);
 
   const songsByStation = useCallback((): Record<string, SongPool[]> => {
-    const poolStations = stations.filter(s => s.isCapture !== false);
+    // Only use stations that are explicitly enabled and marked for capture
+    const poolStations = stations.filter(s => s.enabled && s.isCapture !== false);
     const poolStationNames = new Set(poolStations.map(s => s.name));
     const map: Record<string, SongPool[]> = {};
     for (const song of realSongs) {
