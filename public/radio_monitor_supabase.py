@@ -1308,7 +1308,7 @@ class RadioMonitor:
         # === Fonte 5: Fallback no backend ===
         if SUPABASE_OK:
             print(cor(Cores.BLUE, f"     ☁️  Tentando fallback no histórico..."))
-            result = get_db_fallback(nome)
+            result = get_db_fallback(nome, self.machine_id)
             if result and result.get('tocando_agora'):
                 return {**dados_base, **result}
 
