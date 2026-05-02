@@ -159,7 +159,15 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
     setIsResetting(true);
     
     try {
-      // 1. Clear all local data in Zustand stores
+      const storeState = useRadioStore.getState();
+      
+      // 1. If "Formatar Programação" is checked, clear programming FIRST
+      if (resetOptions.clearUserSequence) {
+        console.log('[RESET] Formatting user programming...');
+        storeState.resetProgramming();
+      }
+
+      // 2. Clear all local data in Zustand stores
       console.log('[RESET] Clearing local data...');
       clearCapturedSongs();
       clearMissingSongs();
@@ -177,11 +185,11 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
       });
       console.log('[RESET] Local data cleared');
 
-      // 2. Clear Supabase data via Edge Function
+      // 3. Clear Supabase data via Edge Function
       if (resetOptions.clearSupabase) {
         console.log('[RESET] Clearing Supabase data...', resetOptions);
         try {
-          const { data, error } = await supabase.functions.invoke('manage-special-monitoring', {
+          const { error } = await supabase.functions.invoke('manage-special-monitoring', {
             body: {
               action: 'full-system-reset',
               data: {
@@ -198,33 +206,15 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
               description: `Dados locais limpos. Erro no banco remoto: ${error.message || 'Erro desconhecido'}`,
               variant: 'destructive',
             });
-          } else {
-            console.log('[RESET] Supabase cleared successfully:', data);
           }
         } catch (supaError) {
           console.error('[RESET] Supabase call exception:', supaError);
-          // Don't block the rest of the reset if Supabase fails
         }
       }
 
-      // 3. Clear localStorage keys — but PRESERVE user configurations
+      // 4. Clear localStorage keys — but PRESERVE user configurations
       console.log('[RESET] Clearing localStorage (preserving configs)...');
       
-      // === CRITICAL: Preserve config, deezerConfig, songAliases, stations, fixedContent, etc. ===
-      // Save the current user configs BEFORE clearing
-      const storeState = useRadioStore.getState();
-      const preservedConfig = { ...storeState.config };          // musicFolders, blockedSongs, forbiddenWords, etc.
-      const preservedDeezerConfig = { ...storeState.deezerConfig }; // ARL, downloadFolder, genreRoutes, etc.
-      const preservedAliases = [...storeState.songAliases];      // Song corrections
-      const preservedStations = [...storeState.stations];        // Radio stations
-      const preservedFixedContent = [...storeState.fixedContent]; // Fixed content blocks
-      const preservedSequence = [...storeState.sequence];        // Sequence config
-      const preservedScheduledSeq = [...storeState.scheduledSequences]; // Scheduled sequences
-      const preservedPrograms = [...storeState.programs];        // Programs
-      const preservedMapasConfig = storeState.mapasConfig ? { ...storeState.mapasConfig } : undefined;
-      const preservedAutoScrape = storeState.autoScrapeEnabled;
-      
-      // Clear transient localStorage keys (caches, scan dates, etc.)
       const keysToPreserve = ['vozBrasilConfig', 'theme', 'supabase.auth.token', 'pgm-radio-storage'];
       const allKeys = Object.keys(localStorage);
       let clearedKeys = 0;
@@ -243,49 +233,25 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
           clearedKeys++;
         }
       });
-      console.log(`[RESET] Cleared ${clearedKeys} localStorage keys (configs preserved)`);
+      console.log(`[RESET] Cleared ${clearedKeys} localStorage keys`);
       
-      // Restore preserved configs into the store (in case Zustand re-hydrated from empty)
-      useRadioStore.setState({
-        config: preservedConfig,
-        deezerConfig: preservedDeezerConfig,
-        songAliases: preservedAliases,
-        stations: preservedStations,
-        fixedContent: preservedFixedContent,
-        sequence: preservedSequence,
-        scheduledSequences: preservedScheduledSeq,
-        programs: preservedPrograms,
-        mapasConfig: preservedMapasConfig || storeState.mapasConfig,
-        autoScrapeEnabled: preservedAutoScrape,
-      });
-
-      // 4. Clear the realtime stats store
+      // 5. Clear the realtime stats store
       try {
         const { useRealtimeStatsStore } = await import('@/store/realtimeStatsStore');
         useRealtimeStatsStore.getState().reset();
-        console.log('[RESET] Realtime stats store cleared');
       } catch (e) {
         console.log('[RESET] Could not clear realtime stats store:', e);
       }
 
-      // 5. Invalidate music library cache - forces fresh read from filesystem
-      console.log('[RESET] Invalidating music library cache...');
+      // 6. Refresh and Invalidate
       invalidateMusicLibraryCache();
-      
-      // 6. Force refresh of music library stats
-      console.log('[RESET] Refreshing music library stats...');
       await refreshLibraryStats();
+      await refreshStats();
 
       toast({
         title: '✅ Sistema Resetado',
         description: 'Todos os dados foram limpos. O sistema está pronto para uma nova instalação.',
       });
-
-      // Refresh stats to reflect changes
-      console.log('[RESET] Refreshing stats...');
-      await refreshStats();
-      
-      console.log('[RESET] Full system reset completed successfully!');
 
     } catch (error) {
       console.error('[RESET] Error:', error);
